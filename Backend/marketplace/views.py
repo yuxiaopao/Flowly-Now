@@ -3,8 +3,7 @@ Marketplace API for workflow templates.
 """
 
 import uuid
-from django.db.models import Prefetch
-from django.db.models import Prefetch
+from django.db.models import Avg, Prefetch
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -161,7 +160,6 @@ class WorkflowTemplateViewSet(viewsets.ModelViewSet):
         return Response({
             'user_rating': rating.rating,
             'rating': float(avg_rating or 0),
-            'avg_rating': float(avg_rating or 0),
             'rating_count': template.ratings.count()
         })
 
@@ -174,7 +172,6 @@ class WorkflowTemplateViewSet(viewsets.ModelViewSet):
             'use_count': template.install_count,
             'installs': template.install_count,
             'rating': template.avg_rating,
-            'avg_rating': template.avg_rating,
             'rating_count': template.ratings.count(),
             'views': template.view_count
         })

@@ -41,8 +41,8 @@ class WorkflowTemplateSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'slug', 'description', 'category', 'category_name',
             'category_slug', 'tags', 'workflow_data', 'nodes', 'edges', 'node_count',
-            'use_count', 'install_count', 'view_count', 'rating', 'avg_rating', 'report_count', 'rating_count',
-            'thumbnail', 'preview_image', 'is_public', 'is_published', 'is_featured', 'is_verified',
+            'use_count', 'view_count', 'rating', 'report_count', 'rating_count',
+            'thumbnail', 'is_public', 'is_featured', 'is_verified',
             'created_by', 'author_name', 'author_avatar', 'is_installed',
             'created_at', 'updated_at'
         ]
@@ -76,7 +76,7 @@ class TemplateCreateSerializer(serializers.ModelSerializer):
         model = WorkflowTemplate
         fields = [
             'name', 'slug', 'description', 'category', 'tags',
-            'workflow_data', 'nodes', 'edges', 'thumbnail', 'preview_image', 'is_public', 'is_published'
+            'workflow_data', 'nodes', 'edges', 'thumbnail', 'is_public'
         ]
 
     def validate_slug(self, value):
