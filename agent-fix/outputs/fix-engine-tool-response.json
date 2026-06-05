@@ -1,0 +1,8 @@
+{
+  "status": "done",
+  "result": "Fixed _tool_call_with_bind method to generate natural language responses when tools are called. The method now:\n1. Generates a descriptive response when tools are called but LLM doesn't provide natural language output\n2. Formats tool_calls in the expected frontend format: {name, arguments, result}\n3. Also updated _tool_call_react method for consistency\n\nChanges made to Backend/agents/engine.py:\n- Modified lines ~726-765: Added logic to generate natural language response from tool results\n- Added formatted_tool_calls that matches frontend expected format\n- Updated _tool_call_react method to use consistent formatting",
+  "files_changed": [
+    "e:/Flowly-now/Backend/agents/engine.py"
+  ],
+  "summary": "Fixed _tool_call_with_bind to return natural language responses instead of raw JSON. Now generates Chinese descriptions like '已调用工具 weather，结果: city: Beijing, temperature: 25°C' and formats tool_calls with {name, arguments, result} structure for frontend compatibility."
+}

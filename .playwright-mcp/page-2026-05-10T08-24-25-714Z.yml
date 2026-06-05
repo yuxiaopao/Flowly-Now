@@ -1,0 +1,121 @@
+- generic [ref=e327]:
+  - complementary [ref=e328]:
+    - link "Flowly Flowly" [ref=e330] [cursor=pointer]:
+      - /url: /home
+      - img "Flowly" [ref=e331]
+      - generic [ref=e332]: Flowly
+    - navigation [ref=e333]:
+      - generic [ref=e334]:
+        - generic [ref=e335]: 主导航
+        - link "仪表盘" [ref=e336] [cursor=pointer]:
+          - /url: /home
+          - img [ref=e337]
+          - generic [ref=e340]: 仪表盘
+        - link "工作流" [ref=e341] [cursor=pointer]:
+          - /url: /workflows
+          - img [ref=e342]
+          - generic [ref=e346]: 工作流
+        - link "Agent" [ref=e347] [cursor=pointer]:
+          - /url: /agents
+          - img [ref=e348]
+          - generic [ref=e351]: Agent
+        - link "知识库" [ref=e352] [cursor=pointer]:
+          - /url: /knowledge
+          - img [ref=e353]
+          - generic [ref=e357]: 知识库
+        - link "团队" [ref=e358] [cursor=pointer]:
+          - /url: /team
+          - img [ref=e359]
+          - generic [ref=e364]: 团队
+      - generic [ref=e365]:
+        - generic [ref=e366]: 工具
+        - link "NL 创建" [ref=e367] [cursor=pointer]:
+          - /url: /nl-create
+          - img [ref=e368]
+          - generic [ref=e370]: NL 创建
+        - link "监控中心" [ref=e371] [cursor=pointer]:
+          - /url: /monitoring
+          - img [ref=e372]
+          - generic [ref=e373]: 监控中心
+        - link "模板" [ref=e374] [cursor=pointer]:
+          - /url: /prompts
+          - img [ref=e375]
+          - generic [ref=e378]: 模板
+      - generic [ref=e379]:
+        - generic [ref=e380]: 工作流
+        - link "新建工作流" [ref=e381] [cursor=pointer]:
+          - /url: /workflows/new
+          - img [ref=e382]
+          - generic [ref=e383]: 新建工作流
+    - link "设置" [ref=e385] [cursor=pointer]:
+      - /url: /settings
+      - img [ref=e386]
+      - generic [ref=e389]: 设置
+  - generic [ref=e390]:
+    - banner [ref=e391]:
+      - button [ref=e392] [cursor=pointer]:
+        - img [ref=e393]
+      - generic [ref=e396]:
+        - button "默认深色主题" [ref=e399] [cursor=pointer]:
+          - img [ref=e401]
+        - button [ref=e403] [cursor=pointer]:
+          - img [ref=e405]
+        - button [ref=e408] [cursor=pointer]:
+          - img [ref=e410]
+        - button "T" [ref=e414] [cursor=pointer]:
+          - generic [ref=e415]: T
+    - main [ref=e416]:
+      - generic [ref=e418]:
+        - generic [ref=e419]:
+          - generic [ref=e420]:
+            - button "返回" [ref=e421] [cursor=pointer]:
+              - img [ref=e423]
+              - generic [ref=e425]: 返回
+            - heading "DeepSeek 测试工作流" [level=1] [ref=e427]
+          - button "导出结果" [disabled] [ref=e429]:
+            - generic [ref=e430]:
+              - img [ref=e431]
+              - text: 导出结果
+        - generic [ref=e434]:
+          - complementary [ref=e435]:
+            - heading "输入参数" [level=3] [ref=e436]
+            - generic [ref=e438]:
+              - generic [ref=e439]: 输入文本
+              - textbox "输入文本" [ref=e442]
+            - button "开始执行" [ref=e444] [cursor=pointer]:
+              - generic [ref=e446]:
+                - img [ref=e447]
+                - text: 开始执行
+            - generic [ref=e449]:
+              - heading "执行历史" [level=4] [ref=e450]
+              - generic [ref=e452]: 暂无执行记录
+          - main [ref=e453]:
+            - heading "执行状态" [level=3] [ref=e455]
+            - generic [ref=e457]:
+              - generic [ref=e458]:
+                - generic [ref=e462]: "1"
+                - generic [ref=e464]: 准备
+              - generic [ref=e465]:
+                - generic [ref=e469]: "2"
+                - generic [ref=e471]: 执行中
+              - generic [ref=e472]:
+                - generic [ref=e475]: "3"
+                - generic [ref=e477]: 完成
+            - generic [ref=e479]: 点击"开始执行"按钮开始执行工作流
+            - generic [ref=e480]:
+              - generic [ref=e481]:
+                - heading "输出结果" [level=4] [ref=e482]
+                - button "复制" [disabled] [ref=e484]:
+                  - generic [ref=e485]:
+                    - img [ref=e486]
+                    - text: 复制
+              - paragraph [ref=e490]: 暂无输出
+          - complementary [ref=e491]:
+            - generic [ref=e492]:
+              - heading "执行日志" [level=3] [ref=e493]
+              - generic [ref=e494]:
+                - button "自动滚动" [ref=e495] [cursor=pointer]:
+                  - generic [ref=e496]: 自动滚动
+                - button "清除" [ref=e497] [cursor=pointer]:
+                  - generic [ref=e498]: 清除
+            - generic [ref=e500]: 暂无日志

@@ -1,0 +1,75 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e95]:
+    - link "返回首页" [ref=e96] [cursor=pointer]:
+      - /url: /
+      - img [ref=e97]
+      - generic [ref=e99]: 返回首页
+    - generic [ref=e100]:
+      - generic [ref=e102]:
+        - generic [ref=e103]:
+          - img "Flowly" [ref=e104]
+          - generic [ref=e105]: Flowly
+        - heading "可视化 AI 工作流平台" [level=1] [ref=e106]
+        - paragraph [ref=e107]: 轻松创建、部署和管理 AI 工作流。 支持多种 AI 模型、内置 RAG 能力、 实时监控和团队协作。
+        - generic [ref=e108]:
+          - generic [ref=e109]:
+            - img [ref=e111]
+            - generic [ref=e113]:
+              - strong [ref=e114]: 拖拽式编辑
+              - generic [ref=e115]: 直观的可视化编辑器
+          - generic [ref=e116]:
+            - img [ref=e118]
+            - generic [ref=e121]:
+              - strong [ref=e122]: 多模型支持
+              - generic [ref=e123]: OpenAI、Claude 等
+          - generic [ref=e124]:
+            - img [ref=e126]
+            - generic [ref=e128]:
+              - strong [ref=e129]: 安全可靠
+              - generic [ref=e130]: 企业级安全保障
+      - generic [ref=e131]:
+        - generic [ref=e132]:
+          - generic [ref=e133]:
+            - heading "欢迎回来" [level=2] [ref=e134]
+            - paragraph [ref=e135]: 登录到您的账户继续
+          - generic [ref=e136]:
+            - generic [ref=e140]:
+              - generic [ref=e141]:
+                - img [ref=e142]
+                - img [ref=e146]
+              - textbox "用户名或邮箱" [ref=e149]: admin
+            - generic [ref=e153]:
+              - img [ref=e155]
+              - textbox "密码" [ref=e158]: admin123
+              - img [ref=e202] [cursor=pointer]
+            - generic [ref=e159]:
+              - generic [ref=e160] [cursor=pointer]:
+                - generic [ref=e161]:
+                  - checkbox "记住我"
+                - generic [ref=e163]: 记住我
+              - link "忘记密码?" [ref=e164] [cursor=pointer]:
+                - /url: /forgot-password
+            - button "登录" [ref=e167] [cursor=pointer]:
+              - generic [ref=e205]: 登录
+          - generic [ref=e170]: 或
+          - button "使用 Google 登录" [ref=e172] [cursor=pointer]:
+            - img [ref=e173]
+            - generic [ref=e175]: 使用 Google 登录
+          - generic [ref=e176]:
+            - generic [ref=e177]: 还没有账号?
+            - link "立即注册" [ref=e178] [cursor=pointer]:
+              - /url: /register
+              - text: 立即注册
+              - img [ref=e179]
+        - generic [ref=e181]:
+          - button "默认深色主题" [ref=e182] [cursor=pointer]:
+            - img [ref=e183]
+          - button "明亮清爽的浅色主题" [ref=e185] [cursor=pointer]:
+            - img [ref=e186]
+          - button "极简黑白设计" [ref=e192] [cursor=pointer]:
+            - img [ref=e193]
+          - button "高对比度无障碍设计" [ref=e196] [cursor=pointer]:
+            - img [ref=e197]
+  - alert [ref=e206]:
+    - img [ref=e208]
+    - paragraph [ref=e210]: 网络连接失败，请检查网络

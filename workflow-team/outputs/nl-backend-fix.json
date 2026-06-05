@@ -1,0 +1,38 @@
+{
+  "task_id": "backend-nl-fix",
+  "status": "done",
+  "result": "Fixed all critical and high-priority issues in NL-to-Workflow module including UUID routing, API consistency, rate limiting, and duplicate code removal",
+  "files_changed": [
+    "Backend/nl_to_workflow/urls.py",
+    "Backend/nl_to_workflow/views.py",
+    "Frontend/src/api/nl-workflow.js"
+  ],
+  "fixes_applied": [
+    {
+      "issue": "NLSession model UUID primary key mismatch",
+      "fix": "Changed URL parameters from <int:session_id> to <uuid:session_id> in all session detail/message/confirm endpoints in urls.py",
+      "impact": "Fixes 404 errors for all session detail, update, delete, message, and confirm endpoints"
+    },
+    {
+      "issue": "API consistency - NLSession list returns raw array",
+      "fix": "Updated NLSessionViewSet.get() to return consistent {code, message, data, count} response format instead of raw array",
+      "impact": "Frontend receives consistent response format matching other API endpoints"
+    },
+    {
+      "issue": "Rate limiting for expensive NL operations",
+      "fix": "Added @method_decorator(ratelimit) to NLWorkflowStreamView (5/minute per user) and NLWorkflowPreviewView (10/minute per user)",
+      "impact": "Prevents abuse of expensive LLM operations and protects backend resources"
+    },
+    {
+      "issue": "Duplicate getSession method in frontend API",
+      "fix": "Removed duplicate getSession method at lines ~123-129 from nl-workflow.js",
+      "impact": "Cleaner code, no functional change as both methods did the same thing"
+    }
+  ],
+  "notes": [
+    "The session_id parameter type is now correctly UUID across all views (NLSessionDetailView, NLSessionMessageView, NLSessionConfirmView)",
+    "Django will automatically convert UUID strings in URLs to Python UUID objects",
+    "Rate limiting uses django-ratelimit decorators with user-based rate limiting"
+  ],
+  "summary": "All 5 issues addressed: (1) Fixed UUID primary key URL routing in urls.py, (2) Made NLSession list endpoint return consistent API format, (3) Added rate limiting to expensive NL endpoints (5/min for stream, 10/min for preview), (4) Verified session_id parameter works correctly with UUID in all views, (5) Removed duplicate getSession method from frontend API. The changes fix 404 errors, ensure API consistency, add security throttling, and clean up duplicate code."
+}

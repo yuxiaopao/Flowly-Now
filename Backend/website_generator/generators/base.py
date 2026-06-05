@@ -1,0 +1,471 @@
+"""
+Base class for website generators.
+"""
+
+import os
+import json
+import logging
+from abc import ABC, abstractmethod
+from typing import Dict, Any, List, Optional
+
+logger = logging.getLogger(__name__)
+
+
+class BaseGenerator(ABC):
+    """
+    Base class for website generators.
+    
+    Subclasses must implement generate_frontend(), generate_backend(), 
+    generate_docker(), and generate_readme() methods.
+    """
+
+    def __init__(self, config: Dict[str, Any]):
+        """
+        Initialize the generator with configuration.
+        
+        Args:
+            config: Dictionary containing:
+                - output_dir: Directory to save generated files
+                - model_path: Path to the trained model
+                - model_type: Type of model (classifier, regressor, etc.)
+                - labels: List of class labels
+                - framework: ML framework (pytorch, keras, etc.)
+                - website_type: Type of website to generate
+                - frontend_framework: Frontend framework (vue, react, html)
+                - backend_framework: Backend framework (flask, fastapi)
+                - port: Backend port number
+                - name: Website name
+                - description: Website description
+        """
+        self.config = config
+        self.output_dir = config.get('output_dir', '')
+        self.model_path = config.get('model_path', '')
+        self.model_type = config.get('model_type', '')
+        self.labels = config.get('labels', [])
+        self.framework = config.get('framework', 'pytorch')
+        self.website_type = config.get('website_type', 'classification')
+        self.frontend_framework = config.get('frontend_framework', 'vue')
+        self.backend_framework = config.get('backend_framework', 'flask')
+        self.port = config.get('port', 5000)
+        self.name = config.get('name', 'Generated AI Website')
+        self.description = config.get('description', '')
+        self.generated_files: List[str] = []
+
+    def generate(self) -> Dict[str, Any]:
+        """
+        Generate the complete website.
+        
+        Returns:
+            Dictionary with:
+                - success: Whether generation succeeded
+                - generated_files: List of generated file paths
+                - error: Error message if failed
+        """
+        try:
+            # Validate output directory
+            if not self.output_dir:
+                return {'success': False, 'error': 'Output directory not specified'}
+
+            # Create output directory structure
+            self._prepare_output_directory()
+
+            # Generate all components
+            self._ensure_directory(self.output_dir)
+            self._ensure_directory(os.path.join(self.output_dir, 'backend'))
+            self._ensure_directory(os.path.join(self.output_dir, 'frontend'))
+
+            # Generate backend files
+            logger.info(f"Generating backend files for {self.website_type}")
+            backend_files = self.generate_backend()
+            self.generated_files.extend(backend_files)
+
+            # Generate frontend files
+            logger.info(f"Generating frontend files for {self.website_type}")
+            frontend_files = self.generate_frontend()
+            self.generated_files.extend(frontend_files)
+
+            # Generate Docker configuration
+            logger.info("Generating Docker configuration")
+            docker_files = self.generate_docker()
+            self.generated_files.extend(docker_files)
+
+            # Generate README
+            logger.info("Generating README")
+            readme_files = self.generate_readme()
+            self.generated_files.extend(readme_files)
+
+            # Generate additional config files
+            logger.info("Generating additional config files")
+            config_files = self._generate_config_files()
+            self.generated_files.extend(config_files)
+
+            return {
+                'success': True,
+                'generated_files': self.generated_files,
+                'output_dir': self.output_dir
+            }
+
+        except Exception as e:
+            logger.exception(f"Website generation failed: {str(e)}")
+            return {
+                'success': False,
+                'error': str(e),
+                'generated_files': self.generated_files
+            }
+
+    def _prepare_output_directory(self) -> None:
+        """Prepare the output directory structure."""
+        # Create main directories
+        self._ensure_directory(self.output_dir)
+        self._ensure_directory(os.path.join(self.output_dir, 'backend'))
+        self._ensure_directory(os.path.join(self.output_dir, 'frontend'))
+
+    def _ensure_directory(self, path: str) -> None:
+        """Ensure a directory exists, create if it doesn't."""
+        if not os.path.exists(path):
+            os.makedirs(path, exist_ok=True)
+            logger.debug(f"Created directory: {path}")
+
+    def _write_file(self, relative_path: str, content: str) -> str:
+        """
+        Write content to a file in the output directory.
+        
+        Args:
+            relative_path: Path relative to output_dir
+            
+        Returns:
+            Full path to the created file
+        """
+        full_path = os.path.join(self.output_dir, relative_path)
+        os.makedirs(os.path.dirname(full_path), exist_ok=True)
+        
+        with open(full_path, 'w', encoding='utf-8') as f:
+            f.write(content)
+            
+        logger.debug(f"Generated file: {full_path}")
+        return full_path
+
+    @abstractmethod
+    def generate_frontend(self) -> List[str]:
+        """
+        Generate frontend code.
+        
+        Returns:
+            List of generated file paths
+        """
+        pass
+
+    @abstractmethod
+    def generate_backend(self) -> List[str]:
+        """
+        Generate backend code.
+        
+        Returns:
+            List of generated file paths
+        """
+        pass
+
+    def generate_docker(self) -> List[str]:
+        """
+        Generate Docker configuration files.
+        
+        Returns:
+            List of generated file paths
+        """
+        files = []
+        
+        # Dockerfile for backend
+        dockerfile_content = self._get_dockerfile_content()
+        files.append(self._write_file('Dockerfile', dockerfile_content))
+        
+        # docker-compose.yml
+        compose_content = self._get_docker_compose_content()
+        files.append(self._write_file('docker-compose.yml', compose_content))
+        
+        # .dockerignore
+        dockerignore_content = self._get_dockerignore_content()
+        files.append(self._write_file('.dockerignore', dockerignore_content))
+        
+        return files
+
+    def generate_readme(self) -> List[str]:
+        """
+        Generate README.md with instructions.
+        
+        Returns:
+            List of generated file paths
+        """
+        readme_content = self._get_readme_content()
+        return [self._write_file('README.md', readme_content)]
+
+    def _generate_config_files(self) -> List[str]:
+        """Generate additional configuration files."""
+        files = []
+        
+        # .env.example
+        env_example = self._get_env_example_content()
+        files.append(self._write_file('.env.example', env_example))
+        
+        # backend/config.json
+        config_json = json.dumps({
+            'model_path': os.path.basename(self.model_path),
+            'labels': self.labels,
+            'framework': self.framework,
+            'website_type': self.website_type,
+            'port': self.port
+        }, indent=2)
+        files.append(self._write_file('backend/config.json', config_json))
+        
+        return files
+
+    def _get_dockerfile_content(self) -> str:
+        """Get Dockerfile content for the backend."""
+        base_image = 'python:3.10-slim'
+        
+        return f'''# Generated AI Website Backend
+# Built with Flowly-now Website Generator
+
+FROM {base_image}
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \\
+    libgomp1 \\
+    libgl1-mesa-glx \\
+    libglib2.0-0 \\
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements and install Python dependencies
+COPY backend/requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy backend code
+COPY backend/ /app/
+
+# Copy model file if exists
+COPY backend/model.pth /app/model.pth 2>/dev/null || true
+
+# Environment variables
+ENV MODEL_PATH=/app/model.pth
+ENV LABELS='{json.dumps(self.labels)}'
+ENV PORT={self.port}
+
+# Expose port
+EXPOSE {self.port}
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \\
+    CMD curl -f http://localhost:{self.port}/health || exit 1
+
+# Run the application
+CMD ["python", "app.py"]
+'''
+
+    def _get_docker_compose_content(self) -> str:
+        """Get docker-compose.yml content."""
+        backend_port = self.port
+        frontend_port = 3000
+
+        return f'''version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ai_website_backend
+    ports:
+      - "{backend_port}:{backend_port}"
+    environment:
+      - MODEL_PATH=/app/model.pth
+      - LABELS={json.dumps(self.labels)}
+      - PORT={self.port}
+    volumes:
+      - ./backend:/app
+      - model_data:/app/model
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:{self.port}/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: ai_website_frontend
+    ports:
+      - "{frontend_port}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      - VITE_API_URL=http://localhost:{backend_port}
+    restart: unless-stopped
+
+volumes:
+  model_data:
+'''
+
+    def _get_dockerignore_content(self) -> str:
+        """Get .dockerignore content."""
+        return '''# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv
+venv/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Testing
+.coverage
+htmlcov/
+*.test
+
+# Misc
+*.log
+.DS_Store
+Thumbs.db
+node_modules/
+'''
+
+    def _get_env_example_content(self) -> str:
+        """Get .env.example content."""
+        return f'''# Model Configuration
+MODEL_PATH=model.pth
+LABELS={json.dumps(self.labels)}
+
+# Server Configuration
+PORT={self.port}
+HOST=0.0.0.0
+
+# Model Framework
+FRAMEWORK={self.framework}
+
+# Frontend API URL (used by frontend)
+VITE_API_URL=http://localhost:{self.port}
+'''
+
+    def _get_readme_content(self) -> str:
+        """Get README.md content - override in subclasses for specific content."""
+        return f'''# {self.name}
+
+{self.description}
+
+## Model Information
+
+- **Type**: {self.website_type.replace('_', ' ').title()}
+- **Framework**: {self.framework.title()}
+- **Labels**: {', '.join(self.labels) if self.labels else 'N/A'}
+
+## Project Structure
+
+```
+.
+├── backend/
+│   ├── app.py           # Flask/FastAPI application with inference endpoint
+│   ├── model_loader.py  # Model loading and prediction utilities
+│   ├── requirements.txt # Python dependencies
+│   └── config.json      # Model configuration
+├── frontend/
+│   ├── src/
+│   │   └── App.vue      # Main application component
+│   ├── package.json
+│   └── vite.config.js
+├── Dockerfile
+├── docker-compose.yml
+├── .env.example
+└── README.md
+```
+
+## Quick Start
+
+### Local Development
+
+1. **Install backend dependencies**:
+   ```bash
+   cd backend
+   pip install -r requirements.txt
+   ```
+
+2. **Configure environment**:
+   ```bash
+   cp ../.env.example .env
+   # Edit .env with your model path
+   ```
+
+3. **Start backend**:
+   ```bash
+   python app.py
+   ```
+
+4. **Install frontend dependencies** (in project root):
+   ```bash
+   cd frontend
+   npm install
+   ```
+
+5. **Start frontend**:
+   ```bash
+   npm run dev
+   ```
+
+### Docker Deployment
+
+1. **Build and run with Docker Compose**:
+   ```bash
+   docker-compose up --build
+   ```
+
+2. Access the application:
+   - Frontend: http://localhost:3000
+   - Backend API: http://localhost:{self.port}
+
+## API Documentation
+
+### POST /predict
+
+Upload an image or data for prediction.
+
+**Request**:
+- Content-Type: `multipart/form-data`
+- Body: `file` - The file to predict
+
+**Response**:
+```json
+{result_type}
+```
+
+### GET /health
+
+Health check endpoint.
+
+**Response**:
+```json
+{{"status": "healthy", "model_loaded": true}}
+```
+
+## Development Notes
+
+- Ensure your trained model file is placed in the `backend/` directory
+- Update `LABELS` in `.env` to match your model's classes
+- The backend expects a model file compatible with {self.framework}
+
+## License
+
+Generated by Flowly-now Website Generator
+'''

@@ -1,0 +1,135 @@
+- generic [ref=e95]:
+  - banner [ref=e96]:
+    - generic [ref=e97]:
+      - button "返回" [ref=e98] [cursor=pointer]:
+        - img [ref=e100]
+        - generic [ref=e102]: 返回
+      - textbox "输入工作流名称..." [ref=e104]: DeepSeek 测试工作流
+    - generic [ref=e106]:
+      - generic [ref=e107]:
+        - button [ref=e108] [cursor=pointer]:
+          - img [ref=e110]
+        - button [ref=e113] [cursor=pointer]:
+          - img [ref=e115]
+        - button [ref=e118] [cursor=pointer]:
+          - img [ref=e120]
+      - generic [ref=e125]:
+        - button [ref=e126] [cursor=pointer]:
+          - img [ref=e128]
+        - button [disabled] [ref=e131]:
+          - img [ref=e133]
+    - generic [ref=e136]:
+      - button "验证" [ref=e137] [cursor=pointer]:
+        - img [ref=e139]
+        - generic [ref=e141]: 验证
+      - button "保存" [active] [ref=e142] [cursor=pointer]:
+        - img [ref=e144]
+        - generic [ref=e148]: 保存
+      - button "执行" [ref=e149] [cursor=pointer]:
+        - img [ref=e151]
+        - generic [ref=e153]: 执行
+  - generic [ref=e154]:
+    - complementary [ref=e155]:
+      - generic [ref=e156]:
+        - heading "流程节点" [level=3] [ref=e157]
+        - generic [ref=e158]:
+          - generic [ref=e159]: 控制流
+          - generic [ref=e160]:
+            - img [ref=e161]
+            - generic [ref=e164]: 开始
+          - generic [ref=e165]:
+            - img [ref=e166]
+            - generic [ref=e168]: 结束
+          - generic [ref=e169]:
+            - img [ref=e170]
+            - generic [ref=e174]: 条件判断
+          - generic [ref=e175]:
+            - img [ref=e176]
+            - generic [ref=e180]: 循环
+        - generic [ref=e181]:
+          - generic [ref=e182]: AI 节点
+          - generic [ref=e183]:
+            - img [ref=e184]
+            - generic [ref=e186]: 大语言模型
+          - generic [ref=e187]:
+            - img [ref=e188]
+            - generic [ref=e190]: 提示词
+        - generic [ref=e191]:
+          - generic [ref=e192]: 数据节点
+          - generic [ref=e193]:
+            - img [ref=e194]
+            - generic [ref=e197]: 输入
+          - generic [ref=e198]:
+            - img [ref=e199]
+            - generic [ref=e202]: 输出
+          - generic [ref=e203]:
+            - img [ref=e204]
+            - generic [ref=e207]: 代码执行
+          - generic [ref=e208]:
+            - img [ref=e209]
+            - generic [ref=e212]: 变量
+        - generic [ref=e213]:
+          - generic [ref=e214]: 工具节点
+          - generic [ref=e215]:
+            - img [ref=e216]
+            - generic [ref=e220]: 工具
+          - generic [ref=e221]:
+            - img [ref=e222]
+            - generic [ref=e226]: HTTP请求
+    - main [ref=e227]:
+      - generic [ref=e230]:
+        - generic:
+          - img
+          - generic:
+            - group [ref=e231]: 开始
+            - group [ref=e234]: 大语言模型
+            - group [ref=e237]: 结束
+    - complementary [ref=e241]:
+      - generic [ref=e242]:
+        - generic [ref=e243]:
+          - heading "节点属性" [level=3] [ref=e244]
+          - button [ref=e245] [cursor=pointer]:
+            - img [ref=e247]
+        - generic [ref=e250]:
+          - generic [ref=e251]:
+            - generic [ref=e252]: 节点名称
+            - textbox "输入节点名称" [ref=e255]
+          - generic [ref=e256]:
+            - generic [ref=e257]: 节点类型
+            - generic [ref=e259]:
+              - generic:
+                - combobox [disabled] [ref=e261]
+                - generic [ref=e262]: 大语言模型
+              - generic:
+                - generic:
+                  - img
+          - generic [ref=e263]:
+            - generic [ref=e264]: 模型
+            - generic [ref=e266]:
+              - generic:
+                - combobox [ref=e268]
+                - generic [ref=e269]: DeepSeek R1 8B (Ollama)
+              - img [ref=e272] [cursor=pointer]
+          - generic [ref=e274]:
+            - generic [ref=e275]: 温度参数
+            - generic [ref=e276]:
+              - slider "滑块介于 0 至 2" [ref=e279] [cursor=pointer]
+              - generic [ref=e281]:
+                - button "减少数值" [ref=e282] [cursor=pointer]:
+                  - img [ref=e284]
+                - button "增加数值" [ref=e286] [cursor=pointer]:
+                  - img [ref=e288]
+                - spinbutton [ref=e292]: "0.7"
+          - generic [ref=e293]:
+            - generic [ref=e294]: 系统提示词
+            - textbox "输入系统提示词..." [ref=e296]: 你是一个有帮助的AI助手，请用简洁的中文回答问题。
+          - generic [ref=e297]:
+            - generic [ref=e298]: 用户模板
+            - 'textbox "{input}" [ref=e300]'
+          - generic [ref=e301]:
+            - generic [ref=e302]: 描述
+            - textbox "节点描述（可选）" [ref=e304]
+        - button "删除节点" [ref=e306] [cursor=pointer]:
+          - generic [ref=e307]:
+            - img [ref=e308]
+            - text: 删除节点

@@ -1,0 +1,919 @@
+// Flowly Black & White Theme System
+// 黑白主题设计系统 — 严格遵循：黑底白字 / 白底黑字
+
+// ============================================
+// 全局派生 CSS 变量（在所有基础变量定义之后）
+// 兼容组件中 var(X)-modifier 语法
+// ============================================
+:root {
+  --bg-primary-secondary: var(--bg-secondary);
+  --bg-primary-tertiary: var(--bg-tertiary);
+  --bg-primary-hover: var(--bg-hover);
+  --text-primary-secondary: var(--text-secondary);
+  --text-primary-tertiary: var(--text-tertiary);
+  --border-primary-hover: var(--border-hover);
+}
+
+// ============================================
+// 全局默认 (:root) — 等同于 dark 主题
+// ============================================
+
+:root {
+  --bg-primary:   #0a0a0b;
+  --bg-secondary: #141418;
+  --bg-tertiary:  #1c1c21;
+  --bg-elevated:  #222228;
+  --bg-hover:     #2a2a32;
+  --bg-active:    #32323c;
+  --bg-overlay:   rgba(0, 0, 0, 0.7);
+
+  --border-primary:   #2e2e38;
+  --border-secondary: #3a3a48;
+  --border-hover:     #4a4a5c;
+
+  // 黑底 → 白字
+  --text-primary:   #fafafa;
+  --text-secondary: #a1a1aa;
+  --text-tertiary:  #71717a;
+  --text-disabled:  #52525b;
+  --text-inverse:   #0a0a0b;
+  --text-color:     #fafafa;
+
+  --surface-muted: rgba(255, 255, 255, 0.04);
+  --surface-strong: rgba(255, 255, 255, 0.09);
+  --surface-accent: rgba(255, 255, 255, 0.12);
+  --overlay-backdrop: rgba(0, 0, 0, 0.68);
+  --focus-ring: rgba(255, 255, 255, 0.34);
+  --hero-glow: rgba(255, 255, 255, 0.14);
+  --hero-grid: rgba(255, 255, 255, 0.055);
+  --decorative-line: rgba(255, 255, 255, 0.08);
+  --toast-progress-track: rgba(255, 255, 255, 0.08);
+  --notification-unread: rgba(255, 255, 255, 0.05);
+  --notification-chip-text: #0a0a0b;
+
+  --success:    #22c55e;
+  --success-bg: rgba(34, 197, 94, 0.12);
+  --warning:    #eab308;
+  --warning-bg: rgba(234, 179, 8, 0.12);
+  --error:      #ef4444;
+  --error-bg:   rgba(239, 68, 68, 0.12);
+  --info:       #3b82f6;
+  --info-bg:    rgba(59, 130, 246, 0.12);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.55);
+  --shadow-lg: 0 10px 20px rgba(0, 0, 0, 0.55);
+  --shadow-xl: 0 20px 30px rgba(0, 0, 0, 0.65);
+
+  --card-bg:     #141418;
+  --card-border: #2e2e38;
+  --input-bg:           #1c1c21;
+  --input-border:       #2e2e38;
+  --input-focus-border: #ffffff;
+  --button-primary-bg:      #ffffff;
+  --button-primary-text:    #0a0a0b;
+  --button-secondary-bg:    transparent;
+  --button-secondary-text:  #fafafa;
+  --button-secondary-border: #3a3a48;
+
+  --scrollbar-track:       #141418;
+  --scrollbar-thumb:       #3a3a48;
+  --scrollbar-thumb-hover: #4a4a5c;
+
+  --accent-primary:   #fafafa;
+  --accent-secondary: #a1a1aa;
+  --accent-muted:     rgba(250, 250, 250, 0.1);
+
+  // 工作流卡片图标渐变 — 蓝靛色
+  --workflow-icon-from: #3b82f6;
+  --workflow-icon-to:   #60a5fa;
+  --workflow-icon-shadow: rgba(59, 130, 246, 0.45);
+
+  // Agent 卡片图标渐变 — 琥珀橙色
+  --agent-icon-from: #f97316;
+  --agent-icon-to:   #fb923c;
+  --agent-icon-shadow: rgba(249, 115, 22, 0.45);
+
+  // 主色调半透明版本（支持主题切换）
+  --accent-primary-05: rgba(250, 250, 250, 0.05);
+  --accent-primary-10: rgba(250, 250, 250, 0.10);
+  --accent-primary-20: rgba(250, 250, 250, 0.20);
+  --accent-primary-30: rgba(250, 250, 250, 0.30);
+  --accent-primary-50: rgba(250, 250, 250, 0.50);
+
+  // 青色强调色（替换紫色）
+  --color-primary: #06b6d4;
+  --color-primary-hover: #0891b2;
+  --color-primary-active: #0e7490;
+  --color-primary-light: #22d3ee;
+  --color-primary-lighter: #67e8f9;
+  --color-primary-pale: #cffafe;
+  --color-primary-shadow: rgba(6, 182, 212, 0.4);
+  --color-primary-03: rgba(6, 182, 212, 0.03);
+  --color-primary-05: rgba(6, 182, 212, 0.05);
+  --color-primary-08: rgba(6, 182, 212, 0.08);
+  --color-primary-10: rgba(6, 182, 212, 0.10);
+  --color-primary-20: rgba(6, 182, 212, 0.20);
+  --color-primary-30: rgba(6, 182, 212, 0.30);
+  --color-primary-50: rgba(6, 182, 212, 0.50);
+}
+
+// ============================================
+// 1. 深色模式 (Dark) — 黑底白字
+// ============================================
+
+[data-theme="dark"],
+.dark {
+  color-scheme: dark;
+
+  --bg-primary:   #0a0a0b;
+  --bg-secondary: #141418;
+  --bg-tertiary:  #1c1c21;
+  --bg-elevated:  #222228;
+  --bg-hover:     #2a2a32;
+  --bg-active:    #32323c;
+  --bg-overlay:   rgba(0, 0, 0, 0.7);
+
+  --border-primary:   #2e2e38;
+  --border-secondary: #3a3a48;
+  --border-hover:     #4a4a5c;
+
+  --text-primary:   #fafafa;
+  --text-secondary: #a1a1aa;
+  --text-tertiary:  #71717a;
+  --text-disabled:  #52525b;
+  --text-inverse:   #0a0a0b;
+  --text-color:     #fafafa;
+
+  --surface-muted: rgba(255, 255, 255, 0.04);
+  --surface-strong: rgba(255, 255, 255, 0.09);
+  --surface-accent: rgba(255, 255, 255, 0.12);
+  --overlay-backdrop: rgba(0, 0, 0, 0.68);
+  --focus-ring: rgba(255, 255, 255, 0.34);
+  --hero-glow: rgba(255, 255, 255, 0.14);
+  --hero-grid: rgba(255, 255, 255, 0.055);
+  --decorative-line: rgba(255, 255, 255, 0.08);
+  --toast-progress-track: rgba(255, 255, 255, 0.08);
+  --notification-unread: rgba(255, 255, 255, 0.05);
+  --notification-chip-text: #0a0a0b;
+
+  --success:    #22c55e;
+  --success-bg: rgba(34, 197, 94, 0.12);
+  --warning:    #eab308;
+  --warning-bg: rgba(234, 179, 8, 0.12);
+  --error:      #ef4444;
+  --error-bg:   rgba(239, 68, 68, 0.12);
+  --info:       #3b82f6;
+  --info-bg:    rgba(59, 130, 246, 0.12);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.55);
+  --shadow-lg: 0 10px 20px rgba(0, 0, 0, 0.55);
+  --shadow-xl: 0 20px 30px rgba(0, 0, 0, 0.65);
+
+  --card-bg:     #141418;
+  --card-border: #2e2e38;
+  --input-bg:           #1c1c21;
+  --input-border:       #2e2e38;
+  --input-focus-border: #ffffff;
+  --button-primary-bg:       #ffffff;
+  --button-primary-text:     #0a0a0b;
+  --button-secondary-bg:     transparent;
+  --button-secondary-text:   #fafafa;
+  --button-secondary-border: #3a3a48;
+
+  --scrollbar-track:       #141418;
+  --scrollbar-thumb:       #3a3a48;
+  --scrollbar-thumb-hover: #4a4a5c;
+
+  --accent-primary:   #fafafa;
+  --accent-secondary: #a1a1aa;
+  --accent-muted:     rgba(250, 250, 250, 0.1);
+
+  // 工作流卡片图标渐变 — 蓝靛色
+  --workflow-icon-from: #3b82f6;
+  --workflow-icon-to:   #60a5fa;
+  --workflow-icon-shadow: rgba(59, 130, 246, 0.45);
+
+  // Agent 卡片图标渐变 — 琥珀橙色
+  --agent-icon-from: #f97316;
+  --agent-icon-to:   #fb923c;
+  --agent-icon-shadow: rgba(249, 115, 22, 0.45);
+
+  // 青色强调色（替换紫色）
+  --color-primary: #06b6d4;
+  --color-primary-hover: #0891b2;
+  --color-primary-active: #0e7490;
+  --color-primary-light: #22d3ee;
+  --color-primary-lighter: #67e8f9;
+  --color-primary-pale: #cffafe;
+  --color-primary-shadow: rgba(6, 182, 212, 0.4);
+  --color-primary-03: rgba(6, 182, 212, 0.03);
+  --color-primary-05: rgba(6, 182, 212, 0.05);
+  --color-primary-08: rgba(6, 182, 212, 0.08);
+  --color-primary-10: rgba(6, 182, 212, 0.10);
+  --color-primary-20: rgba(6, 182, 212, 0.20);
+  --color-primary-30: rgba(6, 182, 212, 0.30);
+  --color-primary-50: rgba(6, 182, 212, 0.50);
+}
+
+// ============================================
+// 2. 浅色模式 (Light) — 白底黑字
+// ============================================
+
+[data-theme="light"],
+.light {
+  color-scheme: light;
+
+  --bg-primary:   #ffffff;
+  --bg-secondary: #fafafa;
+  --bg-tertiary:  #f4f4f5;
+  --bg-elevated:  #ffffff;
+  --bg-hover:     #e4e4e7;
+  --bg-active:    #d4d4d8;
+  --bg-overlay:   rgba(0, 0, 0, 0.45);
+
+  --border-primary:   #e4e4e7;
+  --border-secondary: #d4d4d8;
+  --border-hover:     #a1a1aa;
+
+  // 白底 → 黑字
+  --text-primary:   #0f0f0f;
+  --text-secondary: #3f3f46;
+  --text-tertiary:  #71717a;
+  --text-disabled:  #a1a1aa;
+  --text-inverse:   #ffffff;
+  --text-color:     #0f0f0f;
+
+  --surface-muted: rgba(0, 0, 0, 0.03);
+  --surface-strong: rgba(0, 0, 0, 0.06);
+  --surface-accent: rgba(0, 0, 0, 0.09);
+  --overlay-backdrop: rgba(15, 15, 15, 0.38);
+  --focus-ring: rgba(15, 15, 15, 0.18);
+  --hero-glow: rgba(15, 15, 15, 0.08);
+  --hero-grid: rgba(15, 15, 15, 0.05);
+  --decorative-line: rgba(15, 15, 15, 0.12);
+  --toast-progress-track: rgba(15, 15, 15, 0.08);
+  --notification-unread: rgba(15, 15, 15, 0.04);
+  --notification-chip-text: #ffffff;
+
+  --success:    #15803d;
+  --success-bg: rgba(21, 128, 61, 0.1);
+  --warning:    #b45309;
+  --warning-bg: rgba(180, 83, 9, 0.1);
+  --error:      #b91c1c;
+  --error-bg:   rgba(185, 28, 28, 0.1);
+  --info:       #1d4ed8;
+  --info-bg:    rgba(29, 78, 216, 0.1);
+
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 10px 20px rgba(0, 0, 0, 0.10);
+  --shadow-xl: 0 20px 30px rgba(0, 0, 0, 0.14);
+
+  --card-bg:     #ffffff;
+  --card-border: #e4e4e7;
+  --input-bg:           #ffffff;
+  --input-border:       #d4d4d8;
+  --input-focus-border: #0f0f0f;
+  --button-primary-bg:       #0f0f0f;
+  --button-primary-text:     #ffffff;
+  --button-secondary-bg:     transparent;
+  --button-secondary-text:   #0f0f0f;
+  --button-secondary-border: #d4d4d8;
+
+  --scrollbar-track:       #f4f4f5;
+  --scrollbar-thumb:       #d4d4d8;
+  --scrollbar-thumb-hover: #a1a1aa;
+
+  --accent-primary:   #0f0f0f;
+  --accent-secondary: #71717a;
+  --accent-muted:     rgba(15, 15, 15, 0.08);
+
+  // 工作流卡片图标渐变 — 蓝靛色
+  --workflow-icon-from: #3b82f6;
+  --workflow-icon-to:   #60a5fa;
+  --workflow-icon-shadow: rgba(59, 130, 246, 0.45);
+
+  // Agent 卡片图标渐变 — 琥珀橙色
+  --agent-icon-from: #f97316;
+  --agent-icon-to:   #fb923c;
+  --agent-icon-shadow: rgba(249, 115, 22, 0.45);
+
+  // 主色调半透明版本（支持主题切换）
+  --accent-primary-05: rgba(15, 15, 15, 0.05);
+  --accent-primary-10: rgba(15, 15, 15, 0.10);
+  --accent-primary-20: rgba(15, 15, 15, 0.20);
+  --accent-primary-30: rgba(15, 15, 15, 0.30);
+  --accent-primary-50: rgba(15, 15, 15, 0.50);
+}
+
+// ============================================
+// 3. 纯黑白模式 (Pure B&W) — 纯黑底白字
+// ============================================
+
+[data-theme="pure-bw"],
+.pure-bw {
+  color-scheme: dark;
+
+  --bg-primary:   #000000;
+  --bg-secondary: #0a0a0a;
+  --bg-tertiary:  #141414;
+  --bg-elevated:  #1c1c1c;
+  --bg-hover:     #262626;
+  --bg-active:    #303030;
+  --bg-overlay:   rgba(0, 0, 0, 0.85);
+
+  --border-primary:   #383838;
+  --border-secondary: #484848;
+  --border-hover:     #585858;
+
+  // 纯黑底 → 纯白字
+  --text-primary:   #ffffff;
+  --text-secondary: #b8b8b8;
+  --text-tertiary:  #787878;
+  --text-disabled:  #484848;
+  --text-inverse:   #000000;
+  --text-color:     #ffffff;
+
+  --surface-muted: rgba(255, 255, 255, 0.03);
+  --surface-strong: rgba(255, 255, 255, 0.07);
+  --surface-accent: rgba(255, 255, 255, 0.1);
+  --overlay-backdrop: rgba(0, 0, 0, 0.82);
+  --focus-ring: rgba(255, 255, 255, 0.3);
+  --hero-glow: rgba(255, 255, 255, 0.1);
+  --hero-grid: rgba(255, 255, 255, 0.04);
+  --decorative-line: rgba(255, 255, 255, 0.12);
+  --toast-progress-track: rgba(255, 255, 255, 0.08);
+  --notification-unread: rgba(255, 255, 255, 0.04);
+  --notification-chip-text: #000000;
+
+  --success:    #d4d4d4;
+  --success-bg: rgba(255, 255, 255, 0.08);
+  --warning:    #d4d4d4;
+  --warning-bg: rgba(255, 255, 255, 0.08);
+  --error:      #d4d4d4;
+  --error-bg:   rgba(255, 255, 255, 0.08);
+  --info:       #d4d4d4;
+  --info-bg:    rgba(255, 255, 255, 0.08);
+
+  --shadow-sm: 0 1px 4px rgba(0, 0, 0, 0.9);
+  --shadow-md: 0 4px 10px rgba(0, 0, 0, 0.9);
+  --shadow-lg: 0 10px 22px rgba(0, 0, 0, 0.9);
+  --shadow-xl: 0 20px 36px rgba(0, 0, 0, 0.95);
+
+  --card-bg:     #0a0a0a;
+  --card-border: #383838;
+  --input-bg:           #141414;
+  --input-border:       #383838;
+  --input-focus-border: #ffffff;
+  --button-primary-bg:       #ffffff;
+  --button-primary-text:     #000000;
+  --button-secondary-bg:     transparent;
+  --button-secondary-text:   #ffffff;
+  --button-secondary-border: #484848;
+
+  --scrollbar-track:       #0a0a0a;
+  --scrollbar-thumb:       #484848;
+  --scrollbar-thumb-hover: #686868;
+
+  --accent-primary:   #ffffff;
+  --accent-secondary: #b8b8b8;
+  --accent-muted:     rgba(255, 255, 255, 0.08);
+
+  // 工作流卡片图标渐变 — 蓝靛色
+  --workflow-icon-from: #3b82f6;
+  --workflow-icon-to:   #60a5fa;
+  --workflow-icon-shadow: rgba(59, 130, 246, 0.5);
+
+  // Agent 卡片图标渐变 — 琥珀橙色
+  --agent-icon-from: #f97316;
+  --agent-icon-to:   #fb923c;
+  --agent-icon-shadow: rgba(249, 115, 22, 0.5);
+
+  // 主色调半透明版本（支持主题切换）
+  --accent-primary-05: rgba(255, 255, 255, 0.05);
+  --accent-primary-10: rgba(255, 255, 255, 0.10);
+  --accent-primary-20: rgba(255, 255, 255, 0.20);
+  --accent-primary-30: rgba(255, 255, 255, 0.30);
+  --accent-primary-50: rgba(255, 255, 255, 0.50);
+
+  // 青色强调色（替换紫色）
+  --color-primary: #06b6d4;
+  --color-primary-hover: #0891b2;
+  --color-primary-active: #0e7490;
+  --color-primary-light: #22d3ee;
+  --color-primary-lighter: #67e8f9;
+  --color-primary-pale: #cffafe;
+  --color-primary-shadow: rgba(6, 182, 212, 0.4);
+  --color-primary-03: rgba(6, 182, 212, 0.03);
+  --color-primary-05: rgba(6, 182, 212, 0.05);
+  --color-primary-08: rgba(6, 182, 212, 0.08);
+  --color-primary-10: rgba(6, 182, 212, 0.10);
+  --color-primary-20: rgba(6, 182, 212, 0.20);
+  --color-primary-30: rgba(6, 182, 212, 0.30);
+  --color-primary-50: rgba(6, 182, 212, 0.50);
+}
+
+// ============================================
+// 4. 高对比模式 (High Contrast) — 全黑底纯白字
+// ============================================
+
+[data-theme="high-contrast"],
+.high-contrast {
+  color-scheme: dark;
+
+  --bg-primary:   #000000;
+  --bg-secondary: #000000;
+  --bg-tertiary:  #0a0a0a;
+  --bg-elevated:  #141414;
+  --bg-hover:     #242424;
+  --bg-active:    #343434;
+  --bg-overlay:   rgba(0, 0, 0, 0.92);
+
+  --border-primary:   #ffffff;
+  --border-secondary: #cccccc;
+  --border-hover:     #ffffff;
+
+  // 黑底 → 纯白字（全部用最高对比）
+  --text-primary:   #ffffff;
+  --text-secondary: #ffffff;
+  --text-tertiary:  #cccccc;
+  --text-disabled:  #888888;
+  --text-inverse:   #000000;
+  --text-color:     #ffffff;
+
+  --surface-muted: rgba(255, 255, 255, 0.08);
+  --surface-strong: rgba(255, 255, 255, 0.14);
+  --surface-accent: rgba(255, 255, 255, 0.2);
+  --overlay-backdrop: rgba(0, 0, 0, 0.9);
+  --focus-ring: rgba(255, 214, 0, 0.24);
+  --hero-glow: rgba(255, 255, 255, 0.08);
+  --hero-grid: rgba(255, 255, 255, 0.08);
+  --decorative-line: rgba(255, 255, 255, 0.28);
+  --toast-progress-track: rgba(255, 255, 255, 0.12);
+  --notification-unread: rgba(255, 255, 255, 0.09);
+  --notification-chip-text: #000000;
+
+  --success:    #00e676;
+  --success-bg: rgba(0, 230, 118, 0.18);
+  --warning:    #ffd600;
+  --warning-bg: rgba(255, 214, 0, 0.18);
+  --error:      #ff1744;
+  --error-bg:   rgba(255, 23, 68, 0.18);
+  --info:       #00e5ff;
+  --info-bg:    rgba(0, 229, 255, 0.18);
+
+  --shadow-sm: 0 0 0 1.5px #ffffff;
+  --shadow-md: 0 0 0 2px   #ffffff;
+  --shadow-lg: 0 0 0 2.5px #ffffff;
+  --shadow-xl: 0 0 0 3px   #ffffff;
+
+  --card-bg:     #000000;
+  --card-border: #ffffff;
+  --input-bg:           #000000;
+  --input-border:       #ffffff;
+  --input-focus-border: #ffd600;
+  --button-primary-bg:       #ffffff;
+  --button-primary-text:     #000000;
+  --button-secondary-bg:     transparent;
+  --button-secondary-text:   #ffffff;
+  --button-secondary-border: #ffffff;
+
+  --scrollbar-track:       #000000;
+  --scrollbar-thumb:       #666666;
+  --scrollbar-thumb-hover: #aaaaaa;
+
+  --accent-primary:   #ffffff;
+  --accent-secondary: #cccccc;
+  --accent-muted:     rgba(255, 255, 255, 0.14);
+
+  // 工作流卡片图标渐变 — 蓝靛色
+  --workflow-icon-from: #3b82f6;
+  --workflow-icon-to:   #60a5fa;
+  --workflow-icon-shadow: rgba(59, 130, 246, 0.5);
+
+  // Agent 卡片图标渐变 — 琥珀橙色
+  --agent-icon-from: #f97316;
+  --agent-icon-to:   #fb923c;
+  --agent-icon-shadow: rgba(249, 115, 22, 0.5);
+
+  // 主色调半透明版本（支持主题切换）
+  --accent-primary-05: rgba(255, 255, 255, 0.05);
+  --accent-primary-10: rgba(255, 255, 255, 0.10);
+  --accent-primary-20: rgba(255, 255, 255, 0.20);
+  --accent-primary-30: rgba(255, 255, 255, 0.30);
+  --accent-primary-50: rgba(255, 255, 255, 0.50);
+
+  // 青色强调色（替换紫色）
+  --color-primary: #06b6d4;
+  --color-primary-hover: #0891b2;
+  --color-primary-active: #0e7490;
+  --color-primary-light: #22d3ee;
+  --color-primary-lighter: #67e8f9;
+  --color-primary-pale: #cffafe;
+  --color-primary-shadow: rgba(6, 182, 212, 0.4);
+  --color-primary-03: rgba(6, 182, 212, 0.03);
+  --color-primary-05: rgba(6, 182, 212, 0.05);
+  --color-primary-08: rgba(6, 182, 212, 0.08);
+  --color-primary-10: rgba(6, 182, 212, 0.10);
+  --color-primary-20: rgba(6, 182, 212, 0.20);
+  --color-primary-30: rgba(6, 182, 212, 0.30);
+  --color-primary-50: rgba(6, 182, 212, 0.50);
+}
+
+// ============================================
+// 5. 全局基础应用
+// ============================================
+
+body {
+  background-color: var(--bg-primary);
+  color: var(--text-color, var(--text-primary));
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+// 确保所有文字容器继承主题颜色
+h1, h2, h3, h4, h5, h6,
+p, span, label, li, td, th,
+.el-dropdown-menu__item,
+.el-menu-item,
+.el-sub-menu__title {
+  color: inherit;
+}
+
+// 滚动条
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--scrollbar-track); }
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 3px;
+  &:hover { background: var(--scrollbar-thumb-hover); }
+}
+
+// ============================================
+// 6. Element Plus 全局覆盖
+// ============================================
+
+// 输入框
+.el-input {
+  --el-input-bg-color:          var(--input-bg);
+  --el-input-border-color:      var(--input-border);
+  --el-input-text-color:        var(--text-primary);
+  --el-input-placeholder-color: var(--text-tertiary);
+  --el-input-focus-border-color: var(--input-focus-border);
+
+  .el-input__wrapper {
+    background-color: var(--input-bg);
+    box-shadow: 0 0 0 1px var(--input-border) inset;
+
+    &:hover { box-shadow: 0 0 0 1px var(--border-hover) inset; }
+    &.is-focus { box-shadow: 0 0 0 1.5px var(--input-focus-border) inset; }
+  }
+
+  .el-input__inner {
+    color: var(--text-primary);
+    background-color: transparent;
+  }
+}
+
+// 文本域
+.el-textarea__inner {
+  background-color: var(--input-bg);
+  border-color: var(--input-border);
+  color: var(--text-primary);
+  &:focus { border-color: var(--input-focus-border); }
+}
+
+// 按钮
+.el-button {
+  --el-button-bg-color:           var(--button-secondary-bg);
+  --el-button-border-color:       var(--button-secondary-border);
+  --el-button-text-color:         var(--button-secondary-text);
+  --el-button-hover-bg-color:     var(--bg-hover);
+  --el-button-hover-border-color: var(--border-hover);
+  --el-button-hover-text-color:   var(--text-primary);
+
+  &.el-button--primary {
+    --el-button-bg-color:           var(--button-primary-bg);
+    --el-button-border-color:       var(--button-primary-bg);
+    --el-button-text-color:         var(--button-primary-text);
+    --el-button-hover-bg-color:     var(--accent-secondary);
+    --el-button-hover-border-color: var(--accent-secondary);
+    --el-button-hover-text-color:   var(--text-inverse);
+  }
+}
+
+// 下拉菜单 — 全面覆盖
+.el-dropdown-menu,
+.el-popper.is-light {
+  background-color: var(--bg-elevated) !important;
+  border: 1px solid var(--border-primary) !important;
+  box-shadow: var(--shadow-xl) !important;
+
+  .el-dropdown-menu__item {
+    color: var(--text-primary) !important;
+    background-color: transparent;
+
+    &:not(.is-disabled):hover,
+    &:focus {
+      background-color: var(--bg-hover) !important;
+      color: var(--text-primary) !important;
+    }
+
+    &.is-disabled {
+      color: var(--text-disabled) !important;
+    }
+  }
+
+  .el-popper__arrow::before {
+    background: var(--bg-elevated) !important;
+    border-color: var(--border-primary) !important;
+  }
+}
+
+// 主题选择器弹层（自定义 popper-class）
+.theme-popper {
+  .el-dropdown-menu {
+    background-color: var(--bg-elevated) !important;
+    border-color: var(--border-primary) !important;
+  }
+}
+
+// 表单
+.el-form-item {
+  --el-form-label-font-color: var(--text-secondary);
+}
+
+// 复选框
+.el-checkbox {
+  --el-checkbox-bg-color:           var(--input-bg);
+  --el-checkbox-border-color:       var(--border-primary);
+  --el-checkbox-text-color:         var(--text-primary);
+  --el-checkbox-checked-bg-color:   var(--accent-primary);
+  --el-checkbox-checked-border-color: var(--accent-primary);
+  --el-checkbox-checked-text-color: var(--text-inverse);
+
+  .el-checkbox__label { color: var(--text-primary); }
+}
+
+// 单选框
+.el-radio {
+  --el-radio-text-color: var(--text-primary);
+  .el-radio__label { color: var(--text-primary); }
+}
+
+// Select
+.el-select {
+  .el-select__wrapper {
+    background-color: var(--input-bg) !important;
+    box-shadow: 0 0 0 1px var(--input-border) inset !important;
+    color: var(--text-primary) !important;
+  }
+  .el-select-dropdown {
+    background-color: var(--bg-elevated) !important;
+    border-color: var(--border-primary) !important;
+
+    .el-select-dropdown__item {
+      color: var(--text-primary) !important;
+      &.hover, &:hover { background-color: var(--bg-hover) !important; }
+      &.selected { color: var(--accent-primary) !important; }
+    }
+  }
+}
+
+// 对话框
+.el-dialog {
+  background-color: var(--bg-secondary) !important;
+  border: 1px solid var(--border-primary);
+  border-radius: 12px;
+
+  .el-dialog__header {
+    border-bottom: 1px solid var(--border-primary);
+    .el-dialog__title { color: var(--text-primary); }
+    .el-dialog__headerbtn .el-dialog__close { color: var(--text-secondary); }
+  }
+
+  .el-dialog__body { color: var(--text-primary); }
+}
+
+// 弹出框 Popover
+.el-popover {
+  background-color: var(--bg-elevated) !important;
+  border-color: var(--border-primary) !important;
+  color: var(--text-primary) !important;
+
+  .el-popover__title { color: var(--text-primary) !important; }
+}
+
+// 表格
+.el-table {
+  --el-table-bg-color:          var(--bg-secondary);
+  --el-table-tr-bg-color:       var(--bg-secondary);
+  --el-table-header-bg-color:   var(--bg-tertiary);
+  --el-table-border-color:      var(--border-primary);
+  --el-table-text-color:        var(--text-primary);
+  --el-table-header-text-color: var(--text-secondary);
+  --el-table-row-hover-bg-color: var(--bg-hover);
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+// 标签页
+.el-tabs {
+  .el-tabs__item {
+    color: var(--text-secondary);
+    &.is-active { color: var(--text-primary); }
+    &:hover     { color: var(--text-primary); }
+  }
+  .el-tabs__active-bar { background-color: var(--accent-primary); }
+  .el-tabs__nav-wrap::after { background-color: var(--border-primary); }
+}
+
+// 消息提示
+.el-message {
+  background-color: var(--bg-elevated) !important;
+  border-color: var(--border-primary) !important;
+  .el-message__content { color: var(--text-primary) !important; }
+
+  &.el-message--success { border-color: var(--success) !important; }
+  &.el-message--warning { border-color: var(--warning) !important; }
+  &.el-message--error   { border-color: var(--error)   !important; }
+  &.el-message--info    { border-color: var(--info)    !important; }
+}
+
+// 通知
+.el-notification {
+  background-color: var(--bg-elevated) !important;
+  border-color: var(--border-primary) !important;
+  .el-notification__title   { color: var(--text-primary)   !important; }
+  .el-notification__content { color: var(--text-secondary) !important; }
+}
+
+// 分页
+.el-pagination {
+  --el-pagination-bg-color:          var(--bg-secondary);
+  --el-pagination-text-color:        var(--text-secondary);
+  --el-pagination-border-radius:     4px;
+  --el-pagination-button-color:      var(--text-secondary);
+  --el-pagination-button-bg-color:   var(--bg-secondary);
+  --el-pagination-hover-color:       var(--text-primary);
+  --el-pagination-button-disabled-color: var(--text-disabled);
+
+  .el-pager li {
+    color: var(--text-secondary);
+    background-color: var(--bg-secondary);
+    &:hover, &.is-active { color: var(--text-primary); background-color: var(--bg-hover); }
+  }
+}
+
+// 侧边菜单
+.el-menu {
+  background-color: var(--bg-secondary) !important;
+  border-color: var(--border-primary) !important;
+
+  .el-menu-item,
+  .el-sub-menu__title {
+    color: var(--text-secondary) !important;
+    &:hover { background-color: var(--bg-hover) !important; color: var(--text-primary) !important; }
+    &.is-active { color: var(--text-primary) !important; background-color: var(--accent-muted) !important; }
+  }
+
+  .el-sub-menu .el-menu {
+    background-color: var(--bg-tertiary) !important;
+  }
+}
+
+// 卡片
+.el-card {
+  background-color: var(--card-bg) !important;
+  border-color: var(--card-border) !important;
+  color: var(--text-primary);
+
+  .el-card__header { border-bottom-color: var(--border-primary) !important; color: var(--text-primary); }
+}
+
+// Avatar 文字
+.el-avatar { color: var(--text-inverse); background-color: var(--accent-primary); }
+
+// 标签 Tag
+.el-tag {
+  --el-tag-bg-color:     var(--bg-elevated);
+  --el-tag-border-color: var(--border-primary);
+  --el-tag-text-color:   var(--text-primary);
+}
+
+// Popper / Tooltip / Popover
+.el-popper,
+.el-tooltip__popper,
+.el-popover,
+.el-dropdown__popper {
+  background-color: var(--bg-elevated) !important;
+  border-color: var(--border-primary) !important;
+  color: var(--text-primary) !important;
+  box-shadow: var(--shadow-lg) !important;
+}
+
+.el-popper .el-popper__arrow::before,
+.el-tooltip__popper .el-popper__arrow::before,
+.el-popover.el-popper .el-popper__arrow::before {
+  background: var(--bg-elevated) !important;
+  border-color: var(--border-primary) !important;
+}
+
+// Drawer
+.el-drawer {
+  background-color: var(--bg-secondary) !important;
+  color: var(--text-primary) !important;
+  border-left: 1px solid var(--border-primary);
+
+  .el-drawer__header {
+    color: var(--text-primary) !important;
+    margin-bottom: 0;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border-primary);
+  }
+
+  .el-drawer__body {
+    color: var(--text-primary) !important;
+  }
+}
+
+// Message box / confirm
+.el-message-box {
+  background: var(--bg-secondary) !important;
+  border: 1px solid var(--border-primary) !important;
+  box-shadow: var(--shadow-xl) !important;
+
+  .el-message-box__title,
+  .el-message-box__message,
+  .el-message-box__content {
+    color: var(--text-primary) !important;
+  }
+
+  .el-message-box__headerbtn .el-message-box__close {
+    color: var(--text-secondary) !important;
+  }
+}
+
+// Progress
+.el-progress {
+  --el-progress-text-color: var(--text-secondary);
+  --el-fill-color-light: var(--toast-progress-track);
+
+  .el-progress-bar__outer {
+    background-color: var(--toast-progress-track) !important;
+  }
+}
+
+// Divider
+.el-divider {
+  --el-border-color: var(--border-primary);
+}
+
+// Switch
+.el-switch {
+  --el-switch-off-color: var(--bg-hover);
+  --el-switch-on-color: var(--accent-primary);
+}
+
+// Time select dropdown reuse
+.el-select-dropdown,
+.el-picker__popper {
+  background-color: var(--bg-elevated) !important;
+  border-color: var(--border-primary) !important;
+  color: var(--text-primary) !important;
+}
+
+// Badge
+.el-badge__content { background-color: var(--error); }
+
+// ============================================================
+// 7. 主题化画布背景（工作流画布专用）
+// ============================================
+[data-theme="dark"],
+.dark {
+  --canvas-bg: #0a0a0f;
+  --canvas-pattern: rgba(255, 255, 255, 0.06);
+  --canvas-minimap-bg: #0f0f1a;
+}
+
+[data-theme="light"],
+.light {
+  --canvas-bg: #f4f4f5;
+  --canvas-pattern: rgba(0, 0, 0, 0.06);
+  --canvas-minimap-bg: #e4e4e7;
+}
+
+[data-theme="pure-bw"],
+.pure-bw {
+  --canvas-bg: #000000;
+  --canvas-pattern: rgba(255, 255, 255, 0.04);
+  --canvas-minimap-bg: #0a0a0a;
+}
+
+[data-theme="high-contrast"],
+.high-contrast {
+  --canvas-bg: #000000;
+  --canvas-pattern: rgba(255, 255, 255, 0.05);
+  --canvas-minimap-bg: #0a0a0a;
+}

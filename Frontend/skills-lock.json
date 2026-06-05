@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "skills": {
+    "api-contract-testing": {
+      "source": "aj-geddes/useful-ai-prompts",
+      "sourceType": "github",
+      "skillPath": "skills/api-contract-testing/SKILL.md",
+      "computedHash": "2b466cec96a71c0bfde22a73a984b89342311fe742d58d0a681b8dd5ae735ec8"
+    },
+    "api-security-testing": {
+      "source": "sickn33/antigravity-awesome-skills",
+      "sourceType": "github",
+      "skillPath": "skills/api-security-testing/SKILL.md",
+      "computedHash": "b58813440375789e86e94f5442a54411adc1ce1ca7a40cc1e06e67b97b6fe4e7"
+    },
+    "api-testing": {
+      "source": "secondsky/claude-skills",
+      "sourceType": "github",
+      "skillPath": "plugins/api-testing/skills/api-testing/SKILL.md",
+      "computedHash": "a0e0ed18f1149a71a9cccf09a4c304a321569fc07246b3f761b2ebb8d417a3c8"
+    },
+    "api-testing-patterns": {
+      "source": "proffesor-for-testing/agentic-qe",
+      "sourceType": "github",
+      "skillPath": ".claude/skills/api-testing-patterns/SKILL.md",
+      "computedHash": "10e7372c13d9a5fb6b9662d00aded7ce31a3df5969d035a0e4dfb5b3426958df"
+    },
+    "frontend-testing": {
+      "source": "aj-geddes/useful-ai-prompts",
+      "sourceType": "github",
+      "skillPath": "skills/frontend-testing/SKILL.md",
+      "computedHash": "196c17a328d5db6914f790c4939a02073eeab5e95c155f5fe5971ffe8fbd42a5"
+    },
+    "frontend-testing-best-practices": {
+      "source": "sergiodxa/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/frontend-testing-best-practices/SKILL.md",
+      "computedHash": "d1f4a6e05d1ad541e08f394c5853727c6e61a30e2d91ee26ad3d5d0b974cf5e1"
+    },
+    "ui-testing": {
+      "source": "alinaqi/claude-bootstrap",
+      "sourceType": "github",
+      "skillPath": "skills/ui-testing/SKILL.md",
+      "computedHash": "08edef286b2d192b0079bc389c1303c6cd17df0ae89776b20108aec737082955"
+    }
+  }
+}

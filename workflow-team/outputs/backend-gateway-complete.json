@@ -1,0 +1,50 @@
+{
+  "task_id": "backend-gateway-complete",
+  "status": "done",
+  "result": "Gateway完善完成。补充了5个方法（health_check到registry和3个provider，get_model_info到ollama），修改了6个文件，添加了Ollama function calling和streaming工具支持、健康检查端点、token计数和成本计算。",
+  "files_changed": [
+    "Backend/gateway/providers/ollama_provider.py",
+    "Backend/gateway/providers/registry.py",
+    "Backend/gateway/providers/openai_provider.py",
+    "Backend/gateway/providers/anthropic_provider.py",
+    "Backend/gateway/views.py",
+    "Backend/gateway/urls.py",
+    "Backend/gateway/serializers.py"
+  ],
+  "files_added": [],
+  "features_added": [
+    "Ollama function calling support (tools parameter with _convert_tools method)",
+    "Ollama streaming tool calls support (tool_call type in stream_chat)",
+    "Token counting and cost calculation (calculate_cost in all providers)",
+    "Health check endpoint /api/v1/gateway/health/ with latency_ms and models_count",
+    "ProviderHealthSerializer for health response validation",
+    "GatewayHealthView for unified health status",
+    "OLLAMA_BASE_URL properly read from settings via _base_url field",
+    "Model capability detection from Ollama /api/tags response"
+  ],
+  "summary": "三个provider接口已完全对齐。OllamaProvider现在支持function calling（tools参数），所有provider都有health_check()方法，ProviderRegistry有统一的health_check()聚合所有provider状态。Token计数和成本计算已完善：OpenAI/Anthropic按官方定价计算，Ollama成本为0。健康检查端点GET /api/v1/gateway/health/返回各provider的status、latency_ms和models_count。ModelInfo格式已统一，包含model_id、name、provider、model_type、context_window、supports_streaming、supports_function_calling、supports_vision、input_price、output_price。",
+  "api_endpoints_added": [
+    "GET /api/v1/gateway/health/ - Returns health status of all registered providers"
+  ],
+  "model_fields_aligned": {
+    "model_id": "Model identifier (e.g., 'llama3', 'gpt-4o')",
+    "name": "Display name",
+    "provider": "'openai' | 'anthropic' | 'ollama'",
+    "model_type": "'chat' | 'embedding' | 'image' | 'audio'",
+    "context_window": "Context window size in tokens",
+    "supports_streaming": "Boolean",
+    "supports_function_calling": "Boolean",
+    "supports_vision": "Boolean",
+    "input_price": "Price per million input tokens (Decimal)",
+    "output_price": "Price per million output tokens (Decimal)"
+  },
+  "provider_methods_aligned": [
+    "chat(messages, model, temperature, max_tokens, top_p, tools, **kwargs) -> ProviderResponse",
+    "stream_chat(messages, model, temperature, max_tokens, tools, **kwargs) -> Generator[Dict]",
+    "embeddings(texts, model) -> List[List[float]]",
+    "list_models() -> List[ModelInfo]",
+    "health_check() -> Dict with status, latency_ms, optional models_count/error",
+    "connect() -> bool",
+    "calculate_cost(model, input_tokens, output_tokens) -> Decimal"
+  ]
+}

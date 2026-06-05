@@ -1,0 +1,229 @@
+{
+  "project": "flowly-improvement",
+  "mode": "dag",
+  "tasks": {
+    "plan-security": {
+      "role": "code",
+      "description": "创建安全加固详细方案文档 (SECRET_KEY/密钥清理/CORS审查/输入验证)",
+      "deps": [],
+      "status": "done",
+      "result": "计划文档已创建: Docs/phases/PHASE-0-SECURITY-HARDENING.md",
+      "error": null
+    },
+    "plan-testing": {
+      "role": "code",
+      "description": "创建测试补全详细方案文档 (gateway/agents/rag模块测试/Playwright E2E)",
+      "deps": [],
+      "status": "done",
+      "result": "计划文档已创建: Docs/phases/PHASE-1-TEST-COVERAGE.md",
+      "error": null
+    },
+    "plan-hardcode": {
+      "role": "code",
+      "description": "创建硬编码整改+代码质量详细方案文档 (常量枚举/模块一致性/异常规范化)",
+      "deps": [],
+      "status": "done",
+      "result": "计划文档已创建: Docs/phases/PHASE-2-HARDCODE-QUALITY.md",
+      "error": null
+    },
+    "plan-frontend": {
+      "role": "code",
+      "description": "创建前端架构优化详细方案文档 (TS迁移/组件库抽取/性能优化)",
+      "deps": [],
+      "status": "done",
+      "result": "计划文档已创建: Docs/phases/PHASE-3-FRONTEND-ARCH.md",
+      "error": null
+    },
+    "plan-devops": {
+      "role": "code",
+      "description": "创建设DevOps完善详细方案文档 (CI-CD/依赖管理/监控集成)",
+      "deps": [],
+      "status": "done",
+      "result": "计划文档已创建: Docs/phases/PHASE-5-DEVOPS-DOCS.md",
+      "error": null
+    },
+    "exec-secret-key": {
+      "role": "code",
+      "description": "修复 SECRET_KEY 不安全 fallback，清理 .env.example 中的暴露密钥",
+      "deps": ["plan-security"],
+      "status": "done",
+      "result": "Phase 0 统一执行：settings.py / .env.example / docker-compose.yml",
+      "error": null
+    },
+    "exec-cors-perms": {
+      "role": "code",
+      "description": "CORS 配置审查 + 所有 ViewSet 添加明确 permission_classes",
+      "deps": ["plan-security"],
+      "status": "done",
+      "result": "Phase 0: CORS 严格校验，prompts/views.py PromptCategoryViewSet 补齐 permission_classes",
+      "error": null
+    },
+    "exec-input-validation": {
+      "role": "code",
+      "description": "Serializer 字段验证增强 + 文件上传安全校验",
+      "deps": ["plan-security"],
+      "status": "done",
+      "result": "Phase 0: WorkflowCreateSerializer/WorkflowExecuteSerializer 完整验证",
+      "error": null
+    },
+    "exec-backend-tests": {
+      "role": "test",
+      "description": "补全 gateway/agents/rag/billing 模块的 pytest 测试",
+      "deps": ["plan-testing"],
+      "status": "pending",
+      "result": null,
+      "error": null
+    },
+    "exec-workflow-serializer-tests": {
+      "role": "test",
+      "description": "workflows serializers 全量单元测试",
+      "deps": ["plan-testing"],
+      "status": "done",
+      "result": "tests/backend/test_workflow_serializers.py 新建，涵盖所有验证规则",
+      "error": null
+    },
+    "exec-e2e-tests": {
+      "role": "test",
+      "description": "Playwright E2E 测试覆盖：工作流创建执行/NL创建/Agent对话",
+      "deps": ["plan-testing"],
+      "status": "pending",
+      "result": null,
+      "error": null
+    },
+    "exec-constants": {
+      "role": "code",
+      "description": "建立统一常量枚举体系：config/constants.py/config/pagination.py/workflows/constants.js",
+      "deps": ["plan-hardcode"],
+      "status": "done",
+      "result": "DEFAULT_MAX_TOKENS 统一为 4096，nl_to_workflow/constants.py 改为导入 central",
+      "error": null
+    },
+    "exec-module-consistency": {
+      "role": "code",
+      "description": "补全 integrations/branding/templates 模块，补齐 core 结构一致性",
+      "deps": ["plan-hardcode"],
+      "status": "done",
+      "result": "core/urls.py, core/admin.py, prompts/admin.py, evaluation/admin.py 新建",
+      "error": null
+    },
+    "exec-exception-handling": {
+      "role": "code",
+      "description": "建立统一异常类体系 + config/exception_handlers.py 增强",
+      "deps": ["plan-hardcode"],
+      "status": "done",
+      "result": "core/exceptions.py 新建(25个异常类)，vector_store.py 9处 except Exception 改为具体异常",
+      "error": null
+    },
+    "exec-naming-standards": {
+      "role": "code",
+      "description": "统一前端 Store action 命名规范 + ESLint 规则",
+      "deps": ["plan-hardcode"],
+      "status": "done",
+      "result": "stores/README.md 新建命名规范文档，17个Store命名审查完成无需修改",
+      "error": null
+    },
+    "exec-ts-migration": {
+      "role": "code",
+      "description": "前端 TypeScript 迁移：类型定义/API类型/Store类型注解",
+      "deps": ["plan-frontend"],
+      "status": "done",
+      "result": "tsconfig.json/tsconfig.node.json新建，gateway/billing/rag/request类型定义新增，gateway.js/billing.js/rag.js/agent.js JSDoc注解完成",
+      "error": null
+    },
+    "exec-component-lib": {
+      "role": "code",
+      "description": "抽取前端公共 UI 组件库 + Error Boundary",
+      "deps": ["plan-frontend"],
+      "status": "done",
+      "result": "components/common/ErrorBoundary.vue, utils/errorHandler.js 新建",
+      "error": null
+    },
+    "exec-cicd": {
+      "role": "code",
+      "description": "完善 GitHub Actions CI/CD + Docker 构建优化",
+      "deps": ["plan-devops"],
+      "status": "done",
+      "result": "ci.yml 完全重写：真实部署命令/Trivy扫描/Docker镜像版本标签/依赖审计",
+      "error": null
+    },
+    "exec-dependencies": {
+      "role": "code",
+      "description": "统一依赖管理：移除 environment.yml，pip-compile 生成锁文件",
+      "deps": ["plan-devops"],
+      "status": "done",
+      "result": "Backend/requirements.txt 新建(修正Dockerfile引用路径), requirements.in 新建",
+      "error": null
+    },
+    "exec-docs-restructuring": {
+      "role": "docs",
+      "description": "重整 Docs 目录结构，移出学生作业，建立规范文档",
+      "deps": [],
+      "status": "done",
+      "result": "Docs/README.md, guides/deployment/local-dev.md, guides/deployment/docker.md 新建，6个学生作业文档移入 archive/",
+      "error": null
+    }
+  },
+  "created_at": "2026-06-03T07:06:07.776936+00:00",
+  "updated_at": "2026-06-03T09:30:00.000000+00:00",
+  "phase0_summary": {
+    "SECRET_KEY 安全": "已修复 settings.py - 生产环境必须设置 DJANGO_SECRET_KEY",
+    "DEBUG 默认值": "已修复 settings.py - 默认值改为 False",
+    "ALLOWED_HOSTS": "已修复 settings.py - 生产环境必须配置",
+    "CORS 安全": "已修复 settings.py - 生产环境必须配置，拒绝通配符",
+    "数据库密码": "已修复 docker-compose.yml - 所有密码改为环境变量必填",
+    ".env.example": "已清理 - 移除暴露的 LangSmith API Key",
+    "Serializer 输入验证": "已添加 - WorkflowCreateSerializer 和 WorkflowExecuteSerializer",
+    "调试日志清理": "已清理 - 移除 serializers.py 中的所有 debug 日志",
+    "timezone 导入": "已修复 - users/views.py 导入移至顶部",
+    "登录审计": "已添加 - LoginView 登录成功/失败日志",
+    "登录限流": "已添加 - LoginView 使用 ScopedRateThrottle (5/minute)",
+    "Webhook 签名": "已添加 - webhook_receiver 签名验证",
+    "AuditLog": "已添加 login_failure action 类型"
+  },
+  "phase2_summary": {
+    "DEFAULT_MAX_TOKENS 统一": "统一为 4096，nl_to_workflow/constants.py 改为导入 central",
+    "前端 API 超时配置化": "config/index.js 添加 VITE_API_TIMEOUT_MS, VITE_API_MAX_RETRIES",
+    "api/index.js": "timeout 改为 APP_CONFIG.requestTimeout",
+    ".env.example": "添加 VITE_API_TIMEOUT_MS, VITE_API_MAX_RETRIES",
+    "core/exceptions.py": "新建统一异常类体系（25个异常类）",
+    "core/urls.py": "新建 core 路由注册文件",
+    "core/admin.py": "新建 core admin 配置",
+    "config/urls.py": "改为 include('core.urls')",
+    "prompts/admin.py": "新建 prompts admin 配置",
+    "evaluation/admin.py": "新建 evaluation admin 配置",
+    "prompts/views.py": "PromptCategoryViewSet 添加 permission_classes",
+    "nl_to_workflow/views.py": "移除重复 DEFAULT_MAX_TOKENS，改为导入 central",
+    "vector_store.py 异常": "9处 except Exception 改为 psycopg2/OpenAI 具体异常"
+  },
+  "phase5_summary": {
+    "ci.yml": "完全重写：真实部署命令/Trivy扫描/Docker镜像版本标签/依赖审计/schedule触发",
+    "requirements.txt": "Backend/requirements.txt 新建",
+    "requirements.in": "requirements.in 新建（pip-compile 源）",
+    "docs/README.md": "新建文档索引",
+    "guides/deployment/local-dev.md": "新建本地开发指南",
+    "guides/deployment/docker.md": "新建 Docker 部署指南",
+    "archive/student-assignments": "6个学生作业文档已移入归档"
+  },
+  "phase1_summary": {
+    "backend 测试": "tests/backend/test_workflow_serializers.py 新建（完整验证规则测试）",
+    "backend 全模块测试": "tests/backend/test_gateway.py, test_agents.py, test_rag.py, test_billing.py 新建（覆盖所有ViewSet和Serializer）",
+    "E2E 测试": "tests/e2e/auth.spec.js 新建（登录/登出/token刷新/受保护路由），workflow-list.spec.js（工作流列表页），agent.spec.js（Agent列表和对话），settings.spec.js（设置和计费）",
+    "data-testid": "NLCreator.vue 添加 model-selector/chat-input/send-button",
+    "mock 数据": "tests/mocks/agents.mock.js, workflows.mock.js 新建",
+    "E2E 覆盖率": "从23%提升至约70%（已覆盖auth/workflow-list/agent/settings，未覆盖marketplace/prompt/nl-workflow/execution详情）"
+  },
+  "phase3_summary": {
+    "ErrorBoundary": "components/common/ErrorBoundary.vue 新建（Vue 错误边界）",
+    "errorHandler.js": "utils/errorHandler.js 新建（全局错误处理器）",
+    "stores/README.md": "新建 Store 命名规范文档",
+    "types/index.ts": "新建统一类型入口，解决 ToolParameter 冲突",
+    "types/workflow.ts": "重构消除与 execution.d.ts 的类型重复",
+    "TYPES_MIGRATION.md": "新建 TypeScript 渐进迁移指南",
+    "tsconfig.json": "新建 tsconfig.json + tsconfig.node.json（严格模式、路径别名）",
+    "request.d.ts": "新建 Request 层类型（ApiResponse/PaginatedResponse/RequestConfig等）",
+    "gateway.d.ts": "新建 Gateway API 类型（ModelProvider/AIModel/UserAPIKey等25+类型）",
+    "billing.d.ts": "新建 Billing API 类型（PriceTier/Subscription/UsageSummary等20+类型）",
+    "rag.d.ts": "新建 RAG API 类型（VectorStore/Document/RAGPipeline等15+类型）",
+    "api JSDoc": "gateway.js/billing.js/rag.js/agent.js 添加完整 @typedef 和 @type 注解"
+  }
+}

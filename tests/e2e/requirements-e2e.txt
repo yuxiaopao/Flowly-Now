@@ -1,0 +1,13 @@
+# Requirements for E2E Tests
+# Install with: pip install -r requirements-e2e.txt
+
+# Core testing
+pytest>=7.0.0
+pytest-timeout>=2.1.0
+
+# HTTP client for API testing
+requests>=2.28.0
+httpx>=0.24.0  # For async tests if needed
+
+# For SSE/streaming tests
+sseclient-py>=0.0.28  # SSE client library

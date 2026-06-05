@@ -1,0 +1,39 @@
+{
+  "mcpServers": {
+    "playwright": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp@latest"],
+      "env": {
+        "PLAYWRIGHT_HEADLESS": "false"
+      }
+    },
+    "ollama-coder": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["C:\\Users\\18984\\.npm-global\\node_modules\\ollama-mcp\\dist\\index.js"],
+      "env": {
+        "OLLAMA_HOST": "http://localhost:11434"
+      }
+    },
+    "chrome-devtools": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "chrome-devtools-mcp@latest",
+        "--isolated=true",
+        "--headless=false"
+      ]
+    },
+    "codegraphcontext": {
+      "type": "stdio",
+      "command": "C:\\Users\\18984\\AppData\\Roaming\\uv\\tools\\codegraphcontext\\Scripts\\cgc.exe",
+      "args": ["mcp", "start"],
+      "cwd": "e:\\Flowly-now",
+      "env": {
+        "PYTHONIOENCODING": "utf-8"
+      }
+    }
+  }
+}

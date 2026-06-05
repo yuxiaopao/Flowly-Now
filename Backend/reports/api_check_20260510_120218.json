@@ -1,0 +1,4492 @@
+{
+  "timestamp": "2026-05-10 12:02:18",
+  "base_url": "http://127.0.0.1:8000",
+  "total_endpoints": 486,
+  "summary": {
+    "passed": 34,
+    "failed": 433,
+    "warnings": 19,
+    "auth_required": 0,
+    "skipped": 0
+  },
+  "by_module": {
+    "其他": {
+      "total": 20,
+      "passed": 11,
+      "failed": 9,
+      "warnings": 0
+    },
+    "健康检查": {
+      "total": 2,
+      "passed": 2,
+      "failed": 0,
+      "warnings": 0
+    },
+    "管理": {
+      "total": 23,
+      "passed": 3,
+      "failed": 20,
+      "warnings": 0
+    },
+    "Agent": {
+      "total": 42,
+      "passed": 1,
+      "failed": 41,
+      "warnings": 0
+    },
+    "认证": {
+      "total": 8,
+      "passed": 1,
+      "failed": 0,
+      "warnings": 7
+    },
+    "计费": {
+      "total": 42,
+      "passed": 1,
+      "failed": 41,
+      "warnings": 0
+    },
+    "品牌": {
+      "total": 36,
+      "passed": 1,
+      "failed": 35,
+      "warnings": 0
+    },
+    "网关": {
+      "total": 30,
+      "passed": 1,
+      "failed": 27,
+      "warnings": 2
+    },
+    "集成": {
+      "total": 33,
+      "passed": 1,
+      "failed": 31,
+      "warnings": 1
+    },
+    "市场": {
+      "total": 34,
+      "passed": 1,
+      "failed": 33,
+      "warnings": 0
+    },
+    "监控": {
+      "total": 38,
+      "passed": 1,
+      "failed": 37,
+      "warnings": 0
+    },
+    "NL转工作流": {
+      "total": 5,
+      "passed": 1,
+      "failed": 3,
+      "warnings": 1
+    },
+    "Prompt": {
+      "total": 20,
+      "passed": 1,
+      "failed": 19,
+      "warnings": 0
+    },
+    "RAG": {
+      "total": 52,
+      "passed": 1,
+      "failed": 51,
+      "warnings": 0
+    },
+    "模板": {
+      "total": 42,
+      "passed": 0,
+      "failed": 38,
+      "warnings": 4
+    },
+    "租户": {
+      "total": 38,
+      "passed": 1,
+      "failed": 37,
+      "warnings": 0
+    },
+    "工作流": {
+      "total": 21,
+      "passed": 6,
+      "failed": 11,
+      "warnings": 4
+    }
+  },
+  "results": [
+    {
+      "path": "api/docs/",
+      "method": "GET",
+      "view": "view",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 32.88
+    },
+    {
+      "path": "api/health/",
+      "method": "GET",
+      "view": "view",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 1035.25
+    },
+    {
+      "path": "api/ping/",
+      "method": "GET",
+      "view": "view",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 10.08
+    },
+    {
+      "path": "api/schema/",
+      "method": "GET",
+      "view": "view",
+      "status": "fail",
+      "status_code": 500,
+      "message": "服务器错误 (500)",
+      "response_time_ms": 27.52
+    },
+    {
+      "path": "api/v1/admin/",
+      "method": "GET",
+      "view": "view",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 11.27
+    },
+    {
+      "path": "api/v1/admin/<drf_format_suffix:format>",
+      "method": "GET",
+      "view": "view",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 13.01
+    },
+    {
+      "path": "api/v1/admin/^agents/",
+      "method": "GET",
+      "view": "AgentManagementViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 12.62
+    },
+    {
+      "path": "api/v1/admin/^agents/{pk}/",
+      "method": "GET",
+      "view": "AgentManagementViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.51
+    },
+    {
+      "path": "api/v1/admin/^agents/{pk}\\.{format}/?",
+      "method": "GET",
+      "view": "AgentManagementViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.51
+    },
+    {
+      "path": "api/v1/admin/^agents\\.{format}/?",
+      "method": "GET",
+      "view": "AgentManagementViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.08
+    },
+    {
+      "path": "api/v1/admin/^api-keys/",
+      "method": "GET",
+      "view": "APIKeyManagementViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.51
+    },
+    {
+      "path": "api/v1/admin/^api-keys/{pk}/",
+      "method": "GET",
+      "view": "APIKeyManagementViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.77
+    },
+    {
+      "path": "api/v1/admin/^api-keys/{pk}/revoke/",
+      "method": "GET",
+      "view": "APIKeyManagementViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.02
+    },
+    {
+      "path": "api/v1/admin/^api-keys/{pk}/revoke\\.{format}/?",
+      "method": "GET",
+      "view": "APIKeyManagementViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.1
+    },
+    {
+      "path": "api/v1/admin/^api-keys/{pk}\\.{format}/?",
+      "method": "GET",
+      "view": "APIKeyManagementViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.22
+    },
+    {
+      "path": "api/v1/admin/^api-keys\\.{format}/?",
+      "method": "GET",
+      "view": "APIKeyManagementViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.36
+    },
+    {
+      "path": "api/v1/admin/^users/",
+      "method": "GET",
+      "view": "UserManagementViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.05
+    },
+    {
+      "path": "api/v1/admin/^users/{pk}/",
+      "method": "GET",
+      "view": "UserManagementViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.52
+    },
+    {
+      "path": "api/v1/admin/^users/{pk}\\.{format}/?",
+      "method": "GET",
+      "view": "UserManagementViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.1
+    },
+    {
+      "path": "api/v1/admin/^users\\.{format}/?",
+      "method": "GET",
+      "view": "UserManagementViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.19
+    },
+    {
+      "path": "api/v1/admin/^workflows/",
+      "method": "GET",
+      "view": "WorkflowManagementViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.17
+    },
+    {
+      "path": "api/v1/admin/^workflows/{pk}/",
+      "method": "GET",
+      "view": "WorkflowManagementViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.07
+    },
+    {
+      "path": "api/v1/admin/^workflows/{pk}\\.{format}/?",
+      "method": "GET",
+      "view": "WorkflowManagementViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.01
+    },
+    {
+      "path": "api/v1/admin/^workflows\\.{format}/?",
+      "method": "GET",
+      "view": "WorkflowManagementViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.51
+    },
+    {
+      "path": "api/v1/admin/health/",
+      "method": "GET",
+      "view": "view",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 3065.38
+    },
+    {
+      "path": "api/v1/admin/settings/",
+      "method": "GET",
+      "view": "view",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 10.51
+    },
+    {
+      "path": "api/v1/admin/usage/",
+      "method": "GET",
+      "view": "view",
+      "status": "fail",
+      "status_code": 500,
+      "message": "服务器错误 (500)",
+      "response_time_ms": 15.61
+    },
+    {
+      "path": "api/v1/agents/",
+      "method": "GET",
+      "view": "view",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 9.51
+    },
+    {
+      "path": "api/v1/agents/<drf_format_suffix:format>",
+      "method": "GET",
+      "view": "view",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.44
+    },
+    {
+      "path": "api/v1/agents/^agents/",
+      "method": "GET",
+      "view": "AgentViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.57
+    },
+    {
+      "path": "api/v1/agents/^agents/{pk}/",
+      "method": "GET",
+      "view": "AgentViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 12.99
+    },
+    {
+      "path": "api/v1/agents/^agents/{pk}/chat/",
+      "method": "GET",
+      "view": "AgentViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.03
+    },
+    {
+      "path": "api/v1/agents/^agents/{pk}/chat\\.{format}/?",
+      "method": "GET",
+      "view": "AgentViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.24
+    },
+    {
+      "path": "api/v1/agents/^agents/{pk}/conversations/",
+      "method": "GET",
+      "view": "AgentViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 12.51
+    },
+    {
+      "path": "api/v1/agents/^agents/{pk}/conversations\\.{format}/?",
+      "method": "GET",
+      "view": "AgentViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.51
+    },
+    {
+      "path": "api/v1/agents/^agents/{pk}/debug/",
+      "method": "GET",
+      "view": "AgentViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.65
+    },
+    {
+      "path": "api/v1/agents/^agents/{pk}/debug/sessions/{session_id}/",
+      "method": "GET",
+      "view": "AgentViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 12.14
+    },
+    {
+      "path": "api/v1/agents/^agents/{pk}/debug/sessions/{session_id}\\.{format}/?",
+      "method": "GET",
+      "view": "AgentViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.89
+    },
+    {
+      "path": "api/v1/agents/^agents/{pk}/debug\\.{format}/?",
+      "method": "GET",
+      "view": "AgentViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 13.15
+    },
+    {
+      "path": "api/v1/agents/^agents/{pk}/debug_history/",
+      "method": "GET",
+      "view": "AgentViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.04
+    },
+    {
+      "path": "api/v1/agents/^agents/{pk}/debug_history\\.{format}/?",
+      "method": "GET",
+      "view": "AgentViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 12.51
+    },
+    {
+      "path": "api/v1/agents/^agents/{pk}/reset_memory/",
+      "method": "GET",
+      "view": "AgentViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.82
+    },
+    {
+      "path": "api/v1/agents/^agents/{pk}/reset_memory\\.{format}/?",
+      "method": "GET",
+      "view": "AgentViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.57
+    },
+    {
+      "path": "api/v1/agents/^agents/{pk}/skills/",
+      "method": "GET",
+      "view": "AgentViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.66
+    },
+    {
+      "path": "api/v1/agents/^agents/{pk}/skills\\.{format}/?",
+      "method": "GET",
+      "view": "AgentViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.17
+    },
+    {
+      "path": "api/v1/agents/^agents/{pk}/stream_chat/",
+      "method": "GET",
+      "view": "AgentViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.78
+    },
+    {
+      "path": "api/v1/agents/^agents/{pk}/stream_chat\\.{format}/?",
+      "method": "GET",
+      "view": "AgentViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.48
+    },
+    {
+      "path": "api/v1/agents/^agents/{pk}/tools/",
+      "method": "GET",
+      "view": "AgentViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.1
+    },
+    {
+      "path": "api/v1/agents/^agents/{pk}/tools\\.{format}/?",
+      "method": "GET",
+      "view": "AgentViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.26
+    },
+    {
+      "path": "api/v1/agents/^agents/{pk}/tools_remove/",
+      "method": "GET",
+      "view": "AgentViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.08
+    },
+    {
+      "path": "api/v1/agents/^agents/{pk}/tools_remove\\.{format}/?",
+      "method": "GET",
+      "view": "AgentViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 12.24
+    },
+    {
+      "path": "api/v1/agents/^agents/{pk}/update_skills/",
+      "method": "GET",
+      "view": "AgentViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.26
+    },
+    {
+      "path": "api/v1/agents/^agents/{pk}/update_skills\\.{format}/?",
+      "method": "GET",
+      "view": "AgentViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.66
+    },
+    {
+      "path": "api/v1/agents/^agents/{pk}\\.{format}/?",
+      "method": "GET",
+      "view": "AgentViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.06
+    },
+    {
+      "path": "api/v1/agents/^agents\\.{format}/?",
+      "method": "GET",
+      "view": "AgentViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.51
+    },
+    {
+      "path": "api/v1/agents/^conversations/",
+      "method": "GET",
+      "view": "AgentConversationViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.07
+    },
+    {
+      "path": "api/v1/agents/^conversations/{pk}/",
+      "method": "GET",
+      "view": "AgentConversationViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.38
+    },
+    {
+      "path": "api/v1/agents/^conversations/{pk}/add_message/",
+      "method": "GET",
+      "view": "AgentConversationViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.69
+    },
+    {
+      "path": "api/v1/agents/^conversations/{pk}/add_message\\.{format}/?",
+      "method": "GET",
+      "view": "AgentConversationViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 12.54
+    },
+    {
+      "path": "api/v1/agents/^conversations/{pk}/messages/",
+      "method": "GET",
+      "view": "AgentConversationViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.03
+    },
+    {
+      "path": "api/v1/agents/^conversations/{pk}/messages\\.{format}/?",
+      "method": "GET",
+      "view": "AgentConversationViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 13.02
+    },
+    {
+      "path": "api/v1/agents/^conversations/{pk}\\.{format}/?",
+      "method": "GET",
+      "view": "AgentConversationViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.3
+    },
+    {
+      "path": "api/v1/agents/^conversations\\.{format}/?",
+      "method": "GET",
+      "view": "AgentConversationViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 8.53
+    },
+    {
+      "path": "api/v1/agents/^tools/",
+      "method": "GET",
+      "view": "AgentToolViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.23
+    },
+    {
+      "path": "api/v1/agents/^tools/available/",
+      "method": "GET",
+      "view": "AgentToolViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.21
+    },
+    {
+      "path": "api/v1/agents/^tools/available\\.{format}/?",
+      "method": "GET",
+      "view": "AgentToolViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.05
+    },
+    {
+      "path": "api/v1/agents/^tools/{pk}/",
+      "method": "GET",
+      "view": "AgentToolViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.37
+    },
+    {
+      "path": "api/v1/agents/^tools/{pk}\\.{format}/?",
+      "method": "GET",
+      "view": "AgentToolViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.06
+    },
+    {
+      "path": "api/v1/agents/^tools\\.{format}/?",
+      "method": "GET",
+      "view": "AgentToolViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.09
+    },
+    {
+      "path": "api/v1/audit-logs/",
+      "method": "GET",
+      "view": "AuditLogViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 13.34
+    },
+    {
+      "path": "api/v1/audit-logs/<int:pk>/",
+      "method": "GET",
+      "view": "AuditLogViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 8.16
+    },
+    {
+      "path": "api/v1/audit-logs/actions/",
+      "method": "GET",
+      "view": "AuditLogViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 9.01
+    },
+    {
+      "path": "api/v1/audit-logs/resource-types/",
+      "method": "GET",
+      "view": "AuditLogViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 8.93
+    },
+    {
+      "path": "api/v1/audit-logs/summary/",
+      "method": "GET",
+      "view": "AuditLogViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 13.43
+    },
+    {
+      "path": "api/v1/auth/change-password/",
+      "method": "GET",
+      "view": "view",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 9.09
+    },
+    {
+      "path": "api/v1/auth/login/",
+      "method": "GET",
+      "view": "view",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 8.26
+    },
+    {
+      "path": "api/v1/auth/logout/",
+      "method": "GET",
+      "view": "view",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 8.02
+    },
+    {
+      "path": "api/v1/auth/password-reset/",
+      "method": "GET",
+      "view": "view",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 8.46
+    },
+    {
+      "path": "api/v1/auth/password-reset/confirm/",
+      "method": "GET",
+      "view": "view",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 9.5
+    },
+    {
+      "path": "api/v1/auth/refresh/",
+      "method": "GET",
+      "view": "view",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 7.51
+    },
+    {
+      "path": "api/v1/auth/register/",
+      "method": "GET",
+      "view": "view",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 9.52
+    },
+    {
+      "path": "api/v1/auth/user/",
+      "method": "GET",
+      "view": "view",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 8.04
+    },
+    {
+      "path": "api/v1/billing/",
+      "method": "GET",
+      "view": "view",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 10.04
+    },
+    {
+      "path": "api/v1/billing/<drf_format_suffix:format>",
+      "method": "GET",
+      "view": "view",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.16
+    },
+    {
+      "path": "api/v1/billing/^coupons/my/",
+      "method": "GET",
+      "view": "CouponViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 8.53
+    },
+    {
+      "path": "api/v1/billing/^coupons/my\\.{format}/?",
+      "method": "GET",
+      "view": "CouponViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.71
+    },
+    {
+      "path": "api/v1/billing/^coupons/validate/",
+      "method": "GET",
+      "view": "CouponViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 8.64
+    },
+    {
+      "path": "api/v1/billing/^coupons/validate\\.{format}/?",
+      "method": "GET",
+      "view": "CouponViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.79
+    },
+    {
+      "path": "api/v1/billing/^invoices/",
+      "method": "GET",
+      "view": "InvoiceViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.51
+    },
+    {
+      "path": "api/v1/billing/^invoices/{pk}/",
+      "method": "GET",
+      "view": "InvoiceViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.66
+    },
+    {
+      "path": "api/v1/billing/^invoices/{pk}/download/",
+      "method": "GET",
+      "view": "InvoiceViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.63
+    },
+    {
+      "path": "api/v1/billing/^invoices/{pk}/download\\.{format}/?",
+      "method": "GET",
+      "view": "InvoiceViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.53
+    },
+    {
+      "path": "api/v1/billing/^invoices/{pk}\\.{format}/?",
+      "method": "GET",
+      "view": "InvoiceViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.8
+    },
+    {
+      "path": "api/v1/billing/^invoices\\.{format}/?",
+      "method": "GET",
+      "view": "InvoiceViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.05
+    },
+    {
+      "path": "api/v1/billing/^payments/",
+      "method": "GET",
+      "view": "PaymentViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.53
+    },
+    {
+      "path": "api/v1/billing/^payments/{pk}/",
+      "method": "GET",
+      "view": "PaymentViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.05
+    },
+    {
+      "path": "api/v1/billing/^payments/{pk}\\.{format}/?",
+      "method": "GET",
+      "view": "PaymentViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.51
+    },
+    {
+      "path": "api/v1/billing/^payments\\.{format}/?",
+      "method": "GET",
+      "view": "PaymentViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.0
+    },
+    {
+      "path": "api/v1/billing/^prices/",
+      "method": "GET",
+      "view": "PriceTierViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.03
+    },
+    {
+      "path": "api/v1/billing/^prices/plans/",
+      "method": "GET",
+      "view": "PriceTierViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.02
+    },
+    {
+      "path": "api/v1/billing/^prices/plans\\.{format}/?",
+      "method": "GET",
+      "view": "PriceTierViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.05
+    },
+    {
+      "path": "api/v1/billing/^prices/{pk}/",
+      "method": "GET",
+      "view": "PriceTierViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.09
+    },
+    {
+      "path": "api/v1/billing/^prices/{pk}\\.{format}/?",
+      "method": "GET",
+      "view": "PriceTierViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.57
+    },
+    {
+      "path": "api/v1/billing/^prices\\.{format}/?",
+      "method": "GET",
+      "view": "PriceTierViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.53
+    },
+    {
+      "path": "api/v1/billing/^subscriptions/",
+      "method": "GET",
+      "view": "SubscriptionViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.26
+    },
+    {
+      "path": "api/v1/billing/^subscriptions/cancel/",
+      "method": "GET",
+      "view": "SubscriptionViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 8.78
+    },
+    {
+      "path": "api/v1/billing/^subscriptions/cancel\\.{format}/?",
+      "method": "GET",
+      "view": "SubscriptionViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.14
+    },
+    {
+      "path": "api/v1/billing/^subscriptions/my/",
+      "method": "GET",
+      "view": "SubscriptionViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.52
+    },
+    {
+      "path": "api/v1/billing/^subscriptions/my\\.{format}/?",
+      "method": "GET",
+      "view": "SubscriptionViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.87
+    },
+    {
+      "path": "api/v1/billing/^subscriptions/reactivate/",
+      "method": "GET",
+      "view": "SubscriptionViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.29
+    },
+    {
+      "path": "api/v1/billing/^subscriptions/reactivate\\.{format}/?",
+      "method": "GET",
+      "view": "SubscriptionViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.51
+    },
+    {
+      "path": "api/v1/billing/^subscriptions/subscribe/",
+      "method": "GET",
+      "view": "SubscriptionViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.51
+    },
+    {
+      "path": "api/v1/billing/^subscriptions/subscribe\\.{format}/?",
+      "method": "GET",
+      "view": "SubscriptionViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.04
+    },
+    {
+      "path": "api/v1/billing/^subscriptions/usage/",
+      "method": "GET",
+      "view": "SubscriptionViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.53
+    },
+    {
+      "path": "api/v1/billing/^subscriptions/usage\\.{format}/?",
+      "method": "GET",
+      "view": "SubscriptionViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 8.52
+    },
+    {
+      "path": "api/v1/billing/^subscriptions/{pk}/",
+      "method": "GET",
+      "view": "SubscriptionViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.55
+    },
+    {
+      "path": "api/v1/billing/^subscriptions/{pk}\\.{format}/?",
+      "method": "GET",
+      "view": "SubscriptionViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.05
+    },
+    {
+      "path": "api/v1/billing/^subscriptions\\.{format}/?",
+      "method": "GET",
+      "view": "SubscriptionViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.53
+    },
+    {
+      "path": "api/v1/billing/^usage/",
+      "method": "GET",
+      "view": "UsageRecordViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.53
+    },
+    {
+      "path": "api/v1/billing/^usage/history/",
+      "method": "GET",
+      "view": "UsageRecordViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.53
+    },
+    {
+      "path": "api/v1/billing/^usage/history\\.{format}/?",
+      "method": "GET",
+      "view": "UsageRecordViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.51
+    },
+    {
+      "path": "api/v1/billing/^usage/{pk}/",
+      "method": "GET",
+      "view": "UsageRecordViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.11
+    },
+    {
+      "path": "api/v1/billing/^usage/{pk}\\.{format}/?",
+      "method": "GET",
+      "view": "UsageRecordViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.02
+    },
+    {
+      "path": "api/v1/billing/^usage\\.{format}/?",
+      "method": "GET",
+      "view": "UsageRecordViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.52
+    },
+    {
+      "path": "api/v1/branding/",
+      "method": "GET",
+      "view": "view",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 10.23
+    },
+    {
+      "path": "api/v1/branding/<drf_format_suffix:format>",
+      "method": "GET",
+      "view": "view",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.06
+    },
+    {
+      "path": "api/v1/branding/^branding/",
+      "method": "GET",
+      "view": "BrandingViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 8.54
+    },
+    {
+      "path": "api/v1/branding/^branding/apply_preset/",
+      "method": "GET",
+      "view": "BrandingViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.07
+    },
+    {
+      "path": "api/v1/branding/^branding/apply_preset\\.{format}/?",
+      "method": "GET",
+      "view": "BrandingViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 8.51
+    },
+    {
+      "path": "api/v1/branding/^branding/current/",
+      "method": "GET",
+      "view": "BrandingViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.41
+    },
+    {
+      "path": "api/v1/branding/^branding/current\\.{format}/?",
+      "method": "GET",
+      "view": "BrandingViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.1
+    },
+    {
+      "path": "api/v1/branding/^branding/presets/",
+      "method": "GET",
+      "view": "BrandingViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 8.53
+    },
+    {
+      "path": "api/v1/branding/^branding/presets\\.{format}/?",
+      "method": "GET",
+      "view": "BrandingViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.52
+    },
+    {
+      "path": "api/v1/branding/^branding/preview/",
+      "method": "GET",
+      "view": "BrandingViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.04
+    },
+    {
+      "path": "api/v1/branding/^branding/preview\\.{format}/?",
+      "method": "GET",
+      "view": "BrandingViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.43
+    },
+    {
+      "path": "api/v1/branding/^branding/update_config/",
+      "method": "GET",
+      "view": "BrandingViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.94
+    },
+    {
+      "path": "api/v1/branding/^branding/update_config\\.{format}/?",
+      "method": "GET",
+      "view": "BrandingViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.06
+    },
+    {
+      "path": "api/v1/branding/^branding/{pk}/",
+      "method": "GET",
+      "view": "BrandingViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.52
+    },
+    {
+      "path": "api/v1/branding/^branding/{pk}\\.{format}/?",
+      "method": "GET",
+      "view": "BrandingViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.09
+    },
+    {
+      "path": "api/v1/branding/^branding\\.{format}/?",
+      "method": "GET",
+      "view": "BrandingViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.56
+    },
+    {
+      "path": "api/v1/branding/^domains/",
+      "method": "GET",
+      "view": "CustomDomainViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.52
+    },
+    {
+      "path": "api/v1/branding/^domains/{pk}/",
+      "method": "GET",
+      "view": "CustomDomainViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.24
+    },
+    {
+      "path": "api/v1/branding/^domains/{pk}/refresh_ssl/",
+      "method": "GET",
+      "view": "CustomDomainViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.0
+    },
+    {
+      "path": "api/v1/branding/^domains/{pk}/refresh_ssl\\.{format}/?",
+      "method": "GET",
+      "view": "CustomDomainViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 8.05
+    },
+    {
+      "path": "api/v1/branding/^domains/{pk}/verify/",
+      "method": "GET",
+      "view": "CustomDomainViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.04
+    },
+    {
+      "path": "api/v1/branding/^domains/{pk}/verify\\.{format}/?",
+      "method": "GET",
+      "view": "CustomDomainViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.5
+    },
+    {
+      "path": "api/v1/branding/^domains/{pk}\\.{format}/?",
+      "method": "GET",
+      "view": "CustomDomainViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.43
+    },
+    {
+      "path": "api/v1/branding/^domains\\.{format}/?",
+      "method": "GET",
+      "view": "CustomDomainViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.04
+    },
+    {
+      "path": "api/v1/branding/^email-templates/",
+      "method": "GET",
+      "view": "EmailTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.51
+    },
+    {
+      "path": "api/v1/branding/^email-templates/reset_to_default/",
+      "method": "GET",
+      "view": "EmailTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.74
+    },
+    {
+      "path": "api/v1/branding/^email-templates/reset_to_default\\.{format}/?",
+      "method": "GET",
+      "view": "EmailTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 8.53
+    },
+    {
+      "path": "api/v1/branding/^email-templates/{pk}/",
+      "method": "GET",
+      "view": "EmailTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.55
+    },
+    {
+      "path": "api/v1/branding/^email-templates/{pk}/send_test/",
+      "method": "GET",
+      "view": "EmailTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.54
+    },
+    {
+      "path": "api/v1/branding/^email-templates/{pk}/send_test\\.{format}/?",
+      "method": "GET",
+      "view": "EmailTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.55
+    },
+    {
+      "path": "api/v1/branding/^email-templates/{pk}\\.{format}/?",
+      "method": "GET",
+      "view": "EmailTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.51
+    },
+    {
+      "path": "api/v1/branding/^email-templates\\.{format}/?",
+      "method": "GET",
+      "view": "EmailTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.95
+    },
+    {
+      "path": "api/v1/branding/^presets/",
+      "method": "GET",
+      "view": "ThemePresetViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 12.04
+    },
+    {
+      "path": "api/v1/branding/^presets/{pk}/",
+      "method": "GET",
+      "view": "ThemePresetViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 12.28
+    },
+    {
+      "path": "api/v1/branding/^presets/{pk}\\.{format}/?",
+      "method": "GET",
+      "view": "ThemePresetViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.38
+    },
+    {
+      "path": "api/v1/branding/^presets\\.{format}/?",
+      "method": "GET",
+      "view": "ThemePresetViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 12.14
+    },
+    {
+      "path": "api/v1/credentials/",
+      "method": "GET",
+      "view": "APICredentialViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 16.02
+    },
+    {
+      "path": "api/v1/credentials/<int:pk>/",
+      "method": "GET",
+      "view": "APICredentialViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 12.57
+    },
+    {
+      "path": "api/v1/credentials/<int:pk>/rotate/",
+      "method": "GET",
+      "view": "APICredentialViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.47
+    },
+    {
+      "path": "api/v1/credentials/<int:pk>/verify/",
+      "method": "GET",
+      "view": "APICredentialViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.68
+    },
+    {
+      "path": "api/v1/gateway/",
+      "method": "GET",
+      "view": "view",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 10.71
+    },
+    {
+      "path": "api/v1/gateway/<drf_format_suffix:format>",
+      "method": "GET",
+      "view": "view",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.41
+    },
+    {
+      "path": "api/v1/gateway/^api-keys/",
+      "method": "GET",
+      "view": "UserAPIKeyViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.24
+    },
+    {
+      "path": "api/v1/gateway/^api-keys/{pk}/",
+      "method": "GET",
+      "view": "UserAPIKeyViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.28
+    },
+    {
+      "path": "api/v1/gateway/^api-keys/{pk}/verify/",
+      "method": "GET",
+      "view": "UserAPIKeyViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.16
+    },
+    {
+      "path": "api/v1/gateway/^api-keys/{pk}/verify\\.{format}/?",
+      "method": "GET",
+      "view": "UserAPIKeyViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.21
+    },
+    {
+      "path": "api/v1/gateway/^api-keys/{pk}\\.{format}/?",
+      "method": "GET",
+      "view": "UserAPIKeyViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.39
+    },
+    {
+      "path": "api/v1/gateway/^api-keys\\.{format}/?",
+      "method": "GET",
+      "view": "UserAPIKeyViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.1
+    },
+    {
+      "path": "api/v1/gateway/^logs/",
+      "method": "GET",
+      "view": "APICallLogViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.62
+    },
+    {
+      "path": "api/v1/gateway/^logs/aggregate/",
+      "method": "GET",
+      "view": "APICallLogViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.52
+    },
+    {
+      "path": "api/v1/gateway/^logs/aggregate\\.{format}/?",
+      "method": "GET",
+      "view": "APICallLogViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.09
+    },
+    {
+      "path": "api/v1/gateway/^logs/recent/",
+      "method": "GET",
+      "view": "APICallLogViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.13
+    },
+    {
+      "path": "api/v1/gateway/^logs/recent\\.{format}/?",
+      "method": "GET",
+      "view": "APICallLogViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.04
+    },
+    {
+      "path": "api/v1/gateway/^logs/{pk}/",
+      "method": "GET",
+      "view": "APICallLogViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.1
+    },
+    {
+      "path": "api/v1/gateway/^logs/{pk}\\.{format}/?",
+      "method": "GET",
+      "view": "APICallLogViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.47
+    },
+    {
+      "path": "api/v1/gateway/^logs\\.{format}/?",
+      "method": "GET",
+      "view": "APICallLogViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.0
+    },
+    {
+      "path": "api/v1/gateway/^models/",
+      "method": "GET",
+      "view": "AIModelViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.3
+    },
+    {
+      "path": "api/v1/gateway/^models/default_models/",
+      "method": "GET",
+      "view": "AIModelViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.1
+    },
+    {
+      "path": "api/v1/gateway/^models/default_models\\.{format}/?",
+      "method": "GET",
+      "view": "AIModelViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 8.62
+    },
+    {
+      "path": "api/v1/gateway/^models/{pk}/",
+      "method": "GET",
+      "view": "AIModelViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.53
+    },
+    {
+      "path": "api/v1/gateway/^models/{pk}/test/",
+      "method": "GET",
+      "view": "AIModelViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.05
+    },
+    {
+      "path": "api/v1/gateway/^models/{pk}/test\\.{format}/?",
+      "method": "GET",
+      "view": "AIModelViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.5
+    },
+    {
+      "path": "api/v1/gateway/^models/{pk}\\.{format}/?",
+      "method": "GET",
+      "view": "AIModelViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 8.54
+    },
+    {
+      "path": "api/v1/gateway/^models\\.{format}/?",
+      "method": "GET",
+      "view": "AIModelViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.51
+    },
+    {
+      "path": "api/v1/gateway/^providers/",
+      "method": "GET",
+      "view": "ModelProviderViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.39
+    },
+    {
+      "path": "api/v1/gateway/^providers/{pk}/",
+      "method": "GET",
+      "view": "ModelProviderViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.51
+    },
+    {
+      "path": "api/v1/gateway/^providers/{pk}\\.{format}/?",
+      "method": "GET",
+      "view": "ModelProviderViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.51
+    },
+    {
+      "path": "api/v1/gateway/^providers\\.{format}/?",
+      "method": "GET",
+      "view": "ModelProviderViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.32
+    },
+    {
+      "path": "api/v1/gateway/chat/",
+      "method": "GET",
+      "view": "view",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 12.04
+    },
+    {
+      "path": "api/v1/gateway/embeddings/",
+      "method": "GET",
+      "view": "view",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 10.3
+    },
+    {
+      "path": "api/v1/integrations/",
+      "method": "GET",
+      "view": "view",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 8.53
+    },
+    {
+      "path": "api/v1/integrations/<drf_format_suffix:format>",
+      "method": "GET",
+      "view": "view",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.16
+    },
+    {
+      "path": "api/v1/integrations/^integrations/",
+      "method": "GET",
+      "view": "IntegrationViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 8.53
+    },
+    {
+      "path": "api/v1/integrations/^integrations/available/",
+      "method": "GET",
+      "view": "IntegrationViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.53
+    },
+    {
+      "path": "api/v1/integrations/^integrations/available\\.{format}/?",
+      "method": "GET",
+      "view": "IntegrationViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.51
+    },
+    {
+      "path": "api/v1/integrations/^integrations/{pk}/",
+      "method": "GET",
+      "view": "IntegrationViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.52
+    },
+    {
+      "path": "api/v1/integrations/^integrations/{pk}/connect/",
+      "method": "GET",
+      "view": "IntegrationViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.08
+    },
+    {
+      "path": "api/v1/integrations/^integrations/{pk}/connect\\.{format}/?",
+      "method": "GET",
+      "view": "IntegrationViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.01
+    },
+    {
+      "path": "api/v1/integrations/^integrations/{pk}/disconnect/",
+      "method": "GET",
+      "view": "IntegrationViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.51
+    },
+    {
+      "path": "api/v1/integrations/^integrations/{pk}/disconnect\\.{format}/?",
+      "method": "GET",
+      "view": "IntegrationViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.01
+    },
+    {
+      "path": "api/v1/integrations/^integrations/{pk}/sync/",
+      "method": "GET",
+      "view": "IntegrationViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.73
+    },
+    {
+      "path": "api/v1/integrations/^integrations/{pk}/sync\\.{format}/?",
+      "method": "GET",
+      "view": "IntegrationViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.19
+    },
+    {
+      "path": "api/v1/integrations/^integrations/{pk}\\.{format}/?",
+      "method": "GET",
+      "view": "IntegrationViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.56
+    },
+    {
+      "path": "api/v1/integrations/^integrations\\.{format}/?",
+      "method": "GET",
+      "view": "IntegrationViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.53
+    },
+    {
+      "path": "api/v1/integrations/^templates/",
+      "method": "GET",
+      "view": "IntegrationTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.02
+    },
+    {
+      "path": "api/v1/integrations/^templates/categories/",
+      "method": "GET",
+      "view": "IntegrationTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 12.03
+    },
+    {
+      "path": "api/v1/integrations/^templates/categories\\.{format}/?",
+      "method": "GET",
+      "view": "IntegrationTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.02
+    },
+    {
+      "path": "api/v1/integrations/^templates/featured/",
+      "method": "GET",
+      "view": "IntegrationTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.9
+    },
+    {
+      "path": "api/v1/integrations/^templates/featured\\.{format}/?",
+      "method": "GET",
+      "view": "IntegrationTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.64
+    },
+    {
+      "path": "api/v1/integrations/^templates/{pk}/",
+      "method": "GET",
+      "view": "IntegrationTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 8.64
+    },
+    {
+      "path": "api/v1/integrations/^templates/{pk}\\.{format}/?",
+      "method": "GET",
+      "view": "IntegrationTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.18
+    },
+    {
+      "path": "api/v1/integrations/^templates\\.{format}/?",
+      "method": "GET",
+      "view": "IntegrationTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.56
+    },
+    {
+      "path": "api/v1/integrations/^webhooks/",
+      "method": "GET",
+      "view": "WebhookViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.03
+    },
+    {
+      "path": "api/v1/integrations/^webhooks/{pk}/",
+      "method": "GET",
+      "view": "WebhookViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 14.46
+    },
+    {
+      "path": "api/v1/integrations/^webhooks/{pk}/deliveries/",
+      "method": "GET",
+      "view": "WebhookViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 12.36
+    },
+    {
+      "path": "api/v1/integrations/^webhooks/{pk}/deliveries\\.{format}/?",
+      "method": "GET",
+      "view": "WebhookViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.08
+    },
+    {
+      "path": "api/v1/integrations/^webhooks/{pk}/stats/",
+      "method": "GET",
+      "view": "WebhookViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.53
+    },
+    {
+      "path": "api/v1/integrations/^webhooks/{pk}/stats\\.{format}/?",
+      "method": "GET",
+      "view": "WebhookViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.51
+    },
+    {
+      "path": "api/v1/integrations/^webhooks/{pk}/test/",
+      "method": "GET",
+      "view": "WebhookViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.08
+    },
+    {
+      "path": "api/v1/integrations/^webhooks/{pk}/test\\.{format}/?",
+      "method": "GET",
+      "view": "WebhookViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.01
+    },
+    {
+      "path": "api/v1/integrations/^webhooks/{pk}\\.{format}/?",
+      "method": "GET",
+      "view": "WebhookViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.6
+    },
+    {
+      "path": "api/v1/integrations/^webhooks\\.{format}/?",
+      "method": "GET",
+      "view": "WebhookViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.08
+    },
+    {
+      "path": "api/v1/integrations/webhook-receiver/",
+      "method": "GET",
+      "view": "webhook_receiver",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 5.0
+    },
+    {
+      "path": "api/v1/marketplace/",
+      "method": "GET",
+      "view": "view",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 7.51
+    },
+    {
+      "path": "api/v1/marketplace/<drf_format_suffix:format>",
+      "method": "GET",
+      "view": "view",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.59
+    },
+    {
+      "path": "api/v1/marketplace/^categories/",
+      "method": "GET",
+      "view": "TemplateCategoryViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.54
+    },
+    {
+      "path": "api/v1/marketplace/^categories/{pk}/",
+      "method": "GET",
+      "view": "TemplateCategoryViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.51
+    },
+    {
+      "path": "api/v1/marketplace/^categories/{pk}/templates/",
+      "method": "GET",
+      "view": "TemplateCategoryViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.53
+    },
+    {
+      "path": "api/v1/marketplace/^categories/{pk}/templates\\.{format}/?",
+      "method": "GET",
+      "view": "TemplateCategoryViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.2
+    },
+    {
+      "path": "api/v1/marketplace/^categories/{pk}\\.{format}/?",
+      "method": "GET",
+      "view": "TemplateCategoryViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.53
+    },
+    {
+      "path": "api/v1/marketplace/^categories\\.{format}/?",
+      "method": "GET",
+      "view": "TemplateCategoryViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.79
+    },
+    {
+      "path": "api/v1/marketplace/^installed/",
+      "method": "GET",
+      "view": "InstalledTemplatesViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.54
+    },
+    {
+      "path": "api/v1/marketplace/^installed/{pk}/",
+      "method": "GET",
+      "view": "InstalledTemplatesViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.54
+    },
+    {
+      "path": "api/v1/marketplace/^installed/{pk}\\.{format}/?",
+      "method": "GET",
+      "view": "InstalledTemplatesViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.53
+    },
+    {
+      "path": "api/v1/marketplace/^installed\\.{format}/?",
+      "method": "GET",
+      "view": "InstalledTemplatesViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.53
+    },
+    {
+      "path": "api/v1/marketplace/^my-templates/",
+      "method": "GET",
+      "view": "MyTemplatesViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 8.53
+    },
+    {
+      "path": "api/v1/marketplace/^my-templates/{pk}/",
+      "method": "GET",
+      "view": "MyTemplatesViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.72
+    },
+    {
+      "path": "api/v1/marketplace/^my-templates/{pk}/installs/",
+      "method": "GET",
+      "view": "MyTemplatesViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.68
+    },
+    {
+      "path": "api/v1/marketplace/^my-templates/{pk}/installs\\.{format}/?",
+      "method": "GET",
+      "view": "MyTemplatesViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.51
+    },
+    {
+      "path": "api/v1/marketplace/^my-templates/{pk}/publish/",
+      "method": "GET",
+      "view": "MyTemplatesViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.06
+    },
+    {
+      "path": "api/v1/marketplace/^my-templates/{pk}/publish\\.{format}/?",
+      "method": "GET",
+      "view": "MyTemplatesViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.06
+    },
+    {
+      "path": "api/v1/marketplace/^my-templates/{pk}/unpublish/",
+      "method": "GET",
+      "view": "MyTemplatesViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.21
+    },
+    {
+      "path": "api/v1/marketplace/^my-templates/{pk}/unpublish\\.{format}/?",
+      "method": "GET",
+      "view": "MyTemplatesViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 8.0
+    },
+    {
+      "path": "api/v1/marketplace/^my-templates/{pk}\\.{format}/?",
+      "method": "GET",
+      "view": "MyTemplatesViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.53
+    },
+    {
+      "path": "api/v1/marketplace/^my-templates\\.{format}/?",
+      "method": "GET",
+      "view": "MyTemplatesViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.09
+    },
+    {
+      "path": "api/v1/marketplace/^templates/",
+      "method": "GET",
+      "view": "WorkflowTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.15
+    },
+    {
+      "path": "api/v1/marketplace/^templates/{pk}/",
+      "method": "GET",
+      "view": "WorkflowTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 8.94
+    },
+    {
+      "path": "api/v1/marketplace/^templates/{pk}/install/",
+      "method": "GET",
+      "view": "WorkflowTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.05
+    },
+    {
+      "path": "api/v1/marketplace/^templates/{pk}/install\\.{format}/?",
+      "method": "GET",
+      "view": "WorkflowTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.58
+    },
+    {
+      "path": "api/v1/marketplace/^templates/{pk}/rate/",
+      "method": "GET",
+      "view": "WorkflowTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.04
+    },
+    {
+      "path": "api/v1/marketplace/^templates/{pk}/rate\\.{format}/?",
+      "method": "GET",
+      "view": "WorkflowTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.19
+    },
+    {
+      "path": "api/v1/marketplace/^templates/{pk}/report/",
+      "method": "GET",
+      "view": "WorkflowTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.05
+    },
+    {
+      "path": "api/v1/marketplace/^templates/{pk}/report\\.{format}/?",
+      "method": "GET",
+      "view": "WorkflowTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.54
+    },
+    {
+      "path": "api/v1/marketplace/^templates/{pk}/stats/",
+      "method": "GET",
+      "view": "WorkflowTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.19
+    },
+    {
+      "path": "api/v1/marketplace/^templates/{pk}/stats\\.{format}/?",
+      "method": "GET",
+      "view": "WorkflowTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.04
+    },
+    {
+      "path": "api/v1/marketplace/^templates/{pk}\\.{format}/?",
+      "method": "GET",
+      "view": "WorkflowTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.2
+    },
+    {
+      "path": "api/v1/marketplace/^templates\\.{format}/?",
+      "method": "GET",
+      "view": "WorkflowTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 8.53
+    },
+    {
+      "path": "api/v1/monitoring/",
+      "method": "GET",
+      "view": "view",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 9.53
+    },
+    {
+      "path": "api/v1/monitoring/<drf_format_suffix:format>",
+      "method": "GET",
+      "view": "view",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.1
+    },
+    {
+      "path": "api/v1/monitoring/^alerts/",
+      "method": "GET",
+      "view": "AlertViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.53
+    },
+    {
+      "path": "api/v1/monitoring/^alerts/summary/",
+      "method": "GET",
+      "view": "AlertViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 12.84
+    },
+    {
+      "path": "api/v1/monitoring/^alerts/summary\\.{format}/?",
+      "method": "GET",
+      "view": "AlertViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.4
+    },
+    {
+      "path": "api/v1/monitoring/^alerts/{pk}/",
+      "method": "GET",
+      "view": "AlertViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.0
+    },
+    {
+      "path": "api/v1/monitoring/^alerts/{pk}/acknowledge/",
+      "method": "GET",
+      "view": "AlertViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 8.01
+    },
+    {
+      "path": "api/v1/monitoring/^alerts/{pk}/acknowledge\\.{format}/?",
+      "method": "GET",
+      "view": "AlertViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.18
+    },
+    {
+      "path": "api/v1/monitoring/^alerts/{pk}/mute/",
+      "method": "GET",
+      "view": "AlertViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.16
+    },
+    {
+      "path": "api/v1/monitoring/^alerts/{pk}/mute\\.{format}/?",
+      "method": "GET",
+      "view": "AlertViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 8.54
+    },
+    {
+      "path": "api/v1/monitoring/^alerts/{pk}/resolve/",
+      "method": "GET",
+      "view": "AlertViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.53
+    },
+    {
+      "path": "api/v1/monitoring/^alerts/{pk}/resolve\\.{format}/?",
+      "method": "GET",
+      "view": "AlertViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 8.05
+    },
+    {
+      "path": "api/v1/monitoring/^alerts/{pk}\\.{format}/?",
+      "method": "GET",
+      "view": "AlertViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 12.04
+    },
+    {
+      "path": "api/v1/monitoring/^alerts\\.{format}/?",
+      "method": "GET",
+      "view": "AlertViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.53
+    },
+    {
+      "path": "api/v1/monitoring/^channels/",
+      "method": "GET",
+      "view": "NotificationChannelViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.05
+    },
+    {
+      "path": "api/v1/monitoring/^channels/{pk}/",
+      "method": "GET",
+      "view": "NotificationChannelViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.52
+    },
+    {
+      "path": "api/v1/monitoring/^channels/{pk}/test/",
+      "method": "GET",
+      "view": "NotificationChannelViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.52
+    },
+    {
+      "path": "api/v1/monitoring/^channels/{pk}/test\\.{format}/?",
+      "method": "GET",
+      "view": "NotificationChannelViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.77
+    },
+    {
+      "path": "api/v1/monitoring/^channels/{pk}\\.{format}/?",
+      "method": "GET",
+      "view": "NotificationChannelViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 12.85
+    },
+    {
+      "path": "api/v1/monitoring/^channels\\.{format}/?",
+      "method": "GET",
+      "view": "NotificationChannelViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.51
+    },
+    {
+      "path": "api/v1/monitoring/^logs/",
+      "method": "GET",
+      "view": "ExecutionLogViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.68
+    },
+    {
+      "path": "api/v1/monitoring/^logs/{pk}/",
+      "method": "GET",
+      "view": "ExecutionLogViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.63
+    },
+    {
+      "path": "api/v1/monitoring/^logs/{pk}\\.{format}/?",
+      "method": "GET",
+      "view": "ExecutionLogViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.52
+    },
+    {
+      "path": "api/v1/monitoring/^logs\\.{format}/?",
+      "method": "GET",
+      "view": "ExecutionLogViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.08
+    },
+    {
+      "path": "api/v1/monitoring/^metrics/",
+      "method": "GET",
+      "view": "MetricViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.82
+    },
+    {
+      "path": "api/v1/monitoring/^metrics/aggregate/",
+      "method": "GET",
+      "view": "MetricViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.51
+    },
+    {
+      "path": "api/v1/monitoring/^metrics/aggregate\\.{format}/?",
+      "method": "GET",
+      "view": "MetricViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.42
+    },
+    {
+      "path": "api/v1/monitoring/^metrics/dashboard/",
+      "method": "GET",
+      "view": "MetricViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.08
+    },
+    {
+      "path": "api/v1/monitoring/^metrics/dashboard\\.{format}/?",
+      "method": "GET",
+      "view": "MetricViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.76
+    },
+    {
+      "path": "api/v1/monitoring/^metrics/export/",
+      "method": "GET",
+      "view": "MetricViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.85
+    },
+    {
+      "path": "api/v1/monitoring/^metrics/export\\.{format}/?",
+      "method": "GET",
+      "view": "MetricViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.04
+    },
+    {
+      "path": "api/v1/monitoring/^metrics/{pk}/",
+      "method": "GET",
+      "view": "MetricViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.86
+    },
+    {
+      "path": "api/v1/monitoring/^metrics/{pk}\\.{format}/?",
+      "method": "GET",
+      "view": "MetricViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 12.03
+    },
+    {
+      "path": "api/v1/monitoring/^metrics\\.{format}/?",
+      "method": "GET",
+      "view": "MetricViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.51
+    },
+    {
+      "path": "api/v1/monitoring/^rules/",
+      "method": "GET",
+      "view": "AlertRuleViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.65
+    },
+    {
+      "path": "api/v1/monitoring/^rules/{pk}/",
+      "method": "GET",
+      "view": "AlertRuleViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.52
+    },
+    {
+      "path": "api/v1/monitoring/^rules/{pk}\\.{format}/?",
+      "method": "GET",
+      "view": "AlertRuleViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 13.19
+    },
+    {
+      "path": "api/v1/monitoring/^rules\\.{format}/?",
+      "method": "GET",
+      "view": "AlertRuleViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 8.55
+    },
+    {
+      "path": "api/v1/nl-workflow/preview/",
+      "method": "GET",
+      "view": "view",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 11.54
+    },
+    {
+      "path": "api/v1/nl-workflow/sessions/",
+      "method": "GET",
+      "view": "view",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 11.67
+    },
+    {
+      "path": "api/v1/nl-workflow/sessions/<int:session_id>/",
+      "method": "GET",
+      "view": "view",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 8.55
+    },
+    {
+      "path": "api/v1/nl-workflow/sessions/<int:session_id>/confirm/",
+      "method": "GET",
+      "view": "view",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 8.71
+    },
+    {
+      "path": "api/v1/nl-workflow/sessions/<int:session_id>/message/",
+      "method": "GET",
+      "view": "view",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.51
+    },
+    {
+      "path": "api/v1/node-executions/",
+      "method": "GET",
+      "view": "NodeExecutionViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 10.51
+    },
+    {
+      "path": "api/v1/node-executions/<int:pk>/",
+      "method": "GET",
+      "view": "NodeExecutionViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.46
+    },
+    {
+      "path": "api/v1/node-executions/statistics/",
+      "method": "GET",
+      "view": "NodeExecutionViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 10.05
+    },
+    {
+      "path": "api/v1/prompts/",
+      "method": "GET",
+      "view": "view",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 7.01
+    },
+    {
+      "path": "api/v1/prompts/<drf_format_suffix:format>",
+      "method": "GET",
+      "view": "view",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.76
+    },
+    {
+      "path": "api/v1/prompts/^templates/",
+      "method": "GET",
+      "view": "PromptTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.52
+    },
+    {
+      "path": "api/v1/prompts/^templates/featured/",
+      "method": "GET",
+      "view": "PromptTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 8.01
+    },
+    {
+      "path": "api/v1/prompts/^templates/featured\\.{format}/?",
+      "method": "GET",
+      "view": "PromptTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.51
+    },
+    {
+      "path": "api/v1/prompts/^templates/recent/",
+      "method": "GET",
+      "view": "PromptTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.05
+    },
+    {
+      "path": "api/v1/prompts/^templates/recent\\.{format}/?",
+      "method": "GET",
+      "view": "PromptTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.2
+    },
+    {
+      "path": "api/v1/prompts/^templates/{pk}/",
+      "method": "GET",
+      "view": "PromptTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 8.53
+    },
+    {
+      "path": "api/v1/prompts/^templates/{pk}/create_version/",
+      "method": "GET",
+      "view": "PromptTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.97
+    },
+    {
+      "path": "api/v1/prompts/^templates/{pk}/create_version\\.{format}/?",
+      "method": "GET",
+      "view": "PromptTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.52
+    },
+    {
+      "path": "api/v1/prompts/^templates/{pk}/rate/",
+      "method": "GET",
+      "view": "PromptTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.52
+    },
+    {
+      "path": "api/v1/prompts/^templates/{pk}/rate\\.{format}/?",
+      "method": "GET",
+      "view": "PromptTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.09
+    },
+    {
+      "path": "api/v1/prompts/^templates/{pk}/render/",
+      "method": "GET",
+      "view": "PromptTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.65
+    },
+    {
+      "path": "api/v1/prompts/^templates/{pk}/render\\.{format}/?",
+      "method": "GET",
+      "view": "PromptTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.07
+    },
+    {
+      "path": "api/v1/prompts/^templates/{pk}/use/",
+      "method": "GET",
+      "view": "PromptTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.53
+    },
+    {
+      "path": "api/v1/prompts/^templates/{pk}/use\\.{format}/?",
+      "method": "GET",
+      "view": "PromptTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.09
+    },
+    {
+      "path": "api/v1/prompts/^templates/{pk}/versions/",
+      "method": "GET",
+      "view": "PromptTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.28
+    },
+    {
+      "path": "api/v1/prompts/^templates/{pk}/versions\\.{format}/?",
+      "method": "GET",
+      "view": "PromptTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 8.01
+    },
+    {
+      "path": "api/v1/prompts/^templates/{pk}\\.{format}/?",
+      "method": "GET",
+      "view": "PromptTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.51
+    },
+    {
+      "path": "api/v1/prompts/^templates\\.{format}/?",
+      "method": "GET",
+      "view": "PromptTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.53
+    },
+    {
+      "path": "api/v1/rag/",
+      "method": "GET",
+      "view": "view",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 11.51
+    },
+    {
+      "path": "api/v1/rag/<drf_format_suffix:format>",
+      "method": "GET",
+      "view": "view",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.52
+    },
+    {
+      "path": "api/v1/rag/^chunks/",
+      "method": "GET",
+      "view": "ChunkViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.1
+    },
+    {
+      "path": "api/v1/rag/^chunks/{pk}/",
+      "method": "GET",
+      "view": "ChunkViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.43
+    },
+    {
+      "path": "api/v1/rag/^chunks/{pk}\\.{format}/?",
+      "method": "GET",
+      "view": "ChunkViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.03
+    },
+    {
+      "path": "api/v1/rag/^chunks\\.{format}/?",
+      "method": "GET",
+      "view": "ChunkViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.04
+    },
+    {
+      "path": "api/v1/rag/^collections/",
+      "method": "GET",
+      "view": "DocumentCollectionViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.52
+    },
+    {
+      "path": "api/v1/rag/^collections/{pk}/",
+      "method": "GET",
+      "view": "DocumentCollectionViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.58
+    },
+    {
+      "path": "api/v1/rag/^collections/{pk}/add_document/",
+      "method": "GET",
+      "view": "DocumentCollectionViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.66
+    },
+    {
+      "path": "api/v1/rag/^collections/{pk}/add_document\\.{format}/?",
+      "method": "GET",
+      "view": "DocumentCollectionViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 12.21
+    },
+    {
+      "path": "api/v1/rag/^collections/{pk}/add_url/",
+      "method": "GET",
+      "view": "DocumentCollectionViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.63
+    },
+    {
+      "path": "api/v1/rag/^collections/{pk}/add_url\\.{format}/?",
+      "method": "GET",
+      "view": "DocumentCollectionViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.05
+    },
+    {
+      "path": "api/v1/rag/^collections/{pk}/clear/",
+      "method": "GET",
+      "view": "DocumentCollectionViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.53
+    },
+    {
+      "path": "api/v1/rag/^collections/{pk}/clear\\.{format}/?",
+      "method": "GET",
+      "view": "DocumentCollectionViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.72
+    },
+    {
+      "path": "api/v1/rag/^collections/{pk}/details/",
+      "method": "GET",
+      "view": "DocumentCollectionViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.04
+    },
+    {
+      "path": "api/v1/rag/^collections/{pk}/details\\.{format}/?",
+      "method": "GET",
+      "view": "DocumentCollectionViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.15
+    },
+    {
+      "path": "api/v1/rag/^collections/{pk}/search/",
+      "method": "GET",
+      "view": "DocumentCollectionViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.52
+    },
+    {
+      "path": "api/v1/rag/^collections/{pk}/search\\.{format}/?",
+      "method": "GET",
+      "view": "DocumentCollectionViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 15.49
+    },
+    {
+      "path": "api/v1/rag/^collections/{pk}/stats/",
+      "method": "GET",
+      "view": "DocumentCollectionViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 21.03
+    },
+    {
+      "path": "api/v1/rag/^collections/{pk}/stats\\.{format}/?",
+      "method": "GET",
+      "view": "DocumentCollectionViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 16.56
+    },
+    {
+      "path": "api/v1/rag/^collections/{pk}/upload_file/",
+      "method": "GET",
+      "view": "DocumentCollectionViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 17.68
+    },
+    {
+      "path": "api/v1/rag/^collections/{pk}/upload_file\\.{format}/?",
+      "method": "GET",
+      "view": "DocumentCollectionViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 15.17
+    },
+    {
+      "path": "api/v1/rag/^collections/{pk}\\.{format}/?",
+      "method": "GET",
+      "view": "DocumentCollectionViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 13.51
+    },
+    {
+      "path": "api/v1/rag/^collections\\.{format}/?",
+      "method": "GET",
+      "view": "DocumentCollectionViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 21.21
+    },
+    {
+      "path": "api/v1/rag/^documents/",
+      "method": "GET",
+      "view": "DocumentViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 17.02
+    },
+    {
+      "path": "api/v1/rag/^documents/{pk}/",
+      "method": "GET",
+      "view": "DocumentViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.07
+    },
+    {
+      "path": "api/v1/rag/^documents/{pk}/chunks/",
+      "method": "GET",
+      "view": "DocumentViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 15.97
+    },
+    {
+      "path": "api/v1/rag/^documents/{pk}/chunks\\.{format}/?",
+      "method": "GET",
+      "view": "DocumentViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 23.72
+    },
+    {
+      "path": "api/v1/rag/^documents/{pk}/reprocess/",
+      "method": "GET",
+      "view": "DocumentViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 14.14
+    },
+    {
+      "path": "api/v1/rag/^documents/{pk}/reprocess\\.{format}/?",
+      "method": "GET",
+      "view": "DocumentViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.23
+    },
+    {
+      "path": "api/v1/rag/^documents/{pk}\\.{format}/?",
+      "method": "GET",
+      "view": "DocumentViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.06
+    },
+    {
+      "path": "api/v1/rag/^documents\\.{format}/?",
+      "method": "GET",
+      "view": "DocumentViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.51
+    },
+    {
+      "path": "api/v1/rag/^pipelines/",
+      "method": "GET",
+      "view": "RAGPipelineViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.04
+    },
+    {
+      "path": "api/v1/rag/^pipelines/{pk}/",
+      "method": "GET",
+      "view": "RAGPipelineViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.53
+    },
+    {
+      "path": "api/v1/rag/^pipelines/{pk}/query/",
+      "method": "GET",
+      "view": "RAGPipelineViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.51
+    },
+    {
+      "path": "api/v1/rag/^pipelines/{pk}/query\\.{format}/?",
+      "method": "GET",
+      "view": "RAGPipelineViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.5
+    },
+    {
+      "path": "api/v1/rag/^pipelines/{pk}/retrieve/",
+      "method": "GET",
+      "view": "RAGPipelineViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.24
+    },
+    {
+      "path": "api/v1/rag/^pipelines/{pk}/retrieve\\.{format}/?",
+      "method": "GET",
+      "view": "RAGPipelineViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 13.21
+    },
+    {
+      "path": "api/v1/rag/^pipelines/{pk}\\.{format}/?",
+      "method": "GET",
+      "view": "RAGPipelineViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.24
+    },
+    {
+      "path": "api/v1/rag/^pipelines\\.{format}/?",
+      "method": "GET",
+      "view": "RAGPipelineViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.15
+    },
+    {
+      "path": "api/v1/rag/^vector-stores/",
+      "method": "GET",
+      "view": "VectorStoreViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.35
+    },
+    {
+      "path": "api/v1/rag/^vector-stores/list_types/",
+      "method": "GET",
+      "view": "VectorStoreViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.56
+    },
+    {
+      "path": "api/v1/rag/^vector-stores/list_types\\.{format}/?",
+      "method": "GET",
+      "view": "VectorStoreViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.12
+    },
+    {
+      "path": "api/v1/rag/^vector-stores/{pk}/",
+      "method": "GET",
+      "view": "VectorStoreViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.17
+    },
+    {
+      "path": "api/v1/rag/^vector-stores/{pk}/create_collection/",
+      "method": "GET",
+      "view": "VectorStoreViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.1
+    },
+    {
+      "path": "api/v1/rag/^vector-stores/{pk}/create_collection\\.{format}/?",
+      "method": "GET",
+      "view": "VectorStoreViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.13
+    },
+    {
+      "path": "api/v1/rag/^vector-stores/{pk}/delete_collection/",
+      "method": "GET",
+      "view": "VectorStoreViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.93
+    },
+    {
+      "path": "api/v1/rag/^vector-stores/{pk}/delete_collection\\.{format}/?",
+      "method": "GET",
+      "view": "VectorStoreViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.76
+    },
+    {
+      "path": "api/v1/rag/^vector-stores/{pk}/test_connection/",
+      "method": "GET",
+      "view": "VectorStoreViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.53
+    },
+    {
+      "path": "api/v1/rag/^vector-stores/{pk}/test_connection\\.{format}/?",
+      "method": "GET",
+      "view": "VectorStoreViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.51
+    },
+    {
+      "path": "api/v1/rag/^vector-stores/{pk}\\.{format}/?",
+      "method": "GET",
+      "view": "VectorStoreViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.21
+    },
+    {
+      "path": "api/v1/rag/^vector-stores\\.{format}/?",
+      "method": "GET",
+      "view": "VectorStoreViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.2
+    },
+    {
+      "path": "api/v1/templates/",
+      "method": "GET",
+      "view": "view",
+      "status": "fail",
+      "status_code": 500,
+      "message": "服务器错误 (500)",
+      "response_time_ms": 12.28
+    },
+    {
+      "path": "api/v1/templates/<drf_format_suffix:format>",
+      "method": "GET",
+      "view": "view",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 18.4
+    },
+    {
+      "path": "api/v1/templates/^",
+      "method": "GET",
+      "view": "WorkflowTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 17.56
+    },
+    {
+      "path": "api/v1/templates/^\\.{format}/?",
+      "method": "GET",
+      "view": "WorkflowTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 8.64
+    },
+    {
+      "path": "api/v1/templates/^categories/",
+      "method": "GET",
+      "view": "TemplateCategoryViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.51
+    },
+    {
+      "path": "api/v1/templates/^categories/tree/",
+      "method": "GET",
+      "view": "TemplateCategoryViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.9
+    },
+    {
+      "path": "api/v1/templates/^categories/tree\\.{format}/?",
+      "method": "GET",
+      "view": "TemplateCategoryViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.11
+    },
+    {
+      "path": "api/v1/templates/^categories/{pk}/",
+      "method": "GET",
+      "view": "TemplateCategoryViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.19
+    },
+    {
+      "path": "api/v1/templates/^categories/{pk}\\.{format}/?",
+      "method": "GET",
+      "view": "TemplateCategoryViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.07
+    },
+    {
+      "path": "api/v1/templates/^categories\\.{format}/?",
+      "method": "GET",
+      "view": "TemplateCategoryViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.78
+    },
+    {
+      "path": "api/v1/templates/^featured/",
+      "method": "GET",
+      "view": "WorkflowTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 12.07
+    },
+    {
+      "path": "api/v1/templates/^featured\\.{format}/?",
+      "method": "GET",
+      "view": "WorkflowTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 8.61
+    },
+    {
+      "path": "api/v1/templates/^my/",
+      "method": "GET",
+      "view": "MyTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.53
+    },
+    {
+      "path": "api/v1/templates/^my/favorites/",
+      "method": "GET",
+      "view": "MyTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.64
+    },
+    {
+      "path": "api/v1/templates/^my/favorites\\.{format}/?",
+      "method": "GET",
+      "view": "MyTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.03
+    },
+    {
+      "path": "api/v1/templates/^my/my_reviews/",
+      "method": "GET",
+      "view": "MyTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.18
+    },
+    {
+      "path": "api/v1/templates/^my/my_reviews\\.{format}/?",
+      "method": "GET",
+      "view": "MyTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.25
+    },
+    {
+      "path": "api/v1/templates/^my/{pk}/",
+      "method": "GET",
+      "view": "MyTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.14
+    },
+    {
+      "path": "api/v1/templates/^my/{pk}\\.{format}/?",
+      "method": "GET",
+      "view": "MyTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.33
+    },
+    {
+      "path": "api/v1/templates/^my\\.{format}/?",
+      "method": "GET",
+      "view": "MyTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 12.43
+    },
+    {
+      "path": "api/v1/templates/^popular/",
+      "method": "GET",
+      "view": "WorkflowTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.27
+    },
+    {
+      "path": "api/v1/templates/^popular\\.{format}/?",
+      "method": "GET",
+      "view": "WorkflowTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.1
+    },
+    {
+      "path": "api/v1/templates/^recent/",
+      "method": "GET",
+      "view": "WorkflowTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.45
+    },
+    {
+      "path": "api/v1/templates/^recent\\.{format}/?",
+      "method": "GET",
+      "view": "WorkflowTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.29
+    },
+    {
+      "path": "api/v1/templates/^versions/",
+      "method": "GET",
+      "view": "TemplateVersionViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 8.01
+    },
+    {
+      "path": "api/v1/templates/^versions/{pk}/",
+      "method": "GET",
+      "view": "TemplateVersionViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.15
+    },
+    {
+      "path": "api/v1/templates/^versions/{pk}\\.{format}/?",
+      "method": "GET",
+      "view": "TemplateVersionViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.08
+    },
+    {
+      "path": "api/v1/templates/^versions\\.{format}/?",
+      "method": "GET",
+      "view": "TemplateVersionViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 7.51
+    },
+    {
+      "path": "api/v1/templates/^{pk}/",
+      "method": "GET",
+      "view": "WorkflowTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 8.41
+    },
+    {
+      "path": "api/v1/templates/^{pk}/favorite/",
+      "method": "GET",
+      "view": "WorkflowTemplateViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 9.15
+    },
+    {
+      "path": "api/v1/templates/^{pk}/favorite\\.{format}/?",
+      "method": "GET",
+      "view": "WorkflowTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.06
+    },
+    {
+      "path": "api/v1/templates/^{pk}/like/",
+      "method": "GET",
+      "view": "WorkflowTemplateViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 9.1
+    },
+    {
+      "path": "api/v1/templates/^{pk}/like\\.{format}/?",
+      "method": "GET",
+      "view": "WorkflowTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.06
+    },
+    {
+      "path": "api/v1/templates/^{pk}/preview/",
+      "method": "GET",
+      "view": "WorkflowTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.0
+    },
+    {
+      "path": "api/v1/templates/^{pk}/preview\\.{format}/?",
+      "method": "GET",
+      "view": "WorkflowTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.05
+    },
+    {
+      "path": "api/v1/templates/^{pk}/review/",
+      "method": "GET",
+      "view": "WorkflowTemplateViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 8.58
+    },
+    {
+      "path": "api/v1/templates/^{pk}/review\\.{format}/?",
+      "method": "GET",
+      "view": "WorkflowTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 8.5
+    },
+    {
+      "path": "api/v1/templates/^{pk}/reviews/",
+      "method": "GET",
+      "view": "WorkflowTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 8.65
+    },
+    {
+      "path": "api/v1/templates/^{pk}/reviews\\.{format}/?",
+      "method": "GET",
+      "view": "WorkflowTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.55
+    },
+    {
+      "path": "api/v1/templates/^{pk}/use/",
+      "method": "GET",
+      "view": "WorkflowTemplateViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 7.62
+    },
+    {
+      "path": "api/v1/templates/^{pk}/use\\.{format}/?",
+      "method": "GET",
+      "view": "WorkflowTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.47
+    },
+    {
+      "path": "api/v1/templates/^{pk}\\.{format}/?",
+      "method": "GET",
+      "view": "WorkflowTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 8.44
+    },
+    {
+      "path": "api/v1/tenants/",
+      "method": "GET",
+      "view": "view",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 8.51
+    },
+    {
+      "path": "api/v1/tenants/<drf_format_suffix:format>",
+      "method": "GET",
+      "view": "view",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.1
+    },
+    {
+      "path": "api/v1/tenants/^invitations/",
+      "method": "GET",
+      "view": "TenantInvitationViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.05
+    },
+    {
+      "path": "api/v1/tenants/^invitations/join/",
+      "method": "GET",
+      "view": "TenantInvitationViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.32
+    },
+    {
+      "path": "api/v1/tenants/^invitations/join\\.{format}/?",
+      "method": "GET",
+      "view": "TenantInvitationViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.07
+    },
+    {
+      "path": "api/v1/tenants/^invitations/pending/",
+      "method": "GET",
+      "view": "TenantInvitationViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.55
+    },
+    {
+      "path": "api/v1/tenants/^invitations/pending\\.{format}/?",
+      "method": "GET",
+      "view": "TenantInvitationViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.61
+    },
+    {
+      "path": "api/v1/tenants/^invitations/{pk}/",
+      "method": "GET",
+      "view": "TenantInvitationViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.61
+    },
+    {
+      "path": "api/v1/tenants/^invitations/{pk}/accept/",
+      "method": "GET",
+      "view": "TenantInvitationViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.16
+    },
+    {
+      "path": "api/v1/tenants/^invitations/{pk}/accept\\.{format}/?",
+      "method": "GET",
+      "view": "TenantInvitationViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.01
+    },
+    {
+      "path": "api/v1/tenants/^invitations/{pk}/decline/",
+      "method": "GET",
+      "view": "TenantInvitationViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.52
+    },
+    {
+      "path": "api/v1/tenants/^invitations/{pk}/decline\\.{format}/?",
+      "method": "GET",
+      "view": "TenantInvitationViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.08
+    },
+    {
+      "path": "api/v1/tenants/^invitations/{pk}\\.{format}/?",
+      "method": "GET",
+      "view": "TenantInvitationViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.94
+    },
+    {
+      "path": "api/v1/tenants/^invitations\\.{format}/?",
+      "method": "GET",
+      "view": "TenantInvitationViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.48
+    },
+    {
+      "path": "api/v1/tenants/^memberships/",
+      "method": "GET",
+      "view": "TenantMembershipViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 8.61
+    },
+    {
+      "path": "api/v1/tenants/^memberships/my_memberships/",
+      "method": "GET",
+      "view": "TenantMembershipViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.39
+    },
+    {
+      "path": "api/v1/tenants/^memberships/my_memberships\\.{format}/?",
+      "method": "GET",
+      "view": "TenantMembershipViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.59
+    },
+    {
+      "path": "api/v1/tenants/^memberships/{pk}/",
+      "method": "GET",
+      "view": "TenantMembershipViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 8.93
+    },
+    {
+      "path": "api/v1/tenants/^memberships/{pk}\\.{format}/?",
+      "method": "GET",
+      "view": "TenantMembershipViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.24
+    },
+    {
+      "path": "api/v1/tenants/^memberships\\.{format}/?",
+      "method": "GET",
+      "view": "TenantMembershipViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 8.9
+    },
+    {
+      "path": "api/v1/tenants/^tenants/",
+      "method": "GET",
+      "view": "TenantViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.66
+    },
+    {
+      "path": "api/v1/tenants/^tenants/{pk}/",
+      "method": "GET",
+      "view": "TenantViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.57
+    },
+    {
+      "path": "api/v1/tenants/^tenants/{pk}/invite/",
+      "method": "GET",
+      "view": "TenantViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.51
+    },
+    {
+      "path": "api/v1/tenants/^tenants/{pk}/invite\\.{format}/?",
+      "method": "GET",
+      "view": "TenantViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.16
+    },
+    {
+      "path": "api/v1/tenants/^tenants/{pk}/members/",
+      "method": "GET",
+      "view": "TenantViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 8.77
+    },
+    {
+      "path": "api/v1/tenants/^tenants/{pk}/members\\.{format}/?",
+      "method": "GET",
+      "view": "TenantViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.74
+    },
+    {
+      "path": "api/v1/tenants/^tenants/{pk}/remove_member/",
+      "method": "GET",
+      "view": "TenantViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.54
+    },
+    {
+      "path": "api/v1/tenants/^tenants/{pk}/remove_member\\.{format}/?",
+      "method": "GET",
+      "view": "TenantViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.73
+    },
+    {
+      "path": "api/v1/tenants/^tenants/{pk}/usage/",
+      "method": "GET",
+      "view": "TenantViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.12
+    },
+    {
+      "path": "api/v1/tenants/^tenants/{pk}/usage\\.{format}/?",
+      "method": "GET",
+      "view": "TenantViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.15
+    },
+    {
+      "path": "api/v1/tenants/^tenants/{pk}\\.{format}/?",
+      "method": "GET",
+      "view": "TenantViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.65
+    },
+    {
+      "path": "api/v1/tenants/^tenants\\.{format}/?",
+      "method": "GET",
+      "view": "TenantViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.52
+    },
+    {
+      "path": "api/v1/tenants/^usage/",
+      "method": "GET",
+      "view": "TenantUsageViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.3
+    },
+    {
+      "path": "api/v1/tenants/^usage/refresh/",
+      "method": "GET",
+      "view": "TenantUsageViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 12.01
+    },
+    {
+      "path": "api/v1/tenants/^usage/refresh\\.{format}/?",
+      "method": "GET",
+      "view": "TenantUsageViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.52
+    },
+    {
+      "path": "api/v1/tenants/^usage/{pk}/",
+      "method": "GET",
+      "view": "TenantUsageViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 12.07
+    },
+    {
+      "path": "api/v1/tenants/^usage/{pk}\\.{format}/?",
+      "method": "GET",
+      "view": "TenantUsageViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.53
+    },
+    {
+      "path": "api/v1/tenants/^usage\\.{format}/?",
+      "method": "GET",
+      "view": "TenantUsageViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.11
+    },
+    {
+      "path": "api/v1/tools/",
+      "method": "GET",
+      "view": "ToolViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 11.16
+    },
+    {
+      "path": "api/v1/tools/<int:pk>/",
+      "method": "GET",
+      "view": "ToolViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.52
+    },
+    {
+      "path": "api/v1/tools/<int:pk>/test/",
+      "method": "GET",
+      "view": "ToolViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 7.0
+    },
+    {
+      "path": "api/v1/tools/categories/",
+      "method": "GET",
+      "view": "ToolViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 11.17
+    },
+    {
+      "path": "api/v1/variables/",
+      "method": "GET",
+      "view": "VariableViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 13.51
+    },
+    {
+      "path": "api/v1/variables/<int:pk>/",
+      "method": "GET",
+      "view": "VariableViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 7.01
+    },
+    {
+      "path": "api/v1/workflows/",
+      "method": "GET",
+      "view": "WorkflowViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 22.18
+    },
+    {
+      "path": "api/v1/workflows/<int:pk>/",
+      "method": "GET",
+      "view": "WorkflowViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.05
+    },
+    {
+      "path": "api/v1/workflows/<int:pk>/duplicate/",
+      "method": "GET",
+      "view": "WorkflowViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 8.97
+    },
+    {
+      "path": "api/v1/workflows/<int:pk>/execute/",
+      "method": "GET",
+      "view": "WorkflowViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 8.17
+    },
+    {
+      "path": "api/v1/workflows/<int:pk>/export/",
+      "method": "GET",
+      "view": "WorkflowViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 8.52
+    },
+    {
+      "path": "api/v1/workflows/<int:pk>/import_workflow/",
+      "method": "GET",
+      "view": "WorkflowViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 8.52
+    },
+    {
+      "path": "api/v1/workflows/<int:pk>/stream_execute/",
+      "method": "GET",
+      "view": "WorkflowViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 8.52
+    },
+    {
+      "path": "api/v1/workflows/<int:pk>/validate/",
+      "method": "GET",
+      "view": "WorkflowViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.05
+    },
+    {
+      "path": "api/v1/workflows/edges/",
+      "method": "GET",
+      "view": "EdgeViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 18.27
+    },
+    {
+      "path": "api/v1/workflows/edges/<int:pk>/",
+      "method": "GET",
+      "view": "EdgeViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.38
+    },
+    {
+      "path": "api/v1/workflows/edges/batch_create/",
+      "method": "GET",
+      "view": "EdgeViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 7.85
+    },
+    {
+      "path": "api/v1/workflows/executions/",
+      "method": "GET",
+      "view": "WorkflowExecutionViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 11.28
+    },
+    {
+      "path": "api/v1/workflows/executions/<int:pk>/",
+      "method": "GET",
+      "view": "WorkflowExecutionViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 8.53
+    },
+    {
+      "path": "api/v1/workflows/import/",
+      "method": "GET",
+      "view": "view",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 8.35
+    },
+    {
+      "path": "api/v1/workflows/nodes/",
+      "method": "GET",
+      "view": "NodeViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 13.12
+    },
+    {
+      "path": "api/v1/workflows/nodes/<int:pk>/",
+      "method": "GET",
+      "view": "NodeViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 8.25
+    },
+    {
+      "path": "api/v1/workflows/nodes/available_types/",
+      "method": "GET",
+      "view": "NodeViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 9.27
+    },
+    {
+      "path": "api/v1/workflows/nodes/batch_create/",
+      "method": "GET",
+      "view": "NodeViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 7.53
+    },
+    {
+      "path": "api/v1/workflows/nodes/batch_update_positions/",
+      "method": "GET",
+      "view": "NodeViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 12.08
+    },
+    {
+      "path": "api/v1/workflows/templates/",
+      "method": "GET",
+      "view": "WorkflowTemplateViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 9.51
+    },
+    {
+      "path": "api/v1/workflows/templates/<int:pk>/",
+      "method": "GET",
+      "view": "WorkflowTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 8.05
+    }
+  ]
+}

@@ -1,0 +1,96 @@
+{
+  "project": "model-training-module",
+  "mode": "dag",
+  "tasks": {
+    "dataset-upload": {
+      "role": "code",
+      "description": "完善数据集上传节点：前端拖拽上传+后端文件接收+存储+API接口",
+      "deps": [],
+      "status": "pending",
+      "result": null,
+      "error": null,
+      "created_at": "2026-05-21T15:35:00+08:00",
+      "updated_at": "2026-05-21T15:35:00+08:00"
+    },
+    "data-annotation": {
+      "role": "code",
+      "description": "完善数据标注节点：前端标注界面（框选标签）+后端标注API+标注数据存储",
+      "deps": ["dataset-upload"],
+      "status": "pending",
+      "result": null,
+      "error": null,
+      "created_at": "2026-05-21T15:35:00+08:00",
+      "updated_at": "2026-05-21T15:35:00+08:00"
+    },
+    "data-augmentation": {
+      "role": "code",
+      "description": "完善数据增强节点：真实图像/文本增强逻辑+后端执行+结果存储",
+      "deps": ["dataset-upload"],
+      "status": "pending",
+      "result": null,
+      "error": null,
+      "created_at": "2026-05-21T15:35:00+08:00",
+      "updated_at": "2026-05-21T15:35:00+08:00"
+    },
+    "model-training": {
+      "role": "code",
+      "description": "完善模型训练节点：GPU检测+真实PyTorch训练+WebSocket进度流+断点续训",
+      "deps": ["data-augmentation"],
+      "status": "pending",
+      "result": null,
+      "error": null,
+      "created_at": "2026-05-21T15:35:00+08:00",
+      "updated_at": "2026-05-21T15:35:00+08:00"
+    },
+    "model-evaluation": {
+      "role": "code",
+      "description": "完善模型评估节点：真实评估指标计算+可视化报告+后端评估逻辑",
+      "deps": ["model-training"],
+      "status": "pending",
+      "result": null,
+      "error": null,
+      "created_at": "2026-05-21T15:35:00+08:00",
+      "updated_at": "2026-05-21T15:35:00+08:00"
+    },
+    "model-deployment": {
+      "role": "code",
+      "description": "完善模型部署节点：本地部署逻辑+Flask/FastAPI服务生成+API接口暴露",
+      "deps": ["model-evaluation"],
+      "status": "pending",
+      "result": null,
+      "error": null,
+      "created_at": "2026-05-21T15:35:00+08:00",
+      "updated_at": "2026-05-21T15:35:00+08:00"
+    },
+    "website-generator": {
+      "role": "code",
+      "description": "新增网站生成节点：根据训练好的模型生成前后端分离网站代码+类别配置+空文件夹输出",
+      "deps": ["model-deployment"],
+      "status": "pending",
+      "result": null,
+      "error": null,
+      "created_at": "2026-05-21T15:35:00+08:00",
+      "updated_at": "2026-05-21T15:35:00+08:00"
+    },
+    "dataset-recommend": {
+      "role": "code",
+      "description": "新增数据集推荐模块：推荐主流数据集网站+Kaggle/HuggingFace链接+前端展示",
+      "deps": [],
+      "status": "pending",
+      "result": null,
+      "error": null,
+      "created_at": "2026-05-21T15:35:00+08:00",
+      "updated_at": "2026-05-21T15:35:00+08:00"
+    },
+    "frontend-integration": {
+      "role": "code",
+      "description": "前后端联调：节点注册+WebSocket训练进度+ExecutionResult展示+loading状态",
+      "deps": ["model-training"],
+      "status": "pending",
+      "result": null,
+      "error": null,
+      "created_at": "2026-05-21T15:35:00+08:00",
+      "updated_at": "2026-05-21T15:35:00+08:00"
+    }
+  }
+}

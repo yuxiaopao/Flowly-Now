@@ -1,0 +1,71 @@
+{
+  "status": "done",
+  "result": "Fixed URL routing conflicts in agents app. The sub-routers were incorrectly registered with their own prefixes (r'conversations', r'executions', r'tools') while also being wrapped under explicit path() calls, causing double-prefix issues like /conversations/conversations/. Fixed by changing sub-router registrations to use empty prefix r'' since they're already nested under explicit path() calls. Also wrapped routers with tuple format (urls, app_name) for proper namespace handling.",
+  "files_changed": [
+    "e:\\Flowly-now\\Backend\\agents\\urls.py"
+  ],
+  "changes": [
+    {
+      "file": "e:\\Flowly-now\\Backend\\agents\\urls.py",
+      "changes": [
+        "conversations_router: r'conversations' -> r''",
+        "executions_router: r'executions' -> r''",
+        "tools_router: r'tools' -> r''",
+        "Added app_name tuples for proper namespace: include((router.urls, 'namespace'))"
+      ]
+    }
+  ],
+  "url_patterns_after_fix": {
+    "conversations": [
+      "^conversations/$ [name='conversation-list']",
+      "^conversations/(?P<pk>[^/.]+)/$ [name='conversation-detail']",
+      "^conversations/(?P<pk>[^/.]+)/messages/$ [name='conversation-messages']",
+      "^conversations/(?P<pk>[^/.]+)/add_message/$ [name='conversation-add-message']"
+    ],
+    "executions": [
+      "^executions/$ [name='execution-list']",
+      "^executions/(?P<pk>[^/.]+)/$ [name='execution-detail']"
+    ],
+    "tools": [
+      "^tools/$ [name='agent-tool-list']",
+      "^tools/(?P<pk>[^/.]+)/$ [name='agent-tool-detail']",
+      "^tools/available/$ [name='agent-tool-available']"
+    ],
+    "agents": [
+      "^$ [name='agent-list']",
+      "^(?P<pk>[^/.]+)/$ [name='agent-detail']",
+      "^(?P<pk>[^/.]+)/duplicate/$ [name='agent-duplicate']",
+      "^(?P<pk>[^/.]+)/chat/$ [name='agent-chat']",
+      "^(?P<pk>[^/.]+)/stream_chat/$ [name='agent-stream-chat']",
+      "^(?P<pk>[^/.]+)/debug/$ [name='agent-debug']",
+      "^(?P<pk>[^/.]+)/debug_history/$ [name='agent-debug-history']",
+      "^(?P<pk>[^/.]+)/debug/sessions/(?P<session_id>[^/.]+)/$ [name='agent-debug-session-detail']",
+      "^(?P<pk>[^/.]+)/tools/$ [name='agent-tools']",
+      "^(?P<pk>[^/.]+)/tools_remove/$ [name='agent-tools-remove']",
+      "^(?P<pk>[^/.]+)/reset_memory/$ [name='agent-reset-memory']",
+      "^(?P<pp>[^/.]+)/skills/$ [name='agent-skills']",
+      "^(?P<pk>[^/.]+)/update_skills/$ [name='agent-update-skills']"
+    ]
+  },
+  "api_endpoints": {
+    "GET /api/v1/agents/conversations/": "List conversations (filter by agent_id query param)",
+    "POST /api/v1/agents/conversations/": "Create new conversation",
+    "GET /api/v1/agents/conversations/{uuid}/": "Get conversation detail",
+    "PUT/PATCH /api/v1/agents/conversations/{uuid}/": "Update conversation",
+    "DELETE /api/v1/agents/conversations/{uuid}/": "Delete conversation",
+    "GET /api/v1/agents/conversations/{uuid}/messages/": "Get messages in conversation",
+    "POST /api/v1/agents/conversations/{uuid}/add_message/": "Add message to conversation",
+    "GET /api/v1/agents/executions/": "List executions",
+    "GET /api/v1/agents/executions/{uuid}/": "Get execution detail",
+    "GET /api/v1/agents/tools/": "List agent tools",
+    "GET /api/v1/agents/tools/available/": "List available tool types",
+    "GET /api/v1/agents/": "List agents",
+    "POST /api/v1/agents/": "Create agent",
+    "GET /api/v1/agents/{uuid}/": "Get agent detail",
+    "PUT/PATCH/DELETE /api/v1/agents/{uuid}/": "Update/delete agent",
+    "POST /api/v1/agents/{uuid}/chat/": "Chat with agent",
+    "POST /api/v1/agents/{uuid}/stream_chat/": "Stream chat with agent"
+  },
+  "conflict_resolution": "UUID primary keys in pk field are handled by DRF's DefaultRouter which uses [^/.]+ pattern that matches UUIDs correctly. No manual pk converter needed.",
+  "summary": "Fixed double-prefix issue in URL routing. Sub-routers now use empty prefix r'' and are wrapped under explicit path() calls with proper namespace tuples."
+}

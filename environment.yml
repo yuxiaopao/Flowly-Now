@@ -1,0 +1,25 @@
+name: flowly
+
+channels:
+  - defaults
+  - conda-forge
+
+dependencies:
+  - python=3.12
+  - pip>=23.0
+  - mysqlclient
+
+  # Optional: for data science tools
+  - numpy
+  - pandas
+
+  # Optional: for deployment
+  - gunicorn
+  - uvicorn
+
+  # Development
+  - pytest
+  - pytest-django
+
+  - pip:
+    - -r requirements.txt

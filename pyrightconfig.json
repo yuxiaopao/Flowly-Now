@@ -1,0 +1,17 @@
+{
+  "include": ["Backend"],
+  "exclude": ["**/node_modules", "**/__pycache__", "**/migrations/0*.py"],
+  "pythonVersion": "3.12",
+  "venvPath": ".",
+  "venv": ".venv",
+  "typeCheckingMode": "off",
+  "reportMissingImports": false,
+  "reportMissingModuleSource": false,
+  "extraPaths": ["Backend/workflows/services"],
+  "executionEnvironments": [
+    {
+      "root": "Backend",
+      "pythonVersion": "3.12"
+    }
+  ]
+}

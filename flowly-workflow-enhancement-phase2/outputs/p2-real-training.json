@@ -1,0 +1,9 @@
+{
+  "task_id": "p2-real-training",
+  "status": "done",
+  "result": "创建 Backend/scripts/train_model.py 实现真实训练：PyTorch 动态网络 + HuggingFace Transformers；GPU 检测；checkpoint 保存；run_model_training_node 改为 subprocess 执行训练并追踪 job_id；添加 ML 依赖到 requirements.txt。",
+  "files_changed": [],
+  "files_added": [],
+  "summary": "创建 Backend/scripts/train_model.py 实现真实训练：PyTorch 动态网络 + HuggingFace Transformers；GPU 检测；checkpoint 保存；run_model_training_node 改为 subprocess 执行训练并追踪 job_id；添加 ML 依赖到 requirements.txt。",
+  "completed_at": "2026-05-17T17:23:26.987896+00:00"
+}

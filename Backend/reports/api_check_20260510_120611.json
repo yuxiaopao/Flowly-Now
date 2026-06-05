@@ -1,0 +1,2575 @@
+{
+  "timestamp": "2026-05-10 12:06:11",
+  "base_url": "http://127.0.0.1:8000",
+  "total_endpoints": 273,
+  "summary": {
+    "passed": 87,
+    "failed": 104,
+    "warnings": 82,
+    "auth_required": 0,
+    "skipped": 0
+  },
+  "by_module": {
+    "其他": {
+      "total": 20,
+      "passed": 11,
+      "failed": 6,
+      "warnings": 3
+    },
+    "健康检查": {
+      "total": 2,
+      "passed": 2,
+      "failed": 0,
+      "warnings": 0
+    },
+    "管理": {
+      "total": 9,
+      "passed": 5,
+      "failed": 3,
+      "warnings": 1
+    },
+    "Agent": {
+      "total": 23,
+      "passed": 5,
+      "failed": 11,
+      "warnings": 7
+    },
+    "工作流": {
+      "total": 23,
+      "passed": 9,
+      "failed": 5,
+      "warnings": 9
+    },
+    "认证": {
+      "total": 8,
+      "passed": 1,
+      "failed": 0,
+      "warnings": 7
+    },
+    "计费": {
+      "total": 21,
+      "passed": 12,
+      "failed": 5,
+      "warnings": 4
+    },
+    "品牌": {
+      "total": 18,
+      "passed": 4,
+      "failed": 7,
+      "warnings": 7
+    },
+    "网关": {
+      "total": 16,
+      "passed": 8,
+      "failed": 4,
+      "warnings": 4
+    },
+    "集成": {
+      "total": 17,
+      "passed": 7,
+      "failed": 5,
+      "warnings": 5
+    },
+    "市场": {
+      "total": 17,
+      "passed": 1,
+      "failed": 11,
+      "warnings": 5
+    },
+    "监控": {
+      "total": 19,
+      "passed": 10,
+      "failed": 5,
+      "warnings": 4
+    },
+    "NL转工作流": {
+      "total": 5,
+      "passed": 1,
+      "failed": 1,
+      "warnings": 3
+    },
+    "Prompt": {
+      "total": 10,
+      "passed": 2,
+      "failed": 4,
+      "warnings": 4
+    },
+    "RAG": {
+      "total": 26,
+      "passed": 2,
+      "failed": 15,
+      "warnings": 9
+    },
+    "模板": {
+      "total": 20,
+      "passed": 0,
+      "failed": 16,
+      "warnings": 4
+    },
+    "租户": {
+      "total": 19,
+      "passed": 7,
+      "failed": 6,
+      "warnings": 6
+    }
+  },
+  "results": [
+    {
+      "path": "api/docs/",
+      "method": "GET",
+      "view": "SpectacularSwaggerView",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 8.6
+    },
+    {
+      "path": "api/health/",
+      "method": "GET",
+      "view": "HealthCheckView",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 1018.52
+    },
+    {
+      "path": "api/ping/",
+      "method": "GET",
+      "view": "PingView",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 8.53
+    },
+    {
+      "path": "api/schema/",
+      "method": "GET",
+      "view": "SpectacularAPIView",
+      "status": "fail",
+      "status_code": 500,
+      "message": "服务器错误 (500)",
+      "response_time_ms": 27.56
+    },
+    {
+      "path": "api/v1/admin/",
+      "method": "GET",
+      "view": "APIRootView",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 8.85
+    },
+    {
+      "path": "api/v1/admin/agents/",
+      "method": "GET",
+      "view": "AgentManagementViewSet",
+      "status": "fail",
+      "status_code": 500,
+      "message": "服务器错误 (500)",
+      "response_time_ms": 10.59
+    },
+    {
+      "path": "api/v1/admin/agents/{pk}/",
+      "method": "GET",
+      "view": "AgentManagementViewSet",
+      "status": "fail",
+      "status_code": 500,
+      "message": "服务器错误 (500)",
+      "response_time_ms": 10.46
+    },
+    {
+      "path": "api/v1/admin/api-keys/",
+      "method": "GET",
+      "view": "APIKeyManagementViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 6.57
+    },
+    {
+      "path": "api/v1/admin/api-keys/{pk}/",
+      "method": "GET",
+      "view": "APIKeyManagementViewSet",
+      "status": "fail",
+      "status_code": 500,
+      "message": "服务器错误 (500)",
+      "response_time_ms": 10.0
+    },
+    {
+      "path": "api/v1/admin/api-keys/{pk}/revoke/",
+      "method": "GET",
+      "view": "APIKeyManagementViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 8.66
+    },
+    {
+      "path": "api/v1/admin/health/",
+      "method": "GET",
+      "view": "SystemHealthView",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 3055.9
+    },
+    {
+      "path": "api/v1/admin/settings/",
+      "method": "GET",
+      "view": "SystemSettingsView",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 7.0
+    },
+    {
+      "path": "api/v1/admin/usage/",
+      "method": "GET",
+      "view": "SystemUsageView",
+      "status": "fail",
+      "status_code": 500,
+      "message": "服务器错误 (500)",
+      "response_time_ms": 12.39
+    },
+    {
+      "path": "api/v1/admin/users/",
+      "method": "GET",
+      "view": "UserManagementViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 12.47
+    },
+    {
+      "path": "api/v1/admin/users/{pk}/",
+      "method": "GET",
+      "view": "UserManagementViewSet",
+      "status": "fail",
+      "status_code": 500,
+      "message": "服务器错误 (500)",
+      "response_time_ms": 9.08
+    },
+    {
+      "path": "api/v1/admin/workflows/",
+      "method": "GET",
+      "view": "WorkflowManagementViewSet",
+      "status": "fail",
+      "status_code": 500,
+      "message": "服务器错误 (500)",
+      "response_time_ms": 11.45
+    },
+    {
+      "path": "api/v1/admin/workflows/{pk}/",
+      "method": "GET",
+      "view": "WorkflowManagementViewSet",
+      "status": "fail",
+      "status_code": 500,
+      "message": "服务器错误 (500)",
+      "response_time_ms": 8.0
+    },
+    {
+      "path": "api/v1/agents/",
+      "method": "GET",
+      "view": "APIRootView",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 7.62
+    },
+    {
+      "path": "api/v1/agents/agents/",
+      "method": "GET",
+      "view": "AgentViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 8.75
+    },
+    {
+      "path": "api/v1/agents/agents/{pk}/",
+      "method": "GET",
+      "view": "AgentViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.23
+    },
+    {
+      "path": "api/v1/agents/agents/{pk}/chat/",
+      "method": "GET",
+      "view": "AgentViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 8.07
+    },
+    {
+      "path": "api/v1/agents/agents/{pk}/conversations/",
+      "method": "GET",
+      "view": "AgentViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.28
+    },
+    {
+      "path": "api/v1/agents/agents/{pk}/debug/",
+      "method": "GET",
+      "view": "AgentViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 6.76
+    },
+    {
+      "path": "api/v1/agents/agents/{pk}/debug/sessions/{session_id}/",
+      "method": "GET",
+      "view": "AgentViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.23
+    },
+    {
+      "path": "api/v1/agents/agents/{pk}/debug_history/",
+      "method": "GET",
+      "view": "AgentViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.56
+    },
+    {
+      "path": "api/v1/agents/agents/{pk}/reset_memory/",
+      "method": "GET",
+      "view": "AgentViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 9.92
+    },
+    {
+      "path": "api/v1/agents/agents/{pk}/skills/",
+      "method": "GET",
+      "view": "AgentViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.53
+    },
+    {
+      "path": "api/v1/agents/agents/{pk}/stream_chat/",
+      "method": "GET",
+      "view": "AgentViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 8.16
+    },
+    {
+      "path": "api/v1/agents/agents/{pk}/tools/",
+      "method": "GET",
+      "view": "AgentViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 8.53
+    },
+    {
+      "path": "api/v1/agents/agents/{pk}/tools_remove/",
+      "method": "GET",
+      "view": "AgentViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 7.52
+    },
+    {
+      "path": "api/v1/agents/agents/{pk}/update_skills/",
+      "method": "GET",
+      "view": "AgentViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 7.99
+    },
+    {
+      "path": "api/v1/agents/conversations/",
+      "method": "GET",
+      "view": "AgentConversationViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 10.52
+    },
+    {
+      "path": "api/v1/agents/conversations/{pk}/",
+      "method": "GET",
+      "view": "AgentConversationViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.13
+    },
+    {
+      "path": "api/v1/agents/conversations/{pk}/add_message/",
+      "method": "GET",
+      "view": "AgentConversationViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 7.0
+    },
+    {
+      "path": "api/v1/agents/conversations/{pk}/messages/",
+      "method": "GET",
+      "view": "AgentConversationViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.02
+    },
+    {
+      "path": "api/v1/agents/tools/",
+      "method": "GET",
+      "view": "AgentToolViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 8.51
+    },
+    {
+      "path": "api/v1/agents/tools/available/",
+      "method": "GET",
+      "view": "AgentToolViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 8.48
+    },
+    {
+      "path": "api/v1/agents/tools/{pk}/",
+      "method": "GET",
+      "view": "AgentToolViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 8.7
+    },
+    {
+      "path": "api/v1/audit-logs/",
+      "method": "GET",
+      "view": "AuditLogViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 10.21
+    },
+    {
+      "path": "api/v1/audit-logs/actions/",
+      "method": "GET",
+      "view": "AuditLogViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 9.0
+    },
+    {
+      "path": "api/v1/audit-logs/resource-types/",
+      "method": "GET",
+      "view": "AuditLogViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 7.45
+    },
+    {
+      "path": "api/v1/audit-logs/summary/",
+      "method": "GET",
+      "view": "AuditLogViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 10.52
+    },
+    {
+      "path": "api/v1/audit-logs/{pk}/",
+      "method": "GET",
+      "view": "AuditLogViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 8.01
+    },
+    {
+      "path": "api/v1/auth/change-password/",
+      "method": "GET",
+      "view": "ChangePasswordView",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 8.52
+    },
+    {
+      "path": "api/v1/auth/login/",
+      "method": "GET",
+      "view": "LoginView",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 7.61
+    },
+    {
+      "path": "api/v1/auth/logout/",
+      "method": "GET",
+      "view": "LogoutView",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 9.15
+    },
+    {
+      "path": "api/v1/auth/password-reset/",
+      "method": "GET",
+      "view": "PasswordResetRequestView",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 7.01
+    },
+    {
+      "path": "api/v1/auth/password-reset/confirm/",
+      "method": "GET",
+      "view": "PasswordResetConfirmView",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 8.29
+    },
+    {
+      "path": "api/v1/auth/refresh/",
+      "method": "GET",
+      "view": "TokenRefreshView",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 8.53
+    },
+    {
+      "path": "api/v1/auth/register/",
+      "method": "GET",
+      "view": "RegisterView",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 8.08
+    },
+    {
+      "path": "api/v1/auth/user/",
+      "method": "GET",
+      "view": "UserProfileView",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 8.16
+    },
+    {
+      "path": "api/v1/billing/",
+      "method": "GET",
+      "view": "APIRootView",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 8.33
+    },
+    {
+      "path": "api/v1/billing/coupons/my/",
+      "method": "GET",
+      "view": "CouponViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 7.89
+    },
+    {
+      "path": "api/v1/billing/coupons/validate/",
+      "method": "GET",
+      "view": "CouponViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 8.34
+    },
+    {
+      "path": "api/v1/billing/invoices/",
+      "method": "GET",
+      "view": "InvoiceViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 9.01
+    },
+    {
+      "path": "api/v1/billing/invoices/{pk}/",
+      "method": "GET",
+      "view": "InvoiceViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.52
+    },
+    {
+      "path": "api/v1/billing/invoices/{pk}/download/",
+      "method": "GET",
+      "view": "InvoiceViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 8.51
+    },
+    {
+      "path": "api/v1/billing/payments/",
+      "method": "GET",
+      "view": "PaymentViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 11.92
+    },
+    {
+      "path": "api/v1/billing/payments/{pk}/",
+      "method": "GET",
+      "view": "PaymentViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.51
+    },
+    {
+      "path": "api/v1/billing/prices/",
+      "method": "GET",
+      "view": "PriceTierViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 8.75
+    },
+    {
+      "path": "api/v1/billing/prices/plans/",
+      "method": "GET",
+      "view": "PriceTierViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 9.51
+    },
+    {
+      "path": "api/v1/billing/prices/{pk}/",
+      "method": "GET",
+      "view": "PriceTierViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 8.15
+    },
+    {
+      "path": "api/v1/billing/subscriptions/",
+      "method": "GET",
+      "view": "SubscriptionViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 11.08
+    },
+    {
+      "path": "api/v1/billing/subscriptions/cancel/",
+      "method": "GET",
+      "view": "SubscriptionViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 10.37
+    },
+    {
+      "path": "api/v1/billing/subscriptions/my/",
+      "method": "GET",
+      "view": "SubscriptionViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 10.01
+    },
+    {
+      "path": "api/v1/billing/subscriptions/reactivate/",
+      "method": "GET",
+      "view": "SubscriptionViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 7.51
+    },
+    {
+      "path": "api/v1/billing/subscriptions/subscribe/",
+      "method": "GET",
+      "view": "SubscriptionViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 8.01
+    },
+    {
+      "path": "api/v1/billing/subscriptions/usage/",
+      "method": "GET",
+      "view": "SubscriptionViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 10.04
+    },
+    {
+      "path": "api/v1/billing/subscriptions/{pk}/",
+      "method": "GET",
+      "view": "SubscriptionViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 10.23
+    },
+    {
+      "path": "api/v1/billing/usage/",
+      "method": "GET",
+      "view": "UsageRecordViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 9.85
+    },
+    {
+      "path": "api/v1/billing/usage/history/",
+      "method": "GET",
+      "view": "UsageRecordViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 8.11
+    },
+    {
+      "path": "api/v1/billing/usage/{pk}/",
+      "method": "GET",
+      "view": "UsageRecordViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.33
+    },
+    {
+      "path": "api/v1/branding/",
+      "method": "GET",
+      "view": "APIRootView",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 7.52
+    },
+    {
+      "path": "api/v1/branding/branding/",
+      "method": "GET",
+      "view": "BrandingViewSet",
+      "status": "fail",
+      "status_code": 500,
+      "message": "服务器错误 (500)",
+      "response_time_ms": 8.75
+    },
+    {
+      "path": "api/v1/branding/branding/apply_preset/",
+      "method": "GET",
+      "view": "BrandingViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 7.01
+    },
+    {
+      "path": "api/v1/branding/branding/current/",
+      "method": "GET",
+      "view": "BrandingViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 9.03
+    },
+    {
+      "path": "api/v1/branding/branding/presets/",
+      "method": "GET",
+      "view": "BrandingViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 7.53
+    },
+    {
+      "path": "api/v1/branding/branding/preview/",
+      "method": "GET",
+      "view": "BrandingViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 9.13
+    },
+    {
+      "path": "api/v1/branding/branding/update_config/",
+      "method": "GET",
+      "view": "BrandingViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 7.52
+    },
+    {
+      "path": "api/v1/branding/branding/{pk}/",
+      "method": "GET",
+      "view": "BrandingViewSet",
+      "status": "fail",
+      "status_code": 500,
+      "message": "服务器错误 (500)",
+      "response_time_ms": 8.01
+    },
+    {
+      "path": "api/v1/branding/domains/",
+      "method": "GET",
+      "view": "CustomDomainViewSet",
+      "status": "fail",
+      "status_code": 500,
+      "message": "服务器错误 (500)",
+      "response_time_ms": 7.9
+    },
+    {
+      "path": "api/v1/branding/domains/{pk}/",
+      "method": "GET",
+      "view": "CustomDomainViewSet",
+      "status": "fail",
+      "status_code": 500,
+      "message": "服务器错误 (500)",
+      "response_time_ms": 9.62
+    },
+    {
+      "path": "api/v1/branding/domains/{pk}/refresh_ssl/",
+      "method": "GET",
+      "view": "CustomDomainViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 7.53
+    },
+    {
+      "path": "api/v1/branding/domains/{pk}/verify/",
+      "method": "GET",
+      "view": "CustomDomainViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 8.9
+    },
+    {
+      "path": "api/v1/branding/email-templates/",
+      "method": "GET",
+      "view": "EmailTemplateViewSet",
+      "status": "fail",
+      "status_code": 500,
+      "message": "服务器错误 (500)",
+      "response_time_ms": 6.01
+    },
+    {
+      "path": "api/v1/branding/email-templates/reset_to_default/",
+      "method": "GET",
+      "view": "EmailTemplateViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 9.01
+    },
+    {
+      "path": "api/v1/branding/email-templates/{pk}/",
+      "method": "GET",
+      "view": "EmailTemplateViewSet",
+      "status": "fail",
+      "status_code": 500,
+      "message": "服务器错误 (500)",
+      "response_time_ms": 8.21
+    },
+    {
+      "path": "api/v1/branding/email-templates/{pk}/send_test/",
+      "method": "GET",
+      "view": "EmailTemplateViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 7.64
+    },
+    {
+      "path": "api/v1/branding/presets/",
+      "method": "GET",
+      "view": "ThemePresetViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 9.52
+    },
+    {
+      "path": "api/v1/branding/presets/{pk}/",
+      "method": "GET",
+      "view": "ThemePresetViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.53
+    },
+    {
+      "path": "api/v1/credentials/",
+      "method": "GET",
+      "view": "APICredentialViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 9.45
+    },
+    {
+      "path": "api/v1/credentials/{pk}/",
+      "method": "GET",
+      "view": "APICredentialViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 8.97
+    },
+    {
+      "path": "api/v1/credentials/{pk}/rotate/",
+      "method": "GET",
+      "view": "APICredentialViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 10.16
+    },
+    {
+      "path": "api/v1/credentials/{pk}/verify/",
+      "method": "GET",
+      "view": "APICredentialViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 8.37
+    },
+    {
+      "path": "api/v1/gateway/",
+      "method": "GET",
+      "view": "APIRootView",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 9.41
+    },
+    {
+      "path": "api/v1/gateway/api-keys/",
+      "method": "GET",
+      "view": "UserAPIKeyViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 11.82
+    },
+    {
+      "path": "api/v1/gateway/api-keys/{pk}/",
+      "method": "GET",
+      "view": "UserAPIKeyViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.5
+    },
+    {
+      "path": "api/v1/gateway/api-keys/{pk}/verify/",
+      "method": "GET",
+      "view": "UserAPIKeyViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 10.66
+    },
+    {
+      "path": "api/v1/gateway/chat/",
+      "method": "GET",
+      "view": "GatewayChatView",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 8.3
+    },
+    {
+      "path": "api/v1/gateway/embeddings/",
+      "method": "GET",
+      "view": "GatewayEmbeddingsView",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 9.17
+    },
+    {
+      "path": "api/v1/gateway/logs/",
+      "method": "GET",
+      "view": "APICallLogViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 9.22
+    },
+    {
+      "path": "api/v1/gateway/logs/aggregate/",
+      "method": "GET",
+      "view": "APICallLogViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 10.72
+    },
+    {
+      "path": "api/v1/gateway/logs/recent/",
+      "method": "GET",
+      "view": "APICallLogViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 10.69
+    },
+    {
+      "path": "api/v1/gateway/logs/{pk}/",
+      "method": "GET",
+      "view": "APICallLogViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 8.06
+    },
+    {
+      "path": "api/v1/gateway/models/",
+      "method": "GET",
+      "view": "AIModelViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 10.53
+    },
+    {
+      "path": "api/v1/gateway/models/default_models/",
+      "method": "GET",
+      "view": "AIModelViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 9.52
+    },
+    {
+      "path": "api/v1/gateway/models/{pk}/",
+      "method": "GET",
+      "view": "AIModelViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.62
+    },
+    {
+      "path": "api/v1/gateway/models/{pk}/test/",
+      "method": "GET",
+      "view": "AIModelViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 10.07
+    },
+    {
+      "path": "api/v1/gateway/providers/",
+      "method": "GET",
+      "view": "ModelProviderViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 9.53
+    },
+    {
+      "path": "api/v1/gateway/providers/{pk}/",
+      "method": "GET",
+      "view": "ModelProviderViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.93
+    },
+    {
+      "path": "api/v1/integrations/",
+      "method": "GET",
+      "view": "APIRootView",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 9.06
+    },
+    {
+      "path": "api/v1/integrations/integrations/",
+      "method": "GET",
+      "view": "IntegrationViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 10.54
+    },
+    {
+      "path": "api/v1/integrations/integrations/available/",
+      "method": "GET",
+      "view": "IntegrationViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 9.81
+    },
+    {
+      "path": "api/v1/integrations/integrations/{pk}/",
+      "method": "GET",
+      "view": "IntegrationViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.07
+    },
+    {
+      "path": "api/v1/integrations/integrations/{pk}/connect/",
+      "method": "GET",
+      "view": "IntegrationViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 9.24
+    },
+    {
+      "path": "api/v1/integrations/integrations/{pk}/disconnect/",
+      "method": "GET",
+      "view": "IntegrationViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 9.52
+    },
+    {
+      "path": "api/v1/integrations/integrations/{pk}/sync/",
+      "method": "GET",
+      "view": "IntegrationViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 10.37
+    },
+    {
+      "path": "api/v1/integrations/templates/",
+      "method": "GET",
+      "view": "IntegrationTemplateViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 9.95
+    },
+    {
+      "path": "api/v1/integrations/templates/categories/",
+      "method": "GET",
+      "view": "IntegrationTemplateViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 9.01
+    },
+    {
+      "path": "api/v1/integrations/templates/featured/",
+      "method": "GET",
+      "view": "IntegrationTemplateViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 8.17
+    },
+    {
+      "path": "api/v1/integrations/templates/{pk}/",
+      "method": "GET",
+      "view": "IntegrationTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 8.51
+    },
+    {
+      "path": "api/v1/integrations/webhook-receiver/",
+      "method": "GET",
+      "view": "webhook_receiver",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 4.52
+    },
+    {
+      "path": "api/v1/integrations/webhooks/",
+      "method": "GET",
+      "view": "WebhookViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 9.53
+    },
+    {
+      "path": "api/v1/integrations/webhooks/{pk}/",
+      "method": "GET",
+      "view": "WebhookViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 7.63
+    },
+    {
+      "path": "api/v1/integrations/webhooks/{pk}/deliveries/",
+      "method": "GET",
+      "view": "WebhookViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 8.51
+    },
+    {
+      "path": "api/v1/integrations/webhooks/{pk}/stats/",
+      "method": "GET",
+      "view": "WebhookViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.77
+    },
+    {
+      "path": "api/v1/integrations/webhooks/{pk}/test/",
+      "method": "GET",
+      "view": "WebhookViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 8.54
+    },
+    {
+      "path": "api/v1/marketplace/",
+      "method": "GET",
+      "view": "APIRootView",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 6.53
+    },
+    {
+      "path": "api/v1/marketplace/categories/",
+      "method": "GET",
+      "view": "TemplateCategoryViewSet",
+      "status": "fail",
+      "status_code": 500,
+      "message": "服务器错误 (500)",
+      "response_time_ms": 9.6
+    },
+    {
+      "path": "api/v1/marketplace/categories/{pk}/",
+      "method": "GET",
+      "view": "TemplateCategoryViewSet",
+      "status": "fail",
+      "status_code": 500,
+      "message": "服务器错误 (500)",
+      "response_time_ms": 9.5
+    },
+    {
+      "path": "api/v1/marketplace/categories/{pk}/templates/",
+      "method": "GET",
+      "view": "TemplateCategoryViewSet",
+      "status": "fail",
+      "status_code": 500,
+      "message": "服务器错误 (500)",
+      "response_time_ms": 11.16
+    },
+    {
+      "path": "api/v1/marketplace/installed/",
+      "method": "GET",
+      "view": "InstalledTemplatesViewSet",
+      "status": "fail",
+      "status_code": 500,
+      "message": "服务器错误 (500)",
+      "response_time_ms": 9.01
+    },
+    {
+      "path": "api/v1/marketplace/installed/{pk}/",
+      "method": "GET",
+      "view": "InstalledTemplatesViewSet",
+      "status": "fail",
+      "status_code": 500,
+      "message": "服务器错误 (500)",
+      "response_time_ms": 10.15
+    },
+    {
+      "path": "api/v1/marketplace/my-templates/",
+      "method": "GET",
+      "view": "MyTemplatesViewSet",
+      "status": "fail",
+      "status_code": 500,
+      "message": "服务器错误 (500)",
+      "response_time_ms": 9.18
+    },
+    {
+      "path": "api/v1/marketplace/my-templates/{pk}/",
+      "method": "GET",
+      "view": "MyTemplatesViewSet",
+      "status": "fail",
+      "status_code": 500,
+      "message": "服务器错误 (500)",
+      "response_time_ms": 8.2
+    },
+    {
+      "path": "api/v1/marketplace/my-templates/{pk}/installs/",
+      "method": "GET",
+      "view": "MyTemplatesViewSet",
+      "status": "fail",
+      "status_code": 500,
+      "message": "服务器错误 (500)",
+      "response_time_ms": 8.19
+    },
+    {
+      "path": "api/v1/marketplace/my-templates/{pk}/publish/",
+      "method": "GET",
+      "view": "MyTemplatesViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 10.35
+    },
+    {
+      "path": "api/v1/marketplace/my-templates/{pk}/unpublish/",
+      "method": "GET",
+      "view": "MyTemplatesViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 7.74
+    },
+    {
+      "path": "api/v1/marketplace/templates/",
+      "method": "GET",
+      "view": "WorkflowTemplateViewSet",
+      "status": "fail",
+      "status_code": 500,
+      "message": "服务器错误 (500)",
+      "response_time_ms": 10.05
+    },
+    {
+      "path": "api/v1/marketplace/templates/{pk}/",
+      "method": "GET",
+      "view": "WorkflowTemplateViewSet",
+      "status": "fail",
+      "status_code": 500,
+      "message": "服务器错误 (500)",
+      "response_time_ms": 9.3
+    },
+    {
+      "path": "api/v1/marketplace/templates/{pk}/install/",
+      "method": "GET",
+      "view": "WorkflowTemplateViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 8.23
+    },
+    {
+      "path": "api/v1/marketplace/templates/{pk}/rate/",
+      "method": "GET",
+      "view": "WorkflowTemplateViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 8.0
+    },
+    {
+      "path": "api/v1/marketplace/templates/{pk}/report/",
+      "method": "GET",
+      "view": "WorkflowTemplateViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 9.5
+    },
+    {
+      "path": "api/v1/marketplace/templates/{pk}/stats/",
+      "method": "GET",
+      "view": "WorkflowTemplateViewSet",
+      "status": "fail",
+      "status_code": 500,
+      "message": "服务器错误 (500)",
+      "response_time_ms": 8.6
+    },
+    {
+      "path": "api/v1/monitoring/",
+      "method": "GET",
+      "view": "APIRootView",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 8.33
+    },
+    {
+      "path": "api/v1/monitoring/alerts/",
+      "method": "GET",
+      "view": "AlertViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 12.82
+    },
+    {
+      "path": "api/v1/monitoring/alerts/summary/",
+      "method": "GET",
+      "view": "AlertViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 17.99
+    },
+    {
+      "path": "api/v1/monitoring/alerts/{pk}/",
+      "method": "GET",
+      "view": "AlertViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.51
+    },
+    {
+      "path": "api/v1/monitoring/alerts/{pk}/acknowledge/",
+      "method": "GET",
+      "view": "AlertViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 7.51
+    },
+    {
+      "path": "api/v1/monitoring/alerts/{pk}/mute/",
+      "method": "GET",
+      "view": "AlertViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 8.0
+    },
+    {
+      "path": "api/v1/monitoring/alerts/{pk}/resolve/",
+      "method": "GET",
+      "view": "AlertViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 8.18
+    },
+    {
+      "path": "api/v1/monitoring/channels/",
+      "method": "GET",
+      "view": "NotificationChannelViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 8.51
+    },
+    {
+      "path": "api/v1/monitoring/channels/{pk}/",
+      "method": "GET",
+      "view": "NotificationChannelViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.18
+    },
+    {
+      "path": "api/v1/monitoring/channels/{pk}/test/",
+      "method": "GET",
+      "view": "NotificationChannelViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 7.35
+    },
+    {
+      "path": "api/v1/monitoring/logs/",
+      "method": "GET",
+      "view": "ExecutionLogViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 9.8
+    },
+    {
+      "path": "api/v1/monitoring/logs/{pk}/",
+      "method": "GET",
+      "view": "ExecutionLogViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.66
+    },
+    {
+      "path": "api/v1/monitoring/metrics/",
+      "method": "GET",
+      "view": "MetricViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 9.96
+    },
+    {
+      "path": "api/v1/monitoring/metrics/aggregate/",
+      "method": "GET",
+      "view": "MetricViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 10.04
+    },
+    {
+      "path": "api/v1/monitoring/metrics/dashboard/",
+      "method": "GET",
+      "view": "MetricViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 10.17
+    },
+    {
+      "path": "api/v1/monitoring/metrics/export/",
+      "method": "GET",
+      "view": "MetricViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 9.32
+    },
+    {
+      "path": "api/v1/monitoring/metrics/{pk}/",
+      "method": "GET",
+      "view": "MetricViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 8.71
+    },
+    {
+      "path": "api/v1/monitoring/rules/",
+      "method": "GET",
+      "view": "AlertRuleViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 9.53
+    },
+    {
+      "path": "api/v1/monitoring/rules/{pk}/",
+      "method": "GET",
+      "view": "AlertRuleViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.3
+    },
+    {
+      "path": "api/v1/nl-workflow/preview/",
+      "method": "GET",
+      "view": "NLWorkflowPreviewView",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 7.52
+    },
+    {
+      "path": "api/v1/nl-workflow/sessions/",
+      "method": "GET",
+      "view": "NLSessionViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 8.02
+    },
+    {
+      "path": "api/v1/nl-workflow/sessions/{session_id}/",
+      "method": "GET",
+      "view": "NLSessionDetailView",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.04
+    },
+    {
+      "path": "api/v1/nl-workflow/sessions/{session_id}/confirm/",
+      "method": "GET",
+      "view": "NLSessionConfirmView",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 8.53
+    },
+    {
+      "path": "api/v1/nl-workflow/sessions/{session_id}/message/",
+      "method": "GET",
+      "view": "NLSessionMessageView",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 10.48
+    },
+    {
+      "path": "api/v1/node-executions/",
+      "method": "GET",
+      "view": "NodeExecutionViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 10.52
+    },
+    {
+      "path": "api/v1/node-executions/statistics/",
+      "method": "GET",
+      "view": "NodeExecutionViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 10.52
+    },
+    {
+      "path": "api/v1/node-executions/{pk}/",
+      "method": "GET",
+      "view": "NodeExecutionViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.32
+    },
+    {
+      "path": "api/v1/prompts/",
+      "method": "GET",
+      "view": "APIRootView",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 7.06
+    },
+    {
+      "path": "api/v1/prompts/templates/",
+      "method": "GET",
+      "view": "PromptTemplateViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 11.34
+    },
+    {
+      "path": "api/v1/prompts/templates/featured/",
+      "method": "GET",
+      "view": "PromptTemplateViewSet",
+      "status": "fail",
+      "status_code": 500,
+      "message": "服务器错误 (500)",
+      "response_time_ms": 11.17
+    },
+    {
+      "path": "api/v1/prompts/templates/recent/",
+      "method": "GET",
+      "view": "PromptTemplateViewSet",
+      "status": "fail",
+      "status_code": 500,
+      "message": "服务器错误 (500)",
+      "response_time_ms": 9.15
+    },
+    {
+      "path": "api/v1/prompts/templates/{pk}/",
+      "method": "GET",
+      "view": "PromptTemplateViewSet",
+      "status": "fail",
+      "status_code": 500,
+      "message": "服务器错误 (500)",
+      "response_time_ms": 10.62
+    },
+    {
+      "path": "api/v1/prompts/templates/{pk}/create_version/",
+      "method": "GET",
+      "view": "PromptTemplateViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 6.43
+    },
+    {
+      "path": "api/v1/prompts/templates/{pk}/rate/",
+      "method": "GET",
+      "view": "PromptTemplateViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 9.52
+    },
+    {
+      "path": "api/v1/prompts/templates/{pk}/render/",
+      "method": "GET",
+      "view": "PromptTemplateViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 7.77
+    },
+    {
+      "path": "api/v1/prompts/templates/{pk}/use/",
+      "method": "GET",
+      "view": "PromptTemplateViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 9.55
+    },
+    {
+      "path": "api/v1/prompts/templates/{pk}/versions/",
+      "method": "GET",
+      "view": "PromptTemplateViewSet",
+      "status": "fail",
+      "status_code": 500,
+      "message": "服务器错误 (500)",
+      "response_time_ms": 10.06
+    },
+    {
+      "path": "api/v1/rag/",
+      "method": "GET",
+      "view": "APIRootView",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 8.0
+    },
+    {
+      "path": "api/v1/rag/chunks/",
+      "method": "GET",
+      "view": "ChunkViewSet",
+      "status": "fail",
+      "status_code": 500,
+      "message": "服务器错误 (500)",
+      "response_time_ms": 10.15
+    },
+    {
+      "path": "api/v1/rag/chunks/{pk}/",
+      "method": "GET",
+      "view": "ChunkViewSet",
+      "status": "fail",
+      "status_code": 500,
+      "message": "服务器错误 (500)",
+      "response_time_ms": 10.25
+    },
+    {
+      "path": "api/v1/rag/collections/",
+      "method": "GET",
+      "view": "DocumentCollectionViewSet",
+      "status": "fail",
+      "status_code": 500,
+      "message": "服务器错误 (500)",
+      "response_time_ms": 9.24
+    },
+    {
+      "path": "api/v1/rag/collections/{pk}/",
+      "method": "GET",
+      "view": "DocumentCollectionViewSet",
+      "status": "fail",
+      "status_code": 500,
+      "message": "服务器错误 (500)",
+      "response_time_ms": 13.18
+    },
+    {
+      "path": "api/v1/rag/collections/{pk}/add_document/",
+      "method": "GET",
+      "view": "DocumentCollectionViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 8.3
+    },
+    {
+      "path": "api/v1/rag/collections/{pk}/add_url/",
+      "method": "GET",
+      "view": "DocumentCollectionViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 7.52
+    },
+    {
+      "path": "api/v1/rag/collections/{pk}/clear/",
+      "method": "GET",
+      "view": "DocumentCollectionViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 8.08
+    },
+    {
+      "path": "api/v1/rag/collections/{pk}/details/",
+      "method": "GET",
+      "view": "DocumentCollectionViewSet",
+      "status": "fail",
+      "status_code": 500,
+      "message": "服务器错误 (500)",
+      "response_time_ms": 9.59
+    },
+    {
+      "path": "api/v1/rag/collections/{pk}/search/",
+      "method": "GET",
+      "view": "DocumentCollectionViewSet",
+      "status": "fail",
+      "status_code": 500,
+      "message": "服务器错误 (500)",
+      "response_time_ms": 9.27
+    },
+    {
+      "path": "api/v1/rag/collections/{pk}/stats/",
+      "method": "GET",
+      "view": "DocumentCollectionViewSet",
+      "status": "fail",
+      "status_code": 500,
+      "message": "服务器错误 (500)",
+      "response_time_ms": 9.53
+    },
+    {
+      "path": "api/v1/rag/collections/{pk}/upload_file/",
+      "method": "GET",
+      "view": "DocumentCollectionViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 7.49
+    },
+    {
+      "path": "api/v1/rag/documents/",
+      "method": "GET",
+      "view": "DocumentViewSet",
+      "status": "fail",
+      "status_code": 500,
+      "message": "服务器错误 (500)",
+      "response_time_ms": 11.31
+    },
+    {
+      "path": "api/v1/rag/documents/{pk}/",
+      "method": "GET",
+      "view": "DocumentViewSet",
+      "status": "fail",
+      "status_code": 500,
+      "message": "服务器错误 (500)",
+      "response_time_ms": 8.01
+    },
+    {
+      "path": "api/v1/rag/documents/{pk}/chunks/",
+      "method": "GET",
+      "view": "DocumentViewSet",
+      "status": "fail",
+      "status_code": 500,
+      "message": "服务器错误 (500)",
+      "response_time_ms": 9.25
+    },
+    {
+      "path": "api/v1/rag/documents/{pk}/reprocess/",
+      "method": "GET",
+      "view": "DocumentViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 6.05
+    },
+    {
+      "path": "api/v1/rag/pipelines/",
+      "method": "GET",
+      "view": "RAGPipelineViewSet",
+      "status": "fail",
+      "status_code": 500,
+      "message": "服务器错误 (500)",
+      "response_time_ms": 11.41
+    },
+    {
+      "path": "api/v1/rag/pipelines/{pk}/",
+      "method": "GET",
+      "view": "RAGPipelineViewSet",
+      "status": "fail",
+      "status_code": 500,
+      "message": "服务器错误 (500)",
+      "response_time_ms": 79.76
+    },
+    {
+      "path": "api/v1/rag/pipelines/{pk}/query/",
+      "method": "GET",
+      "view": "RAGPipelineViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 8.14
+    },
+    {
+      "path": "api/v1/rag/pipelines/{pk}/retrieve/",
+      "method": "GET",
+      "view": "RAGPipelineViewSet",
+      "status": "fail",
+      "status_code": 500,
+      "message": "服务器错误 (500)",
+      "response_time_ms": 10.56
+    },
+    {
+      "path": "api/v1/rag/vector-stores/",
+      "method": "GET",
+      "view": "VectorStoreViewSet",
+      "status": "fail",
+      "status_code": 500,
+      "message": "服务器错误 (500)",
+      "response_time_ms": 10.24
+    },
+    {
+      "path": "api/v1/rag/vector-stores/list_types/",
+      "method": "GET",
+      "view": "VectorStoreViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 7.55
+    },
+    {
+      "path": "api/v1/rag/vector-stores/{pk}/",
+      "method": "GET",
+      "view": "VectorStoreViewSet",
+      "status": "fail",
+      "status_code": 500,
+      "message": "服务器错误 (500)",
+      "response_time_ms": 10.09
+    },
+    {
+      "path": "api/v1/rag/vector-stores/{pk}/create_collection/",
+      "method": "GET",
+      "view": "VectorStoreViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 8.21
+    },
+    {
+      "path": "api/v1/rag/vector-stores/{pk}/delete_collection/",
+      "method": "GET",
+      "view": "VectorStoreViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 8.04
+    },
+    {
+      "path": "api/v1/rag/vector-stores/{pk}/test_connection/",
+      "method": "GET",
+      "view": "VectorStoreViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 7.3
+    },
+    {
+      "path": "api/v1/templates/",
+      "method": "GET",
+      "view": "WorkflowTemplateViewSet",
+      "status": "fail",
+      "status_code": 500,
+      "message": "服务器错误 (500)",
+      "response_time_ms": 9.27
+    },
+    {
+      "path": "api/v1/templates/categories/",
+      "method": "GET",
+      "view": "TemplateCategoryViewSet",
+      "status": "fail",
+      "status_code": 500,
+      "message": "服务器错误 (500)",
+      "response_time_ms": 9.11
+    },
+    {
+      "path": "api/v1/templates/categories/tree/",
+      "method": "GET",
+      "view": "TemplateCategoryViewSet",
+      "status": "fail",
+      "status_code": 500,
+      "message": "服务器错误 (500)",
+      "response_time_ms": 9.02
+    },
+    {
+      "path": "api/v1/templates/categories/{pk}/",
+      "method": "GET",
+      "view": "TemplateCategoryViewSet",
+      "status": "fail",
+      "status_code": 500,
+      "message": "服务器错误 (500)",
+      "response_time_ms": 9.08
+    },
+    {
+      "path": "api/v1/templates/featured/",
+      "method": "GET",
+      "view": "WorkflowTemplateViewSet",
+      "status": "fail",
+      "status_code": 500,
+      "message": "服务器错误 (500)",
+      "response_time_ms": 10.03
+    },
+    {
+      "path": "api/v1/templates/my/",
+      "method": "GET",
+      "view": "MyTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 7.62
+    },
+    {
+      "path": "api/v1/templates/my/favorites/",
+      "method": "GET",
+      "view": "MyTemplateViewSet",
+      "status": "fail",
+      "status_code": 500,
+      "message": "服务器错误 (500)",
+      "response_time_ms": 9.58
+    },
+    {
+      "path": "api/v1/templates/my/my_reviews/",
+      "method": "GET",
+      "view": "MyTemplateViewSet",
+      "status": "fail",
+      "status_code": 500,
+      "message": "服务器错误 (500)",
+      "response_time_ms": 8.74
+    },
+    {
+      "path": "api/v1/templates/my/{pk}/",
+      "method": "GET",
+      "view": "MyTemplateViewSet",
+      "status": "fail",
+      "status_code": 500,
+      "message": "服务器错误 (500)",
+      "response_time_ms": 10.51
+    },
+    {
+      "path": "api/v1/templates/popular/",
+      "method": "GET",
+      "view": "WorkflowTemplateViewSet",
+      "status": "fail",
+      "status_code": 500,
+      "message": "服务器错误 (500)",
+      "response_time_ms": 9.61
+    },
+    {
+      "path": "api/v1/templates/recent/",
+      "method": "GET",
+      "view": "WorkflowTemplateViewSet",
+      "status": "fail",
+      "status_code": 500,
+      "message": "服务器错误 (500)",
+      "response_time_ms": 8.52
+    },
+    {
+      "path": "api/v1/templates/versions/",
+      "method": "GET",
+      "view": "TemplateVersionViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.77
+    },
+    {
+      "path": "api/v1/templates/versions/{pk}/",
+      "method": "GET",
+      "view": "TemplateVersionViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 6.79
+    },
+    {
+      "path": "api/v1/templates/{pk}/",
+      "method": "GET",
+      "view": "WorkflowTemplateViewSet",
+      "status": "fail",
+      "status_code": 500,
+      "message": "服务器错误 (500)",
+      "response_time_ms": 12.65
+    },
+    {
+      "path": "api/v1/templates/{pk}/favorite/",
+      "method": "GET",
+      "view": "WorkflowTemplateViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 9.0
+    },
+    {
+      "path": "api/v1/templates/{pk}/like/",
+      "method": "GET",
+      "view": "WorkflowTemplateViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 8.52
+    },
+    {
+      "path": "api/v1/templates/{pk}/preview/",
+      "method": "GET",
+      "view": "WorkflowTemplateViewSet",
+      "status": "fail",
+      "status_code": 500,
+      "message": "服务器错误 (500)",
+      "response_time_ms": 12.02
+    },
+    {
+      "path": "api/v1/templates/{pk}/review/",
+      "method": "GET",
+      "view": "WorkflowTemplateViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 9.19
+    },
+    {
+      "path": "api/v1/templates/{pk}/reviews/",
+      "method": "GET",
+      "view": "WorkflowTemplateViewSet",
+      "status": "fail",
+      "status_code": 500,
+      "message": "服务器错误 (500)",
+      "response_time_ms": 11.23
+    },
+    {
+      "path": "api/v1/templates/{pk}/use/",
+      "method": "GET",
+      "view": "WorkflowTemplateViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 9.29
+    },
+    {
+      "path": "api/v1/tenants/",
+      "method": "GET",
+      "view": "APIRootView",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 9.33
+    },
+    {
+      "path": "api/v1/tenants/invitations/",
+      "method": "GET",
+      "view": "TenantInvitationViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 11.46
+    },
+    {
+      "path": "api/v1/tenants/invitations/join/",
+      "method": "GET",
+      "view": "TenantInvitationViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 8.2
+    },
+    {
+      "path": "api/v1/tenants/invitations/pending/",
+      "method": "GET",
+      "view": "TenantInvitationViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 12.16
+    },
+    {
+      "path": "api/v1/tenants/invitations/{pk}/",
+      "method": "GET",
+      "view": "TenantInvitationViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.07
+    },
+    {
+      "path": "api/v1/tenants/invitations/{pk}/accept/",
+      "method": "GET",
+      "view": "TenantInvitationViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 8.01
+    },
+    {
+      "path": "api/v1/tenants/invitations/{pk}/decline/",
+      "method": "GET",
+      "view": "TenantInvitationViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 8.6
+    },
+    {
+      "path": "api/v1/tenants/memberships/",
+      "method": "GET",
+      "view": "TenantMembershipViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 8.92
+    },
+    {
+      "path": "api/v1/tenants/memberships/my_memberships/",
+      "method": "GET",
+      "view": "TenantMembershipViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 10.47
+    },
+    {
+      "path": "api/v1/tenants/memberships/{pk}/",
+      "method": "GET",
+      "view": "TenantMembershipViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.14
+    },
+    {
+      "path": "api/v1/tenants/tenants/",
+      "method": "GET",
+      "view": "TenantViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 11.11
+    },
+    {
+      "path": "api/v1/tenants/tenants/{pk}/",
+      "method": "GET",
+      "view": "TenantViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.41
+    },
+    {
+      "path": "api/v1/tenants/tenants/{pk}/invite/",
+      "method": "GET",
+      "view": "TenantViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 6.53
+    },
+    {
+      "path": "api/v1/tenants/tenants/{pk}/members/",
+      "method": "GET",
+      "view": "TenantViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 11.72
+    },
+    {
+      "path": "api/v1/tenants/tenants/{pk}/remove_member/",
+      "method": "GET",
+      "view": "TenantViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 7.52
+    },
+    {
+      "path": "api/v1/tenants/tenants/{pk}/usage/",
+      "method": "GET",
+      "view": "TenantViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.79
+    },
+    {
+      "path": "api/v1/tenants/usage/",
+      "method": "GET",
+      "view": "TenantUsageViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 9.0
+    },
+    {
+      "path": "api/v1/tenants/usage/refresh/",
+      "method": "GET",
+      "view": "TenantUsageViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 8.53
+    },
+    {
+      "path": "api/v1/tenants/usage/{pk}/",
+      "method": "GET",
+      "view": "TenantUsageViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 8.51
+    },
+    {
+      "path": "api/v1/tools/",
+      "method": "GET",
+      "view": "ToolViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 8.51
+    },
+    {
+      "path": "api/v1/tools/categories/",
+      "method": "GET",
+      "view": "ToolViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 8.66
+    },
+    {
+      "path": "api/v1/tools/{pk}/",
+      "method": "GET",
+      "view": "ToolViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.52
+    },
+    {
+      "path": "api/v1/tools/{pk}/test/",
+      "method": "GET",
+      "view": "ToolViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 7.0
+    },
+    {
+      "path": "api/v1/variables/",
+      "method": "GET",
+      "view": "VariableViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 10.23
+    },
+    {
+      "path": "api/v1/variables/{pk}/",
+      "method": "GET",
+      "view": "VariableViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 8.23
+    },
+    {
+      "path": "api/v1/workflows/",
+      "method": "GET",
+      "view": "WorkflowViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 19.23
+    },
+    {
+      "path": "api/v1/workflows/edges/",
+      "method": "GET",
+      "view": "EdgeViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 9.51
+    },
+    {
+      "path": "api/v1/workflows/edges/batch_create/",
+      "method": "GET",
+      "view": "EdgeViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 9.5
+    },
+    {
+      "path": "api/v1/workflows/edges/{pk}/",
+      "method": "GET",
+      "view": "EdgeViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 12.61
+    },
+    {
+      "path": "api/v1/workflows/executions/",
+      "method": "GET",
+      "view": "WorkflowExecutionViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 10.27
+    },
+    {
+      "path": "api/v1/workflows/executions/{pk}/",
+      "method": "GET",
+      "view": "WorkflowExecutionViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 10.69
+    },
+    {
+      "path": "api/v1/workflows/import/",
+      "method": "GET",
+      "view": "WorkflowImportView",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 6.58
+    },
+    {
+      "path": "api/v1/workflows/nodes/",
+      "method": "GET",
+      "view": "NodeViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 13.22
+    },
+    {
+      "path": "api/v1/workflows/nodes/available_types/",
+      "method": "GET",
+      "view": "NodeViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 7.48
+    },
+    {
+      "path": "api/v1/workflows/nodes/batch_create/",
+      "method": "GET",
+      "view": "NodeViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 8.1
+    },
+    {
+      "path": "api/v1/workflows/nodes/batch_update_positions/",
+      "method": "GET",
+      "view": "NodeViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 7.68
+    },
+    {
+      "path": "api/v1/workflows/nodes/{pk}/",
+      "method": "GET",
+      "view": "NodeViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 8.0
+    },
+    {
+      "path": "api/v1/workflows/templates/",
+      "method": "GET",
+      "view": "WorkflowTemplateViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 8.53
+    },
+    {
+      "path": "api/v1/workflows/templates/{pk}/",
+      "method": "GET",
+      "view": "WorkflowTemplateViewSet",
+      "status": "fail",
+      "status_code": 404,
+      "message": "端点不存在",
+      "response_time_ms": 9.48
+    },
+    {
+      "path": "api/v1/workflows/{pk}/",
+      "method": "GET",
+      "view": "WorkflowViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 12.29
+    },
+    {
+      "path": "api/v1/workflows/{pk}/duplicate/",
+      "method": "GET",
+      "view": "WorkflowViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 10.57
+    },
+    {
+      "path": "api/v1/workflows/{pk}/execute/",
+      "method": "GET",
+      "view": "WorkflowViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 11.34
+    },
+    {
+      "path": "api/v1/workflows/{pk}/export/",
+      "method": "GET",
+      "view": "WorkflowViewSet",
+      "status": "pass",
+      "status_code": 200,
+      "message": "OK",
+      "response_time_ms": 12.35
+    },
+    {
+      "path": "api/v1/workflows/{pk}/import_workflow/",
+      "method": "GET",
+      "view": "WorkflowViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 7.75
+    },
+    {
+      "path": "api/v1/workflows/{pk}/stream_execute/",
+      "method": "GET",
+      "view": "WorkflowViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 11.14
+    },
+    {
+      "path": "api/v1/workflows/{pk}/validate/",
+      "method": "GET",
+      "view": "WorkflowViewSet",
+      "status": "warning",
+      "status_code": 405,
+      "message": "客户端错误 (405)",
+      "response_time_ms": 7.14
+    }
+  ]
+}

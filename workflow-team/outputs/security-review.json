@@ -1,0 +1,180 @@
+{
+  "task": "security-review",
+  "status": "done",
+  "summary": "Completed security audit of Flowly backend and frontend. Found 2 CRITICAL vulnerabilities (unauthenticated health endpoints leaking system info, verbose error messages), 2 HIGH issues (weak CORS default, missing per-endpoint rate limiting), and several MEDIUM/LOW findings. Overall security posture is reasonable with proper auth on most endpoints, but production hardening is needed.",
+  "audit_date": "2026-05-13T15:51:00+08:00",
+  "files_audited": [
+    "Backend/config/settings.py",
+    "Backend/workflows/views.py",
+    "Backend/workflows/models.py",
+    "Backend/workflows/serializers.py",
+    "Backend/nl_to_workflow/views.py",
+    "Backend/gateway/views.py",
+    "Backend/gateway/providers/ollama_provider.py",
+    "Backend/users/authentication.py",
+    "Backend/config/exception_handlers.py",
+    "Backend/config/handlers.py",
+    "Backend/core/views/health_views.py",
+    "Backend/workflows/services/tool_executor.py",
+    "Frontend/src/views/nl-workflow/Creator.vue"
+  ],
+  "findings": {
+    "CRITICAL": [
+      {
+        "location": "Backend/core/views/health_views.py:12-49",
+        "description": "Health check endpoint returns verbose error messages including exception details. When database is disconnected, the error message includes `health['error'] = str(e)` which could expose internal system information, file paths, and stack traces to unauthenticated users.",
+        "recommendation": "Remove `health['error'] = str(e)` from the health check endpoint. Replace with generic error messages. The health endpoint should never leak internal details."
+      },
+      {
+        "location": "Backend/gateway/views.py:359-400",
+        "description": "GatewayHealthView has no permission classes defined, making it publicly accessible without authentication. This endpoint reveals internal provider names, model counts, and system architecture details to unauthenticated attackers.",
+        "recommendation": "Add `permission_classes = [IsAuthenticated]` to GatewayHealthView, or implement IP-based allowlisting if it's intended as a monitoring endpoint."
+      }
+    ],
+    "HIGH": [
+      {
+        "location": "Backend/config/settings.py:174-177",
+        "description": "CORS_ALLOWED_ORIGINS defaults to localhost-only in development, but CORS_ALLOW_CREDENTIALS is set to True, and the default development origins are permissive. In production, if CORS_ALLOWED_ORIGINS env var is misconfigured or empty, the wildcard matching could be exploited.",
+        "recommendation": "Add explicit validation that CORS_ALLOWED_ORIGINS does not contain empty strings or overly broad patterns. Consider using django-cors-headers' CORS_ALLOWED_ORIGIN_REGEXES for more controlled patterns."
+      },
+      {
+        "location": "Backend/config/settings.py:162-170",
+        "description": "Rate limiting is configured but not applied to specific high-risk endpoints. The global DEFAULT_THROTTLE_CLASSES apply to all endpoints uniformly, but expensive operations like workflow execution and NL-to-workflow generation have no additional per-endpoint throttling, allowing resource exhaustion attacks.",
+        "recommendation": "Apply @throttle_classes with stricter limits (e.g., 5/minute) to execute and stream_execute endpoints. Add workflow_execute throttle rate to DEFAULT_THROTTLE_RATES and bind it to the execute action."
+      }
+    ],
+    "MEDIUM": [
+      {
+        "location": "Backend/workflows/views.py:172-222",
+        "description": "stream_execute action returns execution_id and internal status in streaming SSE responses. An authenticated user could potentially enumerate other users' execution IDs by observing the streaming data structure.",
+        "recommendation": "Validate that the requested workflow belongs to the requesting user before initiating streaming execution. Add authorization check in stream_execute similar to the execute action."
+      },
+      {
+        "location": "Backend/workflows/views.py:374-403",
+        "description": "NodeViewSet.batch_update_positions performs bulk updates without validating that the nodes belong to workflows owned by the requesting user. A malicious user could update positions of nodes on other users' workflows.",
+        "recommendation": "Add authorization check in batch_update_positions to verify that all nodes in the request belong to workflows owned by request.user."
+      },
+      {
+        "location": "Backend/config/settings.py:16",
+        "description": "SECRET_KEY has a hardcoded insecure default value 'django-insecure-flowly-dev-key-change-in-production'. If the DJANGO_SECRET_KEY environment variable is not set, the application uses this weak key, making JWT tokens and session data vulnerable to forgery.",
+        "recommendation": "Ensure the deployment process always sets DJANGO_SECRET_KEY to a cryptographically random value of at least 50 characters. Add a startup check that raises an error if the secret key is the default."
+      },
+      {
+        "location": "Backend/config/settings.py:19",
+        "description": "DEBUG defaults to True when the DEBUG environment variable is not set or is set to 'true'. In production with DEBUG=True, Django exposes detailed stack traces, settings, and internal state in error pages.",
+        "recommendation": "Change the default to False. DEBUG should only be True in explicitly configured development environments."
+      },
+      {
+        "location": "Backend/config/exception_handlers.py:41-109",
+        "description": "The custom exception handler logs detailed exception information via `logger.exception()` which can include stack traces, query parameters, and internal state. In production with file logging enabled, these logs may contain sensitive request data.",
+        "recommendation": "Sanitize logged data to exclude sensitive fields like passwords, tokens, and personal identifiable information. Consider using a structured logging format with explicit field allowlisting."
+      },
+      {
+        "location": "Backend/config/handlers.py:13-24",
+        "description": "handler400 includes `str(exception)` in the error field which could expose internal paths and implementation details from Django/Python exceptions.",
+        "recommendation": "Remove the dynamic error detail from handler400. Use a generic message like 'Bad Request' and log the actual exception server-side without exposing it to the client."
+      },
+      {
+        "location": "Backend/config/handlers.py:41-52",
+        "description": "handler404 includes the request path in the message field (`f'路由不存在: {request.path}'`), which could be exploited to probe for internal paths and API structure.",
+        "recommendation": "Use a generic 404 message without echoing the requested path in the response body."
+      },
+      {
+        "location": "Backend/users/authentication.py:54-78",
+        "description": "JWT tokens use HS256 algorithm with the Django SECRET_KEY. If the SECRET_KEY is compromised, all JWT tokens become forgeable. Additionally, there is no token refresh mechanism with rotation - old refresh tokens remain valid until expiration.",
+        "recommendation": "Consider using RS256 (asymmetric) for JWT signatures to allow key rotation without breaking existing tokens. Implement refresh token rotation to invalidate old tokens on use. Add a token blacklist for logout scenarios."
+      },
+      {
+        "location": "Backend/workflows/services/tool_executor.py:176-204",
+        "description": "The built-in calculator tool uses Python's eval() with a restricted safe_ns. While dangerous builtins are blocked, advanced attacks could potentially escape the sandbox through memory manipulation or object injection via the math module.",
+        "recommendation": "Replace eval()-based calculator with a proper expression parser like ast.literal_eval or a dedicated library such as simpleeval. Consider running script tools in isolated subprocesses with resource limits."
+      }
+    ],
+    "LOW": [
+      {
+        "location": "Backend/workflows/views.py:165-170",
+        "description": "The _get_client_ip method trusts X-Forwarded-For header without validation. An attacker couldspoof the client IP address by sending a crafted X-Forwarded-For header, which is then stored in trigger_source and logged.",
+        "recommendation": "Validate X-Forwarded-For against a list of trusted proxy IPs. Only use the header when the request comes from known proxy addresses."
+      },
+      {
+        "location": "Backend/config/settings.py:247-254",
+        "description": "API keys for OpenAI, Anthropic, and Ollama are stored in Django settings without encryption. If settings.py or settings files are exposed through a file read vulnerability or misconfigured backup, these keys would be compromised.",
+        "recommendation": "Move all API keys to environment variables only (not os.getenv with defaults). Remove any fallback default values for sensitive configuration. Consider using a secrets manager."
+      },
+      {
+        "location": "Frontend/src/views/nl-workflow/Creator.vue:641-661",
+        "description": "Tabs data including session IDs and workflow information are stored in localStorage without encryption. Any malicious browser extension or XSS attack could read this sensitive data.",
+        "recommendation": "Encrypt localStorage data using a browser-based encryption library, or store only non-sensitive tab metadata locally and fetch full session data from the server."
+      },
+      {
+        "location": "Backend/workflows/views.py:376-380",
+        "description": "perform_create in NodeViewSet retrieves a workflow by ID without checking if the requesting user owns it. Any authenticated user could attach nodes to any workflow by providing its ID.",
+        "recommendation": "Add ownership check: verify that the workflow exists and belongs to request.user before saving the node."
+      }
+    ],
+    "INFO": [
+      {
+        "location": "Backend/workflows/models.py:926-1036",
+        "description": "APICredential model stores encrypted credential_data as TextField. The model has a credential_data_hash field but it is not actively used for integrity verification. No visible encryption implementation in the model itself.",
+        "recommendation": "Verify that credential encryption is handled at the application level (serializer or service layer). Document the encryption mechanism and ensure key rotation is supported."
+      },
+      {
+        "location": "Backend/config/settings.py:261-303",
+        "description": "Logging configuration writes to rotating files in BASE_DIR / 'logs' / 'django.log'. If the logs directory is accessible through a misconfiguration, logged sensitive data (IP addresses, usernames, error details) could be exposed.",
+        "recommendation": "Ensure logs directory is outside the web root and not accessible via static file serving. Consider using a centralized logging system for production."
+      },
+      {
+        "location": "Backend/workflows/serializers.py:567-605",
+        "description": "APICredentialSerializer properly uses write_only=True for credential_data and provides a get_masked_credential method. This is good security practice for credential display.",
+        "recommendation": "No immediate action needed. Ensure this pattern is applied consistently across all serializers that handle sensitive data."
+      },
+      {
+        "location": "Backend/workflows/views.py:1061-1155",
+        "description": "AuditLogViewSet has a comprehensive query filtering system but regular users can only see their own logs. Superusers can see all logs. The filtering by user_id query parameter could allow superusers to enumerate other users' activities.",
+        "recommendation": "Add audit logging of audit log access itself. Log when an admin retrieves another user's audit logs for security monitoring purposes."
+      },
+      {
+        "location": "Frontend/src/views/nl-workflow/Creator.vue:548",
+        "description": "The workflow detail dialog uses v-if to conditionally render pre-formatted JSON config via <pre>{{ JSON.stringify(node.config, null, 2) }}</pre>. This is safe from XSS but could expose sensitive configuration if node.config contains credentials or API keys.",
+        "recommendation": "Audit node.config schema to ensure no credentials or secrets are stored in node configurations. If sensitive data must be stored, mask it in the display."
+      },
+      {
+        "location": "Backend/workflows/views.py:292-305",
+        "description": "The export action returns full WorkflowDetailSerializer data without any content-type restrictions. This could allow data exfiltration if a user's session is compromised.",
+        "recommendation": "No immediate concern. The export endpoint requires authentication and returns only the user's own workflow data. Consider adding an audit log entry for export actions."
+      }
+    ]
+  },
+  "recommendations": [
+    "IMMEDIATE: Remove verbose error disclosure from health check endpoint",
+    "IMMEDIATE: Add authentication to GatewayHealthView",
+    "Set DEBUG=False and use a strong SECRET_KEY in all production deployments",
+    "Implement per-endpoint rate limiting for expensive operations (workflow execution, streaming, NL generation)",
+    "Add authorization checks to all batch operations (batch_update_positions, batch_create for nodes/edges)",
+    "Replace eval()-based calculator in tool_executor.py with a safe expression parser",
+    "Implement JWT refresh token rotation for proper logout invalidation",
+    "Move all API keys and secrets to environment variables without fallback defaults",
+    "Sanitize logged data to exclude sensitive fields (passwords, tokens, PII)",
+    "Add startup validation that fails if default SECRET_KEY or DEBUG=True in production",
+    "Implement token blacklist for logout scenarios using a cache or database table",
+    "Add CSRF protection for state-changing operations even though DRF TokenAuth is used",
+    "Consider running user-defined scripts in subprocess with strict resource limits (memory, CPU, time)"
+  ],
+  "passed_checks": [
+    "Most API endpoints properly require IsAuthenticated permission",
+    "WorkflowViewSet implements IsOwnerOrReadOnly for object-level authorization",
+    "SQL queries use Django ORM's parameterized queries (no raw SQL or string interpolation in query filters)",
+    "CSRF middleware is enabled in Django settings",
+    "DRF TokenAuthentication and custom JWTAuthentication are both configured",
+    "CORS_ALLOW_CREDENTIALS requires explicit origin configuration",
+    "API credential serializers properly mask sensitive data with write_only=True",
+    "Django password validators are configured (length, common passwords, numeric)",
+    "Audit logging infrastructure exists for tracking sensitive operations",
+    "User credentials properly hash passwords via Django's auth system",
+    "No v-html usage found in Vue templates - all user content rendered safely",
+    "JWT tokens include expiration times (access: 24h, refresh: 7 days)",
+    "GatewayHealthView uses requests library properly (no hardcoded API keys in provider code)",
+    "Django REST Framework's IsAuthenticated default permission is applied globally",
+    "Workflow and execution data properly filtered by user ownership in querysets"
+  ]
+}

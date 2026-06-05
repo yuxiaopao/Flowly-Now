@@ -1,0 +1,33 @@
+{
+  "testEnvironment": "jest-environment-jsdom",
+  "testMatch": [
+    "**/tests/frontend/**/*.test.{js,ts}",
+    "**/tests/frontend/**/*.spec.{js,ts}"
+  ],
+  "testPathIgnorePatterns": [
+    "/node_modules/",
+    "/dist/"
+  ],
+  "transform": {
+    "^.+\\.js$": "babel-jest"
+  },
+  "moduleNameMapper": {
+    "^@/(.*)$": "<rootDir>/../../Frontend/src/$1"
+  },
+  "moduleFileExtensions": [
+    "js",
+    "json",
+    "vue"
+  ],
+  "collectCoverageFrom": [
+    "../../Frontend/src/api/**/*.{js}",
+    "!../../Frontend/src/main.js"
+  ],
+  "coverageDirectory": "coverage",
+  "reporters": [
+    "default",
+    "jest-junit"
+  ],
+  "rootDir": ".",
+  "maxWorkers": 1
+}

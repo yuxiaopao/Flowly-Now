@@ -1,0 +1,268 @@
+- generic [ref=e5]:
+  - navigation [ref=e6]:
+    - generic [ref=e7]:
+      - link "Flowly Flowly" [ref=e9] [cursor=pointer]:
+        - /url: /
+        - img "Flowly" [ref=e10]
+        - generic [ref=e11]: Flowly
+      - generic [ref=e12]:
+        - link "功能" [ref=e13] [cursor=pointer]:
+          - /url: "#features"
+        - link "定价" [ref=e14] [cursor=pointer]:
+          - /url: "#pricing"
+        - link "常见问题" [ref=e15] [cursor=pointer]:
+          - /url: "#faq"
+      - generic [ref=e16]:
+        - generic [ref=e17]:
+          - button "默认深色主题" [ref=e18] [cursor=pointer]:
+            - img [ref=e19]
+          - button "明亮清爽的浅色主题" [ref=e21] [cursor=pointer]:
+            - img [ref=e22]
+          - button "极简黑白设计" [ref=e28] [cursor=pointer]:
+            - img [ref=e29]
+          - button "高对比度无障碍设计" [ref=e32] [cursor=pointer]:
+            - img [ref=e33]
+        - link "登录" [ref=e36] [cursor=pointer]:
+          - /url: /login
+        - link "开始免费试用" [ref=e37] [cursor=pointer]:
+          - /url: /register
+  - generic [ref=e42]:
+    - generic [ref=e43]: AI驱动的下一代工作流平台
+    - heading "用自然语言构建 AI 工作流" [level=1] [ref=e45]
+    - paragraph [ref=e46]: Flowly 让您通过简单的对话描述，自动生成复杂的 AI 工作流。 无需编程，即可构建自动化流程、集成多种 AI 能力。
+    - generic [ref=e47]:
+      - link "免费开始" [ref=e48] [cursor=pointer]:
+        - /url: /register
+        - img [ref=e49]
+        - text: 免费开始
+      - link "观看演示" [ref=e51] [cursor=pointer]:
+        - /url: /nl-create
+        - img [ref=e52]
+        - text: 观看演示
+    - generic [ref=e54]:
+      - generic [ref=e55]:
+        - generic [ref=e56]: 10K+
+        - text: 活跃用户
+      - generic [ref=e58]:
+        - generic [ref=e59]: 100K+
+        - text: 工作流执行
+      - generic [ref=e61]:
+        - generic [ref=e62]: 99.9%
+        - text: 可用性
+  - generic [ref=e64]:
+    - generic [ref=e65]:
+      - heading "强大的功能，简单的体验" [level=2] [ref=e66]
+      - paragraph [ref=e67]: 从自然语言描述到可视化工作流，Flowly 让 AI 开发变得前所未有的简单。
+    - generic [ref=e68]:
+      - generic [ref=e69]:
+        - img [ref=e71]
+        - heading "自然语言生成" [level=3] [ref=e73]
+        - paragraph [ref=e74]: 用日常语言描述您的需求，AI 自动为您构建完整的工作流程。无需学习复杂的语法。
+      - generic [ref=e75]:
+        - img [ref=e77]
+        - heading "可视化编辑器" [level=3] [ref=e81]
+        - paragraph [ref=e82]: 直观的拖拽式界面，让您轻松设计和编辑工作流。实时预览，每一步都清晰可见。
+      - generic [ref=e83]:
+        - img [ref=e85]
+        - heading "AI Agent 编排" [level=3] [ref=e88]
+        - paragraph [ref=e89]: 构建智能代理，赋予它们工具调用能力。多 Agent 协作，处理复杂任务。
+      - generic [ref=e90]:
+        - img [ref=e92]
+        - heading "实时流式输出" [level=3] [ref=e94]
+        - paragraph [ref=e95]: 即时查看 AI 生成的每一个字符。告别等待，获得流畅的交互体验。
+      - generic [ref=e96]:
+        - img [ref=e98]
+        - heading "RAG 知识库" [level=3] [ref=e102]
+        - paragraph [ref=e103]: 上传文档，构建私有知识库。让 AI 在您的数据基础上提供精准答案。
+      - generic [ref=e104]:
+        - img [ref=e106]
+        - heading "团队协作" [level=3] [ref=e111]
+        - paragraph [ref=e112]: 与团队成员共享工作流，实时协作编辑。权限控制，确保安全共享。
+  - generic [ref=e114]:
+    - generic [ref=e115]:
+      - heading "三步创建您的 AI 工作流" [level=2] [ref=e116]
+      - paragraph [ref=e117]: 简单、直观、高效
+    - generic [ref=e118]:
+      - generic [ref=e119]:
+        - generic [ref=e120]: "1"
+        - generic [ref=e121]:
+          - heading "描述您的需求" [level=3] [ref=e122]
+          - paragraph [ref=e123]: 用自然语言告诉 Flowly 您想要实现的功能，比如"创建一个客服机器人，能够回答产品相关问题"。
+      - img [ref=e125]
+      - generic [ref=e126]:
+        - generic [ref=e127]: "2"
+        - generic [ref=e128]:
+          - heading "AI 自动生成" [level=3] [ref=e129]
+          - paragraph [ref=e130]: Flowly 的 AI 引擎理解您的意图，自动构建可视化工作流，包含所有必要的节点和连接。
+      - img [ref=e132]
+      - generic [ref=e133]:
+        - generic [ref=e134]: "3"
+        - generic [ref=e135]:
+          - heading "一键执行" [level=3] [ref=e136]
+          - paragraph [ref=e137]: 预览工作流，调整细节，然后一键执行。实时查看执行状态和输出结果。
+  - generic [ref=e140]:
+    - generic [ref=e141]:
+      - heading "适用于各种场景" [level=2] [ref=e142]
+      - paragraph [ref=e143]: 无论是客户服务、内容创作还是数据分析，Flowly 都能助您一臂之力。
+      - generic [ref=e144]:
+        - generic [ref=e145]:
+          - img [ref=e147]
+          - generic [ref=e149]:
+            - heading "智能客服" [level=4] [ref=e150]
+            - paragraph [ref=e151]: 构建 7x24 小时在线的 AI 客服，自动回答常见问题
+        - generic [ref=e152]:
+          - img [ref=e154]
+          - generic [ref=e157]:
+            - heading "内容生成" [level=4] [ref=e158]
+            - paragraph [ref=e159]: 自动化生成营销文案、社交媒体内容、产品描述
+        - generic [ref=e160]:
+          - img [ref=e162]
+          - generic [ref=e163]:
+            - heading "数据分析" [level=4] [ref=e164]
+            - paragraph [ref=e165]: 自动采集、处理和分析数据，生成可视化报告
+    - generic [ref=e172]:
+      - generic [ref=e173]:
+        - img [ref=e174]
+        - generic [ref=e176]: 用户输入
+      - img [ref=e178]
+      - generic [ref=e180]:
+        - img [ref=e181]
+        - generic [ref=e184]: AI 分析
+      - img [ref=e186]
+      - generic [ref=e188]:
+        - img [ref=e189]
+        - generic [ref=e192]: 生成回复
+  - generic [ref=e194]:
+    - generic [ref=e195]:
+      - heading "简单透明的定价" [level=2] [ref=e196]
+      - paragraph [ref=e197]: 从免费开始，根据需求升级。所有方案均包含 14 天免费试用。
+    - generic [ref=e198]:
+      - generic [ref=e199]:
+        - generic [ref=e200]:
+          - heading "免费版" [level=3] [ref=e201]
+          - generic [ref=e202]: ¥0/月
+          - paragraph [ref=e203]: 适合个人探索和小规模使用
+        - list [ref=e204]:
+          - listitem [ref=e205]:
+            - img [ref=e206]
+            - text: 3 个工作流
+          - listitem [ref=e208]:
+            - img [ref=e209]
+            - text: 100 次执行/月
+          - listitem [ref=e211]:
+            - img [ref=e212]
+            - text: 基础模板
+          - listitem [ref=e214]:
+            - img [ref=e215]
+            - text: 社区支持
+        - link "免费开始" [ref=e217] [cursor=pointer]:
+          - /url: /register
+      - generic [ref=e218]:
+        - generic [ref=e219]: 最受欢迎
+        - generic [ref=e220]:
+          - heading "专业版" [level=3] [ref=e221]
+          - generic [ref=e222]: ¥99/月
+          - paragraph [ref=e223]: 适合团队和中小型企业
+        - list [ref=e224]:
+          - listitem [ref=e225]:
+            - img [ref=e226]
+            - text: 无限工作流
+          - listitem [ref=e228]:
+            - img [ref=e229]
+            - text: 10,000 次执行/月
+          - listitem [ref=e231]:
+            - img [ref=e232]
+            - text: 高级模板库
+          - listitem [ref=e234]:
+            - img [ref=e235]
+            - text: 团队协作
+          - listitem [ref=e237]:
+            - img [ref=e238]
+            - text: 优先支持
+        - link "立即升级" [ref=e240] [cursor=pointer]:
+          - /url: /register
+      - generic [ref=e241]:
+        - generic [ref=e242]:
+          - heading "企业版" [level=3] [ref=e243]
+          - generic [ref=e244]: ¥399/月
+          - paragraph [ref=e245]: 适合大型企业和高需求场景
+        - list [ref=e246]:
+          - listitem [ref=e247]:
+            - img [ref=e248]
+            - text: 无限所有
+          - listitem [ref=e250]:
+            - img [ref=e251]
+            - text: 私有化部署
+          - listitem [ref=e253]:
+            - img [ref=e254]
+            - text: SSO 集成
+          - listitem [ref=e256]:
+            - img [ref=e257]
+            - text: SLA 保障
+          - listitem [ref=e259]:
+            - img [ref=e260]
+            - text: 专属客服
+        - link "联系销售" [ref=e262] [cursor=pointer]:
+          - /url: /register
+  - generic [ref=e264]:
+    - heading "常见问题" [level=2] [ref=e266]
+    - generic [ref=e267]:
+      - generic [ref=e268]:
+        - button "Flowly 支持哪些 AI 模型？" [ref=e269] [cursor=pointer]:
+          - generic [ref=e270]: Flowly 支持哪些 AI 模型？
+          - img [ref=e271]
+        - paragraph [ref=e273]: Flowly 支持 OpenAI GPT 系列、Anthropic Claude、阿里通义千问、百度文心一言等多种主流 AI 模型。您可以根据需求自由选择和切换。
+      - generic [ref=e274]:
+        - button "是否需要编程基础？" [ref=e275] [cursor=pointer]:
+          - generic [ref=e276]: 是否需要编程基础？
+          - img [ref=e277]
+        - paragraph [ref=e279]: 完全不需要！Flowly 的核心理念是降低 AI 开发门槛。您可以通过自然语言描述需求，或使用可视化拖拽来构建工作流。
+      - generic [ref=e280]:
+        - button "我的数据安全吗？" [ref=e281] [cursor=pointer]:
+          - generic [ref=e282]: 我的数据安全吗？
+          - img [ref=e283]
+        - paragraph [ref=e285]: 我们非常重视数据安全。所有数据传输使用 TLS 加密，数据存储符合 SOC 2 标准。企业版还支持私有化部署，完全掌控您的数据。
+      - generic [ref=e286]:
+        - button "可以集成到现有系统吗？" [ref=e287] [cursor=pointer]:
+          - generic [ref=e288]: 可以集成到现有系统吗？
+          - img [ref=e289]
+        - paragraph [ref=e291]: 可以！Flowly 提供完整的 REST API 和 Webhook 支持，可以轻松与您的网站、应用或其他 SaaS 服务集成。
+  - generic [ref=e294]:
+    - heading "准备好开始了吗？" [level=2] [ref=e295]
+    - paragraph [ref=e296]: 免费注册，立即体验 Flowly 的强大功能。
+    - link "开始免费试用" [ref=e298] [cursor=pointer]:
+      - /url: /register
+  - contentinfo [ref=e299]:
+    - generic [ref=e300]:
+      - generic [ref=e301]:
+        - generic [ref=e302]:
+          - link "Flowly Flowly" [ref=e304] [cursor=pointer]:
+            - /url: /
+            - img "Flowly" [ref=e305]
+            - generic [ref=e306]: Flowly
+          - paragraph [ref=e307]: AI Agent 工作流编排平台
+        - generic [ref=e308]:
+          - heading "产品" [level=4] [ref=e309]
+          - link "功能" [ref=e310] [cursor=pointer]:
+            - /url: "#features"
+          - link "定价" [ref=e311] [cursor=pointer]:
+            - /url: "#pricing"
+          - link "常见问题" [ref=e312] [cursor=pointer]:
+            - /url: "#faq"
+        - generic [ref=e313]:
+          - heading "资源" [level=4] [ref=e314]
+          - link "文档" [ref=e315] [cursor=pointer]:
+            - /url: "#"
+          - link "API" [ref=e316] [cursor=pointer]:
+            - /url: "#"
+          - link "教程" [ref=e317] [cursor=pointer]:
+            - /url: "#"
+        - generic [ref=e318]:
+          - heading "公司" [level=4] [ref=e319]
+          - link "关于我们" [ref=e320] [cursor=pointer]:
+            - /url: "#"
+          - link "博客" [ref=e321] [cursor=pointer]:
+            - /url: "#"
+          - link "联系我们" [ref=e322] [cursor=pointer]:
+            - /url: "#"
+      - paragraph [ref=e324]: © 2026 Flowly. 保留所有权利。

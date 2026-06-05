@@ -1,0 +1,422 @@
+{% extends "admin/flowly_base.html" %}
+{% load static %}
+
+{% block flowly_content %}
+<div class="f-panel">
+
+    <div class="f-panel-header fp-header">
+        <div class="fp-header-row">
+            <div>
+                <h2><i class="fas fa-sliders-h"></i> 动态功能管理</h2>
+                <p>实时切换系统功能开关，配置即时生效</p>
+            </div>
+            <div class="fp-header-actions">
+                <button class="f-btn fp-btn" onclick="fp.exportConfig()">
+                    <i class="fas fa-download"></i> 导出
+                </button>
+                <button class="f-btn fp-btn" onclick="fp.showImport()">
+                    <i class="fas fa-upload"></i> 导入
+                </button>
+                <button class="f-btn fp-btn" onclick="fp.load()">
+                    <i class="fas fa-sync-alt"></i> 刷新
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="f-panel-body">
+
+        <div class="fp-filters-row">
+            <div class="f-search fp-search">
+                <i class="fas fa-search"></i>
+                <input type="text" id="searchInput" class="f-input" placeholder="搜索功能名称、标识或描述..." oninput="fp.filter()" aria-label="搜索功能">
+            </div>
+            <select id="catFilter" class="f-input f-select fp-select" onchange="fp.filter()" aria-label="筛选分类">
+                <option value="">全部分类</option>
+            </select>
+            <select id="typeFilter" class="f-input f-select fp-select" onchange="fp.filter()" aria-label="筛选类型">
+                <option value="">全部类型</option>
+                <option value="boolean">开关</option>
+                <option value="string">文本</option>
+                <option value="integer">整数</option>
+                <option value="float">小数</option>
+                <option value="json">JSON</option>
+                <option value="choice">选项</option>
+                <option value="secret">密钥</option>
+            </select>
+            <select id="groupFilter" class="f-input f-select fp-select" onchange="fp.filter()" aria-label="筛选分组">
+                <option value="">全部分组</option>
+            </select>
+            <div class="fp-count-wrap">
+                <span id="featureCount" class="fp-count">加载中...</span>
+            </div>
+        </div>
+
+        <div id="featuresContainer" class="fp-list"></div>
+
+        <div id="featuresPagination" class="f-pagination" aria-label="分页"></div>
+    </div>
+</div>
+
+<div id="importModal" class="f-modal-overlay fp-hidden" role="dialog" aria-labelledby="importModalTitle" aria-modal="true">
+    <div class="f-modal">
+        <div class="f-modal-header">
+            <h3 id="importModalTitle"><i class="fas fa-upload fp-icon-accent"></i> 导入配置</h3>
+            <button class="f-modal-close" onclick="fp.closeImport()" aria-label="关闭">&#x2715;</button>
+        </div>
+        <p class="fp-modal-desc">粘贴之前导出的 JSON 配置内容：</p>
+        <textarea id="importContent" class="f-input fp-textarea" rows="8" placeholder='{"key": "value", ...}' aria-label="JSON配置内容"></textarea>
+        <div class="fp-modal-actions">
+            <button class="f-btn f-btn-ghost" onclick="fp.closeImport()">取消</button>
+            <button class="f-btn f-btn-primary" onclick="fp.doImport()">确认导入</button>
+        </div>
+    </div>
+</div>
+
+<div id="editModal" class="f-modal-overlay fp-hidden" role="dialog" aria-labelledby="editModalTitle" aria-modal="true">
+    <div class="f-modal">
+        <div class="f-modal-header">
+            <h3 id="editModalTitle"><i class="fas fa-edit fp-icon-accent"></i> 编辑</h3>
+            <button class="f-modal-close" onclick="fp.closeEdit()" aria-label="关闭">&#x2715;</button>
+        </div>
+        <div id="editModalBody"></div>
+        <div class="fp-modal-actions">
+            <button class="f-btn f-btn-ghost" onclick="fp.closeEdit()">取消</button>
+            <button class="f-btn f-btn-primary" onclick="fp.saveEdit()"><i class="fas fa-save"></i> 保存</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<style>
+.fp-header-row { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 16px; }
+.fp-header-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.fp-btn { background: rgba(255,255,255,0.15); color: #fff; border: 1.5px solid rgba(255,255,255,0.3); }
+.fp-filters-row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; align-items: center; }
+.fp-search { flex: 1; min-width: 200px; }
+.fp-select { width: 150px; }
+.fp-count-wrap { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.fp-count { font-size: 0.8rem; color: rgba(255,255,255,0.7); }
+.fp-list { min-height: 100px; }
+.fp-hidden { display: none !important; }
+.fp-modal-desc { font-size: 0.85rem; color: var(--text-muted); margin-bottom: 16px; }
+.fp-textarea { resize: vertical; min-height: 160px; }
+.fp-modal-actions { display: flex; gap: 10px; margin-top: 20px; justify-content: flex-end; }
+.fp-feature-row { display: flex; align-items: center; gap: 14px; padding: 16px 18px; background: #fff; border: 1px solid var(--border); border-radius: var(--radius-md); margin-bottom: 8px; transition: all 0.2s ease; }
+.fp-feature-row:hover { border-color: rgba(99,102,241,0.3); box-shadow: var(--shadow-md); transform: translateX(4px); }
+.fp-feature-row.fp-readonly { opacity: 0.6; }
+.fp-feature-info { flex: 1; min-width: 0; }
+.fp-feature-name { font-weight: 600; font-size: 0.9rem; color: var(--text-primary); }
+.fp-feature-desc { font-size: 0.78rem; color: var(--text-muted); margin-top: 2px; }
+.fp-feature-key { font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: var(--text-muted); margin-top: 3px; display: flex; align-items: center; gap: 4px; }
+.fp-feature-badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 50px; font-size: 0.7rem; font-weight: 600; }
+.fp-badge-on { background: rgba(16,185,129,0.1); color: var(--success); }
+.fp-badge-off { background: rgba(239,68,68,0.1); color: var(--danger); }
+.fp-cat-header { display: flex; align-items: center; gap: 10px; padding: 12px 16px; margin: 20px 0 10px; background: var(--accent-soft); border-radius: var(--radius-sm); border-left: 3px solid var(--accent); }
+.fp-cat-header h4 { font-size: 0.95rem; font-weight: 700; color: var(--text-primary); flex: 1; }
+.fp-cat-count { background: var(--accent); color: #fff; font-size: 0.7rem; font-weight: 700; padding: 2px 8px; border-radius: 50px; }
+.fp-controls { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.fp-empty { text-align: center; padding: 60px 20px; color: var(--text-muted); }
+.fp-empty i { font-size: 3rem; margin-bottom: 16px; opacity: 0.3; }
+.fp-empty h4 { font-size: 1rem; color: var(--text-secondary); margin-bottom: 6px; }
+.fp-val-inline { margin-top: 6px; font-size: 0.8rem; color: var(--text-muted); }
+.fp-val-code { font-family: 'JetBrains Mono', monospace; }
+.fp-val-json { margin-top: 6px; font-size: 0.75rem; color: var(--accent); font-family: 'JetBrains Mono', monospace; }
+.fp-icon-accent { color: var(--accent); }
+@media (max-width: 768px) {
+    .fp-filters-row { flex-direction: column; }
+    .fp-select { width: 100%; }
+    .fp-header-row { flex-direction: column; }
+}
+</style>
+<script>
+(function() {
+    'use strict';
+
+    var fp = window.fp = {
+        allData: [],
+        filtered: [],
+        page: 1,
+        pageSize: 15,
+        editKey: null,
+
+        load: async function() {
+            var container = document.getElementById('featuresContainer');
+            renderSkeleton(container, 6, 'feature');
+            document.getElementById('featureCount').textContent = '加载中...';
+
+            try {
+                var data = await apiCall('/api/v1/features/categories/');
+                this.allData = data || [];
+                this.populateFilters();
+                this.filter();
+                document.getElementById('featureCount').textContent =
+                    '共 ' + this.allData.reduce(function(s, c) { return s + (c.features || []).length; }, 0) + ' 项功能';
+            } catch(e) {
+                container.innerHTML = '<div class="fp-empty"><i class="fas fa-exclamation-triangle"></i><h4>加载失败</h4><p>请检查网络连接</p></div>';
+            }
+        },
+
+        populateFilters: function() {
+            var cats = {};
+            var groups = {};
+            this.allData.forEach(function(cat) {
+                cats[cat.slug] = cat.name;
+                (cat.features || []).forEach(function(f) {
+                    if (f.group) groups[f.group] = true;
+                });
+            });
+
+            var catSel = document.getElementById('catFilter');
+            catSel.innerHTML = '<option value="">全部分类</option>';
+            Object.keys(cats).forEach(function(slug) {
+                catSel.innerHTML += '<option value="' + slug + '">' + cats[slug] + '</option>';
+            });
+
+            var grpSel = document.getElementById('groupFilter');
+            grpSel.innerHTML = '<option value="">全部分组</option>';
+            Object.keys(groups).sort().forEach(function(g) {
+                grpSel.innerHTML += '<option value="' + g + '">' + g + '</option>';
+            });
+        },
+
+        filter: function() {
+            var search = (document.getElementById('searchInput').value || '').toLowerCase().trim();
+            var cat = document.getElementById('catFilter').value;
+            var type = document.getElementById('typeFilter').value;
+            var group = document.getElementById('groupFilter').value;
+
+            this.filtered = [];
+            this.allData.forEach(function(catData) {
+                (catData.features || []).forEach(function(f) {
+                    f._catName = catData.name;
+                    f._catSlug = catData.slug;
+                    if (cat && catData.slug !== cat) return;
+                    if (type && f.value_type !== type) return;
+                    if (group && f.group !== group) return;
+                    if (search && !f.name.toLowerCase().includes(search) &&
+                        !f.key.toLowerCase().includes(search) &&
+                        !(f.description || '').toLowerCase().includes(search) &&
+                        !(f.group || '').toLowerCase().includes(search)) return;
+                    fp.filtered.push(f);
+                });
+            });
+
+            this.page = 1;
+            this.render();
+        },
+
+        render: function() {
+            var container = document.getElementById('featuresContainer');
+            var start = (this.page - 1) * this.pageSize;
+            var page = this.filtered.slice(start, start + this.pageSize);
+
+            if (page.length === 0) {
+                container.innerHTML = '<div class="fp-empty"><i class="fas fa-search"></i><h4>没有匹配的功能</h4><p>尝试调整搜索条件</p></div>';
+                document.getElementById('featuresPagination').innerHTML = '';
+                return;
+            }
+
+            var byCat = {};
+            page.forEach(function(f) {
+                var cat = f._catName || '未分类';
+                if (!byCat[cat]) byCat[cat] = [];
+                byCat[cat].push(f);
+            });
+
+            var html = '';
+            Object.keys(byCat).forEach(function(catName) {
+                html += '<div class="fp-cat-header">';
+                html += '<i class="fas fa-layer-group" style="color:var(--accent);font-size:0.9rem;"></i>';
+                html += '<h4>' + escHtml(catName) + '</h4>';
+                html += '<span class="fp-cat-count">' + byCat[catName].length + '</span>';
+                html += '</div>';
+
+                byCat[catName].forEach(function(f) {
+                    html += fp.renderFeature(f);
+                });
+            });
+
+            container.innerHTML = html;
+            renderPagination('featuresPagination', this.filtered.length, this.page, this.pageSize, 'fp.goPage');
+        },
+
+        renderFeature: function(f) {
+            var val = f.value !== undefined && f.value !== null ? f.value : f.default_value;
+            var isReadonly = f.is_readonly;
+            var valType = f.value_type;
+            var displayVal = f.display_value || (val !== null && val !== undefined ? String(val) : '未设置');
+
+            var html = '<div class="fp-feature-row' + (isReadonly ? ' fp-readonly' : '') + '" data-key="' + escAttr(f.key) + '">';
+
+            html += '<div class="fp-feature-info">';
+            html += '<div class="fp-feature-name">' + escHtml(f.name) + '</div>';
+            if (f.description) {
+                html += '<div class="fp-feature-desc">' + escHtml(f.description) + '</div>';
+            }
+            html += '<div class="fp-feature-key"><i class="fas fa-key"></i> ' + escHtml(f.key) + '</div>';
+
+            if (valType === 'boolean') {
+                html += '<span class="fp-feature-badge ' + (val ? 'fp-badge-on' : 'fp-badge-off') + '">' +
+                    (val ? '✓ 已开启' : '✗ 已关闭') + '</span>';
+            } else if (valType === 'choice' && f.choices && f.choices.length > 0) {
+                html += '<div class="fp-val-inline">';
+                html += '<select class="f-input f-select" style="font-size:0.8rem;padding:6px 30px 6px 10px;width:auto;max-width:200px;" ' +
+                    (isReadonly ? 'disabled ' : '') + ' onchange="fp.updateVal(\'' + escAttr(f.key) + '\', this.value)" aria-label="' + escAttr(f.name) + '">';
+                (f.choices || []).forEach(function(opt) {
+                    html += '<option value="' + escAttr(String(opt)) + '"' + (String(val) === String(opt) ? ' selected' : '') + '>' + escHtml(String(opt)) + '</option>';
+                });
+                html += '</select></div>';
+            } else if (valType === 'integer' || valType === 'float') {
+                html += '<div class="fp-val-inline">';
+                html += '<input type="number" class="f-input" style="width:130px;font-size:0.8rem;padding:6px 10px;" ' +
+                    'value="' + (val !== null ? val : '') + '" ' +
+                    (f.min_value !== null ? 'min="' + f.min_value + '" ' : '') +
+                    (f.max_value !== null ? 'max="' + f.max_value + '" ' : '') +
+                    (isReadonly ? 'disabled ' : '') +
+                    ' onchange="fp.updateVal(\'' + escAttr(f.key) + '\', parseFloat(this.value))" aria-label="' + escAttr(f.name) + '">';
+                if (f.suffix) html += '<span style="color:var(--text-muted);font-size:0.8rem;margin-left:8px;">' + escHtml(f.suffix) + '</span>';
+                html += '</div>';
+            } else if (valType === 'json') {
+                html += '<div class="fp-val-json">' + escHtml(JSON.stringify(val) || 'null') + '</div>';
+            } else if (valType === 'string' && !isReadonly) {
+                html += '<div class="fp-val-inline">' + escHtml(displayVal) + '</div>';
+            } else {
+                html += '<div class="fp-val-inline"><span class="fp-val-code">' + escHtml(displayVal) + '</span></div>';
+            }
+            html += '</div>';
+
+            html += '<div class="fp-controls">';
+
+            if (valType === 'string' && !isReadonly) {
+                html += '<button class="f-btn f-btn-sm f-btn-ghost" onclick="fp.showEdit(\'' + escAttr(f.key) + '\')" title="编辑" aria-label="编辑 ' + escAttr(f.name) + '">' +
+                    '<i class="fas fa-pen"></i></button>';
+            }
+
+            if (valType === 'boolean') {
+                html += '<label class="f-toggle" title="' + (val ? '点击关闭' : '点击开启') + '">' +
+                    '<input type="checkbox" ' + (val ? 'checked ' : '') + (isReadonly ? 'disabled ' : '') +
+                    ' onchange="toggleFeature(\'' + escAttr(f.key) + '\', ' + !!val + ')"' +
+                    ' aria-label="' + escAttr(f.name) + '">' +
+                    '<span class="f-toggle-track"></span></label>';
+            }
+
+            if (!isReadonly && val !== f.default_value) {
+                html += '<button class="f-btn f-btn-sm f-btn-ghost" onclick="fp.reset(\'' + escAttr(f.key) + '\')" title="重置为默认" aria-label="重置 ' + escAttr(f.name) + '" style="color:var(--warning);">' +
+                    '<i class="fas fa-undo"></i></button>';
+            }
+
+            html += '</div></div>';
+            return html;
+        },
+
+        goPage: function(p) {
+            this.page = p;
+            this.render();
+        },
+
+        showEdit: function(key) {
+            var f = this.filtered.find(function(x) { return x.key === key; });
+            if (!f) return;
+            this.editKey = key;
+            var val = f.value !== undefined && f.value !== null ? f.value : (f.default_value || '');
+            var body = document.getElementById('editModalBody');
+            body.innerHTML =
+                '<p class="fp-modal-desc" style="font-family:\'JetBrains Mono\',monospace;">' + escHtml(key) + '</p>' +
+                '<div class="fp-modal-field">' +
+                '<label style="display:block;font-weight:600;font-size:0.85rem;color:var(--text-secondary);margin-bottom:6px;">' + escHtml(f.name) + '</label>' +
+                (f.description ? '<p style="font-size:0.8rem;color:var(--text-muted);margin-bottom:10px;">' + escHtml(f.description) + '</p>' : '') +
+                '<textarea id="editVal" class="f-input" rows="4" style="resize:vertical;" aria-label="' + escAttr(f.name) + '">' + escHtml(String(val)) + '</textarea>' +
+                '</div>' +
+                '<div class="fp-modal-desc" style="margin-top:10px;">默认值: <code>' + escHtml(String(f.default_value !== undefined ? JSON.stringify(f.default_value) : '')) + '</code></div>';
+            document.getElementById('editModal').style.display = 'flex';
+            document.getElementById('editModal').classList.remove('fp-hidden');
+            document.getElementById('editVal').focus();
+        },
+
+        closeEdit: function() {
+            document.getElementById('editModal').style.display = 'none';
+            document.getElementById('editModal').classList.add('fp-hidden');
+        },
+
+        saveEdit: function() {
+            var val = document.getElementById('editVal').value;
+            if (this.editKey) {
+                updateFeature(this.editKey, val);
+            }
+            this.closeEdit();
+        },
+
+        updateVal: function(key, value) {
+            updateFeature(key, value);
+        },
+
+        reset: async function(key) {
+            if (!confirm('确定重置 "' + key + '" 为默认值吗？')) return;
+            try {
+                showLoading();
+                await apiCall('/api/v1/features/' + encodeURIComponent(key) + '/reset/', 'POST');
+                showToast('↪ ' + key + ' 已重置', 'info');
+                hideLoading();
+                this.load();
+            } catch(e) {
+                hideLoading();
+            }
+        },
+
+        exportConfig: function() {
+            window.location.href = '/admin/flowly/export/';
+            showToast('⬇️ 配置导出中...', 'info');
+        },
+
+        showImport: function() {
+            document.getElementById('importModal').style.display = 'flex';
+            document.getElementById('importModal').classList.remove('fp-hidden');
+        },
+
+        closeImport: function() {
+            document.getElementById('importModal').style.display = 'none';
+            document.getElementById('importModal').classList.add('fp-hidden');
+        },
+
+        doImport: async function() {
+            var content = (document.getElementById('importContent').value || '').trim();
+            if (!content) { showToast('请输入配置内容', 'warning'); return; }
+            try {
+                var data = JSON.parse(content);
+                var resp = await apiCall('/admin/flowly/import/', 'POST', data);
+                if (resp.updated && resp.updated.length > 0) {
+                    showToast('✅ 成功导入 ' + resp.updated.length + ' 项配置', 'success');
+                    this.closeImport();
+                    this.load();
+                } else {
+                    showToast('⚠️ 导入完成，但 ' + (resp.skipped ? resp.skipped.length : 0) + ' 项被跳过', 'warning');
+                }
+            } catch(e) {
+                showToast('❌ JSON 格式错误', 'error');
+            }
+        }
+    };
+
+    function escHtml(s) {
+        if (s === null || s === undefined) return '';
+        var div = document.createElement('div');
+        div.textContent = String(s);
+        return div.innerHTML;
+    }
+    function escAttr(s) {
+        return String(s).replace(/'/g, "\'").replace(/"/g, '&quot;');
+    }
+
+    fp.load();
+
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            fp.closeEdit();
+            fp.closeImport();
+        }
+    });
+})();
+</script>
+{% endblock %}

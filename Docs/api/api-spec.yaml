@@ -1,0 +1,4492 @@
+# Flowly API Specification
+# Version: 1.0.0
+# Base URL: /api/v1
+# Authentication: Bearer Token (Token-based)
+
+openapi: 3.0.3
+info:
+  title: Flowly AI Workflow Platform API
+  description: |
+    Flowly is an AI-powered workflow orchestration platform supporting:
+    - Visual workflow editor with drag-and-drop nodes
+    - AI Agent creation and management
+    - Natural Language to Workflow generation
+    - RAG (Retrieval Augmented Generation) knowledge base
+    - Real-time monitoring and analytics
+  version: 1.0.0
+  contact:
+    name: Flowly Support
+    email: support@flowly.ai
+
+servers:
+  - url: /api/v1
+    description: Current API version
+
+security:
+  - bearerAuth: []
+
+# =============================================================================
+# SHARED COMPONENTS
+# =============================================================================
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    # ----- Common -----
+    PaginatedResponse:
+      type: object
+      properties:
+        count:
+          type: integer
+          description: Total number of results
+        next:
+          type: string
+          nullable: true
+          description: URL to next page
+        previous:
+          type: string
+          nullable: true
+          description: URL to previous page
+        results:
+          type: array
+          items:
+            type: object
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message
+        detail:
+          type: string
+          description: Detailed error information
+        code:
+          type: string
+          description: Error code for programmatic handling
+
+    UserSimple:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: User ID
+        username:
+          type: string
+          description: Username
+        email:
+          type: string
+          format: email
+          description: Email address
+        avatar:
+          type: string
+          format: uri
+          nullable: true
+          description: Avatar URL
+
+    PaginationParams:
+      type: object
+      properties:
+        page:
+          type: integer
+          minimum: 1
+          default: 1
+          description: Page number
+        page_size:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+          description: Results per page
+
+  responses:
+    BadRequest:
+      description: Bad Request - Invalid parameters
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: Validation error
+            detail: name: This field is required.
+
+    Unauthorized:
+      description: Unauthorized - Invalid or missing token
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: Authentication credentials were not provided.
+
+    Forbidden:
+      description: Forbidden - Insufficient permissions
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: You do not have permission to perform this action.
+
+    NotFound:
+      description: Not Found - Resource does not exist
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: Not found.
+
+    ServerError:
+      description: Internal Server Error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: Internal server error.
+
+# =============================================================================
+# AUTHENTICATION - /auth
+# =============================================================================
+
+paths:
+  # ----- Authentication -----
+  /auth/register/:
+    post:
+      tags: [Authentication]
+      summary: Register new user
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - username
+                - email
+                - password
+                - password_confirm
+              properties:
+                username:
+                  type: string
+                  minLength: 3
+                  maxLength: 150
+                  description: Unique username
+                  example: john_doe
+                email:
+                  type: string
+                  format: email
+                  description: Email address
+                  example: john@example.com
+                password:
+                  type: string
+                  format: password
+                  minLength: 8
+                  description: Password (min 8 chars)
+                  example: SecurePass123!
+                password_confirm:
+                  type: string
+                  format: password
+                  description: Password confirmation
+                  example: SecurePass123!
+                first_name:
+                  type: string
+                  maxLength: 150
+                  example: John
+                last_name:
+                  type: string
+                  maxLength: 150
+                  example: Doe
+                phone:
+                  type: string
+                  maxLength: 20
+                  example: "+86-138-0000-0000"
+      responses:
+        '201':
+          description: User created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                  username:
+                    type: string
+                  email:
+                    type: string
+                  access:
+                    type: string
+                    description: JWT access token
+                  refresh:
+                    type: string
+                    description: JWT refresh token
+              example:
+                id: 1
+                username: john_doe
+                email: john@example.com
+                access: eyJhbGciOiJIUzI1NiIs...
+                refresh: eyJhbGciOiJIUzI1NiIs...
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /auth/login/:
+    post:
+      tags: [Authentication]
+      summary: User login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - username
+                - password
+              properties:
+                username:
+                  type: string
+                  example: john_doe
+                password:
+                  type: string
+                  format: password
+                  example: SecurePass123!
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access:
+                    type: string
+                    description: JWT access token
+                  refresh:
+                    type: string
+                    description: JWT refresh token
+                  user:
+                    $ref: '#/components/schemas/UserSimple'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/refresh/:
+    post:
+      tags: [Authentication]
+      summary: Refresh access token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - refresh
+              properties:
+                refresh:
+                  type: string
+                  description: JWT refresh token
+      responses:
+        '200':
+          description: Token refreshed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access:
+                    type: string
+                  refresh:
+                    type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/me/:
+    get:
+      tags: [Authentication]
+      summary: Get current user profile
+      responses:
+        '200':
+          description: Current user profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserSimple'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/change-password/:
+    post:
+      tags: [Authentication]
+      summary: Change password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - old_password
+                - new_password
+                - new_password_confirm
+              properties:
+                old_password:
+                  type: string
+                  format: password
+                new_password:
+                  type: string
+                  format: password
+                  minLength: 8
+                new_password_confirm:
+                  type: string
+                  format: password
+      responses:
+        '200':
+          description: Password changed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /auth/forgot-password/:
+    post:
+      tags: [Authentication]
+      summary: Request password reset
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        '200':
+          description: Reset email sent
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+
+  /auth/reset-password/:
+    post:
+      tags: [Authentication]
+      summary: Reset password with token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - uidb64
+                - token
+                - new_password
+              properties:
+                uidb64:
+                  type: string
+                  description: User ID base64 encoded
+                token:
+                  type: string
+                  description: Password reset token
+                new_password:
+                  type: string
+                  format: password
+      responses:
+        '200':
+          description: Password reset successful
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+# =============================================================================
+# WORKFLOWS - /workflows
+# =============================================================================
+
+  /workflows/:
+    get:
+      tags: [Workflows]
+      summary: List workflows
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Search by name or description
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [draft, active, paused, archived]
+        - name: ordering
+          in: query
+          schema:
+            type: string
+            enum: [-created_at, created_at, -updated_at, updated_at, name, -name]
+      responses:
+        '200':
+          description: List of workflows
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedResponse'
+                  - type: object
+                    properties:
+                      results:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/WorkflowList'
+    post:
+      tags: [Workflows]
+      summary: Create workflow
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkflowCreate'
+      responses:
+        '201':
+          description: Workflow created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowDetail'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /workflows/{id}/:
+    get:
+      tags: [Workflows]
+      summary: Get workflow detail
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Workflow detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowDetail'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Workflows]
+      summary: Update workflow
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkflowUpdate'
+      responses:
+        '200':
+          description: Workflow updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowDetail'
+    delete:
+      tags: [Workflows]
+      summary: Delete workflow
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: Workflow deleted
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /workflows/{id}/execute/:
+    post:
+      tags: [Workflows]
+      summary: Execute workflow
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                input_data:
+                  type: object
+                  description: Workflow input parameters
+                  example:
+                    user_input: "Hello, world!"
+                trigger_type:
+                  type: string
+                  default: manual
+                  enum: [manual, webhook, scheduled, api]
+                is_async:
+                  type: boolean
+                  default: false
+                  description: Run asynchronously
+      responses:
+        '201':
+          description: Execution started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  execution_id:
+                    type: integer
+                  status:
+                    type: string
+                  task_id:
+                    type: string
+                    nullable: true
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /workflows/{id}/duplicate/:
+    post:
+      tags: [Workflows]
+      summary: Duplicate workflow
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '201':
+          description: Workflow duplicated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowDetail'
+
+  /workflows/{id}/export/:
+    get:
+      tags: [Workflows]
+      summary: Export workflow as JSON
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Workflow export data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowDetail'
+
+  /workflows/{id}/validate/:
+    post:
+      tags: [Workflows]
+      summary: Validate workflow structure
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Validation result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  valid:
+                    type: boolean
+                  errors:
+                    type: array
+                    items:
+                      type: string
+                  warnings:
+                    type: array
+                    items:
+                      type: string
+
+  /workflows/{id}/stream_execute/:
+    post:
+      tags: [Workflows]
+      summary: Execute workflow with streaming
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                input_data:
+                  type: object
+      responses:
+        '200':
+          description: Streaming response (SSE)
+          content:
+            text/event-stream:
+              schema:
+                type: string
+
+  /workflows/import/:
+    post:
+      tags: [Workflows]
+      summary: Import workflow from JSON
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkflowCreate'
+      responses:
+        '201':
+          description: Workflow imported
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowDetail'
+
+  # ----- Nodes -----
+  /workflows/nodes/:
+    get:
+      tags: [Workflows]
+      summary: List nodes
+      parameters:
+        - name: workflow
+          in: query
+          required: true
+          schema:
+            type: integer
+          description: Workflow ID
+      responses:
+        '200':
+          description: List of nodes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Node'
+    post:
+      tags: [Workflows]
+      summary: Create node
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NodeCreate'
+      responses:
+        '201':
+          description: Node created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Node'
+
+  /workflows/nodes/{id}/:
+    get:
+      tags: [Workflows]
+      summary: Get node detail
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Node detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Node'
+    patch:
+      tags: [Workflows]
+      summary: Update node
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NodeCreate'
+      responses:
+        '200':
+          description: Node updated
+    delete:
+      tags: [Workflows]
+      summary: Delete node
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: Node deleted
+
+  /workflows/nodes/available_types/:
+    get:
+      tags: [Workflows]
+      summary: Get available node types
+      responses:
+        '200':
+          description: Available node types
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  node_types:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        type:
+                          type: string
+                          example: llm
+                        label:
+                          type: string
+                          example: LLM
+                        category:
+                          type: string
+                          example: AI
+                        description:
+                          type: string
+
+  /workflows/nodes/batch_update_positions/:
+    post:
+      tags: [Workflows]
+      summary: Batch update node positions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                positions:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      id:
+                        type: integer
+                      position:
+                        type: object
+                        properties:
+                          x:
+                            type: number
+                          y:
+                            type: number
+      responses:
+        '200':
+          description: Positions updated
+
+  # ----- Edges -----
+  /workflows/edges/:
+    get:
+      tags: [Workflows]
+      summary: List edges
+      parameters:
+        - name: workflow
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: List of edges
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Edge'
+    post:
+      tags: [Workflows]
+      summary: Create edge
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EdgeCreate'
+      responses:
+        '201':
+          description: Edge created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Edge'
+
+  /workflows/edges/{id}/:
+    patch:
+      tags: [Workflows]
+      summary: Update edge
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EdgeCreate'
+      responses:
+        '200':
+          description: Edge updated
+    delete:
+      tags: [Workflows]
+      summary: Delete edge
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: Edge deleted
+
+  # ----- Executions -----
+  /workflows/executions/:
+    get:
+      tags: [Workflows]
+      summary: List executions
+      parameters:
+        - name: workflow
+          in: query
+          schema:
+            type: integer
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: List of executions
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedResponse'
+                  - type: object
+                    properties:
+                      results:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Execution'
+
+  /workflows/executions/{id}/:
+    get:
+      tags: [Workflows]
+      summary: Get execution detail
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Execution detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionDetail'
+
+  /workflows/executions/{id}/cancel/:
+    post:
+      tags: [Workflows]
+      summary: Cancel execution
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Execution cancelled
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: cancelled
+
+  /workflows/executions/{id}/logs/:
+    get:
+      tags: [Workflows]
+      summary: Get execution logs
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Execution logs
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  node_status:
+                    type: object
+                  error_message:
+                    type: string
+                    nullable: true
+                  traceback:
+                    type: string
+                    nullable: true
+
+# =============================================================================
+# AGENTS - /agents
+# =============================================================================
+
+  /agents/:
+    get:
+      tags: [Agents]
+      summary: List agents
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: List of agents
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedResponse'
+                  - type: object
+                    properties:
+                      results:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/AgentList'
+    post:
+      tags: [Agents]
+      summary: Create agent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentCreate'
+      responses:
+        '201':
+          description: Agent created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentDetail'
+
+  /agents/{id}/:
+    get:
+      tags: [Agents]
+      summary: Get agent detail
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Agent detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentDetail'
+    patch:
+      tags: [Agents]
+      summary: Update agent
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentUpdate'
+      responses:
+        '200':
+          description: Agent updated
+    delete:
+      tags: [Agents]
+      summary: Delete agent
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: Agent deleted
+
+  /agents/{id}/chat/:
+    post:
+      tags: [Agents]
+      summary: Chat with agent
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - message
+              properties:
+                message:
+                  type: string
+                  description: User message
+                  example: "Hello, how are you?"
+                conversation_id:
+                  type: integer
+                  nullable: true
+                  description: Continue existing conversation
+      responses:
+        '200':
+          description: Chat response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  conversation_id:
+                    type: integer
+                  response:
+                    type: string
+                    description: Agent response
+                  tool_calls:
+                    type: array
+                    items:
+                      type: object
+                    nullable: true
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /agents/{id}/stream_chat/:
+    post:
+      tags: [Agents]
+      summary: Chat with agent (streaming)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - message
+              properties:
+                message:
+                  type: string
+                conversation_id:
+                  type: integer
+                  nullable: true
+      responses:
+        '200':
+          description: Streaming response (SSE)
+          content:
+            text/event-stream:
+              schema:
+                type: string
+
+  /agents/{id}/debug/:
+    post:
+      tags: [Agents]
+      summary: Debug agent
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - message
+              properties:
+                message:
+                  type: string
+      responses:
+        '200':
+          description: Debug response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  response:
+                    type: string
+                  tool_calls:
+                    type: array
+                    nullable: true
+
+  /agents/{id}/debug/history/:
+    get:
+      tags: [Agents]
+      summary: Get debug history
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Debug history
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AgentExecution'
+    delete:
+      tags: [Agents]
+      summary: Clear debug history
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: History cleared
+
+  /agents/{id}/tools/:
+    get:
+      tags: [Agents]
+      summary: Get agent tools
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Agent tools
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  available_tools:
+                    type: array
+                    items:
+                      type: string
+                  agent_tools:
+                    type: array
+                    items:
+                      type: string
+    post:
+      tags: [Agents]
+      summary: Add tools to agent
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - tools
+              properties:
+                tools:
+                  type: array
+                  items:
+                    type: string
+                  example: ["search", "calculator"]
+      responses:
+        '200':
+          description: Tools updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tools:
+                    type: array
+                    items:
+                      type: string
+
+  /agents/{id}/tools_remove/:
+    post:
+      tags: [Agents]
+      summary: Remove tool from agent
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - tool
+              properties:
+                tool:
+                  type: string
+                  example: calculator
+      responses:
+        '200':
+          description: Tool removed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tools:
+                    type: array
+                    items:
+                      type: string
+
+  /agents/{id}/skills/:
+    get:
+      tags: [Agents]
+      summary: Get agent skills
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Agent skills
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  skills:
+                    type: array
+                    items:
+                      type: string
+
+  /agents/{id}/update_skills/:
+    patch:
+      tags: [Agents]
+      summary: Update agent skills
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - skills
+              properties:
+                skills:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '200':
+          description: Skills updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  skills:
+                    type: array
+                    items:
+                      type: string
+
+  /agents/{id}/reset_memory/:
+    post:
+      tags: [Agents]
+      summary: Reset agent memory
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Memory reset
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+
+  /agents/{id}/conversations/:
+    get:
+      tags: [Agents]
+      summary: Get agent conversations
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Conversations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AgentConversation'
+
+  /agents/{id}/debug/sessions/{session_id}/:
+    get:
+      tags: [Agents]
+      summary: Get debug session detail
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Session detail
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                  conversation_id:
+                    type: integer
+                    nullable: true
+                  messages:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        role:
+                          type: string
+                          enum: [user, assistant, system]
+                        content:
+                          type: string
+                  status:
+                    type: string
+                  started_at:
+                    type: string
+                    format: date-time
+
+# =============================================================================
+# CONVERSATIONS - /conversations
+# =============================================================================
+
+  /conversations/:
+    get:
+      tags: [Conversations]
+      summary: List conversations
+      parameters:
+        - name: agent_id
+          in: query
+          schema:
+            type: integer
+        - name: page
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: List of conversations
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedResponse'
+
+  /conversations/{id}/:
+    get:
+      tags: [Conversations]
+      summary: Get conversation detail
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Conversation detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentConversation'
+    delete:
+      tags: [Conversations]
+      summary: Delete conversation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: Conversation deleted
+
+  /conversations/{id}/messages/:
+    get:
+      tags: [Conversations]
+      summary: Get conversation messages
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Messages
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  messages:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        role:
+                          type: string
+                        content:
+                          type: string
+                  message_count:
+                    type: integer
+                  token_count:
+                    type: integer
+
+  /conversations/{id}/add_message/:
+    post:
+      tags: [Conversations]
+      summary: Add message to conversation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - role
+                - content
+              properties:
+                role:
+                  type: string
+                  enum: [user, assistant, system]
+                content:
+                  type: string
+      responses:
+        '200':
+          description: Message added
+
+# =============================================================================
+# PROMPTS - /prompts
+# =============================================================================
+
+  /prompts/:
+    get:
+      tags: [Prompts]
+      summary: List prompt templates
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: category
+          in: query
+          schema:
+            type: integer
+        - name: search
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of prompts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedResponse'
+    post:
+      tags: [Prompts]
+      summary: Create prompt template
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PromptCreate'
+      responses:
+        '201':
+          description: Prompt created
+
+  /prompts/{id}/:
+    get:
+      tags: [Prompts]
+      summary: Get prompt detail
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Prompt detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PromptDetail'
+    patch:
+      tags: [Prompts]
+      summary: Update prompt
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PromptCreate'
+      responses:
+        '200':
+          description: Prompt updated
+    delete:
+      tags: [Prompts]
+      summary: Delete prompt
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: Prompt deleted
+
+  /prompts/{id}/rate/:
+    post:
+      tags: [Prompts]
+      summary: Rate prompt
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - rating
+              properties:
+                rating:
+                  type: integer
+                  minimum: 1
+                  maximum: 5
+                comment:
+                  type: string
+      responses:
+        '200':
+          description: Rating submitted
+
+  /prompts/categories/:
+    get:
+      tags: [Prompts]
+      summary: List prompt categories
+      responses:
+        '200':
+          description: Categories
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PromptCategory'
+
+# =============================================================================
+# NL TO WORKFLOW - /nl-workflow
+# =============================================================================
+
+  /nl-workflow/sessions/:
+    get:
+      tags: [NL to Workflow]
+      summary: List NL sessions
+      responses:
+        '200':
+          description: List of sessions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: integer
+                    name:
+                      type: string
+                    description:
+                      type: string
+                    workflow_id:
+                      type: integer
+                      nullable: true
+                    status:
+                      type: string
+                    created_at:
+                      type: string
+                      format: date-time
+    post:
+      tags: [NL to Workflow]
+      summary: Create NL session and generate workflow
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                description:
+                  type: string
+                  description: Workflow description in natural language
+                name:
+                  type: string
+                  description: Session name
+      responses:
+        '201':
+          description: Workflow generated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  session_id:
+                    type: integer
+                  workflow:
+                    type: object
+                  message:
+                    type: string
+
+  /nl-workflow/sessions/{session_id}/:
+    get:
+      tags: [NL to Workflow]
+      summary: Get NL session detail
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Session detail
+    delete:
+      tags: [NL to Workflow]
+      summary: Delete NL session
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Session deleted
+
+  /nl-workflow/sessions/{session_id}/message/:
+    post:
+      tags: [NL to Workflow]
+      summary: Send message to continue conversation
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - message
+              properties:
+                message:
+                  type: string
+      responses:
+        '200':
+          description: Response received
+
+  /nl-workflow/sessions/{session_id}/confirm/:
+    post:
+      tags: [NL to Workflow]
+      summary: Confirm and save generated workflow
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Workflow saved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  workflow_id:
+                    type: integer
+                  workflow:
+                    $ref: '#/components/schemas/WorkflowDetail'
+
+  /nl-workflow/preview/:
+    post:
+      tags: [NL to Workflow]
+      summary: Preview generated workflow without saving
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - description
+              properties:
+                description:
+                  type: string
+      responses:
+        '200':
+          description: Preview generated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  preview:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                      description:
+                        type: string
+                      nodes:
+                        type: array
+                      edges:
+                        type: array
+                      node_count:
+                        type: integer
+                      edge_count:
+                        type: integer
+
+# =============================================================================
+# MONITORING - /monitoring
+# =============================================================================
+
+  /monitoring/alerts/:
+    get:
+      tags: [Monitoring]
+      summary: List alerts
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, acknowledged, resolved, muted]
+      responses:
+        '200':
+          description: List of alerts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedResponse'
+
+  /monitoring/alerts/{id}/acknowledge/:
+    post:
+      tags: [Monitoring]
+      summary: Acknowledge alert
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Alert acknowledged
+
+  /monitoring/alerts/{id}/resolve/:
+    post:
+      tags: [Monitoring]
+      summary: Resolve alert
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                note:
+                  type: string
+      responses:
+        '200':
+          description: Alert resolved
+
+  /monitoring/alerts/{id}/mute/:
+    post:
+      tags: [Monitoring]
+      summary: Mute alert
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Alert muted
+
+  /monitoring/rules/:
+    get:
+      tags: [Monitoring]
+      summary: List alert rules
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: List of rules
+    post:
+      tags: [Monitoring]
+      summary: Create alert rule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AlertRuleCreate'
+      responses:
+        '201':
+          description: Rule created
+
+  /monitoring/rules/{id}/:
+    patch:
+      tags: [Monitoring]
+      summary: Update alert rule
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AlertRuleCreate'
+      responses:
+        '200':
+          description: Rule updated
+    delete:
+      tags: [Monitoring]
+      summary: Delete alert rule
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: Rule deleted
+
+  /monitoring/metrics/:
+    get:
+      tags: [Monitoring]
+      summary: List metrics
+      parameters:
+        - name: type
+          in: query
+          schema:
+            type: string
+        - name: hours
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: List of metrics
+
+  /monitoring/metrics/dashboard/:
+    get:
+      tags: [Monitoring]
+      summary: Get dashboard metrics
+      responses:
+        '200':
+          description: Dashboard metrics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total_executions:
+                    type: integer
+                  executions_this_month:
+                    type: integer
+                  successful_executions:
+                    type: integer
+                  success_rate:
+                    type: number
+                  active_alerts:
+                    type: integer
+                  workflow_count:
+                    type: integer
+
+  /monitoring/metrics/aggregate/:
+    get:
+      tags: [Monitoring]
+      summary: Get aggregated metrics
+      parameters:
+        - name: type
+          in: query
+          schema:
+            type: string
+        - name: period
+          in: query
+          schema:
+            type: string
+            enum: [hour, day]
+        - name: hours
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Aggregated metrics
+
+  /monitoring/metrics/export/:
+    get:
+      tags: [Monitoring]
+      summary: Export metrics as CSV
+      parameters:
+        - name: type
+          in: query
+          schema:
+            type: string
+        - name: hours
+          in: query
+          schema:
+            type: integer
+            default: 168
+      responses:
+        '200':
+          description: CSV file download
+          content:
+            text/csv:
+              schema:
+                type: string
+
+  /monitoring/channels/:
+    get:
+      tags: [Monitoring]
+      summary: List notification channels
+      responses:
+        '200':
+          description: List of channels
+    post:
+      tags: [Monitoring]
+      summary: Create notification channel
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+                - channel_type
+              properties:
+                name:
+                  type: string
+                channel_type:
+                  type: string
+                  enum: [email, webhook, slack]
+                config:
+                  type: object
+                is_active:
+                  type: boolean
+      responses:
+        '201':
+          description: Channel created
+
+  /monitoring/channels/{id}/test/:
+    post:
+      tags: [Monitoring]
+      summary: Test notification channel
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Test sent
+
+# =============================================================================
+# RAG - /rag
+# =============================================================================
+
+  /rag/collections/:
+    get:
+      tags: [RAG]
+      summary: List document collections
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: List of collections
+    post:
+      tags: [RAG]
+      summary: Create document collection
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+                vector_store:
+                  type: integer
+                embedding_model:
+                  type: string
+                chunk_size:
+                  type: integer
+                  default: 500
+                chunk_overlap:
+                  type: integer
+                  default: 50
+      responses:
+        '201':
+          description: Collection created
+
+  /rag/collections/{id}/:
+    get:
+      tags: [RAG]
+      summary: Get collection detail
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Collection detail
+    delete:
+      tags: [RAG]
+      summary: Delete collection
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: Collection deleted
+
+  /rag/collections/{id}/documents/:
+    get:
+      tags: [RAG]
+      summary: List documents in collection
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: List of documents
+
+  /rag/collections/{id}/query/:
+    post:
+      tags: [RAG]
+      summary: Query collection
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - query
+              properties:
+                query:
+                  type: string
+                top_k:
+                  type: integer
+                  default: 5
+                min_similarity:
+                  type: number
+                  default: 0.5
+      responses:
+        '200':
+          description: Query results
+
+  /rag/documents/:
+    post:
+      tags: [RAG]
+      summary: Upload document
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - collection_id
+                - title
+                - content
+              properties:
+                collection_id:
+                  type: integer
+                title:
+                  type: string
+                content:
+                  type: string
+                metadata:
+                  type: object
+      responses:
+        '201':
+          description: Document uploaded
+
+  /rag/vector-stores/:
+    get:
+      tags: [RAG]
+      summary: List vector stores
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: List of vector stores
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedResponse'
+                  - type: object
+                    properties:
+                      results:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/VectorStore'
+    post:
+      tags: [RAG]
+      summary: Create vector store
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VectorStoreCreate'
+      responses:
+        '201':
+          description: Vector store created
+
+  /rag/vector-stores/{id}/:
+    get:
+      tags: [RAG]
+      summary: Get vector store details
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Vector store details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VectorStore'
+    patch:
+      tags: [RAG]
+      summary: Update vector store
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VectorStoreCreate'
+      responses:
+        '200':
+          description: Vector store updated
+    delete:
+      tags: [RAG]
+      summary: Delete vector store
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: Vector store deleted
+
+  /rag/vector-stores/{id}/test_connection/:
+    post:
+      tags: [RAG]
+      summary: Test vector store connection
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Connection test result
+
+  /rag/pipelines/:
+    get:
+      tags: [RAG]
+      summary: List RAG pipelines
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: List of RAG pipelines
+    post:
+      tags: [RAG]
+      summary: Create RAG pipeline
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RAGPipelineCreate'
+      responses:
+        '201':
+          description: Pipeline created
+
+  /rag/pipelines/{id}/:
+    get:
+      tags: [RAG]
+      summary: Get RAG pipeline details
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Pipeline details
+    patch:
+      tags: [RAG]
+      summary: Update RAG pipeline
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RAGPipelineCreate'
+      responses:
+        '200':
+          description: Pipeline updated
+    delete:
+      tags: [RAG]
+      summary: Delete RAG pipeline
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: Pipeline deleted
+
+  /rag/pipelines/{id}/query/:
+    post:
+      tags: [RAG]
+      summary: Query using RAG pipeline
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - query
+              properties:
+                query:
+                  type: string
+                top_k:
+                  type: integer
+                  default: 5
+      responses:
+        '200':
+          description: Query results
+
+# =============================================================================
+# BILLING - /billing
+# =============================================================================
+
+  /billing/subscription/:
+    get:
+      tags: [Billing]
+      summary: Get current subscription
+      responses:
+        '200':
+          description: Subscription info
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Subscription'
+    post:
+      tags: [Billing]
+      summary: Subscribe to plan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - plan_type
+              properties:
+                plan_type:
+                  type: string
+                  enum: [free, starter, professional, enterprise]
+                billing_cycle:
+                  type: string
+                  enum: [monthly, yearly]
+      responses:
+        '201':
+          description: Subscription created
+
+  /billing/plans/:
+    get:
+      tags: [Billing]
+      summary: List available plans
+      responses:
+        '200':
+          description: List of plans
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PricePlan'
+
+  /billing/usage/:
+    get:
+      tags: [Billing]
+      summary: Get current usage
+      responses:
+        '200':
+          description: Usage info
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  current_usage:
+                    $ref: '#/components/schemas/UsageRecord'
+                  limits:
+                    type: object
+                  usage_percentages:
+                    type: object
+                  remaining:
+                    type: object
+
+  /billing/invoices/:
+    get:
+      tags: [Billing]
+      summary: List invoices
+      responses:
+        '200':
+          description: List of invoices
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedResponse'
+
+  /billing/subscription/cancel/:
+    post:
+      tags: [Billing]
+      summary: Cancel subscription
+      responses:
+        '200':
+          description: Subscription cancelled
+
+  /billing/subscription/reactivate/:
+    post:
+      tags: [Billing]
+      summary: Reactivate subscription
+      responses:
+        '200':
+          description: Subscription reactivated
+
+  /billing/validate-coupon/:
+    post:
+      tags: [Billing]
+      summary: Validate coupon code
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - code
+              properties:
+                code:
+                  type: string
+      responses:
+        '200':
+          description: Coupon valid
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  valid:
+                    type: boolean
+                  discount:
+                    type: object
+
+# =============================================================================
+# INTEGRATIONS - /integrations
+# =============================================================================
+
+  /integrations/webhooks/:
+    get:
+      tags: [Integrations]
+      summary: List webhooks
+      responses:
+        '200':
+          description: List of webhooks
+    post:
+      tags: [Integrations]
+      summary: Create webhook
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+                - url
+                - events
+              properties:
+                name:
+                  type: string
+                url:
+                  type: string
+                  format: uri
+                events:
+                  type: array
+                  items:
+                    type: string
+                secret:
+                  type: string
+                headers:
+                  type: object
+                retry_count:
+                  type: integer
+                  default: 3
+      responses:
+        '201':
+          description: Webhook created
+
+  /integrations/webhooks/{id}/:
+    get:
+      tags: [Integrations]
+      summary: Get webhook detail
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Webhook detail
+    patch:
+      tags: [Integrations]
+      summary: Update webhook
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Webhook updated
+    delete:
+      tags: [Integrations]
+      summary: Delete webhook
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: Webhook deleted
+
+  /integrations/webhooks/{id}/test/:
+    post:
+      tags: [Integrations]
+      summary: Test webhook
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Test result
+
+  /integrations/webhooks/{id}/deliveries/:
+    get:
+      tags: [Integrations]
+      summary: List webhook deliveries
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: List of deliveries
+
+  /integrations/webhooks/{id}/stats/:
+    get:
+      tags: [Integrations]
+      summary: Get webhook statistics
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Webhook statistics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total_deliveries:
+                    type: integer
+                  successful_deliveries:
+                    type: integer
+                  failed_deliveries:
+                    type: integer
+                  success_rate:
+                    type: number
+
+  /integrations/available/:
+    get:
+      tags: [Integrations]
+      summary: List available integrations
+      responses:
+        '200':
+          description: Available integrations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: integer
+                    name:
+                      type: string
+                    integration_type:
+                      type: string
+                    category:
+                      type: string
+                    description:
+                      type: string
+                    icon:
+                      type: string
+                    color:
+                      type: string
+                    usage_count:
+                      type: integer
+                    is_featured:
+                      type: boolean
+
+  /integrations/{id}/connect/:
+    post:
+      tags: [Integrations]
+      summary: Connect integration
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Connected
+
+  /integrations/{id}/disconnect/:
+    post:
+      tags: [Integrations]
+      summary: Disconnect integration
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Disconnected
+
+# =============================================================================
+# MARKETPLACE - /marketplace
+# =============================================================================
+
+  /marketplace/templates/:
+    get:
+      tags: [Marketplace]
+      summary: List marketplace templates
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: category
+          in: query
+          schema:
+            type: string
+        - name: search
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of templates
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedResponse'
+
+  /marketplace/templates/{id}/:
+    get:
+      tags: [Marketplace]
+      summary: Get template detail
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Template detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateDetail'
+
+  /marketplace/templates/{id}/install/:
+    post:
+      tags: [Marketplace]
+      summary: Install template
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  description: Custom name for installed workflow
+      responses:
+        '201':
+          description: Template installed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  workflow_id:
+                    type: integer
+                  workflow:
+                    $ref: '#/components/schemas/WorkflowDetail'
+
+  /marketplace/templates/{id}/rate/:
+    post:
+      tags: [Marketplace]
+      summary: Rate template
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - rating
+              properties:
+                rating:
+                  type: integer
+                  minimum: 1
+                  maximum: 5
+                title:
+                  type: string
+                content:
+                  type: string
+      responses:
+        '200':
+          description: Rating submitted
+
+  /marketplace/templates/{id}/favorite/:
+    post:
+      tags: [Marketplace]
+      summary: Toggle favorite
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Favorite toggled
+
+  /marketplace/templates/{id}/reviews/:
+    get:
+      tags: [Marketplace]
+      summary: Get template reviews
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Reviews list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedResponse'
+
+  /marketplace/categories/:
+    get:
+      tags: [Marketplace]
+      summary: List template categories
+      responses:
+        '200':
+          description: Categories list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: integer
+                    name:
+                      type: string
+                    slug:
+                      type: string
+                    description:
+                      type: string
+                    icon:
+                      type: string
+                    template_count:
+                      type: integer
+
+# =============================================================================
+# TENANTS - /tenants
+# =============================================================================
+
+  /tenants/:
+    get:
+      tags: [Tenants]
+      summary: List user's tenants
+      responses:
+        '200':
+          description: List of tenants
+    post:
+      tags: [Tenants]
+      summary: Create tenant
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+                - slug
+              properties:
+                name:
+                  type: string
+                slug:
+                  type: string
+                description:
+                  type: string
+                billing_email:
+                  type: string
+                  format: email
+      responses:
+        '201':
+          description: Tenant created
+
+  /tenants/{id}/:
+    get:
+      tags: [Tenants]
+      summary: Get tenant detail
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Tenant detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantDetail'
+    patch:
+      tags: [Tenants]
+      summary: Update tenant
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Tenant updated
+
+  /tenants/{id}/members/:
+    get:
+      tags: [Tenants]
+      summary: List tenant members
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Members list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TenantMembership'
+
+  /tenants/{id}/invitations/:
+    post:
+      tags: [Tenants]
+      summary: Invite member
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - role
+              properties:
+                email:
+                  type: string
+                  format: email
+                role:
+                  type: string
+                  enum: [admin, member, viewer]
+      responses:
+        '201':
+          description: Invitation sent
+
+  /tenants/{id}/usage/:
+    get:
+      tags: [Tenants]
+      summary: Get tenant usage
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Usage info
+
+  /tenants/invitations/{invitation_id}/accept/:
+    post:
+      tags: [Tenants]
+      summary: Accept invitation
+      parameters:
+        - name: invitation_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Invitation accepted
+
+# =============================================================================
+# TEMPLATES - /templates
+# =============================================================================
+
+  /templates/:
+    get:
+      tags: [Templates]
+      summary: List workflow templates
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: category
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: List of templates
+    post:
+      tags: [Templates]
+      summary: Create template from workflow
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - workflow_id
+              properties:
+                workflow_id:
+                  type: integer
+                name:
+                  type: string
+                description:
+                  type: string
+                category_id:
+                  type: integer
+                tags:
+                  type: array
+                  items:
+                    type: string
+                is_public:
+                  type: boolean
+                  default: false
+      responses:
+        '201':
+          description: Template created
+
+  /templates/{id}/:
+    get:
+      tags: [Templates]
+      summary: Get template detail
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Template detail
+    delete:
+      tags: [Templates]
+      summary: Delete template
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: Template deleted
+
+  /templates/{id}/install/:
+    post:
+      tags: [Templates]
+      summary: Install template
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '201':
+          description: Template installed
+
+  /templates/{id}/favorite/:
+    post:
+      tags: [Templates]
+      summary: Toggle favorite
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Favorite toggled
+
+  /templates/{id}/reviews/:
+    get:
+      tags: [Templates]
+      summary: Get template reviews
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Reviews
+
+  /templates/categories/:
+    get:
+      tags: [Templates]
+      summary: List template categories
+      responses:
+        '200':
+          description: Categories
+
+# =============================================================================
+# SHARED DATA SCHEMAS
+# =============================================================================
+
+schemas:
+  # ----- User -----
+  UserSimple:
+    type: object
+    properties:
+      id:
+        type: integer
+        example: 1
+      username:
+        type: string
+        example: john_doe
+      email:
+        type: string
+        format: email
+        example: john@example.com
+      avatar:
+        type: string
+        format: uri
+        nullable: true
+        example: https://example.com/avatar.jpg
+
+  # ----- Workflow -----
+  WorkflowList:
+    type: object
+    properties:
+      id:
+        type: integer
+      name:
+        type: string
+      description:
+        type: string
+      owner:
+        $ref: '#/components/schemas/UserSimple'
+      status:
+        type: string
+        enum: [draft, active, paused, archived]
+      status_display:
+        type: string
+      is_published:
+        type: boolean
+      is_public:
+        type: boolean
+      version:
+        type: integer
+      tags:
+        type: array
+        items:
+          type: string
+      node_count:
+        type: integer
+      execution_count:
+        type: integer
+      created_at:
+        type: string
+        format: date-time
+      updated_at:
+        type: string
+        format: date-time
+
+  WorkflowDetail:
+    allOf:
+      - $ref: '#/components/schemas/WorkflowList'
+      - type: object
+        properties:
+          settings:
+            type: object
+          parent:
+            type: integer
+            nullable: true
+          nodes:
+            type: array
+            items:
+              $ref: '#/components/schemas/Node'
+          edges:
+            type: array
+            items:
+              $ref: '#/components/schemas/Edge'
+
+  WorkflowCreate:
+    type: object
+    properties:
+      name:
+        type: string
+        minLength: 1
+        maxLength: 200
+        example: My Workflow
+      description:
+        type: string
+        example: A workflow for processing data
+      status:
+        type: string
+        enum: [draft, active, paused]
+        default: draft
+      is_published:
+        type: boolean
+        default: false
+      is_public:
+        type: boolean
+        default: false
+      tags:
+        type: array
+        items:
+          type: string
+        example: ["ai", "automation"]
+      settings:
+        type: object
+      nodes:
+        type: array
+        items:
+          $ref: '#/components/schemas/NodeCreate'
+      edges:
+        type: array
+        items:
+          $ref: '#/components/schemas/EdgeCreate'
+
+  WorkflowUpdate:
+    type: object
+    properties:
+      name:
+        type: string
+      description:
+        type: string
+      status:
+        type: string
+        enum: [draft, active, paused, archived]
+      is_published:
+        type: boolean
+      is_public:
+        type: boolean
+      tags:
+        type: array
+        items:
+          type: string
+      settings:
+        type: object
+
+  # ----- Node -----
+  Node:
+    type: object
+    properties:
+      id:
+        type: integer
+      workflow:
+        type: integer
+      node_type:
+        type: string
+        example: llm
+      node_type_display:
+        type: string
+        example: LLM
+      name:
+        type: string
+      description:
+        type: string
+      position_x:
+        type: integer
+      position_y:
+        type: integer
+      config:
+        type: object
+        description: Node-specific configuration
+      style:
+        type: object
+      created_at:
+        type: string
+        format: date-time
+      updated_at:
+        type: string
+        format: date-time
+
+  NodeCreate:
+    type: object
+    properties:
+      node_type:
+        type: string
+        example: llm
+      name:
+        type: string
+        example: LLM Node
+      description:
+        type: string
+      position_x:
+        type: integer
+        example: 100
+      position_y:
+        type: integer
+        example: 200
+      config:
+        type: object
+        example:
+          model: gpt-4
+          temperature: 0.7
+          system_prompt: You are a helpful assistant.
+      style:
+        type: object
+
+  # ----- Edge -----
+  Edge:
+    type: object
+    properties:
+      id:
+        type: integer
+      workflow:
+        type: integer
+      source_node:
+        type: integer
+      source_node_name:
+        type: string
+      target_node:
+        type: integer
+      target_node_name:
+        type: string
+      label:
+        type: string
+      type:
+        type: string
+        default: default
+      animated:
+        type: boolean
+        default: false
+      condition:
+        type: object
+
+  EdgeCreate:
+    type: object
+    properties:
+      source_node:
+        type: integer
+        description: Source node ID
+        example: 1
+      target_node:
+        type: integer
+        description: Target node ID
+        example: 2
+      label:
+        type: string
+      type:
+        type: string
+      animated:
+        type: boolean
+      condition:
+        type: object
+
+  # ----- Execution -----
+  Execution:
+    type: object
+    properties:
+      id:
+        type: integer
+      workflow:
+        type: integer
+      workflow_name:
+        type: string
+      status:
+        type: string
+        enum: [pending, running, completed, failed, cancelled]
+      status_display:
+        type: string
+      trigger_type:
+        type: string
+      started_at:
+        type: string
+        format: date-time
+      completed_at:
+        type: string
+        format: date-time
+        nullable: true
+      duration:
+        type: number
+        nullable: true
+
+  ExecutionDetail:
+    allOf:
+      - $ref: '#/components/schemas/Execution'
+      - type: object
+        properties:
+          input_data:
+            type: object
+          output_data:
+            type: object
+          error_message:
+            type: string
+            nullable: true
+          node_status:
+            type: object
+
+  # ----- Agent -----
+  AgentList:
+    type: object
+    properties:
+      id:
+        type: integer
+      name:
+        type: string
+      description:
+        type: string
+      agent_type:
+        type: string
+        enum: [conversational, task, research, coding]
+      model:
+        type: string
+        example: gpt-4
+      is_active:
+        type: boolean
+      created_at:
+        type: string
+        format: date-time
+      updated_at:
+        type: string
+        format: date-time
+
+  AgentDetail:
+    allOf:
+      - $ref: '#/components/schemas/AgentList'
+      - type: object
+        properties:
+          system_prompt:
+            type: string
+          temperature:
+            type: number
+          max_tokens:
+            type: integer
+          tools:
+            type: array
+            items:
+              type: string
+          skills:
+            type: array
+            items:
+              type: string
+          memory_enabled:
+            type: boolean
+          context_window:
+            type: integer
+          settings:
+            type: object
+          tools_detail:
+            type: array
+            items:
+              $ref: '#/components/schemas/AgentTool'
+
+  AgentCreate:
+    type: object
+    required:
+      - name
+    properties:
+      name:
+        type: string
+        minLength: 1
+        maxLength: 200
+      description:
+        type: string
+      agent_type:
+        type: string
+        enum: [conversational, task, research, coding]
+        default: conversational
+      system_prompt:
+        type: string
+      model:
+        type: string
+        default: gpt-4
+      temperature:
+        type: number
+        minimum: 0
+        maximum: 2
+        default: 0.7
+      max_tokens:
+        type: integer
+        default: 2000
+      tools:
+        type: array
+        items:
+          type: string
+        example: ["search", "calculator"]
+      skills:
+        type: array
+        items:
+          type: string
+      memory_enabled:
+        type: boolean
+        default: true
+      context_window:
+        type: integer
+        default: 10
+      is_active:
+        type: boolean
+        default: true
+
+  AgentUpdate:
+    type: object
+    properties:
+      name:
+        type: string
+      description:
+        type: string
+      system_prompt:
+        type: string
+      model:
+        type: string
+      temperature:
+        type: number
+      max_tokens:
+        type: integer
+      tools:
+        type: array
+        items:
+          type: string
+      skills:
+        type: array
+        items:
+          type: string
+      memory_enabled:
+        type: boolean
+      context_window:
+        type: integer
+      is_active:
+        type: boolean
+
+  AgentTool:
+    type: object
+    properties:
+      id:
+        type: integer
+      name:
+        type: string
+      tool_type:
+        type: string
+      config:
+        type: object
+      is_enabled:
+        type: boolean
+
+  AgentConversation:
+    type: object
+    properties:
+      id:
+        type: integer
+      agent:
+        type: integer
+      messages:
+        type: array
+        items:
+          type: object
+          properties:
+            role:
+              type: string
+              enum: [user, assistant, system]
+            content:
+              type: string
+      summary:
+        type: string
+      message_count:
+        type: integer
+      token_count:
+        type: integer
+      created_at:
+        type: string
+        format: date-time
+      updated_at:
+        type: string
+        format: date-time
+
+  AgentExecution:
+    type: object
+    properties:
+      id:
+        type: integer
+      agent:
+        type: integer
+      agent_name:
+        type: string
+      conversation:
+        type: integer
+        nullable: true
+      status:
+        type: string
+        enum: [pending, running, completed, failed]
+      input_data:
+        type: object
+      output_data:
+        type: object
+      error_message:
+        type: string
+        nullable: true
+      started_at:
+        type: string
+        format: date-time
+      completed_at:
+        type: string
+        format: date-time
+        nullable: true
+
+  # ----- Prompt -----
+  PromptCategory:
+    type: object
+    properties:
+      id:
+        type: integer
+      name:
+        type: string
+      slug:
+        type: string
+      description:
+        type: string
+      icon:
+        type: string
+      color:
+        type: string
+      prompt_count:
+        type: integer
+
+  PromptDetail:
+    type: object
+    properties:
+      id:
+        type: integer
+      name:
+        type: string
+      description:
+        type: string
+      prompt_type:
+        type: string
+        enum: [system, user, assistant, task]
+      template:
+        type: string
+      variables:
+        type: array
+        items:
+          type: object
+          properties:
+            name:
+              type: string
+            description:
+              type: string
+            required:
+              type: boolean
+      category:
+        $ref: '#/components/schemas/PromptCategory'
+      tags:
+        type: array
+        items:
+          type: string
+      use_count:
+        type: integer
+      avg_rating:
+        type: number
+      rating_count:
+        type: integer
+      is_featured:
+        type: boolean
+      creator_name:
+        type: string
+      created_at:
+        type: string
+        format: date-time
+
+  PromptCreate:
+    type: object
+    required:
+      - name
+      - template
+    properties:
+      name:
+        type: string
+      description:
+        type: string
+      prompt_type:
+        type: string
+        enum: [system, user, assistant, task]
+        default: task
+      template:
+        type: string
+      variables:
+        type: array
+        items:
+          type: object
+      category_id:
+        type: integer
+      tags:
+        type: array
+        items:
+          type: string
+      temperature:
+        type: number
+      max_tokens:
+        type: integer
+
+  # ----- Alert -----
+  AlertRuleCreate:
+    type: object
+    required:
+      - name
+      - condition
+      - severity
+      - threshold
+    properties:
+      name:
+        type: string
+      description:
+        type: string
+      condition:
+        type: string
+        description: "e.g., execution_count > 100"
+      severity:
+        type: string
+        enum: [low, medium, high, critical]
+      threshold:
+        type: number
+      time_window_minutes:
+        type: integer
+        default: 60
+      notify_email:
+        type: boolean
+        default: true
+      notify_webhook:
+        type: boolean
+        default: false
+      webhook_url:
+        type: string
+        format: uri
+      is_active:
+        type: boolean
+        default: true
+
+  # ----- Billing -----
+  PricePlan:
+    type: object
+    properties:
+      id:
+        type: integer
+      plan_type:
+        type: string
+        enum: [free, starter, professional, enterprise]
+      plan_type_display:
+        type: string
+      billing_cycle:
+        type: string
+        enum: [monthly, yearly]
+      price:
+        type: number
+      currency:
+        type: string
+        default: CNY
+      max_workflows:
+        type: integer
+      max_executions_per_month:
+        type: integer
+      max_team_members:
+        type: integer
+      max_storage_gb:
+        type: integer
+      max_api_calls_per_month:
+        type: integer
+      enable_advanced_nodes:
+        type: boolean
+      enable_version_history:
+        type: boolean
+      enable_custom_domain:
+        type: boolean
+
+  Subscription:
+    type: object
+    properties:
+      id:
+        type: integer
+      plan_type:
+        type: string
+      plan_type_display:
+        type: string
+      billing_cycle:
+        type: string
+      status:
+        type: string
+      status_display:
+        type: string
+      is_trial:
+        type: boolean
+      trial_ends_at:
+        type: string
+        format: date-time
+        nullable: true
+      current_period_start:
+        type: string
+        format: date-time
+      current_period_end:
+        type: string
+        format: date-time
+
+  UsageRecord:
+    type: object
+    properties:
+      period_start:
+        type: string
+        format: date-time
+      period_end:
+        type: string
+        format: date-time
+      workflow_count:
+        type: integer
+      execution_count:
+        type: integer
+      api_call_count:
+        type: integer
+      storage_used_mb:
+        type: number
+      input_tokens:
+        type: integer
+      output_tokens:
+        type: integer
+      total_cost:
+        type: number
+
+  # ----- Tenant -----
+  TenantDetail:
+    type: object
+    properties:
+      id:
+        type: integer
+      name:
+        type: string
+      slug:
+        type: string
+      description:
+        type: string
+      status:
+        type: string
+      plan:
+        type: string
+      owner:
+        $ref: '#/components/schemas/UserSimple'
+      settings:
+        type: object
+      custom_domain:
+        type: string
+      max_users:
+        type: integer
+      max_workflows:
+        type: integer
+      max_executions_per_month:
+        type: integer
+      billing_email:
+        type: string
+        format: email
+      subscription_id:
+        type: string
+      subscription_end:
+        type: string
+        format: date-time
+        nullable: true
+      created_at:
+        type: string
+        format: date-time
+      updated_at:
+        type: string
+        format: date-time
+
+  TenantMembership:
+    type: object
+    properties:
+      id:
+        type: integer
+      user:
+        $ref: '#/components/schemas/UserSimple'
+      role:
+        type: string
+        enum: [owner, admin, member, viewer]
+      permissions:
+        type: array
+        items:
+          type: string
+      is_active:
+        type: boolean
+      joined_at:
+        type: string
+        format: date-time
+
+  # ----- Template -----
+  TemplateDetail:
+    type: object
+    properties:
+      id:
+        type: integer
+      name:
+        type: string
+      slug:
+        type: string
+      description:
+        type: string
+      category:
+        type: object
+        properties:
+          id:
+            type: integer
+          name:
+            type: string
+          slug:
+            type: string
+      tags:
+        type: array
+        items:
+          type: string
+      nodes:
+        type: array
+        description: Workflow nodes configuration
+      edges:
+        type: array
+        description: Workflow edges configuration
+      install_count:
+        type: integer
+      view_count:
+        type: integer
+      avg_rating:
+        type: number
+      rating_count:
+        type: integer
+      is_verified:
+        type: boolean
+      is_featured:
+        type: boolean
+      author_name:
+        type: string
+      author_avatar:
+        type: string
+        format: uri
+      is_installed:
+        type: boolean
+      created_at:
+        type: string
+        format: date-time
+
+  # ----- RAG -----
+  VectorStore:
+    type: object
+    properties:
+      id:
+        type: integer
+      name:
+        type: string
+      store_type:
+        type: string
+        enum: [qdrant, milvus, chroma, pinecone, weaviate]
+      host:
+        type: string
+      port:
+        type: integer
+      collection_name:
+        type: string
+      is_connected:
+        type: boolean
+      collection_count:
+        type: integer
+      total_vectors:
+        type: integer
+      created_at:
+        type: string
+        format: date-time
+
+  VectorStoreCreate:
+    type: object
+    required:
+      - name
+      - store_type
+      - host
+    properties:
+      name:
+        type: string
+      store_type:
+        type: string
+        enum: [qdrant, milvus, chroma, pinecone, weaviate]
+      host:
+        type: string
+      port:
+        type: integer
+      collection_name:
+        type: string
+      api_key:
+        type: string
+
+  RAGPipelineCreate:
+    type: object
+    required:
+      - name
+      - collection
+    properties:
+      name:
+        type: string
+      description:
+        type: string
+      collection:
+        type: integer
+      retriever_config:
+        type: object
+      generator_config:
+        type: object
+
+  # ----- Marketplace -----
+  TemplateCategory:
+    type: object
+    properties:
+      id:
+        type: integer
+      name:
+        type: string
+      slug:
+        type: string
+      description:
+        type: string
+      icon:
+        type: string
+      color:
+        type: string
+      template_count:
+        type: integer
+      is_active:
+        type: boolean
+
+  TemplateInstall:
+    type: object
+    properties:
+      id:
+        type: integer
+      template:
+        type: integer
+      template_name:
+        type: string
+      installed_by:
+        type: integer
+      installed_by_name:
+        type: string
+      installed_at:
+        type: string
+        format: date-time
+      workflow_id:
+        type: integer
+
+  TemplateRating:
+    type: object
+    properties:
+      id:
+        type: integer
+      template:
+        type: integer
+      rating:
+        type: integer
+        minimum: 1
+        maximum: 5
+      title:
+        type: string
+      content:
+        type: string
+      user:
+        type: integer
+      user_name:
+        type: string
+      created_at:
+        type: string
+        format: date-time
+
+  # ----- Gateway -----
+  ModelProvider:
+    type: object
+    properties:
+      id:
+        type: integer
+      name:
+        type: string
+      provider_type:
+        type: string
+      is_active:
+        type: boolean
+      is_default:
+        type: boolean
+      config:
+        type: object
+      models_count:
+        type: integer
+      created_at:
+        type: string
+        format: date-time
+
+  AIModel:
+    type: object
+    properties:
+      id:
+        type: integer
+      provider:
+        type: integer
+      provider_name:
+        type: string
+      name:
+        type: string
+      model_id:
+        type: string
+      display_name:
+        type: string
+      description:
+        type: string
+      is_active:
+        type: boolean
+      is_default:
+        type: boolean
+      config:
+        type: object
+      max_tokens:
+        type: integer
+      supports_streaming:
+        type: boolean
+      total_calls:
+        type: integer
+      total_tokens:
+        type: integer
+      created_at:
+        type: string
+        format: date-time
+
+  AIModelCreate:
+    type: object
+    required:
+      - provider
+      - name
+      - model_id
+    properties:
+      provider:
+        type: integer
+      name:
+        type: string
+      model_id:
+        type: string
+      display_name:
+        type: string
+      description:
+        type: string
+      is_active:
+        type: boolean
+      is_default:
+        type: boolean
+      config:
+        type: object
+
+  UserAPIKey:
+    type: object
+    properties:
+      id:
+        type: integer
+      name:
+        type: string
+      provider:
+        type: string
+      endpoint:
+        type: string
+      is_verified:
+        type: boolean
+      last_used_at:
+        type: string
+        format: date-time
+      created_at:
+        type: string
+        format: date-time
+
+  UserAPIKeyCreate:
+    type: object
+    required:
+      - name
+      - provider
+      - api_key
+    properties:
+      name:
+        type: string
+      provider:
+        type: string
+      endpoint:
+        type: string
+      api_key:
+        type: string
+
+  APICallLog:
+    type: object
+    properties:
+      id:
+        type: integer
+      endpoint:
+        type: string
+      method:
+        type: string
+      provider:
+        type: string
+      model:
+        type: string
+      tokens_used:
+        type: integer
+      cost:
+        type: number
+      latency_ms:
+        type: integer
+      status_code:
+        type: integer
+      created_at:
+        type: string
+        format: date-time
+
+  # ----- Integration -----
+  IntegrationTemplate:
+    type: object
+    properties:
+      id:
+        type: integer
+      name:
+        type: string
+      description:
+        type: string
+      integration_type:
+        type: string
+      category:
+        type: string
+      config_schema:
+        type: object
+      is_featured:
+        type: boolean
+      usage_count:
+        type: integer
+      created_at:
+        type: string
+        format: date-time
+
+  WebhookDelivery:
+    type: object
+    properties:
+      id:
+        type: integer
+      webhook:
+        type: integer
+      webhook_name:
+        type: string
+      event:
+        type: string
+      payload:
+        type: string
+      status:
+        type: string
+        enum: [pending, success, failed, retrying]
+      status_code:
+        type: integer
+      attempts:
+        type: integer
+      response_body:
+        type: string
+      error_message:
+        type: string
+      created_at:
+        type: string
+        format: date-time
+      completed_at:
+        type: string
+        format: date-time

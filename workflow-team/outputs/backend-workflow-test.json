@@ -1,0 +1,23 @@
+{
+  "task_id": "backend-workflow-test",
+  "status": "done",
+  "result": "后端API测试完成，61个测试全部通过",
+  "test_results": {
+    "total": 61,
+    "passed": 61,
+    "failed": 0,
+    "skipped": 0
+  },
+  "endpoints_tested": {
+    "workflows": 20,
+    "agents": 12,
+    "nl_workflow": 10,
+    "gateway": 7,
+    "prompts": 3,
+    "monitoring": 7,
+    "utils": 2
+  },
+  "note": "初始17个失败是因为测试中使用了错误的类名（如WorkflowNodeViewSet应为NodeViewSet），修正后全部通过",
+  "files_added": ["workflow-team/tests/test_backend_api.py"],
+  "summary": "运行了61个API端点测试，全部通过。测试覆盖了Workflows（20个）、Agents（12个）、NL-to-Workflow（10个）、Gateway（7个）、Prompts（3个）、Monitoring（7个）和Utils（2个）所有核心ViewSet和端点。"
+}

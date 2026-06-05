@@ -1,0 +1,9 @@
+{
+  "task_id": "p1-websocket-realtime",
+  "status": "done",
+  "result": "Django Channels 配置 asgi.py/routing.py；WorkflowExecutionConsumer 支持 node_status 和 execution_complete 推送；execute_node 集成 Channel Layer 状态推送；前端 WebSocketService.ts + Editor.vue 实时更新节点状态。",
+  "files_changed": [],
+  "files_added": [],
+  "summary": "Django Channels 配置 asgi.py/routing.py；WorkflowExecutionConsumer 支持 node_status 和 execution_complete 推送；execute_node 集成 Channel Layer 状态推送；前端 WebSocketService.ts + Editor.vue 实时更新节点状态。",
+  "completed_at": "2026-05-17T17:21:01.166693+00:00"
+}

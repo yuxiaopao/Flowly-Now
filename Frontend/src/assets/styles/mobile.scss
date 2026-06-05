@@ -1,0 +1,297 @@
+/* Mobile Responsive Styles */
+
+/* 移动端基础样式 */
+@media (max-width: 768px) {
+  /* 隐藏滚动条但保持功能 */
+  ::-webkit-scrollbar {
+    display: none;
+  }
+
+  * {
+    -ms-overflow-style: none;
+  }
+
+  /* 通用响应式布局 */
+  .el-row {
+    flex-direction: column;
+  }
+
+  .el-col {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  /* 表格响应式 */
+  .el-table {
+    font-size: 12px;
+
+    .el-table__header th {
+      padding: 8px 4px;
+    }
+
+    .el-table__body td {
+      padding: 8px 4px;
+    }
+  }
+
+  /* 表单响应式 */
+  .el-form-item {
+    margin-bottom: 12px;
+  }
+
+  .el-form-item__label {
+    font-size: 13px;
+  }
+
+  /* 卡片响应式 */
+  .el-card {
+    border-radius: 8px;
+
+    .el-card__header {
+      padding: 12px 16px;
+    }
+
+    .el-card__body {
+      padding: 16px;
+    }
+  }
+
+  /* 按钮响应式 */
+  .el-button {
+    padding: 8px 12px;
+    font-size: 13px;
+  }
+
+  /* 对话框响应式 */
+  .el-dialog {
+    width: 95% !important;
+    margin: 10px auto !important;
+    max-height: 90vh;
+
+    .el-dialog__header {
+      padding: 12px 16px;
+    }
+
+    .el-dialog__body {
+      padding: 16px;
+      max-height: 60vh;
+      overflow-y: auto;
+    }
+  }
+
+  /* 抽屉响应式 */
+  .el-drawer {
+    width: 90% !important;
+
+    &.el-drawer--rtl {
+      width: 90% !important;
+    }
+  }
+
+  /* 分页响应式 */
+  .el-pagination {
+    font-size: 12px;
+
+    .el-pagination__total {
+      display: none;
+    }
+
+    .el-pagination__sizes {
+      display: none;
+    }
+  }
+
+  /* Tabs 响应式 */
+  .el-tabs {
+    .el-tabs__header {
+      overflow-x: auto;
+      overflow-y: hidden;
+
+      &::-webkit-scrollbar {
+        display: none;
+      }
+    }
+
+    .el-tabs__nav-wrap::after {
+      display: none;
+    }
+
+    .el-tabs__item {
+      padding: 0 12px;
+      font-size: 13px;
+    }
+  }
+
+  /* 页面响应式 */
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start !important;
+    gap: 12px;
+
+    .header-actions {
+      width: 100%;
+      flex-wrap: wrap;
+    }
+  }
+
+  /* 统计卡片响应式 */
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 12px !important;
+  }
+
+  /* 网格响应式 */
+  .grid-cols-4 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .grid-cols-3 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* 平板适配 */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .el-dialog {
+    width: 80% !important;
+  }
+
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* 移动端工作流画布 */
+@media (max-width: 768px) {
+  .workflow-canvas-wrapper {
+    .canvas-toolbar {
+      padding: 8px;
+
+      .toolbar-group {
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+    }
+  }
+
+  .property-panel {
+    width: 100% !important;
+    max-height: 50vh;
+
+    .el-collapse {
+      .el-collapse-item__header {
+        padding: 12px 16px;
+        font-size: 14px;
+      }
+
+      .el-collapse-item__content {
+        padding: 12px 16px;
+      }
+    }
+  }
+}
+
+/* 移动端导航菜单 */
+@media (max-width: 768px) {
+  .mobile-nav-menu {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: var(--el-bg-color);
+    border-top: 1px solid var(--el-border-color);
+    display: flex;
+    justify-content: space-around;
+    padding: 8px 0;
+    z-index: 100;
+    box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
+
+    .nav-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 12px;
+      color: var(--el-text-color-secondary);
+      text-decoration: none;
+      font-size: 11px;
+
+      &.active {
+        color: var(--el-color-primary);
+      }
+
+      .nav-icon {
+        width: 20px;
+        height: 20px;
+      }
+    }
+  }
+}
+
+/* 移动端输入增强 */
+@media (max-width: 768px) {
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  input[type="number"],
+  textarea,
+  .el-input__inner {
+    font-size: 16px !important; /* 防止 iOS 缩放 */
+  }
+
+  .el-select {
+    width: 100% !important;
+  }
+
+  .el-date-editor {
+    width: 100% !important;
+  }
+}
+
+/* 触摸友好的点击目标 */
+@media (max-width: 768px) {
+  .el-button,
+  .el-dropdown-item,
+  .el-menu-item,
+  .el-tabs__item,
+  .el-pagination button,
+  .el-pagination li {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* 手势操作 */
+  .swipe-to-delete {
+    touch-action: pan-y;
+  }
+}
+
+/* 性能优化 - 减少动画 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* 深色模式移动端优化 */
+@media (max-width: 768px) and (prefers-color-scheme: dark) {
+  .el-drawer,
+  .el-dialog {
+    background-color: var(--el-bg-color-overlay) !important;
+  }
+}
+
+/* 安全区域适配 - iPhone X 及以上 */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .mobile-nav-menu {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .app-layout {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}

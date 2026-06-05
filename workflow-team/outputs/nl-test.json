@@ -1,0 +1,32 @@
+{
+  "task_id": "nl-test",
+  "status": "done",
+  "result": "Created comprehensive test suite for NL-to-Workflow module covering backend pytest tests and frontend Vitest tests",
+  "files_created": [
+    "tests/nl_workflow/__init__.py",
+    "tests/nl_workflow/conftest.py",
+    "tests/nl_workflow/test_nl_api.py",
+    "tests/nl_workflow/test_nl_intent.py",
+    "tests/nl_workflow/test_nl_cycle.py",
+    "tests/nl_workflow/test_nl_cost.py",
+    "tests/nl_workflow/test_nl_validation.py",
+    "tests/nl_workflow/test_nl_rate_limit.py",
+    "tests/frontend/unit/nl-workflow.spec.js"
+  ],
+  "tests_written": [
+    "TestNLSessionAPI: test_create_session, test_list_sessions_returns_correct_format, test_list_sessions_empty, test_get_session_by_uuid, test_get_session_by_uuid_string, test_delete_session_by_uuid, test_delete_session_not_found, test_send_message, test_send_message_empty, test_send_message_session_not_found, test_confirm_workflow, test_confirm_workflow_no_workflow, test_patch_session_rename, test_user_isolation, test_intent_analysis_endpoint, test_suggest_endpoint",
+    "TestIntentDetection: test_create_intent_chinese, test_create_intent_english, test_modify_intent, test_delete_intent, test_chat_intent, test_subtype_qa_bot, test_subtype_data_processing, test_subtype_translation, test_subtype_moderation, test_subtype_article_generation, test_subtype_customer_service, test_subtype_generic, test_retry_detection, test_retry_detection_false, test_retry_combined_with_intent, test_detect_workflow_subtype_direct, test_is_retry_intent_direct, test_intent_order_delete_first, test_intent_order_modify_second",
+    "TestNLServiceIntent: test_service_analyze_intent, test_service_get_intent_details, test_intent_analysis_consistency",
+    "TestNLCycleDetection: test_no_cycle_simple_linear, test_no_cycle_with_branch, test_no_cycle_parallel_paths, test_has_cycle_self_loop, test_has_cycle_mutual_dependency, test_has_cycle_triangular, test_has_cycle_from_fixture, test_empty_workflow, test_workflow_with_single_node, test_workflow_disconnected_nodes, test_cycle_path_includes_all_cycle_nodes, test_validation_with_cycle_in_workflow",
+    "TestNLCostEstimation: test_estimate_empty_workflow, test_estimate_only_start_end_nodes, test_estimate_llm_nodes, test_estimate_multiple_llm_nodes, test_estimate_premium_model_gpt4, test_estimate_premium_model_claude, test_estimate_budget_model, test_estimate_tool_nodes, test_estimate_code_nodes, test_estimate_condition_nodes, test_estimate_complex_workflow, test_estimate_validation_includes_cost, test_cost_rounding, test_cost_with_http_parameters",
+    "TestNLValidation: test_validate_valid_workflow, test_validate_missing_start, test_validate_missing_end, test_validate_multiple_starts, test_validate_disconnected_nodes, test_validate_missing_nodes, test_validate_with_auto_layout, test_validate_partial_positions, test_validate_with_null_position",
+    "TestNLWorkflowNameGeneration: test_generate_name_from_description_qa_bot, test_generate_name_from_description_translation, test_generate_name_from_description_data_processing, test_generate_name_no_input, test_generate_name_existing_name_preserved, test_generate_workflow_name_direct",
+    "TestCalculateNodePositions: test_single_node, test_multiple_nodes, test_custom_start_position, test_custom_spacing, test_empty_nodes",
+    "TestValidationIncludesCost: test_validation_includes_cost, test_validation_cost_matches_estimate",
+    "TestNLRateLimiting: test_stream_endpoint_rate_limit_hit, test_preview_endpoint_rate_limit_hit, test_rate_limit_response_format, test_rate_limit_per_user, test_unauthenticated_request_not_rate_limited, test_rate_limit_headers",
+    "TestRateLimitEdgeCases: test_empty_description_still_counts, test_different_endpoints_independent_limits, test_rate_limit_resets_after_window",
+    "Frontend tests: NL Workflow API - Backend Compatibility, NL Intent Detection (Frontend), NL Workflow - Field Name Mapping, NL Workflow - Streaming, NL Workflow - Error Handling"
+  ],
+  "test_count": 80,
+  "summary": "Created comprehensive test suite for NL-to-Workflow module with 80+ tests across 8 backend test files and 1 frontend test file. Backend tests cover: UUID routing for sessions, API response format {code, message, data, count}, intent detection with subtypes (qa_bot, data_processing, translation, moderation, article_generation, customer_service, generic) and retry detection, DAG cycle detection using DFS algorithm, workflow cost estimation for different node types and model tiers (gpt-4, claude-3 with 2x multiplier, gpt-3.5 with 0.5x multiplier), workflow validation with auto-layout and name generation, and rate limiting (5/min for stream, 10/min for preview). Frontend tests cover API response format compatibility, UUID handling, credentials configuration (credentials: 'include' without manual Authorization header), field name mapping (session_id, workflow_json), and intent detection logic."
+}

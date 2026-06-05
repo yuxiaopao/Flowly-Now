@@ -1,0 +1,66 @@
+{
+  "task_id": "frontend-nl-creator",
+  "status": "done",
+  "result": "前端NL界面完善完成。已修复流式生成API（使用POST替代EventSource），增强Creator.vue添加流式进度显示、Intent意图分析展示、工作流节点预览面板，Store新增isStreaming状态和intent支持。",
+  "files_changed": [
+    "Frontend/src/api/nl-workflow.js",
+    "Frontend/src/stores/nlWorkflow.js",
+    "Frontend/src/views/nl-workflow/Creator.vue"
+  ],
+  "files_added": [],
+  "features_added": [
+    "流式生成界面 - 新增streamWorkflow API方法，使用POST请求替代错误的EventSource GET请求",
+    "Intent分析显示 - 在消息中显示识别到的意图类型（create/modify/delete/chat）及详情",
+    "流式进度指示器 - 显示5个阶段的生成进度（分析需求→设计结构→生成节点→连接边→优化流程）",
+    "工作流预览面板 - 嵌入式工作流节点列表预览，支持展开/收起、节点详情查看、保存操作",
+    "多轮对话支持 - 完整保留现有的标签页、会话历史、批量操作功能",
+    "Node图标映射 - 根据节点类型显示对应的图标"
+  ],
+  "api_endpoints_covered": {
+    "GET /nl-workflow/models/": "getModels()",
+    "POST /nl-workflow/sessions/": "createSession()",
+    "GET /nl-workflow/sessions/": "getSessions()",
+    "GET /nl-workflow/sessions/{id}/": "getSession()",
+    "PATCH /nl-workflow/sessions/{id}/": "updateSession()",
+    "DELETE /nl-workflow/sessions/{id}/": "deleteSession()",
+    "POST /nl-workflow/sessions/{id}/message/": "sendMessage()",
+    "POST /nl-workflow/sessions/{id}/confirm/": "confirmWorkflow()",
+    "POST /nl-workflow/stream/": "streamWorkflow() (fixed: POST + fetch)",
+    "POST /nl-workflow/preview/": "preview()",
+    "POST /nl-workflow/analyze-intent/": "analyzeIntent()",
+    "POST /nl-workflow/suggest/": "suggest()"
+  },
+  "store_state_fields": [
+    "messages",
+    "isGenerating",
+    "isStreaming",
+    "generationError",
+    "streamingProgress",
+    "streamingStage",
+    "generatedWorkflow",
+    "lastIntent",
+    "history",
+    "historyLoading",
+    "models",
+    "selectedModel",
+    "modelsLoading",
+    "currentSessionId",
+    "settings"
+  ],
+  "store_actions": [
+    "createSession",
+    "streamWorkflow",
+    "sendMessage",
+    "analyzeIntent",
+    "getSuggestions",
+    "confirmWorkflow",
+    "loadHistory",
+    "deleteSession",
+    "loadModels",
+    "addMessage",
+    "updateLastAssistantMessage",
+    "reset",
+    "resetSession"
+  ],
+  "summary": "前端NL-to-Workflow Creator界面已完善。主要修复：streamWorkflow API从错误的EventSource GET改为正确的fetch POST SSE流式请求；新增流式进度UI（5阶段指示器和进度条）；新增Intent意图分析显示（create/modify/delete/chat四类）；新增嵌入式工作流节点预览面板；Store新增isStreaming和lastIntent状态支持。所有API端点已完整覆盖。"
+}

@@ -1,0 +1,9 @@
+{
+  "task_id": "p1-async-polling",
+  "status": "done",
+  "result": "实现 _poll_replicate_prediction 通用轮询方法（5s间隔，最多300s超时）；更新 run_video_generation_node 为真实轮询并返回 video_url；实现 _poll_elevenlabs_prediction 方法；更新 run_audio_generation_node 使用真实 API key；run_model_training_node 添加 job_id stub。",
+  "files_changed": [],
+  "files_added": [],
+  "summary": "实现 _poll_replicate_prediction 通用轮询方法（5s间隔，最多300s超时）；更新 run_video_generation_node 为真实轮询并返回 video_url；实现 _poll_elevenlabs_prediction 方法；更新 run_audio_generation_node 使用真实 API key；run_model_training_node 添加 job_id stub。",
+  "completed_at": "2026-05-17T17:14:57.594098+00:00"
+}

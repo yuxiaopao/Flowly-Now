@@ -1,0 +1,10 @@
+C:\Users\18984\AppData\Roaming\Python\Python38\site-packages\redis\utils.py:29: CryptographyDeprecationWarning: Python 3.8 is no longer supported by the Python core team and support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.8.
+  import cryptography  # noqa
+usage: manage.py runserver [-h] [--ipv6] [--nothreading] [--noreload]
+                           [--noasgi] [--http_timeout HTTP_TIMEOUT]
+                           [--websocket_handshake_timeout WEBSOCKET_HANDSHAKE_TIMEOUT]
+                           [--version] [--settings SETTINGS]
+                           [--pythonpath PYTHONPATH] [--no-color]
+                           [--force-color] [--skip-checks]
+                           [addrport]
+manage.py runserver: error: unrecognized arguments: 2>&1
