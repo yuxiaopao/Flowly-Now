@@ -4,21 +4,19 @@
 {% block flowly_content %}
 <div class="f-panel">
 
-    <div class="f-panel-header sp-header">
-        <div class="sp-header-row">
-            <div>
-                <h2><i class="fas fa-server"></i> 系统状态</h2>
-                <p id="sysClock" class="sp-clock">加载中...</p>
-            </div>
-            <div class="sp-header-actions">
-                <button class="f-btn sp-btn" onclick="sysPanel.refresh()">
-                    <i class="fas fa-sync-alt"></i> 刷新状态
-                </button>
-                <label class="f-toggle" title="自动刷新（10秒）">
-                    <input type="checkbox" id="autoRefreshSys" onchange="sysPanel.toggleAuto()" aria-label="自动刷新">
-                    <span class="f-toggle-track"></span>
-                </label>
-            </div>
+    <div class="f-page-header">
+        <div class="f-page-header-main">
+            <h2><i class="fas fa-server"></i> 系统状态</h2>
+            <p id="sysClock" class="f-page-meta">加载中...</p>
+        </div>
+        <div class="f-page-header-actions">
+            <button class="f-btn f-btn-ghost f-btn-sm" onclick="sysPanel.refresh()">
+                <i class="fas fa-sync-alt"></i> 刷新状态
+            </button>
+            <label class="f-toggle" title="自动刷新（10秒）">
+                <input type="checkbox" id="autoRefreshSys" onchange="sysPanel.toggleAuto()" aria-label="自动刷新">
+                <span class="f-toggle-track"></span>
+            </label>
         </div>
     </div>
 
@@ -26,7 +24,7 @@
 
         <div class="sp-stats-grid">
             <div class="f-stat primary">
-                <div class="f-stat-value">Django 5.x</div>
+                <div class="f-stat-value">{{ django_version }}</div>
                 <div class="f-stat-label">Django 版本</div>
             </div>
             <div class="f-stat info">
@@ -38,7 +36,7 @@
                 <div class="f-stat-label">运行模式</div>
             </div>
             <div class="f-stat success">
-                <div class="f-stat-value">e-Flowly</div>
+                <div class="f-stat-value">{{ site_name|default:"Flowly" }}</div>
                 <div class="f-stat-label">应用版本</div>
             </div>
         </div>
@@ -100,7 +98,7 @@
             <div class="sp-quick-grid">
 
                 <a href="/admin/flowly/features/" class="f-quick-link sp-quick-link">
-                    <i class="fas fa-sliders-h sp-i-purple"></i>
+                    <i class="fas fa-sliders-h sp-i-blue"></i>
                     <div class="sp-quick-body">
                         <div class="sp-quick-title">功能开关</div>
                         <div class="sp-quick-desc">管理系统功能</div>
@@ -123,7 +121,7 @@
                     </div>
                 </a>
 
-                <a href="/admin/workflows/audits/" class="f-quick-link sp-quick-link">
+                <a href="/admin/workflows/workflowexecution/" class="f-quick-link sp-quick-link">
                     <i class="fas fa-history sp-i-yellow"></i>
                     <div class="sp-quick-body">
                         <div class="sp-quick-title">执行日志</div>
@@ -156,11 +154,6 @@
 
 {% block extra_js %}
 <style>
-.sp-header { background: linear-gradient(135deg, #06b6d4 0%, #22d3ee 50%, #67e8f9 100%); }
-.sp-header-row { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 16px; }
-.sp-header-actions { display: flex; gap: 10px; align-items: center; }
-.sp-btn { background: rgba(255,255,255,0.15); color: #fff; border: 1.5px solid rgba(255,255,255,0.3); }
-.sp-clock { opacity: 0.85; font-size: 0.85rem; font-family: 'JetBrains Mono', monospace; }
 .sp-stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 20px; }
 .sp-card { margin-bottom: 20px; }
 .sp-health-summary { margin-left: auto; font-size: 0.7rem; font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--text-muted); }
@@ -179,14 +172,14 @@
 .f-health-left { display: flex; align-items: center; gap: 10px; }
 .f-health-right { display: flex; align-items: center; gap: 10px; }
 .sp-health-msg { font-size: 0.85rem; color: var(--text-muted); }
-.sp-i-purple { color: #6366f1; }
+.sp-i-blue { color: #1d4ed8; }
 .sp-i-green { color: #10b981; }
 .sp-i-cyan { color: #06b6d4; }
 .sp-i-yellow { color: #f59e0b; }
 .sp-i-pink { color: #ec4899; }
 .sp-i-orange { color: #f97316; }
 .sp-quick-link { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 16px 12px; text-decoration: none !important; }
-.sp-quick-link {
+@media (max-width: 768px) {
     .sp-stats-grid { grid-template-columns: 1fr 1fr; }
     .sp-charts-grid { grid-template-columns: 1fr; }
     .sp-quick-grid { grid-template-columns: 1fr 1fr; }
@@ -212,6 +205,13 @@
         modeCard.className = isDebug ? 'f-stat warning' : 'f-stat success';
     }
 
+    function escHealth(s) {
+        if (s === null || s === undefined) return '';
+        var div = document.createElement('div');
+        div.textContent = String(s);
+        return div.innerHTML;
+    }
+
     var sysPanel = window.sysPanel = {
         autoTimer: null,
         cpuChart: null,
@@ -219,83 +219,87 @@
 
         refresh: async function() {
             showLoading();
-            await this.loadHealth();
-            await this.loadResources();
+            try {
+                var data = await apiCall('/admin/flowly/system-data/');
+                this.renderHealth(data);
+                this.renderResources(data);
+            } catch(e) {
+                showToast('系统状态加载失败', 'error');
+            }
             hideLoading();
-            showToast('✅ 系统状态已刷新', 'success');
         },
 
-        loadHealth: async function() {
+        renderHealth: function(data) {
             var list = document.getElementById('healthList');
             var checks = [
-                { key: 'database', label: '数据库 (MySQL 8.0)', icon: 'fa-database', color: '#6366f1' },
+                { key: 'database', label: '数据库', icon: 'fa-database', color: '#1d4ed8' },
                 { key: 'redis', label: 'Redis 缓存', icon: 'fa-bolt', color: '#ef4444' },
-                { key: 'storage', label: '静态文件存储', icon: 'fa-folder', color: '#f59e0b' },
+                { key: 'storage', label: '媒体存储', icon: 'fa-folder', color: '#f59e0b' },
                 { key: 'memory', label: '系统内存', icon: 'fa-microchip', color: '#10b981' },
+                { key: 'celery', label: 'Celery 队列', icon: 'fa-tasks', color: '#0f2847' },
             ];
+            var health = data.health || {};
             list.innerHTML = checks.map(function(c) {
-                return '<div class="f-health-item" id="health-' + c.key + '">' +
+                var item = health[c.key] || { status: 'unknown', message: '未检测' };
+                var isIssue = item.status === 'error' || item.status === 'warning' || item.status === 'unknown';
+                var detailHtml = '';
+                if (isIssue) {
+                    var detailText = item.detail || item.message || '暂无详细信息';
+                    detailHtml = '<details class="sp-health-detail">' +
+                        '<summary>查看详情</summary>' +
+                        '<p class="sp-health-detail-body">' + escHealth(detailText) + '</p></details>';
+                }
+                return '<div class="f-health-item' + (isIssue ? ' sp-health-issue' : '') + '" id="health-' + c.key + '">' +
                     '<div class="f-health-left">' +
                     '<i class="fas ' + c.icon + '" style="color:' + c.color + ';font-size:1rem;width:20px;text-align:center;"></i>' +
                     '<strong>' + c.label + '</strong></div>' +
                     '<div class="f-health-right">' +
-                    '<span class="f-health-dot unknown" id="dot-' + c.key + '"></span>' +
-                    '<span id="msg-' + c.key + '" class="sp-health-msg">检测中...</span></div></div>';
+                    '<span class="f-health-dot ' + item.status + '" id="dot-' + c.key + '"></span>' +
+                    '<span id="msg-' + c.key + '" class="sp-health-msg">' + escHealth(item.message || '—') + '</span></div>' +
+                    detailHtml + '</div>';
             }).join('');
 
-            await new Promise(function(r) { setTimeout(r, 600); });
-            this.setHealth('database', 'healthy', 'MySQL 8.0 连接正常');
-            await new Promise(function(r) { setTimeout(r, 400); });
-            this.setHealth('redis', 'healthy', 'Redis 连接正常');
-            await new Promise(function(r) { setTimeout(r, 300); });
-            this.setHealth('storage', 'healthy', '静态文件目录可用');
-            await new Promise(function(r) { setTimeout(r, 200); });
-            var mem = Math.round(40 + Math.random() * 30);
-            this.setHealth('memory', mem > 75 ? 'warning' : 'healthy',
-                '使用 ' + mem + '% (约 ' + Math.round(mem * 0.13) + 'GB / 16GB)');
-
-            var healthy = document.querySelectorAll('.f-health-dot.healthy').length;
-            var total = document.querySelectorAll('.f-health-dot').length;
-            document.getElementById('healthSummary').textContent = healthy + ' / ' + total + ' 服务正常';
+            document.getElementById('healthSummary').textContent =
+                (data.healthy_count || 0) + ' / ' + (data.total_checks || checks.length) + ' 服务正常';
         },
 
-        setHealth: function(key, status, message) {
-            var dot = document.getElementById('dot-' + key);
-            var msg = document.getElementById('msg-' + key);
-            if (dot) dot.className = 'f-health-dot ' + status;
-            if (msg) {
-                msg.textContent = message;
-                msg.style.color = status === 'healthy' ? 'var(--success)' :
-                    status === 'warning' ? 'var(--warning)' : 'var(--text-muted)';
+        renderResources: function(data) {
+            var cpu = data.cpu_percent != null ? Math.round(data.cpu_percent) : null;
+            var mem = data.mem_percent != null ? Math.round(data.mem_percent) : null;
+
+            if (cpu != null) {
+                this.renderRing('cpuChart', cpu, cpu > 80 ? '#ef4444' : cpu > 60 ? '#f59e0b' : '#10b981');
+                document.getElementById('cpuPercent').textContent = cpu + '%';
+                document.getElementById('cpuVal').textContent = cpu + '%';
+                document.getElementById('cpuBar').style.width = cpu + '%';
+                document.getElementById('cpuBar').style.background =
+                    cpu > 80 ? 'linear-gradient(90deg,var(--danger),var(--warning))' :
+                    cpu > 60 ? 'linear-gradient(90deg,var(--warning),var(--accent))' :
+                    'linear-gradient(90deg,var(--success),var(--accent))';
+            } else {
+                document.getElementById('cpuPercent').textContent = 'N/A';
+                document.getElementById('cpuVal').textContent = '需 psutil';
             }
-        },
 
-        loadResources: async function() {
-            var cpu = Math.round(15 + Math.random() * 55);
-            var mem = Math.round(35 + Math.random() * 40);
+            document.getElementById('cpuCores').textContent =
+                (data.cpu_cores || navigator.hardwareConcurrency || '—') + ' 逻辑核心';
 
-            this.renderRing('cpuChart', cpu, cpu > 80 ? '#ef4444' : cpu > 60 ? '#f59e0b' : '#10b981');
-            this.renderRing('memChart', mem, mem > 80 ? '#ef4444' : mem > 60 ? '#f59e0b' : '#06b6d4');
-
-            document.getElementById('cpuPercent').textContent = cpu + '%';
-            document.getElementById('cpuVal').textContent = cpu + '%';
-            document.getElementById('cpuBar').style.width = cpu + '%';
-            document.getElementById('cpuBar').style.background =
-                cpu > 80 ? 'linear-gradient(90deg,var(--danger),var(--warning))' :
-                cpu > 60 ? 'linear-gradient(90deg,var(--warning),var(--accent))' :
-                'linear-gradient(90deg,var(--success),var(--accent))';
-            document.getElementById('cpuCores').textContent = navigator.hardwareConcurrency + ' 逻辑核心';
-
-            document.getElementById('memPercent').textContent = mem + '%';
-            document.getElementById('memVal').textContent = mem + '%';
-            document.getElementById('memBar').style.width = mem + '%';
-            document.getElementById('memBar').style.background =
-                mem > 80 ? 'linear-gradient(90deg,var(--danger),var(--warning))' :
-                mem > 60 ? 'linear-gradient(90deg,var(--warning),var(--accent))' :
-                'linear-gradient(90deg,var(--info),var(--accent))';
-
-            var usedGB = (mem * 0.16).toFixed(1);
-            document.getElementById('memDetails').textContent = usedGB + 'GB / 16GB';
+            if (mem != null) {
+                this.renderRing('memChart', mem, mem > 80 ? '#ef4444' : mem > 60 ? '#f59e0b' : '#06b6d4');
+                document.getElementById('memPercent').textContent = mem + '%';
+                document.getElementById('memVal').textContent = mem + '%';
+                document.getElementById('memBar').style.width = mem + '%';
+                document.getElementById('memBar').style.background =
+                    mem > 80 ? 'linear-gradient(90deg,var(--danger),var(--warning))' :
+                    mem > 60 ? 'linear-gradient(90deg,var(--warning),var(--accent))' :
+                    'linear-gradient(90deg,var(--info),var(--accent))';
+                document.getElementById('memDetails').textContent =
+                    (data.mem_used_gb || '?') + 'GB / ' + (data.mem_total_gb || '?') + 'GB';
+            } else {
+                document.getElementById('memPercent').textContent = 'N/A';
+                document.getElementById('memVal').textContent = '需 psutil';
+                document.getElementById('memDetails').textContent = '无法获取内存信息';
+            }
         },
 
         renderRing: function(canvasId, percent, color) {
@@ -331,15 +335,17 @@
 
     setInterval(function() {
         var el = document.getElementById('autoRefreshSys');
-        if (el && el.checked) {
-            sysPanel.loadResources();
-        }
-    }, 5000);
+        if (el && el.checked) sysPanel.refresh();
+    }, 10000);
 })();
 </script>
 <style>
 .f-health-left { display: flex; align-items: center; gap: 10px; }
 .f-health-right { display: flex; align-items: center; gap: 10px; }
 .sp-health-msg { font-size: 0.85rem; color: var(--text-muted); }
+.sp-health-detail { width: 100%; margin-top: 8px; padding-left: 30px; }
+.sp-health-detail summary { cursor: pointer; font-size: 0.78rem; color: var(--accent); font-weight: 600; }
+.sp-health-detail-body { margin-top: 6px; font-size: 0.78rem; color: var(--text-secondary); line-height: 1.5; word-break: break-word; }
+.f-health-item.sp-health-issue { flex-wrap: wrap; align-items: flex-start; }
 </style>
 {% endblock %}

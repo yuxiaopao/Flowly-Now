@@ -26,8 +26,8 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'jsdom',
-    include: ['tests/**/*.test.{js,ts}', 'tests/**/*.spec.{js,ts}'],
-    exclude: ['tests/e2e/**'],
+    include: ['../tests/frontend/vitest/**/*.test.{js,ts}', '../tests/frontend/vitest/**/*.spec.{js,ts}'],
+    exclude: ['../tests/frontend/e2e/**'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
@@ -37,10 +37,10 @@ export default defineConfig({
         'src/auto-imports.d.ts',
         'src/components.d.ts',
         '**/*.config.{js,ts}',
-        '**/tests/**'
+        '../tests/**'
       ]
     },
-    setupFiles: ['./tests/setup.js'],
+    setupFiles: ['../tests/frontend/vitest/setup.js'],
     testTimeout: 10000,
     hookTimeout: 10000
   },

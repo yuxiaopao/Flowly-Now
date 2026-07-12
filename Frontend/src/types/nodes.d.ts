@@ -30,6 +30,12 @@ export type NodeType =
   | 'video_generation'
   | 'audio_generation'
   | 'subtitle_generation'
+  | 'video_translation'
+  | 'video_upload'
+  | 'subtitle_translate'
+  | 'segment_dubbing'
+  | 'lip_sync'
+  | 'subtitle_burn'
   | 'image_editing'
   | 'dataset_upload'
   | 'data_annotation'
@@ -37,6 +43,19 @@ export type NodeType =
   | 'model_training'
   | 'model_evaluation'
   | 'model_deployment'
+  | 'website_generator'
+  | 'backend_setup'
+  | 'frontend_setup'
+  | 'ui_beautify'
+  | 'site_code_review'
+  | 'environment_provision'
+  | 'site_qa'
+  | 'site_preview'
+  | 'project_profiler'
+  | 'project_agent'
+  | 'yolo_training'
+  | 'clip_classification'
+  | 'clip_retrieval'
   | 'document_loader'
   | 'embedding'
   | 'vector_store'
@@ -361,6 +380,55 @@ export interface SubtitleGenerationConfig extends BaseNodeConfig {
   format: 'srt' | 'vtt' | 'ass'
 }
 
+export interface VideoTranslationConfig extends BaseNodeConfig {
+  provider?: 'dashscope'
+  video_input?: string
+  media_id?: string
+  inputMode?: 'upload' | 'url' | 'upstream'
+  source_language?: string
+  target_languages?: string[]
+  voice?: string
+  subtitle_format?: 'srt' | 'vtt' | 'both'
+  burn_subtitles?: boolean
+  lip_sync?: boolean
+  face_ref_image_url?: string
+  video_extension?: boolean
+}
+
+export interface VideoUploadConfig extends BaseNodeConfig {
+  inputMode?: 'upload' | 'url'
+  video_input?: string
+  media_id?: string
+  public_url?: string
+}
+
+export interface SubtitleTranslateConfig extends BaseNodeConfig {
+  source_language?: string
+  target_language?: string
+  subtitle_format?: 'srt' | 'vtt'
+}
+
+export interface SegmentDubbingConfig extends BaseNodeConfig {
+  target_language?: string
+  voice?: string
+  provider?: string
+}
+
+export interface LipSyncConfig extends BaseNodeConfig {
+  target_language?: string
+  video_input?: string
+  audio_input?: string
+  lip_sync?: boolean
+  face_ref_image_url?: string
+  video_extension?: boolean
+}
+
+export interface SubtitleBurnConfig extends BaseNodeConfig {
+  target_language?: string
+  video_input?: string
+  subtitle_format?: 'srt' | 'vtt'
+}
+
 export interface ImageEditingConfig extends BaseNodeConfig {
   provider: 'openai' | 'stability'
   model: string
@@ -419,6 +487,30 @@ export interface ModelDeploymentConfig extends BaseNodeConfig {
   minInstances?: number
   maxInstances?: number
 }
+
+export interface WebsiteGeneratorConfig extends BaseNodeConfig {
+  websiteType?: string
+  waitForCompletion?: boolean
+  waitTimeoutSeconds?: number
+  wizard?: Record<string, unknown>
+}
+
+export interface SiteFactoryRoleAgentConfig extends BaseNodeConfig {
+  outputDir?: string
+  websiteType?: string
+  agentMode?: 'auto' | 'rules' | 'llm'
+  useLlm?: boolean
+  allowCoreEdit?: boolean
+  autoQaAfterEdit?: boolean
+  maxRounds?: number
+  instruction?: string
+  generatedSiteId?: string
+}
+
+export type BackendSetupConfig = SiteFactoryRoleAgentConfig
+export type FrontendSetupConfig = SiteFactoryRoleAgentConfig
+export type UiBeautifyConfig = SiteFactoryRoleAgentConfig
+export type SiteCodeReviewConfig = SiteFactoryRoleAgentConfig
 
 // ==================== RAG 检索节点配置 ====================
 
@@ -538,6 +630,12 @@ export type NodeConfig =
   | VideoGenerationConfig
   | AudioGenerationConfig
   | SubtitleGenerationConfig
+  | VideoTranslationConfig
+  | VideoUploadConfig
+  | SubtitleTranslateConfig
+  | SegmentDubbingConfig
+  | LipSyncConfig
+  | SubtitleBurnConfig
   | ImageEditingConfig
   | DatasetUploadConfig
   | DataAnnotationConfig
@@ -545,6 +643,11 @@ export type NodeConfig =
   | ModelTrainingConfig
   | ModelEvaluationConfig
   | ModelDeploymentConfig
+  | WebsiteGeneratorConfig
+  | BackendSetupConfig
+  | FrontendSetupConfig
+  | UiBeautifyConfig
+  | SiteCodeReviewConfig
   | DocumentLoaderConfig
   | EmbeddingConfig
   | VectorStoreConfig

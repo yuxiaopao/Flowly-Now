@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="vector-store-detail">
     <div class="page-header">
       <div class="header-left">
@@ -94,7 +94,7 @@
             <el-form-item label="集合名称">
               <el-input
                 v-model="formData.collection"
-                placeholder="default"
+                placeholder="默认"
               />
             </el-form-item>
             <el-form-item label="API Key">
@@ -102,7 +102,7 @@
                 v-model="formData.api_key"
                 type="password"
                 show-password
-                placeholder="API Key"
+                placeholder="输入 API Key"
               />
             </el-form-item>
             <el-form-item label="向量维度">
@@ -115,15 +115,15 @@
             <el-form-item label="度量方式">
               <el-select v-model="formData.metric">
                 <el-option
-                  label="Cosine"
+                  label="余弦相似度"
                   value="cosine"
                 />
                 <el-option
-                  label="Dot Product"
+                  label="点积"
                   value="dot"
                 />
                 <el-option
-                  label="Euclidean"
+                  label="欧氏距离"
                   value="euclidean"
                 />
               </el-select>
@@ -386,6 +386,10 @@ import { ElMessageBox } from 'element-plus'
 import { ArrowLeft, Save, Plus, Wifi } from 'lucide-vue-next'
 import { APP_CONFIG } from '@/config'
 import { useAppStore } from '@/stores/app'
+import ragApi from '@/api/rag'
+
+const DEFAULT_EMBEDDING_MODEL = APP_CONFIG.embedding.defaultModel
+
 const appStore = useAppStore()
 
 const route = useRoute()
@@ -413,7 +417,7 @@ const formData = ref({
 const collectionForm = ref({
   name: '',
   description: '',
-  embedding_model: 'text-embedding-ada-002',
+  embedding_model: DEFAULT_EMBEDDING_MODEL,
   chunk_size: 1000,
   chunk_overlap: 200
 })
@@ -430,83 +434,59 @@ const goBack = () => router.push('/vector-stores')
 
 const fetchVectorStore = async () => {
   try {
-    const response = await fetch(`/api/rag/vector-stores/${vectorStoreId.value}/`, {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
-      }
-    })
-    if (response.ok) {
-      const data = await response.json()
-      vectorStore.value = data
-      formData.value = { ...data }
-    }
-  } catch (err) {
+    const data = await ragApi.getVectorStore(vectorStoreId.value)
+    vectorStore.value = data
+    formData.value = { ...data }
+  } catch {
     appStore.error('获取向量存储失败')
   }
 }
 
 const fetchCollections = async () => {
   try {
-    const response = await fetch(`/api/rag/collections/?vector_store=${vectorStoreId.value}`, {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
-      }
-    })
-    if (response.ok) {
-      const data = await response.json()
-      collections.value = data.results || data
-    }
+    const data = await ragApi.getCollections({ vector_store: vectorStoreId.value })
+    collections.value = data.results || data || []
+    stats.value.totalCollections = collections.value.length
   } catch (err) {
     console.error('获取集合失败:', err)
+    collections.value = []
   }
 }
 
 const handleSave = async () => {
   try {
-    const response = await fetch(`/api/rag/vector-stores/${vectorStoreId.value}/`, {
-      method: 'PUT',
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(formData.value)
-    })
-    if (response.ok) {
-      appStore.success('保存成功')
-    } else {
-      appStore.error('保存失败')
-    }
-  } catch (err) {
+    await ragApi.updateVectorStore(vectorStoreId.value, formData.value)
+    appStore.success('保存成功')
+    await fetchVectorStore()
+  } catch {
     appStore.error('保存失败')
   }
 }
 
 const handleTest = async () => {
   appStore.info('正在测试连接...')
-  // Connection test logic
+  try {
+    const result = await ragApi.testVectorStoreConnection(vectorStoreId.value)
+    if (result?.success || result?.ok) {
+      appStore.success(result.message || '连接成功')
+    } else {
+      appStore.error(result?.message || result?.error || '连接失败')
+    }
+  } catch {
+    appStore.error('连接测试失败')
+  }
 }
 
 const createCollection = async () => {
   try {
-    const response = await fetch('/api/rag/collections/', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        ...collectionForm.value,
-        vector_store: vectorStoreId.value
-      })
+    await ragApi.createCollection({
+      ...collectionForm.value,
+      vectorStore: vectorStoreId.value,
     })
-    if (response.ok) {
-      appStore.success('创建成功')
-      showCreateCollection.value = false
-      fetchCollections()
-    } else {
-      appStore.error('创建失败')
-    }
-  } catch (err) {
+    appStore.success('创建成功')
+    showCreateCollection.value = false
+    await fetchCollections()
+  } catch {
     appStore.error('创建失败')
   }
 }
@@ -520,16 +500,9 @@ const deleteCollection = async (collection) => {
     await ElMessageBox.confirm('确定要删除这个集合吗？', '警告', {
       type: 'warning'
     })
-    const response = await fetch(`/api/rag/collections/${collection.id}/`, {
-      method: 'DELETE',
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
-      }
-    })
-    if (response.ok) {
-      appStore.success('删除成功')
-      fetchCollections()
-    }
+    await ragApi.deleteCollection(collection.id)
+    appStore.success('删除成功')
+    await fetchCollections()
   } catch (err) {
     if (err !== 'cancel') appStore.error('删除失败')
   }
@@ -581,7 +554,8 @@ onMounted(() => {
 }
 
 .detail-tabs {
-  background: white;
+  background: var(--card-bg);
+  border: 1px solid var(--border-primary);
   padding: 24px;
   border-radius: 8px;
 }
@@ -609,22 +583,24 @@ onMounted(() => {
 .stat-value {
   font-size: 32px;
   font-weight: 600;
-  color: var(--el-color-primary);
+  color: var(--color-primary);
 }
 
 .stat-label {
-  color: #666;
+  color: var(--text-secondary);
   margin-top: 8px;
 }
 
 .chart-container {
-  background: #fafafa;
+  background: var(--bg-tertiary);
   padding: 20px;
   border-radius: 8px;
+  transition: background-color 0.2s ease;
 }
 
 .chart-container h3 {
   margin-bottom: 16px;
+  color: var(--text-primary);
 }
 
 .chart-placeholder {
@@ -632,13 +608,19 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #fff;
-  border: 1px dashed #ddd;
+  background: var(--card-bg);
+  border: 1px dashed var(--border-secondary);
   border-radius: 8px;
+  color: var(--text-tertiary);
+  transition: border-color 0.2s ease;
+}
+
+.chart-placeholder:hover {
+  border-color: var(--border-hover);
 }
 
 .loading-state {
-  background: white;
+  background: var(--card-bg);
   padding: 24px;
   border-radius: 8px;
 }

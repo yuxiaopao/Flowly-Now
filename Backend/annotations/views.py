@@ -19,10 +19,11 @@ from .serializers import (
     AnnotationItemSerializer, AnnotationItemUpdateSerializer
 )
 from .utils import (
-    initialize_items_from_dataset, generate_pre_labels, export_annotations
+    initialize_items_from_dataset, generate_pre_labels, export_annotations,
+    export_image_text_pairs,
 )
 
-logger = logging.getLogger(__name__)
+from tenants.access import get_accessible_tenant_ids
 
 
 class AnnotationProjectViewSet(viewsets.ModelViewSet):
@@ -38,7 +39,7 @@ class AnnotationProjectViewSet(viewsets.ModelViewSet):
         """Return projects filtered by tenant and user access."""
         user = self.request.user
         queryset = AnnotationProject.objects.filter(
-            Q(tenant__isnull=True) | Q(tenant__in=user.tenants.values_list('tenant', flat=True))
+            Q(tenant__isnull=True) | Q(tenant_id__in=get_accessible_tenant_ids(user))
         )
 
         status_filter = self.request.query_params.get('status')
@@ -160,6 +161,17 @@ class AnnotationProjectViewSet(viewsets.ModelViewSet):
         export_format = request.query_params.get('format', 'json')
 
         try:
+            if export_format == 'image_text_pairs':
+                result = export_image_text_pairs(project)
+                if not result.get('success'):
+                    return Response({'error': result.get('error')}, status=status.HTTP_400_BAD_REQUEST)
+                response = HttpResponse(
+                    result['content'],
+                    content_type='application/x-ndjson; charset=utf-8',
+                )
+                response['Content-Disposition'] = f'attachment; filename="pairs_{project.id}.jsonl"'
+                return response
+
             result = export_annotations(project, export_format)
 
             if not result.get('success'):
@@ -273,24 +285,26 @@ class AnnotationProjectViewSet(viewsets.ModelViewSet):
         """
         user = request.user
 
+        tenant_ids = get_accessible_tenant_ids(user)
+
         total_projects = AnnotationProject.objects.filter(
-            Q(tenant__isnull=True) | Q(tenant__in=user.tenants.values_list('tenant', flat=True))
+            Q(tenant__isnull=True) | Q(tenant_id__in=tenant_ids)
         ).count()
 
         completed_projects = AnnotationProject.objects.filter(
-            Q(tenant__isnull=True) | Q(tenant__in=user.tenants.values_list('tenant', flat=True)),
+            Q(tenant__isnull=True) | Q(tenant_id__in=tenant_ids),
             status='completed'
         ).count()
 
         total_items = AnnotationItem.objects.filter(
             project__in=AnnotationProject.objects.filter(
-                Q(tenant__isnull=True) | Q(tenant__in=user.tenants.values_list('tenant', flat=True))
+                Q(tenant__isnull=True) | Q(tenant_id__in=tenant_ids)
             )
         ).count()
 
         annotated_items = AnnotationItem.objects.filter(
             project__in=AnnotationProject.objects.filter(
-                Q(tenant__isnull=True) | Q(tenant__in=user.tenants.values_list('tenant', flat=True))
+                Q(tenant__isnull=True) | Q(tenant_id__in=tenant_ids)
             ),
             status='annotated'
         ).count()
@@ -315,13 +329,20 @@ class AnnotationItemViewSet(viewsets.ModelViewSet):
     lookup_field = 'id'
 
     def get_queryset(self):
-        """Return items filtered by project."""
+        """Return items filtered by accessible project."""
+        user = self.request.user
+        tenant_ids = get_accessible_tenant_ids(user)
         project_id = self.request.query_params.get('project')
-        queryset = AnnotationItem.objects.all()
 
+        accessible_projects = AnnotationProject.objects.filter(
+            Q(created_by=user) | Q(tenant_id__in=tenant_ids)
+        )
         if project_id:
-            queryset = queryset.filter(project_id=project_id)
+            accessible_projects = accessible_projects.filter(id=project_id)
 
+        queryset = AnnotationItem.objects.filter(
+            project__in=accessible_projects.values_list('id', flat=True)
+        )
         return queryset.select_related('project', 'annotated_by')
 
     def get_serializer_class(self):

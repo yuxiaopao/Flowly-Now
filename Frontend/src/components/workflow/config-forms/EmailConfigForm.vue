@@ -67,7 +67,7 @@
         <el-form-item label="发件人">
           <el-input 
             v-model="localData.fromEmail" 
-            placeholder="noreply@example.com"
+            placeholder="留空则使用系统默认发件人"
             @change="handleChange"
           />
         </el-form-item>
@@ -112,13 +112,49 @@
       <!-- SMTP 配置 -->
       <div class="form-section">
         <h4 class="section-title">
-          SMTP 配置（可选）
+          SMTP 配置
         </h4>
-        <div class="smtp-config">
+        <el-form-item label="使用全局 SMTP">
+          <div class="switch-row">
+            <el-switch
+              v-model="localData.useGlobalSmtp"
+              @change="handleGlobalSmtpToggle"
+            />
+            <span class="switch-label">
+              {{ localData.useGlobalSmtp ? '使用系统默认（设置 → 通知与邮件 / .env）' : '使用节点自定义 SMTP' }}
+            </span>
+          </div>
+        </el-form-item>
+        <div class="section-hint">
+          开启后将自动使用平台全局 SMTP 发送；关闭后可在此节点单独填写并覆盖。
+        </div>
+        <div
+          v-if="localData.useGlobalSmtp && globalSmtp.configured"
+          class="global-smtp-badge"
+        >
+          已检测到全局 SMTP：{{ globalSmtp.server }}:{{ globalSmtp.port }}（{{ globalSmtp.username }}）
+        </div>
+        <div
+          v-else-if="localData.useGlobalSmtp && !globalSmtpLoaded"
+          class="section-hint"
+        >
+          正在加载全局 SMTP…
+        </div>
+        <div
+          v-else-if="localData.useGlobalSmtp && !globalSmtp.configured"
+          class="global-smtp-warning"
+        >
+          全局 SMTP 尚未配置，请先在「设置 → 通知与邮件」或 Backend `.env` 中配置。
+        </div>
+        <div
+          class="smtp-config"
+          :class="{ readonly: localData.useGlobalSmtp }"
+        >
           <el-form-item label="服务器">
             <el-input 
               v-model="localData.smtpConfig.server" 
               placeholder="smtp.example.com"
+              :disabled="localData.useGlobalSmtp"
               @change="handleChange"
             />
           </el-form-item>
@@ -132,6 +168,7 @@
                   placeholder="587"
                   controls-position="right"
                   style="width: 100%"
+                  :disabled="localData.useGlobalSmtp"
                   @change="handleChange"
                 />
               </el-form-item>
@@ -140,6 +177,7 @@
               <el-form-item label="TLS">
                 <el-switch
                   v-model="localData.smtpConfig.useTls"
+                  :disabled="localData.useGlobalSmtp"
                   @change="handleChange"
                 />
               </el-form-item>
@@ -149,6 +187,7 @@
             <el-input 
               v-model="localData.smtpConfig.username" 
               placeholder="username"
+              :disabled="localData.useGlobalSmtp"
               @change="handleChange"
             />
           </el-form-item>
@@ -157,7 +196,8 @@
               v-model="localData.smtpConfig.password" 
               type="password" 
               show-password
-              placeholder="密码"
+              :placeholder="smtpPasswordPlaceholder"
+              :disabled="localData.useGlobalSmtp"
               @change="handleChange"
             />
           </el-form-item>
@@ -201,7 +241,8 @@
 </template>
 
 <script setup>
-import { reactive, watch } from 'vue'
+import { reactive, watch, ref, onMounted, computed } from 'vue'
+import { getEmailSmtpDefaults } from '@/api/workflow'
 
 const props = defineProps({
   modelValue: {
@@ -211,6 +252,17 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['update:modelValue', 'change'])
+
+const globalSmtpLoaded = ref(false)
+const globalSmtp = reactive({
+  server: '',
+  port: 587,
+  useTls: true,
+  username: '',
+  fromEmail: '',
+  hasPassword: false,
+  configured: false,
+})
 
 const localData = reactive({
   label: '',
@@ -222,6 +274,7 @@ const localData = reactive({
   subject: '',
   isHtml: false,
   body: '',
+  useGlobalSmtp: true,
   smtpConfig: {
     server: '',
     port: 587,
@@ -230,6 +283,51 @@ const localData = reactive({
     password: ''
   }
 })
+
+const smtpPasswordPlaceholder = computed(() => {
+  if (!localData.useGlobalSmtp) return '密码'
+  return globalSmtp.hasPassword ? '使用全局授权码' : '密码'
+})
+
+async function loadGlobalSmtp() {
+  try {
+    const resp = await getEmailSmtpDefaults()
+    const smtp = resp?.smtp || resp?.data?.smtp || {}
+    Object.assign(globalSmtp, {
+      server: smtp.server || '',
+      port: smtp.port || 587,
+      useTls: smtp.useTls !== false,
+      username: smtp.username || '',
+      fromEmail: smtp.fromEmail || '',
+      hasPassword: Boolean(smtp.hasPassword),
+      configured: Boolean(smtp.configured),
+    })
+  } catch {
+    // ignore — user can still configure node-level SMTP
+  } finally {
+    globalSmtpLoaded.value = true
+    applyGlobalSmtpToForm()
+  }
+}
+
+function applyGlobalSmtpToForm() {
+  if (!localData.useGlobalSmtp) return
+  localData.smtpConfig.server = globalSmtp.server
+  localData.smtpConfig.port = globalSmtp.port
+  localData.smtpConfig.useTls = globalSmtp.useTls
+  localData.smtpConfig.username = globalSmtp.username
+  localData.smtpConfig.password = globalSmtp.hasPassword ? '********' : ''
+  if (!localData.fromEmail && globalSmtp.fromEmail) {
+    localData.fromEmail = globalSmtp.fromEmail
+  }
+}
+
+function handleGlobalSmtpToggle() {
+  if (localData.useGlobalSmtp) {
+    applyGlobalSmtpToForm()
+  }
+  handleChange()
+}
 
 watch(() => props.modelValue, (newVal) => {
   if (newVal) {
@@ -243,6 +341,7 @@ watch(() => props.modelValue, (newVal) => {
       subject: newVal.subject || '',
       isHtml: newVal.isHtml || false,
       body: newVal.body || '',
+      useGlobalSmtp: newVal.useGlobalSmtp !== false,
       smtpConfig: {
         server: newVal.smtpConfig?.server || '',
         port: newVal.smtpConfig?.port || 587,
@@ -251,12 +350,29 @@ watch(() => props.modelValue, (newVal) => {
         password: newVal.smtpConfig?.password || ''
       }
     })
+    if (localData.useGlobalSmtp && globalSmtpLoaded.value) {
+      applyGlobalSmtpToForm()
+    }
   }
 }, { immediate: true, deep: true })
 
+onMounted(() => {
+  loadGlobalSmtp()
+})
+
 const handleChange = () => {
-  emit('update:modelValue', { ...localData })
-  emit('change', { ...localData })
+  const payload = { ...localData }
+  if (payload.useGlobalSmtp) {
+    payload.smtpConfig = {
+      server: '',
+      port: payload.smtpConfig.port || 587,
+      useTls: payload.smtpConfig.useTls !== false,
+      username: '',
+      password: '',
+    }
+  }
+  emit('update:modelValue', payload)
+  emit('change', payload)
 }
 </script>
 
@@ -285,6 +401,48 @@ const handleChange = () => {
   margin: 0 0 $spacing-3;
   text-transform: uppercase;
   letter-spacing: 0.05em;
+}
+
+.section-hint {
+  margin: -$spacing-1 0 $spacing-3;
+  font-size: $font-size-xs;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.switch-row {
+  display: flex;
+  align-items: center;
+  gap: $spacing-2;
+}
+
+.switch-label {
+  font-size: $font-size-xs;
+  color: var(--text-secondary);
+}
+
+.global-smtp-badge {
+  margin-bottom: $spacing-3;
+  padding: $spacing-2 $spacing-3;
+  border-radius: $radius-md;
+  background: color-mix(in srgb, var(--color-success, #22c55e) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-success, #22c55e) 35%, transparent);
+  font-size: $font-size-xs;
+  color: var(--text-primary);
+}
+
+.global-smtp-warning {
+  margin-bottom: $spacing-3;
+  padding: $spacing-2 $spacing-3;
+  border-radius: $radius-md;
+  background: color-mix(in srgb, var(--color-warning, #f59e0b) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-warning, #f59e0b) 35%, transparent);
+  font-size: $font-size-xs;
+  color: var(--text-primary);
+}
+
+.smtp-config.readonly {
+  opacity: 0.92;
 }
 
 .body-input {

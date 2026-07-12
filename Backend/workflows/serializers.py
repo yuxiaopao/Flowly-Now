@@ -2,17 +2,109 @@
 Serializers for workflows app.
 """
 
+import uuid as uuid_lib
+
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
+from tenants.access import can_edit_workflow
 from .models import (
     Workflow, Node, Edge, WorkflowExecution, NodeExecution,
     Variable, Tool, APICredential, AuditLog,
     TemplateCategory, WorkflowTemplate,
+    TemplateInstall, TemplateRatingRecord,
+    TemplateReport,
     ExecutionCache, ExecutionCacheConfig,
     ExecutionLog,
 )
 
 User = get_user_model()
+
+
+def _coerce_uuid(value):
+    if value is None or value == '':
+        return None
+    try:
+        return uuid_lib.UUID(str(value))
+    except (TypeError, ValueError, AttributeError):
+        return None
+
+
+def _node_fields_from_data(node_data):
+    sort_order = node_data.get('sort_order')
+    if sort_order is None:
+        sort_order = node_data.get('sortOrder', 0)
+    return {
+        'node_type': node_data.get('node_type', ''),
+        'name': node_data.get('name', ''),
+        'description': node_data.get('description', ''),
+        'position_x': node_data.get('position_x', 0),
+        'position_y': node_data.get('position_y', 0),
+        'sort_order': sort_order if sort_order is not None else 0,
+        'config': node_data.get('config', {}) or {},
+        'style': node_data.get('style', {}) or {},
+        'error_handling': node_data.get('error_handling', 'stop'),
+        'max_retries': node_data.get('max_retries', 3),
+        'retry_delay_seconds': node_data.get('retry_delay_seconds', 5),
+        'fallback_value': node_data.get('fallback_value'),
+    }
+
+
+def _register_node_id_mapping(node_id_map, frontend_id, node_id):
+    node_id_map[str(node_id)] = node_id
+    if frontend_id:
+        node_id_map[str(frontend_id)] = node_id
+
+
+def _upsert_workflow_nodes(workflow, nodes_data):
+    """Update nodes in place when IDs match; preserve canvas UUIDs across saves."""
+    existing = {str(node.id): node for node in workflow.nodes.all()}
+    kept_ids = set()
+    node_id_map = {}
+
+    for node_data in nodes_data:
+        frontend_id = node_data.get('id')
+        parsed_id = _coerce_uuid(frontend_id)
+        fields = _node_fields_from_data(node_data)
+
+        if parsed_id and str(parsed_id) in existing:
+            node = existing[str(parsed_id)]
+            for key, value in fields.items():
+                setattr(node, key, value)
+            node.save()
+        else:
+            create_kwargs = {**fields, 'workflow': workflow}
+            if parsed_id:
+                create_kwargs['id'] = parsed_id
+            node = Node.objects.create(**create_kwargs)
+
+        kept_ids.add(str(node.id))
+        _register_node_id_mapping(node_id_map, frontend_id, node.id)
+
+    for node_id, node in existing.items():
+        if node_id not in kept_ids:
+            node.delete()
+
+    return node_id_map
+
+
+def _sync_workflow_edges(workflow, edges_data, node_id_map):
+    workflow.edges.all().delete()
+    for edge_data in edges_data:
+        source = edge_data.get('source_node') or edge_data.get('source')
+        target = edge_data.get('target_node') or edge_data.get('target')
+        source_id = node_id_map.get(str(source)) if source is not None else None
+        target_id = node_id_map.get(str(target)) if target is not None else None
+        if not source_id or not target_id:
+            continue
+        Edge.objects.create(
+            workflow=workflow,
+            source_node_id=source_id,
+            target_node_id=target_id,
+            label=edge_data.get('label', ''),
+            animated=edge_data.get('animated', False),
+            condition_expression=edge_data.get('condition_expression', ''),
+            condition_priority=edge_data.get('condition_priority', 0),
+        )
 
 
 class UserSimpleSerializer(serializers.ModelSerializer):
@@ -192,8 +284,11 @@ class WorkflowListSerializer(serializers.ModelSerializer):
         source='get_status_display',
         read_only=True
     )
-    # 卡片预览：取前6个节点简略数据（不返回完整config，减轻payload）
+    # 卡片预览：画布截图（保存时生成）+ 节点/边 fallback
     nodes_preview = serializers.SerializerMethodField()
+    canvas_preview = serializers.SerializerMethodField()
+    edges_preview = serializers.SerializerMethodField()
+    can_edit = serializers.SerializerMethodField()
 
     class Meta:
         model = Workflow
@@ -202,24 +297,54 @@ class WorkflowListSerializer(serializers.ModelSerializer):
             'status', 'status_display', 'is_public',
             'version', 'tags', 'config', 'node_count', 'execution_count',
             'created_at', 'updated_at',
-            'nodes_preview',
+            'nodes_preview', 'canvas_preview', 'edges_preview', 'can_edit',
         ]
         read_only_fields = [
-            'id', 'owner', 'version', 'created_at', 'updated_at'
+            'id', 'owner', 'version', 'created_at', 'updated_at', 'can_edit'
+        ]
+
+    def get_can_edit(self, obj):
+        request = self.context.get('request')
+        if not request:
+            return False
+        return can_edit_workflow(request.user, obj)
+
+    def get_canvas_preview(self, obj):
+        """Return saved editor canvas screenshot (base64 JPEG in config)."""
+        preview = (obj.config or {}).get('canvas_preview', '')
+        if not preview or not isinstance(preview, str):
+            return ''
+        if len(preview) > 300_000:
+            return ''
+        return preview
+
+    def get_edges_preview(self, obj):
+        """Return lightweight edge list for card fallback preview."""
+        return [
+            {
+                'id': str(edge.id),
+                'source': str(edge.source_node_id),
+                'target': str(edge.target_node_id),
+            }
+            for edge in obj.edges.all()[:50]
         ]
 
     def get_nodes_preview(self, obj):
-        """Return a lightweight preview of nodes for the card mini-canvas."""
-        nodes = list(obj.nodes.all()[:12])
+        """Return normalized node positions for card fallback preview."""
+        nodes = list(obj.nodes.all()[:30])
         if not nodes:
             return []
-        # 计算包围框
-        xs = [n.position_x for n in nodes]
-        ys = [n.position_y for n in nodes]
+        xs = [float(n.position_x) for n in nodes]
+        ys = [float(n.position_y) for n in nodes]
         min_x, max_x = min(xs), max(xs)
         min_y, max_y = min(ys), max(ys)
-        padding = 60
-        view_w, view_h = max(max_x - min_x + padding * 2, 200), max(max_y - min_y + padding * 2, 120)
+        padding = 40
+        scale = 1.0
+        content_w = max(max_x - min_x + padding * 2, 200)
+        content_h = max(max_y - min_y + padding * 2, 120)
+        view_w, view_h = 220, 100
+        if content_w > view_w or content_h > view_h:
+            scale = min(view_w / content_w, view_h / content_h)
 
         return [
             {
@@ -227,8 +352,8 @@ class WorkflowListSerializer(serializers.ModelSerializer):
                 'type': n.node_type,
                 'name': n.name,
                 'position': {
-                    'x': n.position_x - min_x + padding,
-                    'y': n.position_y - min_y + padding,
+                    'x': round((float(n.position_x) - min_x + padding) * scale),
+                    'y': round((float(n.position_y) - min_y + padding) * scale),
                 },
             }
             for n in nodes
@@ -245,6 +370,7 @@ class WorkflowDetailSerializer(serializers.ModelSerializer):
         source='get_status_display',
         read_only=True
     )
+    can_edit = serializers.SerializerMethodField()
 
     class Meta:
         model = Workflow
@@ -252,11 +378,17 @@ class WorkflowDetailSerializer(serializers.ModelSerializer):
             'id', 'name', 'description', 'owner',
             'status', 'status_display', 'is_public',
             'version', 'parent_version', 'tags', 'config',
-            'nodes', 'edges', 'created_at', 'updated_at'
+            'nodes', 'edges', 'created_at', 'updated_at', 'can_edit',
         ]
         read_only_fields = [
-            'id', 'owner', 'version', 'created_at', 'updated_at'
+            'id', 'owner', 'version', 'created_at', 'updated_at', 'can_edit'
         ]
+
+    def get_can_edit(self, obj):
+        request = self.context.get('request')
+        if not request:
+            return False
+        return can_edit_workflow(request.user, obj)
 
     def get_nodes(self, obj):
         nodes = self.context.get('nodes', None)
@@ -352,6 +484,15 @@ class WorkflowCreateSerializer(serializers.ModelSerializer):
             )
         return value
 
+    def validate_config(self, value):
+        if value and isinstance(value, dict):
+            preview = value.get('canvas_preview', '')
+            if preview and len(str(preview)) > 300_000:
+                raise serializers.ValidationError(
+                    '画布预览图过大，请重新保存'
+                )
+        return value
+
     def get_fields(self):
         """Override to ensure nodes/edges use JSONField (not reverse FK fields)."""
         fields = super().get_fields()
@@ -377,6 +518,8 @@ class WorkflowCreateSerializer(serializers.ModelSerializer):
         ret['edges'] = EdgeSerializer(
             instance.edges.all(), many=True, context=self.context
         ).data
+        request = self.context.get('request')
+        ret['can_edit'] = can_edit_workflow(request.user, instance) if request else False
         return ret
 
     def validate(self, attrs):
@@ -398,16 +541,48 @@ class WorkflowCreateSerializer(serializers.ModelSerializer):
                     raise serializers.ValidationError({'nodes': 'Each node must be an object'})
 
                 # Support both flat (snake_case from handleSave) and nested (Vue Flow) formats
-                position = node.get('position', {})
+                position = node.get('position')
                 pos_x = node.get('position_x', 0)
                 pos_y = node.get('position_y', 0)
-                if isinstance(position, dict):
-                    pos_x = position.get('x', 0)
-                    pos_y = position.get('y', 0)
+                if isinstance(position, dict) and (
+                    position.get('x') is not None or position.get('y') is not None
+                ):
+                    if position.get('x') is not None:
+                        pos_x = position.get('x')
+                    if position.get('y') is not None:
+                        pos_y = position.get('y')
+                pos_x = float(pos_x) if pos_x is not None else 0
+                pos_y = float(pos_y) if pos_y is not None else 0
 
                 data_obj = node.get('data', {}) or {}
                 raw_type = node.get('type', '') or node.get('node_type', '')
                 node_type = type_mapping.get(raw_type, raw_type)
+
+                # Merge data_obj top-level fields into config dict
+                # This ensures fields like framework, modelType, yoloVersion etc. are preserved
+                config_from_data = data_obj.get('config', {}) or {}
+                # Extract known top-level config fields
+                config_fields = [
+                    'framework', 'modelType', 'yoloVersion', 'modelVariant',
+                    'gpuEnabled', 'checkpointing', 'datasetPath', 'datasetYamlPath',
+                    'datasetId', 'annotationProjectId', 'classNames',
+                    'epochs', 'batchSize', 'imageSize', 'learningRate',
+                    'inputDim', 'hiddenDims', 'numLabels', 'dropout',
+                    'optimizer', 'weight_decay', 'momentum',
+                    'patience', 'savePeriod', 'cache', 'workers',
+                    'project', 'name', 'outputDir',
+                    'inputDim', 'hiddenDims', 'numLabels',
+                    'warmupSteps', 'weightDecay',
+                    'modelName', 'datasetName', 'trainingMode',
+                ]
+                for field in config_fields:
+                    if data_obj.get(field) is not None:
+                        config_from_data[field] = data_obj.get(field)
+                # Also merge inputs if present (common in Vue Flow nodes)
+                if 'inputs' in data_obj:
+                    config_from_data['inputs'] = data_obj['inputs']
+                if 'hyperparameters' in data_obj:
+                    config_from_data['hyperparameters'] = data_obj['hyperparameters']
 
                 nodes_transformed.append({
                     'id': node.get('id'),
@@ -416,8 +591,12 @@ class WorkflowCreateSerializer(serializers.ModelSerializer):
                     'description': data_obj.get('description', '') or node.get('description', ''),
                     'position_x': pos_x,
                     'position_y': pos_y,
-                    'sort_order': node.get('sortOrder', 0) or node.get('sort_order', 0),
-                    'config': data_obj.get('config', {}) or node.get('config', {}),
+                    'sort_order': (
+                        node.get('sort_order')
+                        if node.get('sort_order') is not None
+                        else (node.get('sortOrder') if node.get('sortOrder') is not None else 0)
+                    ),
+                    'config': config_from_data or node.get('config', {}),
                     'style': data_obj.get('style', {}) or node.get('style', {}),
                     'error_handling': data_obj.get('errorHandling', 'stop') or node.get('error_handling', 'stop'),
                     'max_retries': data_obj.get('maxRetries', 3) or node.get('max_retries', 3),
@@ -463,41 +642,8 @@ class WorkflowCreateSerializer(serializers.ModelSerializer):
 
         workflow = Workflow.objects.create(**validated_data)
 
-        node_id_map = {}
-
-        for node_data in nodes_data:
-            node = Node.objects.create(
-                workflow=workflow,
-                node_type=node_data.get('node_type', ''),
-                name=node_data.get('name', ''),
-                description=node_data.get('description', ''),
-                position_x=node_data.get('position_x', 0),
-                position_y=node_data.get('position_y', 0),
-                sort_order=node_data.get('sort_order', 0),
-                config=node_data.get('config', {}),
-                style=node_data.get('style', {}),
-                error_handling=node_data.get('error_handling', 'stop'),
-                max_retries=node_data.get('max_retries', 3),
-                retry_delay_seconds=node_data.get('retry_delay_seconds', 5),
-                fallback_value=node_data.get('fallback_value')
-            )
-            node_id_map[node_data.get('id', node.id)] = node.id
-            node_id_map[node.id] = node.id
-
-        for edge_data in edges_data:
-            source = edge_data.get('source_node') or edge_data.get('source')
-            target = edge_data.get('target_node') or edge_data.get('target')
-            source_id = node_id_map.get(source) if isinstance(source, str) else source
-            target_id = node_id_map.get(target) if isinstance(target, str) else target
-            Edge.objects.create(
-                workflow=workflow,
-                source_node_id=source_id,
-                target_node_id=target_id,
-                label=edge_data.get('label', ''),
-                animated=edge_data.get('animated', False),
-                condition_expression=edge_data.get('condition_expression', ''),
-                condition_priority=edge_data.get('condition_priority', 0),
-            )
+        node_id_map = _upsert_workflow_nodes(workflow, nodes_data)
+        _sync_workflow_edges(workflow, edges_data, node_id_map)
 
         return workflow
 
@@ -505,56 +651,24 @@ class WorkflowCreateSerializer(serializers.ModelSerializer):
         nodes_data = validated_data.pop('nodes', None)
         edges_data = validated_data.pop('edges', None)
 
+        config_data = validated_data.get('config')
+        if config_data is not None:
+            existing_config = instance.config or {}
+            validated_data['config'] = {**existing_config, **config_data}
+
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
 
         node_id_map = {}
-
         if nodes_data is not None:
-            instance.nodes.all().delete()
-
-            for node_data in nodes_data:
-                frontend_id = node_data.get('id')
-
-                node = Node.objects.create(
-                    workflow=instance,
-                    node_type=node_data.get('node_type', ''),
-                    name=node_data.get('name', ''),
-                    description=node_data.get('description', ''),
-                    position_x=node_data.get('position_x', 0),
-                    position_y=node_data.get('position_y', 0),
-                    sort_order=node_data.get('sort_order', 0),
-                    config=node_data.get('config', {}),
-                    style=node_data.get('style', {}),
-                    error_handling=node_data.get('error_handling', 'stop'),
-                    max_retries=node_data.get('max_retries', 3),
-                    retry_delay_seconds=node_data.get('retry_delay_seconds', 5),
-                    fallback_value=node_data.get('fallback_value')
-                )
-                if frontend_id:
-                    node_id_map[frontend_id] = node.id
-                node_id_map[node.id] = node.id
+            node_id_map = _upsert_workflow_nodes(instance, nodes_data)
 
         if edges_data is not None:
-            instance.edges.all().delete()
-
-            for edge_data in edges_data:
-                source = edge_data.get('source_node') or edge_data.get('source')
-                target = edge_data.get('target_node') or edge_data.get('target')
-
-                source_id = node_id_map.get(source) if isinstance(source, str) else source
-                target_id = node_id_map.get(target) if isinstance(target, str) else target
-
-                Edge.objects.create(
-                    workflow=instance,
-                    source_node_id=source_id,
-                    target_node_id=target_id,
-                    label=edge_data.get('label', ''),
-                    animated=edge_data.get('animated', False),
-                    condition_expression=edge_data.get('condition_expression', ''),
-                    condition_priority=edge_data.get('condition_priority', 0),
-                )
+            if not node_id_map and nodes_data is None:
+                for node in instance.nodes.all():
+                    _register_node_id_mapping(node_id_map, str(node.id), node.id)
+            _sync_workflow_edges(instance, edges_data, node_id_map)
 
         return instance
 
@@ -734,7 +848,12 @@ class APICredentialSerializer(serializers.ModelSerializer):
         source='get_service_type_display',
         read_only=True
     )
+    scope_display = serializers.CharField(
+        source='get_scope_display',
+        read_only=True
+    )
     masked_credential = serializers.SerializerMethodField()
+    is_expired = serializers.SerializerMethodField()
 
     class Meta:
         model = APICredential
@@ -743,14 +862,15 @@ class APICredentialSerializer(serializers.ModelSerializer):
             'credential_type', 'credential_type_display',
             'credential_data', 'masked_credential', 'credential_data_hash',
             'service_type', 'service_type_display', 'service_config',
-            'scope', 'owner', 'is_encrypted',
-            'is_active', 'expires_at', 'last_used_at', 'usage_count',
+            'scope', 'scope_display', 'scope_permission',
+            'owner', 'tenant', 'is_encrypted',
+            'is_active', 'is_expired', 'expires_at', 'last_used_at', 'usage_count',
             'created_at', 'updated_at'
         ]
         read_only_fields = [
             'id', 'masked_credential', 'credential_data_hash', 'is_encrypted',
             'owner', 'last_used_at', 'usage_count',
-            'created_at', 'updated_at'
+            'created_at', 'updated_at', 'is_expired', 'scope_display'
         ]
         extra_kwargs = {
             'credential_data': {'write_only': True}
@@ -760,23 +880,62 @@ class APICredentialSerializer(serializers.ModelSerializer):
         """Return masked credential for display."""
         return obj.get_masked_data()
 
+    def get_is_expired(self, obj):
+        """Return whether the credential is expired."""
+        return obj.is_expired()
+
 
 class APICredentialCreateSerializer(serializers.ModelSerializer):
-    """Serializer for creating API credentials."""
+    """Serializer for creating/updating API credentials."""
+
+    scope = serializers.ChoiceField(
+        choices=APICredential.SCOPE_CHOICES,
+        default='user',
+        required=False
+    )
+    tenant_id = serializers.UUIDField(
+        source='tenant.id',
+        required=False,
+        allow_null=True,
+        write_only=True
+    )
 
     class Meta:
         model = APICredential
         fields = [
-            'name', 'description', 'credential_type',
+            'id', 'name', 'description', 'credential_type',
             'credential_data', 'service_type', 'service_config',
-            'scope', 'expires_at', 'is_active'
+            'scope', 'scope_permission', 'tenant_id',
+            'expires_at', 'is_active'
         ]
+        read_only_fields = ['id']
         extra_kwargs = {
             'credential_data': {'write_only': True}
         }
 
+    def validate(self, attrs):
+        scope = attrs.get('scope', 'user')
+        tenant_id = attrs.get('tenant', {}).get('id')
+
+        if scope == 'tenant' and not tenant_id:
+            raise serializers.ValidationError({
+                'tenant_id': '租户级凭证必须指定 tenant_id'
+            })
+        if scope in ('user', 'global') and tenant_id:
+            attrs['tenant'] = None
+
+        return attrs
+
     def create(self, validated_data):
         """Create credential with encrypted data."""
+        tenant_data = validated_data.pop('tenant', None)
+        tenant_id = tenant_data.get('id') if tenant_data else None
+        tenant = None
+        if tenant_id:
+            from tenants.models import Tenant
+            tenant = Tenant.objects.filter(id=tenant_id).first()
+        validated_data['tenant'] = tenant
+
         raw_data = validated_data.pop('credential_data', '')
         credential = APICredential(**validated_data)
         if raw_data:
@@ -850,36 +1009,61 @@ class TemplateCategorySerializer(serializers.ModelSerializer):
 class WorkflowTemplateListSerializer(serializers.ModelSerializer):
     """Serializer for workflow template list view."""
 
-    category_name = serializers.CharField(source='category.name', read_only=True)
-    category_slug = serializers.CharField(source='category.slug', read_only=True)
-    creator_name = serializers.CharField(source='created_by.username', read_only=True)
+    category_name = serializers.SerializerMethodField()
+    category_slug = serializers.SerializerMethodField()
+    creator_name = serializers.SerializerMethodField()
+    install_count = serializers.IntegerField(source='use_count', read_only=True)
+    thumbnail = serializers.CharField(source='thumbnail_url', read_only=True)
+    is_published = serializers.BooleanField(source='is_active', read_only=True)
+    node_count = serializers.SerializerMethodField()
 
     class Meta:
         model = WorkflowTemplate
         fields = [
             'id', 'category', 'category_name', 'category_slug', 'name',
-            'description', 'difficulty', 'tags', 'thumbnail_url',
-            'estimated_duration', 'required_apis', 'use_count', 'rating',
-            'rating_count', 'is_featured', 'is_verified', 'creator_name',
-            'created_at'
+            'description', 'difficulty', 'tags', 'thumbnail_url', 'thumbnail',
+            'estimated_duration', 'required_apis', 'use_count', 'install_count', 'rating',
+            'rating_count', 'is_featured', 'is_verified', 'is_active', 'is_public',
+            'is_published', 'node_count', 'creator_name', 'created_at'
         ]
+
+    def get_node_count(self, obj):
+        workflow_data = obj.workflow_data or {}
+        nodes = workflow_data.get('nodes') if isinstance(workflow_data, dict) else None
+        return len(nodes or [])
+
+    def get_category_name(self, obj):
+        return obj.category.name if obj.category else ''
+
+    def get_category_slug(self, obj):
+        return obj.category.slug if obj.category else ''
+
+    def get_creator_name(self, obj):
+        return obj.created_by.username if obj.created_by else ''
 
 
 class WorkflowTemplateDetailSerializer(serializers.ModelSerializer):
     """Serializer for workflow template detail view."""
 
-    category = TemplateCategorySerializer(read_only=True)
-    creator_name = serializers.CharField(source='created_by.username', read_only=True)
+    category = TemplateCategorySerializer(read_only=True, allow_null=True)
+    creator_name = serializers.SerializerMethodField()
+    install_count = serializers.IntegerField(source='use_count', read_only=True)
+    thumbnail = serializers.CharField(source='thumbnail_url', read_only=True)
+    is_published = serializers.BooleanField(source='is_active', read_only=True)
 
     class Meta:
         model = WorkflowTemplate
         fields = [
             'id', 'category', 'name', 'description', 'difficulty', 'tags',
-            'thumbnail_url', 'workflow_data', 'variables_schema',
-            'estimated_duration', 'required_apis', 'use_count', 'rating',
-            'rating_count', 'is_featured', 'is_verified', 'version',
+            'thumbnail_url', 'thumbnail', 'workflow_data', 'variables_schema',
+            'estimated_duration', 'required_apis', 'use_count', 'install_count', 'rating',
+            'rating_count', 'is_featured', 'is_verified', 'is_active', 'is_published',
+            'version',
             'creator_name', 'created_at', 'updated_at'
         ]
+
+    def get_creator_name(self, obj):
+        return obj.created_by.username if obj.created_by else ''
 
 
 class WorkflowTemplateCreateFromSerializer(serializers.Serializer):
@@ -887,6 +1071,67 @@ class WorkflowTemplateCreateFromSerializer(serializers.Serializer):
 
     name = serializers.CharField(max_length=200, required=False)
     variables = serializers.DictField(required=False, default=dict)
+
+
+class TemplateInstallSerializer(serializers.ModelSerializer):
+    """Serializer for TemplateInstall model."""
+
+    username = serializers.CharField(source='user.username', read_only=True)
+    template_name = serializers.CharField(source='template.name', read_only=True)
+    workflow_name = serializers.CharField(source='workflow.name', read_only=True)
+
+    class Meta:
+        model = TemplateInstall
+        fields = ['id', 'user', 'username', 'template', 'template_name', 'workflow', 'workflow_name', 'installed_at']
+
+
+class TemplateRatingRecordSerializer(serializers.ModelSerializer):
+    """Serializer for TemplateRatingRecord model."""
+
+    username = serializers.CharField(source='user.username', read_only=True)
+    template_name = serializers.CharField(source='template.name', read_only=True)
+
+    class Meta:
+        model = TemplateRatingRecord
+        fields = ['id', 'user', 'username', 'template', 'template_name', 'rating', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+
+class TemplateReportSerializer(serializers.ModelSerializer):
+    """Serializer for TemplateReport model."""
+
+    username = serializers.CharField(source='user.username', read_only=True)
+    template_name = serializers.CharField(source='template.name', read_only=True)
+    reviewer_name = serializers.CharField(source='reviewed_by.username', read_only=True)
+    reason_display = serializers.CharField(source='get_reason_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+
+    class Meta:
+        model = TemplateReport
+        fields = [
+            'id', 'user', 'username', 'template', 'template_name',
+            'reason', 'reason_display', 'description',
+            'status', 'status_display',
+            'reviewed_by', 'reviewer_name', 'reviewed_at', 'reviewed_notes',
+            'created_at', 'updated_at',
+        ]
+        read_only_fields = ['id', 'user', 'reviewed_by', 'created_at', 'updated_at']
+
+
+class TemplateReportCreateSerializer(serializers.Serializer):
+    """Serializer for submitting a template report."""
+
+    REASON_CHOICES = [
+        'inappropriate', 'spam', 'copyright', 'misleading', 'broken', 'other'
+    ]
+
+    reason = serializers.ChoiceField(choices=REASON_CHOICES, write_only=True)
+    description = serializers.CharField(max_length=1000, required=False, allow_blank=True, write_only=True)
+
+    def validate_reason(self, value):
+        if value not in self.REASON_CHOICES:
+            raise serializers.ValidationError('Invalid reason.')
+        return value
 
 
 class ExecutionCacheSerializer(serializers.ModelSerializer):

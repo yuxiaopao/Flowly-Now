@@ -147,7 +147,7 @@ class TenantUpdateSerializer(serializers.ModelSerializer):
 
 
 class TenantMembershipCreateSerializer(serializers.ModelSerializer):
-    """Serializer for creating TenantMembership."""
+    """Serializer for creating TenantMembership (existing user only)."""
 
     email = serializers.EmailField(write_only=True)
 
@@ -162,6 +162,19 @@ class TenantMembershipCreateSerializer(serializers.ModelSerializer):
         except User.DoesNotExist:
             raise serializers.ValidationError('该邮箱的用户不存在')
         return value
+
+
+class TenantInviteSerializer(serializers.Serializer):
+    """Serializer for inviting users by email (user need not exist yet)."""
+
+    email = serializers.EmailField()
+    role = serializers.ChoiceField(
+        choices=[c for c in TenantMembership.ROLE_CHOICES if c[0] != 'owner'],
+        default='member',
+    )
+
+    def validate_email(self, value):
+        return value.lower().strip()
 
 
 class TenantInvitationSerializer(serializers.ModelSerializer):

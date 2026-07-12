@@ -115,9 +115,9 @@ describe('marketplaceApi.getTemplateStats', () => {
 })
 
 describe('marketplaceApi.reportTemplate', () => {
-  it('POST /marketplace/templates/:id/report/', async () => {
-    await marketplaceApi.reportTemplate(1, '不当内容')
-    expect(mockRequest.post).toHaveBeenCalledWith('/marketplace/templates/1/report/', { reason: '不当内容' })
+  it('POST /templates/:id/report/', async () => {
+    await marketplaceApi.reportTemplate('abc-123', 'inappropriate')
+    expect(mockRequest.post).toHaveBeenCalledWith('/templates/abc-123/report/', { reason: 'inappropriate' })
   })
 })
 

@@ -34,6 +34,7 @@ db.sqlite3
 *.pot
 *.pyc
 media/
+backups/
 staticfiles/
 logs/
 
@@ -55,9 +56,48 @@ htmlcov/
 coverage/
 .tox/
 
-# Environment
+# Environment / secrets
 .env
+.env.*
+!.env.example
+!**/.env.example
 .env.local
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
+credentials.json
+**/service-account*.json
+
+# Private / personal documents (do NOT upload)
+*.doc
+*.docx
+*.xls
+*.xlsx
+*.ppt
+*.pptx
+Thesis/
+PPT/
+Docs/reference/
+Docs/reports/
+
+# Local desktop builds & large artifacts
+Desktop/
+Frontend/dist/
+Frontend/dist-electron/
+test-reports/
+tests/artifacts/
+
+# ML model weights (large / local-only)
+*.pt
+*.pth
+*.onnx
+*.safetensors
+*.ckpt
+*.h5
+*.pkl
+*.joblib
 
 # Celery
 celerybeat-schedule
@@ -65,3 +105,14 @@ celerybeat.pid
 
 # Docker
 *.pid
+
+# Backend ad-hoc debug scripts (use Backend/scripts/ for maintained tooling)
+Backend/test_login*.py
+Backend/test_api_login*.py
+Backend/test_http_login*.py
+Backend/test_email_nl.py
+Backend/test_hash.py
+Backend/check_user*.py
+Backend/scan_passwords*.py
+Backend/fix_password.py
+Backend/password_hash.txt

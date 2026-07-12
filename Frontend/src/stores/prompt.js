@@ -10,15 +10,55 @@ export const usePromptStore = defineStore('prompt', () => {
   const isSaving = ref(false)
   const error = ref(null)
 
-  // Categories
   const categories = ref([
     { value: 'general', label: '通用' },
     { value: 'writing', label: '写作' },
     { value: 'coding', label: '编程' },
     { value: 'analysis', label: '分析' },
     { value: 'creative', label: '创意' },
-    { value: 'business', label: '商业' }
+    { value: 'business', label: '商业' },
   ])
+
+  async function fetchCategories() {
+    try {
+      const response = await promptApi.getCategories()
+      const list = Array.isArray(response) ? response : (response?.results || [])
+      if (list.length > 0) {
+        categories.value = list.map(item => ({
+          value: item.id,
+          label: item.name,
+          slug: item.slug,
+        }))
+      }
+      return list
+    } catch (err) {
+      error.value = err.message
+      throw err
+    }
+  }
+
+  function resolveCategoryId(category) {
+    if (category && typeof category === 'object') {
+      return category.id ?? category.slug ?? ''
+    }
+    return category
+  }
+
+  function getCategoryLabelForTemplate(template) {
+    return (
+      template?.categoryName
+      ?? template?.category_name
+      ?? getCategoryLabel(template?.category)
+    )
+  }
+
+  function getCategoryLabel(category) {
+    if (category && typeof category === 'object') {
+      return category.name || category.slug || '未分类'
+    }
+    const cat = categories.value.find(c => c.value === category || c.slug === category)
+    return cat ? cat.label : (category || '未分类')
+  }
 
   // Variable types
   const variableTypes = ref([
@@ -34,17 +74,21 @@ export const usePromptStore = defineStore('prompt', () => {
 
   // Getters
   const featuredTemplates = computed(() =>
-    templates.value.filter(t => t.is_featured)
+    templates.value.filter(t => t.isFeatured ?? t.is_featured)
   )
 
   const popularTemplates = computed(() =>
-    [...templates.value].sort((a, b) => b.usage_count - a.usage_count).slice(0, 10)
+    [...templates.value]
+      .sort((a, b) => (b.useCount ?? b.use_count ?? b.usage_count ?? 0) - (a.useCount ?? a.use_count ?? a.usage_count ?? 0))
+      .slice(0, 10)
   )
 
   const templatesByCategory = computed(() => {
     const grouped = {}
     categories.value.forEach(cat => {
-      grouped[cat.value] = templates.value.filter(t => t.category === cat.value)
+      grouped[cat.value] = templates.value.filter(
+        t => resolveCategoryId(t.category) === cat.value
+      )
     })
     return grouped
   })
@@ -160,6 +204,7 @@ export const usePromptStore = defineStore('prompt', () => {
       await promptApi.shareTemplate(id)
       const template = templates.value.find(t => t.id === id)
       if (template) {
+        template.isPublic = true
         template.is_public = true
       }
     } catch (err) {
@@ -173,6 +218,7 @@ export const usePromptStore = defineStore('prompt', () => {
       await promptApi.unshareTemplate(id)
       const template = templates.value.find(t => t.id === id)
       if (template) {
+        template.isPublic = false
         template.is_public = false
       }
     } catch (err) {
@@ -209,6 +255,7 @@ export const usePromptStore = defineStore('prompt', () => {
     templatesByCategory,
 
     // Actions
+    fetchCategories,
     fetchTemplates,
     fetchTemplate,
     createTemplate,
@@ -218,6 +265,9 @@ export const usePromptStore = defineStore('prompt', () => {
     duplicateTemplate,
     shareTemplate,
     unshareTemplate,
+    getCategoryLabel,
+    getCategoryLabelForTemplate,
+    resolveCategoryId,
     clearRendered,
     clearStore
   }

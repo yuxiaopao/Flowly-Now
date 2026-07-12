@@ -47,15 +47,15 @@ def on_session_created(sender, instance, created, **kwargs):
 @receiver(post_save, sender='nl_to_workflow.NLSession')
 def on_session_status_changed(sender, instance, **kwargs):
     """Handle NL session status changes."""
-    tracker = getattr(instance, 'tracker', None)
-    has_tracker = tracker is not None
+    # Django has no built-in tracker; use a sentinel on the instance set by the view layer.
+    # If no old status is available, skip broadcasting for the initial creation.
+    if not hasattr(instance, '_previous_status'):
+        return
 
-    status_changed = (has_tracker and tracker.has_changed('status')) if has_tracker else (instance.status != 'active')
+    old_status = instance._previous_status
+    new_status = instance.status
 
-    if status_changed:
-        old_status = tracker.previous('status') if has_tracker else 'unknown'
-        new_status = instance.status
-
+    if old_status != new_status:
         logger.info(f"NL session status changed: {instance.id} from {old_status} to {new_status}")
 
         if new_status == 'completed':
@@ -83,11 +83,12 @@ def on_session_status_changed(sender, instance, **kwargs):
 @receiver(post_save, sender='nl_to_workflow.NLSession')
 def on_workflow_generated(sender, instance, **kwargs):
     """Handle workflow generation."""
-    tracker = getattr(instance, 'tracker', None)
-    has_tracker = tracker is not None
-    workflow_changed = (has_tracker and tracker.has_changed('workflow_id')) if has_tracker else False
+    workflow_changed = (
+        getattr(instance, '_workflow_changed', False) or
+        getattr(instance, '_previous_workflow_id', None) is not None
+    )
 
-    if instance.workflow_id and (workflow_changed or (hasattr(instance, '_workflow_changed') and instance._workflow_changed)):
+    if instance.workflow_id and workflow_changed:
         logger.info(f"Workflow generated from NL session: {instance.id} -> {instance.workflow_id}")
 
         workflow_generated.send(

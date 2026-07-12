@@ -96,7 +96,7 @@
               plain
               @click="showDatasetDialog = true"
             >
-              <el-icon><FolderOpened /></el-icon>
+              <el-icon><FolderOpen /></el-icon>
               浏览数据集
             </el-button>
           </el-form-item>
@@ -118,7 +118,7 @@
                 size="small"
                 @click="clearSelectedDataset"
               >
-                <el-icon><Close /></el-icon>
+                <el-icon><X /></el-icon>
               </el-button>
             </div>
           </el-form-item>
@@ -188,27 +188,62 @@
         <el-form-item label="数据格式">
           <el-select
             v-model="localData.format"
-            @change="handleChange"
+            @change="handleFormatChange"
           >
-            <el-option
-              label="文本 (TXT)"
-              value="text"
-            />
-            <el-option
-              label="CSV"
-              value="csv"
-            />
-            <el-option
-              label="JSON"
-              value="json"
-            />
-            <el-option
-              label="Parquet"
-              value="parquet"
-            />
+            <el-option-group label="表格数据">
+              <el-option
+                label="文本 (TXT)"
+                value="text"
+              />
+              <el-option
+                label="CSV"
+                value="csv"
+              />
+              <el-option
+                label="JSON"
+                value="json"
+              />
+              <el-option
+                label="Parquet"
+                value="parquet"
+              />
+            </el-option-group>
+            <el-option-group label="ML 多素材（M4）">
+              <el-option
+                label="YOLO 检测"
+                value="yolo"
+              />
+              <el-option
+                label="图像文件夹（以图搜图）"
+                value="image_folder"
+              />
+              <el-option
+                label="图文对 pairs.jsonl"
+                value="image_text_pairs"
+              />
+              <el-option
+                label="分类文件夹"
+                value="classification_folders"
+              />
+            </el-option-group>
           </el-select>
           <div class="field-hint">
-            自动从文件扩展名检测，如需覆盖可手动选择
+            {{ formatHint }}
+          </div>
+        </el-form-item>
+
+        <el-form-item
+          v-if="isMlFormat && localData.source === 'upload'"
+          label="数据集路径"
+          required
+        >
+          <el-input
+            v-model="localData.path"
+            placeholder="服务器上的数据集目录或 pairs.jsonl 绝对路径"
+            @change="handleChange"
+          />
+          <div class="field-hint">
+            ML 格式需指向已解压目录（YOLO 含 data.yaml；图文对含 pairs.jsonl）
           </div>
         </el-form-item>
       </div>
@@ -364,7 +399,7 @@
 import { ref, reactive, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Upload, FolderOpened, Close, Search, RefreshCw, Loader, Check, Tag, ExternalLink } from 'lucide-vue-next'
+import { Upload, FolderOpen, X, Search, Loader, Check, Tag } from 'lucide-vue-next'
 import { datasetApi, createDatasetFormData, formatFileSize, detectFormatFromFilename } from '@/api/dataset'
 import { annotationApi } from '@/api/annotation'
 
@@ -399,6 +434,21 @@ const localData = reactive({
   datasetName: '',
   format: 'csv',
   datasetId: ''
+})
+
+const ML_FORMATS = ['yolo', 'image_folder', 'image_text_pairs', 'classification_folders']
+
+const isMlFormat = computed(() => ML_FORMATS.includes(localData.format))
+
+const formatHint = computed(() => {
+  const hints = {
+    yolo: '目录需含 data.yaml + images/ + labels/',
+    image_folder: 'images/ 下放置图片，可选 metadata.json',
+    image_text_pairs: 'pairs.jsonl：每行 {"image":"...", "text":"..."}',
+    classification_folders: 'train/class_a/* 或根目录按类分子文件夹',
+    csv: '自动从文件扩展名检测，如需覆盖可手动选择',
+  }
+  return hints[localData.format] || hints.csv
 })
 
 const selectedDataset = computed(() => {
@@ -466,6 +516,10 @@ const handleChange = () => {
   }
   emit('update:modelValue', output)
   emit('change', output)
+}
+
+const handleFormatChange = () => {
+  handleChange()
 }
 
 const handleSourceChange = () => {

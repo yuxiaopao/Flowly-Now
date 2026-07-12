@@ -225,7 +225,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, watch } from 'vue'
+import { reactive, computed, watch } from 'vue'
 
 const props = defineProps({
   modelValue: {
@@ -257,15 +257,6 @@ const unitMultiplier = computed(() => {
     hours: 3600
   }
   return multipliers[localData.unit] || 1
-})
-
-const unitLabel = computed(() => {
-  const labels = {
-    seconds: '秒',
-    minutes: '分钟',
-    hours: '小时'
-  }
-  return labels[localData.unit] || '秒'
 })
 
 const formattedDuration = computed(() => {

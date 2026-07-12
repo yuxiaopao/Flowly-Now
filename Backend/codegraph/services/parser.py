@@ -5,6 +5,8 @@ Code Parser - 多语言代码依赖解析器
 
 import os
 import re
+import ast
+import inspect
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
@@ -25,6 +27,7 @@ class FileNode:
     imports: List[str] = field(default_factory=list)
     imported_by: List[str] = field(default_factory=list)
     content_hash: str = ""
+    functions: List['FuncNode'] = field(default_factory=list)  # 文件内函数列表
 
     def to_dict(self) -> dict:
         return {
@@ -37,12 +40,34 @@ class FileNode:
             'lines': self.lines,
             'imports': self.imports,
             'imported_by': self.imported_by,
+            'functions': [f.to_dict() for f in self.functions],
+        }
+
+
+@dataclass
+class FuncNode:
+    """函数节点（属于某个文件节点内部）"""
+    id: str  # file_node_id::funcName
+    name: str
+    signature: str = ""
+    lineno: int = 0
+    end_lineno: int = 0
+    calls: List[str] = field(default_factory=list)  # 调用的函数名列表
+
+    def to_dict(self) -> dict:
+        return {
+            'id': self.id,
+            'name': self.name,
+            'signature': self.signature,
+            'lineno': self.lineno,
+            'end_lineno': self.end_lineno,
+            'calls': self.calls,
         }
 
 
 @dataclass
 class DependencyEdge:
-    """依赖边"""
+    """依赖边（文件间）"""
     id: str
     source: str
     target: str
@@ -60,11 +85,30 @@ class DependencyEdge:
 
 
 @dataclass
+class FuncCallEdge:
+    """函数调用边（文件内或跨文件）"""
+    id: str
+    source: str  # func_id
+    target: str  # func_id
+    weight: int = 1
+
+    def to_dict(self) -> dict:
+        return {
+            'id': self.id,
+            'source': self.source,
+            'target': self.target,
+            'weight': self.weight,
+        }
+
+
+@dataclass
 class CodeStructure:
     """代码结构"""
     root_path: str
     nodes: List[FileNode] = field(default_factory=list)
     edges: List[DependencyEdge] = field(default_factory=list)
+    func_nodes: List[FuncNode] = field(default_factory=list)
+    func_edges: List[FuncCallEdge] = field(default_factory=list)
     stats: Dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
@@ -72,6 +116,8 @@ class CodeStructure:
             'root_path': self.root_path,
             'nodes': [n.to_dict() for n in self.nodes],
             'edges': [e.to_dict() for e in self.edges],
+            'func_nodes': [f.to_dict() for f in self.func_nodes],
+            'func_edges': [fe.to_dict() for fe in self.func_edges],
             'stats': self.stats,
         }
 
@@ -180,6 +226,232 @@ class PythonParser(BaseParser):
             imports.append(match.group(1))
 
         return imports
+
+
+class PythonFuncExtractor:
+    """Python AST 函数提取器"""
+
+    BUILTINS = {
+        'print', 'len', 'range', 'str', 'int', 'float', 'bool', 'list',
+        'dict', 'set', 'tuple', 'open', 'file', 'input', 'map', 'filter',
+        'zip', 'enumerate', 'sorted', 'reversed', 'sum', 'min', 'max',
+        'abs', 'round', 'isinstance', 'hasattr', 'getattr', 'setattr',
+        'delattr', 'callable', 'type', 'id', 'hash', 'repr', 'format',
+        'divmod', 'pow', 'hex', 'oct', 'bin', 'chr', 'ord', 'slice',
+        'super', 'property', 'classmethod', 'staticmethod', 'vars',
+        'dir', 'locals', 'globals', 'compile', 'eval', 'exec',
+        'any', 'all', 'iter', 'next', 'object', 'Exception',
+    }
+
+    def extract(self, content: str, file_node_id: str) -> Tuple[List[FuncNode], List[FuncCallEdge]]:
+        """提取函数节点和调用边"""
+        try:
+            tree = ast.parse(content)
+        except (SyntaxError, ValueError):
+            return [], []
+
+        local_funcs: Set[str] = set()  # 本地定义的函数名
+        imported_names: Set[str] = set()  # 导入的名字（可能是模块或函数）
+        imported_modules: Set[str] = set()  # 导入的模块名
+        func_nodes: List[FuncNode] = []
+        call_edges: List[FuncCallEdge] = []
+        edge_id = 0
+
+        # 第一遍：收集 import 信息和函数签名
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    imported_modules.add(alias.name.split('.')[0])
+            elif isinstance(node, ast.ImportFrom):
+                if node.module:
+                    imported_modules.add(node.module.split('.')[0])
+                for alias in node.names:
+                    if alias.asname:
+                        imported_names.add(alias.asname)
+                    else:
+                        imported_names.add(alias.name)
+
+        # 第二遍：收集本地函数名
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                local_funcs.add(node.name)
+
+        # 第三遍：为每个函数创建节点 + 提取调用边
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                func_id = f"{file_node_id}::{node.name}"
+                signature = self._get_signature(node)
+                calls = self._extract_calls(node, local_funcs, imported_names, imported_modules)
+
+                func_nodes.append(FuncNode(
+                    id=func_id,
+                    name=node.name,
+                    signature=signature,
+                    lineno=node.lineno or 0,
+                    end_lineno=node.end_lineno or 0,
+                    calls=calls,
+                ))
+
+                for callee in calls:
+                    # 查找被调用的本地函数
+                    if callee in local_funcs:
+                        target_id = f"{file_node_id}::{callee}"
+                        call_edges.append(FuncCallEdge(
+                            id=f"func_edge_{edge_id}",
+                            source=func_id,
+                            target=target_id,
+                        ))
+                        edge_id += 1
+
+        return func_nodes, call_edges
+
+    def _get_signature(self, node: ast.FunctionDef) -> str:
+        try:
+            return ast.unparse(node.args)
+        except Exception:
+            args = [a.arg for a in node.args.args]
+            return f"({', '.join(args)})"
+
+    def _extract_calls(
+        self,
+        node: ast.FunctionDef,
+        local_funcs: Set[str],
+        imported_names: Set[str],
+        imported_modules: Set[str]
+    ) -> List[str]:
+        """提取函数体内的所有被调用函数名"""
+        calls = []
+        seen = set()
+
+        class CallVisitor(ast.NodeVisitor):
+            def visit_Call(self, call_node):
+                # 获取被调用的名字
+                name = None
+                if isinstance(call_node.func, ast.Name):
+                    name = call_node.func.id
+                elif isinstance(call_node.func, ast.Attribute):
+                    if isinstance(call_node.func.value, ast.Name):
+                        name = call_node.func.attr  # module.attr 形式只看 attr
+
+                if name and name not in self.builtins and name not in seen:
+                    seen.add(name)
+                    calls.append(name)
+
+                self.generic_visit(call_node)
+
+        visitor = CallVisitor()
+        visitor.builtins = self.BUILTINS
+        visitor.seen = seen
+        visitor.calls = calls
+        try:
+            visitor.visit(node)
+        except Exception:
+            pass
+
+        return calls
+
+
+class JavaScriptFuncExtractor:
+    """JavaScript 正则函数提取器（用于 JS/TS/Vue 文件）"""
+
+    # 匹配函数声明: function name(...) { ... }  或 async function name(...) { ... }
+    FUNC_DECL = re.compile(
+        r'(?:async\s+)?function\s+(\w+)\s*\(([^)]*)\)',
+        re.MULTILINE
+    )
+    # 匹配箭头函数: const/let/var name = (...) => ... 或 async (...) => ...
+    ARROW_FUNC = re.compile(
+        r'(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s+)?\([^)]*\)\s*=>',
+        re.MULTILINE
+    )
+    # 匹配方法: name(...) { ... }  在 class 或对象字面量中
+    METHOD_DEF = re.compile(
+        r'(?:async\s+)?(\w+)\s*\(([^)]*)\)\s*(?:{|=>)',
+        re.MULTILINE
+    )
+    # 匹配函数调用: func(...)  |  obj.func(...)
+    CALL_EXPR = re.compile(
+        r'(?<![.\w])(\w+)\s*\(',
+        re.MULTILINE
+    )
+
+    # 内置方法（不视为本地调用）
+    BUILTINS = {
+        'console', 'log', 'warn', 'error', 'debug', 'info',
+        'setTimeout', 'setInterval', 'clearTimeout', 'clearInterval',
+        'setImmediate', 'queueMicrotask',
+        'setState', 'useState', 'useEffect', 'useRef', 'useMemo', 'useCallback',
+        'watch', 'computed', 'ref', 'reactive', 'onMounted', 'onUnmounted',
+        'fetch', 'axios', 'XMLHttpRequest',
+        'JSON', 'Math', 'Date', 'RegExp', 'Array', 'Object', 'String', 'Number',
+        'Boolean', 'Symbol', 'Promise', 'Map', 'Set', 'WeakMap', 'WeakSet',
+        'Error', 'TypeError', 'ReferenceError', 'SyntaxError',
+        'parseInt', 'parseFloat', 'isNaN', 'isFinite',
+        'encodeURI', 'decodeURI', 'encodeURIComponent', 'decodeURIComponent',
+        'btoa', 'atob', 'structuredClone',
+        'document', 'window', 'navigator', 'location', 'history', 'localStorage',
+        'sessionStorage', 'indexedDB', 'crypto', 'performance', 'requestAnimationFrame',
+        'defineComponent', 'h', 'createElement', 'nextTick', 'toRaw',
+        'getCurrentInstance', 'provide', 'inject', 'markRaw',
+        'call', 'apply', 'bind',
+    }
+
+    def extract(self, content: str, file_node_id: str) -> Tuple[List[FuncNode], List[FuncCallEdge]]:
+        """提取 JS 函数节点和调用边"""
+        script = self._extract_script(content)
+        if not script:
+            return [], []
+
+        func_defs = {}  # name -> (lineno, signature)
+        edge_id = 0
+        func_nodes: List[FuncNode] = []
+        call_edges: List[FuncCallEdge] = []
+
+        for m in self.FUNC_DECL.finditer(script):
+            name, params = m.group(1), m.group(2)
+            func_defs[name] = (m.start(), f"({params})")
+
+        for m in self.ARROW_FUNC.finditer(script):
+            name = m.group(1)
+            func_defs[name] = (m.start(), "()")
+
+        # 提取所有调用
+        all_calls = {}
+        for m in self.CALL_EXPR.finditer(script):
+            name = m.group(1)
+            if name not in self.BUILTINS and name not in all_calls:
+                all_calls[name] = m.start()
+
+        # 为本地定义的函数创建节点
+        local_func_names = set(func_defs.keys())
+        for name, (pos, sig) in func_defs.items():
+            func_id = f"{file_node_id}::{name}"
+            func_nodes.append(FuncNode(
+                id=func_id,
+                name=name,
+                signature=sig,
+                lineno=pos,
+                end_lineno=0,
+                calls=[],
+            ))
+
+        # 跨文件调用边：本地函数调用其他本地函数
+        for node in func_nodes:
+            called_locals = [c for c in all_calls if c in local_func_names and c != node.name]
+            for callee in called_locals:
+                call_edges.append(FuncCallEdge(
+                    id=f"func_edge_{edge_id}",
+                    source=node.id,
+                    target=f"{file_node_id}::{callee}",
+                ))
+                edge_id += 1
+
+        return func_nodes, call_edges
+
+    def _extract_script(self, content: str) -> str:
+        """从 Vue 文件中提取 <script> 内容"""
+        match = re.search(r'<script[^>]*>(.*?)</script>', content, re.DOTALL | re.IGNORECASE)
+        return match.group(1) if match else content
 
 
 class CodeParser:
@@ -364,7 +636,8 @@ class CodeParser:
         构建代码结构
         1. 扫描所有支持的文件
         2. 解析每个文件的依赖
-        3. 构建节点和边
+        3. 提取函数节点和调用边
+        4. 构建节点和边
         """
         if not os.path.exists(root_path):
             raise FileNotFoundError(f"Path not found: {root_path}")
@@ -375,7 +648,7 @@ class CodeParser:
         # 扫描文件
         files = self._scan_directory(root_path)
 
-        # 并行解析文件
+        # 并行解析文件（同时提取函数节点）
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
             results = list(executor.map(
                 lambda f: self._parse_file(f, root_path),
@@ -394,11 +667,11 @@ class CodeParser:
                 imp_rel = os.path.relpath(imp_path, root_path)
                 if imp_rel in self._path_to_id:
                     target_id = self._path_to_id[imp_rel]
-                    if node.id in self._file_cache:
+                    if imp_rel in self._file_cache:
                         if target_id not in self._file_cache[imp_rel].imported_by:
                             self._file_cache[imp_rel].imported_by.append(node.id)
 
-        # 构建边
+        # 构建文件间依赖边
         edges = []
         edge_id = 0
         for node in nodes:
@@ -414,18 +687,39 @@ class CodeParser:
                     ))
                     edge_id += 1
 
+        # 提取函数节点和调用边
+        func_nodes = []
+        func_edges = []
+        py_extractor = PythonFuncExtractor()
+        js_extractor = JavaScriptFuncExtractor()
+
+        for node in nodes:
+            if node.extension == '.py':
+                fn, fe = py_extractor.extract(node.path, node.id)
+            elif node.extension in ('.js', '.ts', '.jsx', '.tsx', '.vue', '.mjs', '.cjs'):
+                fn, fe = js_extractor.extract(node.path, node.id)
+            else:
+                fn, fe = [], []
+
+            node.functions.extend(fn)
+            func_nodes.extend(fn)
+            func_edges.extend(fe)
+
         structure.nodes = nodes
         structure.edges = edges
-        structure.stats = self._compute_stats(nodes, edges)
+        structure.func_nodes = func_nodes
+        structure.func_edges = func_edges
+        structure.stats = self._compute_stats(nodes, edges, func_nodes)
 
         return structure
 
-    def _compute_stats(self, nodes: List[FileNode], edges: List[DependencyEdge]) -> Dict:
+    def _compute_stats(self, nodes: List[FileNode], edges: List[DependencyEdge], func_nodes: List[FuncNode] = None) -> Dict:
         """计算统计信息"""
         type_count = {}
         module_count = {}
         total_lines = 0
         total_size = 0
+        total_functions = 0
 
         for node in nodes:
             ext = node.extension.lstrip('.')
@@ -433,12 +727,14 @@ class CodeParser:
             module_count[node.module] = module_count.get(node.module, 0) + 1
             total_lines += node.lines
             total_size += node.size
+            total_functions += len(node.functions)
 
         return {
             'total_files': len(nodes),
             'total_edges': len(edges),
             'total_lines': total_lines,
             'total_size': total_size,
+            'total_functions': total_functions,
             'by_type': type_count,
             'by_module': module_count,
         }

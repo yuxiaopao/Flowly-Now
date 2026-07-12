@@ -1,13 +1,10 @@
 <template>
   <div class="integrations-page">
-    <div class="page-header">
-      <div class="header-left">
-        <h1>集成</h1>
-        <p class="subtitle">
-          连接您的常用工具和服务
-        </p>
-      </div>
-    </div>
+    <PageHeader
+      compact
+      title="集成"
+      subtitle="连接您的常用工具和服务"
+    />
 
     <!-- Categories -->
     <el-tabs
@@ -57,7 +54,7 @@
             class="card-icon"
             :style="{ backgroundColor: integration.color }"
           >
-            <span>{{ integration.name.charAt(0) }}</span>
+            <span>{{ integration.name?.charAt(0) ?? '?' }}</span>
           </div>
           <div class="card-content">
             <h4>{{ integration.name }}</h4>
@@ -98,7 +95,7 @@
               class="integration-icon"
               :style="{ backgroundColor: integration.color }"
             >
-              <span>{{ integration.name.charAt(0) }}</span>
+              <span>{{ integration.name?.charAt(0) ?? '?' }}</span>
             </div>
             <div class="integration-info">
               <h4>{{ integration.name }}</h4>
@@ -162,7 +159,7 @@
             class="item-icon"
             :style="{ backgroundColor: item.color }"
           >
-            <span>{{ item.name.charAt(0) }}</span>
+            <span>{{ item.name?.charAt(0) ?? '?' }}</span>
           </div>
           <div class="item-info">
             <h4>{{ item.name }}</h4>
@@ -213,7 +210,7 @@
             class="detail-icon"
             :style="{ backgroundColor: selectedIntegration.color }"
           >
-            <span>{{ selectedIntegration.name.charAt(0) }}</span>
+            <span>{{ selectedIntegration.name?.charAt(0) ?? '?' }}</span>
           </div>
           <div class="detail-info">
             <h3>{{ selectedIntegration.name }}</h3>
@@ -285,6 +282,7 @@ import { ref, computed, onMounted } from 'vue'
 import { Plug, Zap } from 'lucide-vue-next'
 import { useAppStore } from '@/stores/app'
 import { useIntegrationsStore } from '@/stores/integrations'
+import PageHeader from '@/components/layout/PageHeader.vue'
 
 const integrationsStore = useIntegrationsStore()
 const appStore = useAppStore()
@@ -295,7 +293,9 @@ const selectedIntegration = ref(null)
 
 // Computed
 const featuredIntegrations = computed(() => {
-  return integrationsStore.templates.filter(t => t.is_featured).slice(0, 6)
+  return integrationsStore.templates
+    .filter(t => t.isFeatured ?? t.is_featured)
+    .slice(0, 6)
 })
 
 const allIntegrations = computed(() => {
@@ -328,7 +328,8 @@ const getCategoryTitle = () => {
 
 const isConnected = (integration) => {
   return integrationsStore.integrations.some(
-    i => i.integration_type === integration.integration_type && i.is_connected
+    i => (i.integrationType ?? i.integration_type) === (integration.integrationType ?? integration.integration_type)
+      && (i.isConnected ?? i.is_connected)
   )
 }
 
@@ -361,7 +362,7 @@ const disconnectFromDialog = async () => {
   if (!selectedIntegration.value) return
   try {
     const connectedItem = integrationsStore.integrations.find(
-      i => i.integration_type === selectedIntegration.value.integration_type
+      i => (i.integrationType ?? i.integration_type) === (selectedIntegration.value.integrationType ?? selectedIntegration.value.integration_type)
     )
     if (connectedItem) {
       await integrationsStore.disconnectIntegration(connectedItem.id)
@@ -382,12 +383,6 @@ const syncIntegration = async (item) => {
   }
 }
 
-const formatDate = (dateStr) => {
-  if (!dateStr) return '-'
-  const date = new Date(dateStr)
-  return date.toLocaleString('zh-CN')
-}
-
 onMounted(async () => {
   await Promise.all([
     integrationsStore.fetchAvailableIntegrations(),
@@ -400,21 +395,6 @@ onMounted(async () => {
 <style lang="scss" scoped>
 .integrations-page {
   padding: 24px;
-}
-
-.page-header {
-  margin-bottom: 24px;
-
-  h1 {
-    margin: 0;
-    font-size: 28px;
-    font-weight: 600;
-  }
-
-  .subtitle {
-    margin: 8px 0 0;
-    color: var(--el-text-color-secondary);
-  }
 }
 
 .category-tabs {

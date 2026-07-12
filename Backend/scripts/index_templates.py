@@ -104,7 +104,7 @@ def index_workflow_templates():
 def main():
     """Main entry point."""
     print("=" * 50)
-    print("e-Flowly Vector Indexing Tool")
+    print("Flowly Vector Indexing Tool")
     print("=" * 50)
 
     # Check PgVector

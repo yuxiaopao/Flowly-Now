@@ -5,6 +5,8 @@ Billing API views.
 from datetime import datetime, timedelta
 from django.utils import timezone
 from django.db.models import Sum
+from workflows.models import Workflow, WorkflowExecution
+from agents.models import Agent
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -137,7 +139,13 @@ class SubscriptionViewSet(viewsets.ModelViewSet):
         subscription = self.get_queryset().first()
 
         if not subscription:
-            return Response({'error': 'No subscription found'}, status=status.HTTP_404_NOT_FOUND)
+            subscription = Subscription.objects.create(
+                user=request.user,
+                plan_type=PlanType.FREE,
+                status=SubscriptionStatus.ACTIVE,
+                current_period_start=timezone.now(),
+                current_period_end=timezone.now() + timedelta(days=365),
+            )
 
         limits = subscription.get_usage_limits() or {}
 
@@ -160,32 +168,54 @@ class SubscriptionViewSet(viewsets.ModelViewSet):
             total_cost=Sum('total_cost')
         )
 
+        live_workflow_count = Workflow.objects.filter(owner=request.user).count()
+        live_agent_count = Agent.objects.filter(owner=request.user).count()
+        live_execution_count = WorkflowExecution.objects.filter(
+            workflow__owner=request.user,
+            queued_at__gte=period_start,
+            queued_at__lte=period_end,
+        ).count()
+
+        workflow_count = max(usage['workflow_count'] or 0, live_workflow_count)
+        execution_count = max(usage['execution_count'] or 0, live_execution_count)
+        agent_count = max(usage['agent_count'] or 0, live_agent_count)
+
         usage_record = UsageRecord(
             period_start=period_start,
             period_end=period_end,
-            workflow_count=usage['workflow_count'] or 0,
-            execution_count=usage['execution_count'] or 0,
+            workflow_count=workflow_count,
+            execution_count=execution_count,
             api_call_count=usage['api_call_count'] or 0,
             storage_used_mb=usage['storage_used_mb'] or 0,
-            agent_count=usage['agent_count'] or 0,
+            agent_count=agent_count,
             input_tokens=usage['input_tokens'] or 0,
             output_tokens=usage['output_tokens'] or 0,
             total_cost=usage['total_cost'] or 0
         )
 
+        max_workflows = limits.get('max_workflows') or 100
+        max_executions = limits.get('max_executions_per_month') or 1000
+        max_storage_gb = limits.get('max_storage_gb') or 5
+        max_agents = limits.get('max_agents') or 5
+        max_api_calls = limits.get('max_api_calls_per_month') or 10000
+
+        storage_mb = float(usage_record.storage_used_mb or 0)
+
         # Calculate percentages
         usage_percentages = {
-            'workflows': min(100, (usage_record.workflow_count / limits.get('max_workflows', 100)) * 100) if limits.get('max_workflows') else 0,
-            'executions': min(100, (usage_record.execution_count / limits.get('max_executions_per_month', 1000)) * 100) if limits.get('max_executions_per_month') else 0,
-            'storage': min(100, (float(usage_record.storage_used_mb or 0) / (limits.get('max_storage_gb', 5) * 1024)) * 100) if limits.get('max_storage_gb') else 0,
-            'agents': min(100, (usage_record.agent_count / limits.get('max_agents', 5)) * 100) if limits.get('max_agents') else 0,
+            'workflows': min(100, (usage_record.workflow_count / max_workflows) * 100) if max_workflows else 0,
+            'executions': min(100, (usage_record.execution_count / max_executions) * 100) if max_executions else 0,
+            'storage': min(100, (storage_mb / (max_storage_gb * 1024)) * 100) if max_storage_gb else 0,
+            'agents': min(100, (usage_record.agent_count / max_agents) * 100) if max_agents else 0,
+            'api_calls': min(100, (usage_record.api_call_count / max_api_calls) * 100) if max_api_calls else 0,
         }
 
         remaining = {
-            'workflows': max(0, limits.get('max_workflows', 100) - usage_record.workflow_count),
-            'executions': max(0, limits.get('max_executions_per_month', 1000) - usage_record.execution_count),
-            'storage_gb': max(0, limits.get('max_storage_gb', 5) - float(usage_record.storage_used_mb or 0) / 1024),
-            'agents': max(0, limits.get('max_agents', 5) - usage_record.agent_count),
+            'workflows': max(0, max_workflows - usage_record.workflow_count),
+            'executions': max(0, max_executions - usage_record.execution_count),
+            'storage_gb': max(0, max_storage_gb - storage_mb / 1024),
+            'agents': max(0, max_agents - usage_record.agent_count),
+            'api_calls': max(0, max_api_calls - usage_record.api_call_count),
         }
 
         return Response({

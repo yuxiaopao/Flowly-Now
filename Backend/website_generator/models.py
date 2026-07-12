@@ -20,6 +20,14 @@ class GeneratedSite(models.Model):
         ('generating', '生成中'),
         ('completed', '已完成'),
         ('failed', '失败'),
+        ('iterating', '迭代中'),
+    ]
+
+    PREVIEW_STATUS_CHOICES = [
+        ('', '未知'),
+        ('live', '可预览'),
+        ('blocked', '已阻断'),
+        ('stale', '已过期'),
     ]
 
     WEBSITE_TYPE_CHOICES = [
@@ -27,6 +35,7 @@ class GeneratedSite(models.Model):
         ('regression', '回归预测'),
         ('detection', '目标检测'),
         ('segmentation', '图像分割'),
+        ('clip_retrieval', 'CLIP 检索'),
         ('nlp_classification', '文本分类'),
         ('ner', '命名实体识别'),
     ]
@@ -55,6 +64,19 @@ class GeneratedSite(models.Model):
     )
     labels = models.JSONField(default=list, verbose_name='类别标签')
     framework = models.CharField(max_length=50, default='pytorch', verbose_name='框架')
+
+    # YOLO Training Link
+    training_run_id = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name='训练运行ID',
+        help_text='关联的 YOLO 训练运行 ID'
+    )
+    yolo_version = models.CharField(max_length=20, blank=True, verbose_name='YOLO版本')
+    yolo_variant = models.CharField(max_length=20, blank=True, verbose_name='YOLO模型规格')
+    best_weight_path = models.CharField(max_length=500, blank=True, verbose_name='最佳权重路径')
+    last_weight_path = models.CharField(max_length=500, blank=True, verbose_name='最终权重路径')
+    class_names = models.JSONField(default=list, verbose_name='类别名称')
 
     # Generated code
     output_dir = models.CharField(max_length=500, verbose_name='输出目录')
@@ -91,6 +113,20 @@ class GeneratedSite(models.Model):
     # Deployment info
     inference_endpoint = models.CharField(max_length=500, blank=True, verbose_name='推理端点')
     port = models.IntegerField(default=5000, verbose_name='后端端口')
+    codegraph_project_id = models.IntegerField(null=True, blank=True, verbose_name='CodeGraph 项目ID')
+    show_in_nav = models.BooleanField(default=True, verbose_name='显示在侧栏导航')
+    last_qa_gate = models.CharField(max_length=20, blank=True, verbose_name='最近QA档位')
+    last_qa_report = models.JSONField(default=dict, blank=True, verbose_name='最近QA报告')
+    last_preview_url = models.CharField(max_length=500, blank=True, verbose_name='最近预览URL')
+    preview_status = models.CharField(
+        max_length=20,
+        choices=PREVIEW_STATUS_CHOICES,
+        blank=True,
+        default='',
+        verbose_name='预览状态',
+    )
+    rag_collection_id = models.UUIDField(null=True, blank=True, verbose_name='项目RAG集合ID')
+    last_agent_reply = models.JSONField(default=dict, blank=True, verbose_name='最近Agent回复')
 
     tenant = models.ForeignKey(
         'tenants.Tenant',
@@ -166,6 +202,10 @@ class GeneratedSite(models.Model):
         self.completed_at = timezone.now()
         self.error_message = error_message
         self.save(update_fields=['status', 'completed_at', 'error_message'])
+
+    def mark_iterating(self):
+        self.status = 'iterating'
+        self.save(update_fields=['status'])
 
     def update_progress(self, progress):
         self.progress = min(progress, 99)

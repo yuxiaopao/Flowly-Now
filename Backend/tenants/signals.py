@@ -46,8 +46,37 @@ Flowly 团队
 
 @receiver(post_delete, sender='tenants.TenantMembership')
 def membership_deleted(sender, instance, **kwargs):
-    """Handle membership deletion."""
-    pass
+    """Handle membership deletion — notify removed member and team."""
+    user = instance.user
+    tenant = instance.tenant
+    if user and user.email:
+        from django.conf import settings
+        from core.email_delivery import send_email_with_fallback
+
+        try:
+            send_email_with_fallback(
+                subject=f'您已离开团队 {tenant.name}',
+                message=(
+                    f'您好 {user.username},\n\n'
+                    f'您已不再属于团队 "{tenant.name}"。\n\n'
+                    f'如有疑问请联系团队管理员。\n\n'
+                    f'Flowly 团队'
+                ),
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[user.email],
+            )
+        except Exception:
+            pass
+
+    notify_tenant(
+        tenant.id,
+        'membership_removed',
+        {
+            'user_id': str(user.id) if user else None,
+            'username': getattr(user, 'username', ''),
+            'role': instance.role,
+        },
+    )
 
 
 def notify_tenant(tenant_id, event_type, data):

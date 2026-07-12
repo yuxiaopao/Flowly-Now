@@ -1,5 +1,7 @@
 <template>
   <div
+    ref="rootEl"
+    :style="{ '--node-accent': nodeColor, ...resize.sizeStyle.value }"
     class="domain-node subtitle-node"
     :class="{ selected, expanded: isExpanded, 'is-running': isRunning, 'is-completed': isCompleted, 'is-failed': isFailed }"
     @click.stop="handleSelect"
@@ -10,16 +12,7 @@
     />
 
     <div class="node-header">
-      <div
-        class="node-type-badge"
-        :style="{ backgroundColor: nodeColor + '22', borderColor: nodeColor }"
-      >
-        <Subtitles
-          class="badge-icon"
-          :style="{ color: nodeColor }"
-        />
-        <span :style="{ color: nodeColor }">字幕生成</span>
-      </div>
+      <NodeTypeBadge :node-type="NODE_TYPE" />
       <button
         class="action-btn"
         @click.stop="toggleExpand"
@@ -33,12 +26,14 @@
 
     <div class="node-name-section">
       <input
+        :id="id ? `node-label-${id}` : undefined"
+        name="node-label"
         v-model="localName"
         class="node-name-input"
         placeholder="节点名称..."
         @blur="handleChange"
         @keydown.enter="handleChange"
-        @click.stop
+        @click.stop="handleSelect"
       >
     </div>
 
@@ -51,10 +46,10 @@
         <span class="info-value">{{ localConfig.format?.toUpperCase() || localConfig.model || '-' }}</span>
       </div>
       <div
-        v-if="localConfig.prompt || localConfig.text"
+        v-if="localConfig.inputPath"
         class="preview-row"
       >
-        <span class="preview-text">{{ truncate(localConfig.prompt || localConfig.text, 35) }}</span>
+        <span class="preview-text">{{ truncate(localConfig.inputPath, 35) }}</span>
       </div>
       <div
         v-if="localConfig.language"
@@ -206,15 +201,51 @@
           />
         </div>
         <div class="config-section">
-          <label class="config-label">输入文本 / 视频路径</label>
+          <label class="config-label">输入类型</label>
+          <el-select
+            v-model="localConfig.inputType"
+            size="small"
+            @change="handleChange"
+          >
+            <el-option
+              value="audio"
+              label="音频文件"
+            />
+            <el-option
+              value="video"
+              label="视频文件"
+            />
+          </el-select>
+        </div>
+        <div class="config-section">
+          <label class="config-label">音频/视频路径或 URL</label>
           <el-input
-            v-model="localConfig.input"
+            v-model="localConfig.inputPath"
             type="textarea"
             :rows="2"
             size="small"
-            placeholder="输入要生成字幕的文本或视频路径..."
+            placeholder="本地文件路径，或公网可访问的音频/视频 URL（DashScope 需要 URL）..."
             @change="handleChange"
           />
+        </div>
+        <div class="config-section">
+          <label class="config-label">服务商</label>
+          <el-select
+            v-model="localConfig.provider"
+            size="small"
+            placeholder="自动（URL 用 DashScope，本地路径用 OpenAI）"
+            clearable
+            @change="handleChange"
+          >
+            <el-option
+              value="openai"
+              label="OpenAI Whisper（本地文件）"
+            />
+            <el-option
+              value="dashscope"
+              label="阿里云百炼 Paraformer（公网 URL）"
+            />
+          </el-select>
         </div>
         <div class="config-section">
           <label class="config-label">字幕格式</label>
@@ -268,6 +299,12 @@
       type="source"
       :position="Position.Right"
     />
+
+    <div
+      class="resize-handle"
+      title="拖动调整节点大小"
+      @pointerdown.stop="(e) => resize.startResize(e, rootEl?.offsetWidth, rootEl?.offsetHeight)"
+    />
   </div>
 </template>
 
@@ -276,6 +313,10 @@ import { ref, watch, computed } from 'vue'
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
 import { Subtitles, ChevronDown, Loader, Copy, Check, AlertCircle, FileText } from 'lucide-vue-next'
 import { useExecutionStore } from '@/stores/execution'
+import NodeTypeBadge from '@/components/workflow/nodes/NodeTypeBadge.vue'
+import { useNodePresentation } from '@/composables/useNodePresentation'
+import { useNodeResize } from '@/composables/useNodeResize'
+
 
 const props = defineProps({
   id: { type: String, default: '' },
@@ -283,20 +324,33 @@ const props = defineProps({
   selected: { type: Boolean, default: false }
 })
 
+const NODE_TYPE = 'subtitle_generation'
+const { nodeIcon, nodeColor, nodeLabel } = useNodePresentation(NODE_TYPE)
+
 const emit = defineEmits(['select'])
 const { updateNodeData } = useVueFlow()
 const executionStore = useExecutionStore()
 
+const rootEl = ref(null)
+const resize = useNodeResize({
+  id: props.id,
+  initialWidth: props.data.uiSize?.width,
+  initialHeight: props.data.uiSize?.height,
+  minWidth: 260,
+  minHeight: 180,
+  maxWidth: 720,
+  maxHeight: 900,
+})
+
 const isExpanded = ref(false)
-const nodeColor = '#a855f7'
 
 const localName = ref(props.data.label || '字幕生成')
 const localConfig = ref({
   model: props.data.config?.model || '',
+  provider: props.data.config?.provider || '',
   format: props.data.config?.format || 'srt',
-  input: props.data.config?.input || '',
-  prompt: props.data.config?.prompt || '',
-  text: props.data.config?.text || '',
+  inputType: props.data.config?.inputType || 'audio',
+  inputPath: props.data.config?.inputPath || props.data.config?.input || '',
   language: props.data.config?.language || 'zh-CN',
   maxCharsPerLine: props.data.config?.maxCharsPerLine || 42
 })
@@ -309,22 +363,42 @@ const isFailed = computed(() => nodeStatus.value === 'failed')
 const showSrtFormat = ref(false)
 const copiedSrt = ref(false)
 
+function formatSeconds(sec) {
+  const total = Math.max(0, Math.floor(Number(sec) || 0))
+  const m = Math.floor(total / 60)
+  const s = total % 60
+  return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
+}
+
 const subtitleLines = computed(() => {
   if (!nodeOutput.value) return []
   if (Array.isArray(nodeOutput.value)) return nodeOutput.value
-  if (nodeOutput.value.subtitles) return nodeOutput.value.subtitles
-  if (nodeOutput.value.lines) return nodeOutput.value.lines
+  const segments = nodeOutput.value.segments
+  if (Array.isArray(segments) && segments.length) {
+    return segments.map((seg) => ({
+      start: formatSeconds(seg.start),
+      end: formatSeconds(seg.end),
+      text: seg.text || ''
+    }))
+  }
+  if (Array.isArray(nodeOutput.value.lines)) return nodeOutput.value.lines
+  if (nodeOutput.value.text) return [{ start: '00:00', end: '00:00', text: nodeOutput.value.text }]
   return []
 })
 
 const srtContent = computed(() => {
-  return subtitleLines.value.map((line, i) => {
-    const idx = i + 1
-    const start = line.start || line.startTime || '00:00:00,000'
-    const end = line.end || line.endTime || '00:00:00,000'
-    const text = line.text || line.content || line.value || ''
-    return `${idx}\n${start} --> ${end}\n${text}`
-  }).join('\n\n')
+  if (!nodeOutput.value) return ''
+  if (typeof nodeOutput.value.subtitles === 'string') return nodeOutput.value.subtitles
+  if (Array.isArray(nodeOutput.value.subtitles)) {
+    return nodeOutput.value.subtitles.map((line, i) => {
+      const idx = i + 1
+      const start = line.start || line.startTime || '00:00:00,000'
+      const end = line.end || line.endTime || '00:00:00,000'
+      const text = line.text || line.content || line.value || ''
+      return `${idx}\n${start} --> ${end}\n${text}`
+    }).join('\n\n')
+  }
+  return nodeOutput.value.text || ''
 })
 
 async function copySrt() {
@@ -351,6 +425,10 @@ const totalDuration = computed(() => {
     const s = Math.floor(d % 60)
     return `${m}:${s.toString().padStart(2, '0')}`
   }
+  const segments = nodeOutput.value.segments
+  if (Array.isArray(segments) && segments.length) {
+    return formatSeconds(segments[segments.length - 1].end)
+  }
   return null
 })
 
@@ -362,11 +440,23 @@ function truncate(str, len) {
 watch(() => props.data, (d) => {
   if (d) {
     localName.value = d.label || '字幕生成'
-    localConfig.value = { model: d.config?.model || '', format: d.config?.format || 'srt', input: d.config?.input || '', prompt: d.config?.prompt || '', text: d.config?.text || '', language: d.config?.language || 'zh-CN', maxCharsPerLine: d.config?.maxCharsPerLine || 42, ...d.config }
+    localConfig.value = {
+      model: d.config?.model || '',
+      provider: d.config?.provider || '',
+      format: d.config?.format || 'srt',
+      inputType: d.config?.inputType || 'audio',
+      inputPath: d.config?.inputPath || d.config?.input || '',
+      language: d.config?.language || 'zh-CN',
+      maxCharsPerLine: d.config?.maxCharsPerLine || 42,
+      ...d.config
+    }
   }
 }, { deep: true })
 
-function toggleExpand() { isExpanded.value = !isExpanded.value }
+function toggleExpand() {
+  handleSelect()
+  isExpanded.value = !isExpanded.value
+}
 
 function handleChange() {
   if (props.id) updateNodeData(props.id, { label: localName.value, config: { ...localConfig.value } })
@@ -397,6 +487,25 @@ function handleSelect() {
   background: rgba(0, 0, 0, 0.2);
   overflow: hidden;
   transition: all 0.3s ease;
+  flex: 1 1 auto;
+  min-height: 100px;
+  display: flex;
+  flex-direction: column;
+}
+
+.resize-handle {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 14px;
+  height: 14px;
+  border-right: 2px solid rgba(168, 85, 247, 0.55);
+  border-bottom: 2px solid rgba(168, 85, 247, 0.55);
+  cursor: nwse-resize;
+  opacity: 0.55;
+  z-index: 3;
+
+  &:hover { opacity: 1; }
 }
 
 .subtitle-error {
@@ -593,6 +702,9 @@ function handleSelect() {
 .status-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
 
 .domain-node {
+  position: relative;
+  display: flex;
+  flex-direction: column;
   background: var(--node-bg, rgba(20, 20, 30, 0.95));
   border: 2px solid var(--node-border, v-bind(nodeColor));
   border-radius: 12px;

@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="team-page">
     <div class="page-header">
       <div class="header-left">
@@ -65,7 +65,7 @@
         >
           <div class="card-header">
             <div class="tenant-avatar">
-              {{ tenant.name.charAt(0).toUpperCase() }}
+              {{ tenant.name?.charAt(0)?.toUpperCase() ?? '?' }}
             </div>
             <div class="tenant-info">
               <h3 class="tenant-name">
@@ -141,7 +141,7 @@
             <div class="section-header">
               <h4>成员列表</h4>
               <el-button
-                v-if="isAdmin(selectedTenant)"
+                v-if="isAdmin()"
                 size="small"
                 type="primary"
                 @click="showInviteDialog = true"
@@ -169,7 +169,7 @@
                 class="member-item"
               >
                 <div class="member-avatar">
-                  {{ member.user?.username?.charAt(0).toUpperCase() || '?' }}
+                  {{ member.user?.username?.charAt(0)?.toUpperCase() ?? '?' }}
                 </div>
                 <div class="member-info">
                   <span class="member-name">{{ member.user?.username }}</span>
@@ -179,7 +179,7 @@
                   v-model="member.role"
                   size="small"
                   style="width: 100px"
-                  :disabled="member.role === 'owner' || !isAdmin(selectedTenant)"
+                  :disabled="member.role === 'owner' || !isAdmin()"
                   @change="handleRoleChange(member)"
                 >
                   <el-option
@@ -200,7 +200,7 @@
                   />
                 </el-select>
                 <el-button
-                  v-if="canRemoveMember(member, selectedTenant)"
+                  v-if="canRemoveMember(member)"
                   text
                   size="small"
                   type="danger"
@@ -208,6 +208,182 @@
                 >
                   <Trash2 class="remove-icon" />
                 </el-button>
+              </div>
+            </div>
+          </el-tab-pane>
+
+          <!-- ---- Team Knowledge Base Tab ---- -->
+          <el-tab-pane
+            label="团队知识库"
+            name="knowledge"
+          >
+            <div class="section-header">
+              <h4>团队共享知识库</h4>
+              <el-button
+                size="small"
+                @click="goToKnowledge"
+              >
+                前往知识库管理
+                <ArrowRight class="btn-icon-sm" />
+              </el-button>
+            </div>
+            <div
+              v-if="isLoadingKnowledge"
+              class="loading"
+            >
+              <el-skeleton
+                :rows="3"
+                animated
+              />
+            </div>
+            <div
+              v-else-if="teamCollections.length === 0"
+              class="empty-tab"
+            >
+              <p>该团队暂无共享知识库，前往「知识库」页面创建时选择所属团队即可共享</p>
+            </div>
+            <div
+              v-else
+              class="resource-grid"
+            >
+              <div
+                v-for="col in teamCollections"
+                :key="col.id"
+                class="resource-card"
+              >
+                <div class="resource-icon kb-icon">
+                  <BookOpen class="resource-icon-inner" />
+                </div>
+                <div class="resource-info">
+                  <h5>{{ col.name }}</h5>
+                  <p class="resource-desc">
+                    {{ col.description || '暂无描述' }}
+                  </p>
+                  <div class="resource-meta">
+                    <span>{{ col.document_count ?? 0 }} 篇文档 · {{ col.chunk_count ?? 0 }} 分块</span>
+                    <span>{{ col.embedding_model }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </el-tab-pane>
+
+          <!-- ---- Team Agents Tab ---- -->
+          <el-tab-pane
+            label="团队 Agent"
+            name="agents"
+          >
+            <div class="section-header">
+              <h4>团队共享 Agent</h4>
+              <el-button
+                size="small"
+                @click="router.push('/agents')"
+              >
+                前往 Agent 管理
+                <ArrowRight class="btn-icon-sm" />
+              </el-button>
+            </div>
+            <div
+              v-if="isLoadingTeamAgents"
+              class="loading"
+            >
+              <el-skeleton
+                :rows="3"
+                animated
+              />
+            </div>
+            <div
+              v-else-if="teamAgents.length === 0"
+              class="empty-tab"
+            >
+              <p>该团队暂无共享 Agent，创建/编辑 Agent 时选择所属团队即可共享</p>
+            </div>
+            <div
+              v-else
+              class="resource-grid"
+            >
+              <div
+                v-for="agent in teamAgents"
+                :key="agent.id"
+                class="resource-card clickable"
+                @click="goToAgent(agent)"
+              >
+                <div class="resource-icon agent-icon">
+                  <Bot class="resource-icon-inner" />
+                </div>
+                <div class="resource-info">
+                  <h5>{{ agent.name }}</h5>
+                  <p class="resource-desc">
+                    {{ agent.description || '暂无描述' }}
+                  </p>
+                  <div class="resource-meta">
+                    <span>{{ agent.model }}</span>
+                    <span v-if="agent.knowledge_collections?.length">
+                      关联 {{ agent.knowledge_collections.length }} 个知识库
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </el-tab-pane>
+
+          <!-- ---- AI Collaboration Records Tab ---- -->
+          <el-tab-pane
+            label="AI协作记录"
+            name="collaborations"
+          >
+            <div class="section-header">
+              <h4>多智能体协作记录</h4>
+              <el-button
+                size="small"
+                type="primary"
+                @click="goToCollaborate"
+              >
+                <Plus class="btn-icon-sm" />发起协作
+              </el-button>
+            </div>
+            <div
+              v-if="isLoadingCollaborations"
+              class="loading"
+            >
+              <el-skeleton
+                :rows="3"
+                animated
+              />
+            </div>
+            <div
+              v-else-if="teamCollaborations.length === 0"
+              class="empty-tab"
+            >
+              <p>该团队暂无协作记录，点击「发起协作」创建一次多智能体协作任务</p>
+            </div>
+            <div
+              v-else
+              class="collaborations-list"
+            >
+              <div
+                v-for="run in teamCollaborations"
+                :key="run.id"
+                class="collaboration-item"
+              >
+                <div class="collab-icon">
+                  <Workflow class="collab-icon-inner" />
+                </div>
+                <div class="collab-content">
+                  <p class="collab-task">
+                    {{ run.task }}
+                  </p>
+                  <div class="collab-meta">
+                    <span>{{ run.created_by_username }}</span>
+                    <span>{{ formatDateTime(run.started_at) }}</span>
+                  </div>
+                </div>
+                <el-tag
+                  size="small"
+                  :type="getCollaborationStatusType(run.status)"
+                >
+                  {{ getCollaborationStatusLabel(run.status) }}
+                </el-tag>
               </div>
             </div>
           </el-tab-pane>
@@ -220,7 +396,7 @@
             <div class="section-header">
               <h4>团队技能</h4>
               <el-button
-                v-if="isAdmin(selectedTenant)"
+                v-if="isAdmin()"
                 size="small"
                 type="primary"
                 @click="openSkillCreateDialog"
@@ -322,7 +498,7 @@
                     </el-tag>
                   </div>
                   <el-dropdown
-                    v-if="isAdmin(selectedTenant)"
+                    v-if="isAdmin()"
                     trigger="click"
                   >
                     <el-button
@@ -387,7 +563,7 @@
             <div class="section-header">
               <h4>团队任务</h4>
               <el-button
-                v-if="isAdmin(selectedTenant)"
+                v-if="isAdmin()"
                 size="small"
                 type="primary"
                 @click="openTaskCreateDialog"
@@ -550,7 +726,7 @@
                     />
                   </el-select>
                   <el-dropdown
-                    v-if="isAdmin(selectedTenant)"
+                    v-if="isAdmin()"
                     trigger="click"
                   >
                     <el-button
@@ -1250,15 +1426,20 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, watch } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { useTenantStore } from '@/stores/tenant'
 import { useAuthStore } from '@/stores/auth'
 import { useAppStore } from '@/stores/app'
+import { ragApi } from '@/api/rag'
+import { agentApi } from '@/api/agent'
 import {
   Plus, Users, Bell, GitBranch, MoreVertical, Edit, Trash2,
-  Cpu, Star, UserPlus, User, Calendar, AlertTriangle
+  Cpu, Star, UserPlus, User, Calendar, AlertTriangle,
+  BookOpen, Bot, Workflow, ArrowRight
 } from 'lucide-vue-next'
-import { ElMessage, ElMessageBox } from 'element-plus'
+
+const router = useRouter()
 
 const tenantStore = useTenantStore()
 const authStore = useAuthStore()
@@ -1278,12 +1459,20 @@ const selectedTenant = ref(null)
 const editingTenant = ref(null)
 const editingSkill = ref(null)
 const editingTask = ref(null)
+const currentTaskAssign = ref(null)
 
 const usage = ref(null)
 const isLoadingMembers = ref(false)
 const isLoadingSkills = ref(false)
 const isLoadingTasks = ref(false)
 const isLoadingActivities = ref(false)
+const isLoadingKnowledge = ref(false)
+const isLoadingTeamAgents = ref(false)
+const isLoadingCollaborations = ref(false)
+
+const teamCollections = ref([])
+const teamAgents = ref([])
+const teamCollaborations = ref([])
 
 const formRef = ref(null)
 const inviteFormRef = ref(null)
@@ -1337,6 +1526,12 @@ const skills = computed(() => tenantStore.skills)
 const tasks = computed(() => tenantStore.tasks)
 const activities = computed(() => tenantStore.activities)
 
+// Current user's membership in the selected tenant (for permission checks)
+const currentUserMembership = computed(() => {
+  if (!selectedTenant.value || !authStore.user) return null
+  return members.value.find(m => m.user?.id === authStore.user?.id) || null
+})
+
 const filteredSkills = computed(() => {
   if (!skillCategoryFilter.value) return skills.value
   return skills.value.filter(s => s.category === skillCategoryFilter.value)
@@ -1356,9 +1551,6 @@ function getPlanType(plan) {
 function getPlanLabel(plan) {
   return { free: '免费版', starter: '入门版', professional: '专业版', enterprise: '企业版' }[plan] || plan
 }
-function getRoleType(role) {
-  return { owner: 'danger', admin: 'warning', member: 'success', viewer: 'info' }[role] || 'info'
-}
 function getRoleLabel(role) {
   return { owner: '所有者', admin: '管理员', member: '成员', viewer: '查看者' }[role] || role
 }
@@ -1372,10 +1564,13 @@ function getProgressStatus(percentage) {
   return 'success'
 }
 function isOwner(tenant) { return tenant.owner?.id === authStore.user?.id }
-function isAdmin(tenant) { return isOwner(tenant) || tenant.owner?.id === authStore.user?.id }
-function canRemoveMember(member, tenant) {
+function isAdmin() {
+  if (!currentUserMembership.value) return false
+  return ['owner', 'admin'].includes(currentUserMembership.value.role)
+}
+function canRemoveMember(member) {
   if (member.role === 'owner') return false
-  if (!isAdmin(tenant)) return false
+  if (!isAdmin()) return false
   return true
 }
 function getCategoryColor(cat) {
@@ -1480,6 +1675,9 @@ async function selectTenant(tenant) {
   isLoadingSkills.value = true
   isLoadingTasks.value = true
   isLoadingActivities.value = true
+  isLoadingKnowledge.value = true
+  isLoadingTeamAgents.value = true
+  isLoadingCollaborations.value = true
 
   try {
     const [usageData] = await Promise.all([
@@ -1498,13 +1696,72 @@ async function selectTenant(tenant) {
     isLoadingTasks.value = false
     isLoadingActivities.value = false
   }
+
+  loadTeamKnowledge(tenant.id)
+  loadTeamAgents(tenant.id)
+  loadTeamCollaborations(tenant.id)
+}
+
+// ---- Team Knowledge / Agent / Collaboration (read-only visibility) ----
+async function loadTeamKnowledge(tenantId) {
+  isLoadingKnowledge.value = true
+  try {
+    const res = await ragApi.getCollections({ tenant: tenantId })
+    teamCollections.value = res?.results || res || []
+  } catch (err) {
+    appStore.error('加载团队知识库失败')
+  } finally {
+    isLoadingKnowledge.value = false
+  }
+}
+
+async function loadTeamAgents(tenantId) {
+  isLoadingTeamAgents.value = true
+  try {
+    const res = await agentApi.getList({ tenant: tenantId })
+    teamAgents.value = res?.results || res || []
+  } catch (err) {
+    appStore.error('加载团队 Agent 失败')
+  } finally {
+    isLoadingTeamAgents.value = false
+  }
+}
+
+async function loadTeamCollaborations(tenantId) {
+  isLoadingCollaborations.value = true
+  try {
+    const res = await agentApi.getCollaborationList({ tenant: tenantId })
+    teamCollaborations.value = res?.results || res || []
+  } catch (err) {
+    appStore.error('加载团队协作记录失败')
+  } finally {
+    isLoadingCollaborations.value = false
+  }
+}
+
+function goToKnowledge() {
+  router.push('/knowledge')
+}
+function goToAgent(agent) {
+  router.push(`/agents/${agent.id}/debug`)
+}
+function goToCollaborate() {
+  router.push('/agents/collaborate')
+}
+
+function getCollaborationStatusType(s) {
+  return { pending: 'info', running: 'warning', completed: 'success', failed: 'danger' }[s] || 'info'
+}
+function getCollaborationStatusLabel(s) {
+  return { pending: '待处理', running: '进行中', completed: '已完成', failed: '失败' }[s] || s
 }
 
 // ---- Member Actions ----
 async function handleRoleChange(member) {
   if (member.role === 'owner') return
   try {
-    appStore.info('角色变更已保存')
+    await tenantStore.updateMemberRole(member.id, member.role)
+    appStore.success('角色变更已保存')
   } catch (err) {
     appStore.error('变更失败')
   }
@@ -1703,11 +1960,13 @@ async function handleDeleteTask(task) {
 }
 
 async function handleTaskStatusChange(task) {
+  const oldStatus = task.status
   try {
     await tenantStore.changeTaskStatus(task.id, task.status)
     if (task.status === 'done') appStore.success('任务已完成')
     await tenantStore.fetchActivities(selectedTenant.value.id)
   } catch (err) {
+    task.status = oldStatus
     appStore.error('状态变更失败')
   }
 }
@@ -1825,6 +2084,50 @@ onMounted(async () => {
   .member-email { font-size: $font-size-xs; color: var(--text-tertiary); }
 }
 .remove-icon { width: 14px; height: 14px; }
+
+// Team Knowledge / Agents (shared resource cards)
+.resource-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: $spacing-4; }
+.resource-card {
+  display: flex; gap: $spacing-3; background: var(--bg-tertiary);
+  border: 1px solid var(--border-primary); border-radius: $radius-lg; padding: $spacing-4;
+  transition: all $transition-fast;
+  &.clickable { cursor: pointer; &:hover { border-color: $color-primary; } }
+}
+.resource-icon {
+  width: 40px; height: 40px; border-radius: $radius-md; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  &.kb-icon { background: linear-gradient(135deg, #06b6d4, #3b82f6); }
+  &.agent-icon { background: linear-gradient(135deg, #8b5cf6, #ec4899); }
+  .resource-icon-inner { width: 20px; height: 20px; color: white; }
+}
+.resource-info { flex: 1; min-width: 0;
+  h5 { margin: 0 0 $spacing-1; font-size: $font-size-sm; font-weight: $font-weight-semibold; }
+}
+.resource-desc {
+  font-size: $font-size-xs; color: var(--text-secondary); margin: 0 0 $spacing-2;
+  overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+.resource-meta { display: flex; gap: $spacing-3; font-size: $font-size-xs; color: var(--text-tertiary); flex-wrap: wrap; }
+
+// AI Collaboration Records
+.collaborations-list { display: flex; flex-direction: column; gap: $spacing-2; }
+.collaboration-item {
+  display: flex; align-items: center; gap: $spacing-3; padding: $spacing-3;
+  background: var(--bg-tertiary); border: 1px solid var(--border-primary); border-radius: $radius-lg;
+}
+.collab-icon {
+  width: 36px; height: 36px; border-radius: $radius-md; flex-shrink: 0;
+  background: linear-gradient(135deg, #f59e0b, #ef4444);
+  display: flex; align-items: center; justify-content: center;
+  .collab-icon-inner { width: 18px; height: 18px; color: white; }
+}
+.collab-content { flex: 1; min-width: 0;
+  .collab-task {
+    margin: 0 0 $spacing-1; font-size: $font-size-sm; color: var(--text-primary);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+}
+.collab-meta { display: flex; gap: $spacing-3; font-size: $font-size-xs; color: var(--text-tertiary); }
 
 // Skills
 .skills-filter { margin-bottom: $spacing-4; }

@@ -1,6 +1,6 @@
 <template>
   <div
-    class="domain-node retriever-node"
+    :style="{ '--node-accent': nodeColor }" class="domain-node retriever-node"
     :class="{ selected, expanded: isExpanded, 'is-running': isRunning, 'is-completed': isCompleted, 'is-failed': isFailed }"
     @click.stop="handleSelect"
   >
@@ -10,16 +10,7 @@
     />
 
     <div class="node-header">
-      <div
-        class="node-type-badge"
-        :style="{ backgroundColor: nodeColor + '22', borderColor: nodeColor }"
-      >
-        <Search
-          class="badge-icon"
-          :style="{ color: nodeColor }"
-        />
-        <span :style="{ color: nodeColor }">检索器</span>
-      </div>
+      <NodeTypeBadge :node-type="NODE_TYPE" />
       <button
         class="action-btn"
         @click.stop="toggleExpand"
@@ -33,12 +24,14 @@
 
     <div class="node-name-section">
       <input
+        :id="id ? `node-label-${id}` : undefined"
+        name="node-label"
         v-model="localName"
         class="node-name-input"
         placeholder="节点名称..."
         @blur="handleChange"
         @keydown.enter="handleChange"
-        @click.stop
+        @click.stop="handleSelect"
       >
     </div>
 
@@ -138,6 +131,59 @@
         @click.stop
       >
         <div class="config-section">
+          <label class="config-label">数据来源</label>
+          <el-select
+            v-model="localConfig.provider"
+            size="small"
+            @change="handleChange"
+          >
+            <el-option
+              value="knowledge_base"
+              label="团队知识库（推荐）"
+            />
+            <el-option
+              value="chroma"
+              label="Chroma 向量库"
+            />
+            <el-option
+              value="pinecone"
+              label="Pinecone"
+            />
+          </el-select>
+        </div>
+        <div
+          v-if="localConfig.provider === 'knowledge_base'"
+          class="config-section"
+        >
+          <label class="config-label">关联知识库</label>
+          <el-select
+            v-model="localConfig.collectionId"
+            size="small"
+            filterable
+            placeholder="选择要检索的知识库"
+            @change="handleChange"
+          >
+            <el-option
+              v-for="c in collections"
+              :key="c.id"
+              :label="c.name"
+              :value="c.id"
+            />
+          </el-select>
+        </div>
+        <div
+          v-else
+          class="config-section"
+        >
+          <label class="config-label">索引名称</label>
+          <el-input
+            v-model="localConfig.indexName"
+            size="small"
+            placeholder="向量库索引/集合名称..."
+            @change="handleChange"
+          />
+        </div>
+        <div class="config-section">
           <label class="config-label">检索类型</label>
           <el-select
             v-model="localConfig.retrieverType"
@@ -219,10 +265,14 @@
 </template>
 
 <script setup>
-import { ref, watch, computed } from 'vue'
+import { ref, watch, computed, onMounted } from 'vue'
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
 import { Search, ChevronDown, Loader } from 'lucide-vue-next'
 import { useExecutionStore } from '@/stores/execution'
+import { useRAGStore } from '@/stores/rag'
+import NodeTypeBadge from '@/components/workflow/nodes/NodeTypeBadge.vue'
+import { useNodePresentation } from '@/composables/useNodePresentation'
+
 
 const props = defineProps({
   id: { type: String, default: '' },
@@ -230,21 +280,34 @@ const props = defineProps({
   selected: { type: Boolean, default: false }
 })
 
+const NODE_TYPE = 'retriever'
+const { nodeIcon, nodeColor, nodeLabel } = useNodePresentation(NODE_TYPE)
+
 const emit = defineEmits(['select'])
 const { updateNodeData } = useVueFlow()
 const executionStore = useExecutionStore()
+const ragStore = useRAGStore()
 
 const isExpanded = ref(false)
-const nodeColor = '#06b6d4'
+const collections = computed(() => ragStore.collections)
 
 const localName = ref(props.data.label || '检索器')
 const localConfig = ref({
+  provider: props.data.config?.provider || 'knowledge_base',
+  collectionId: props.data.config?.collectionId || '',
+  indexName: props.data.config?.indexName || '',
   retrieverType: props.data.config?.retrieverType || 'similarity',
   method: props.data.config?.method || '',
   query: props.data.config?.query || '',
   topK: props.data.config?.topK || 5,
   similarityThreshold: props.data.config?.similarityThreshold || 0.7,
   description: props.data.config?.description || ''
+})
+
+onMounted(() => {
+  if (!collections.value.length) {
+    ragStore.fetchCollections()
+  }
 })
 
 const nodeStatus = computed(() => executionStore.nodeStatusMap[props.id])
@@ -277,11 +340,25 @@ function truncate(str, len) {
 watch(() => props.data, (d) => {
   if (d) {
     localName.value = d.label || '检索器'
-    localConfig.value = { retrieverType: d.config?.retrieverType || 'similarity', method: d.config?.method || '', query: d.config?.query || '', topK: d.config?.topK || 5, similarityThreshold: d.config?.similarityThreshold || 0.7, description: d.config?.description || '', ...d.config }
+    localConfig.value = {
+      provider: d.config?.provider || 'knowledge_base',
+      collectionId: d.config?.collectionId || '',
+      indexName: d.config?.indexName || '',
+      retrieverType: d.config?.retrieverType || 'similarity',
+      method: d.config?.method || '',
+      query: d.config?.query || '',
+      topK: d.config?.topK || 5,
+      similarityThreshold: d.config?.similarityThreshold || 0.7,
+      description: d.config?.description || '',
+      ...d.config
+    }
   }
 }, { deep: true })
 
-function toggleExpand() { isExpanded.value = !isExpanded.value }
+function toggleExpand() {
+  handleSelect()
+  isExpanded.value = !isExpanded.value
+}
 
 function handleChange() {
   if (props.id) updateNodeData(props.id, { label: localName.value, config: { ...localConfig.value } })

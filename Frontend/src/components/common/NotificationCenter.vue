@@ -305,13 +305,12 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, markRaw } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import {
-  Bell, Inbox, Check, MoreVertical, MoreHorizontal,
-  CheckCircle, XCircle, Clock, Bot, AlertTriangle, Zap,
-  Info, UserPlus, MessageCircle, AtSign
+  Bell, Inbox, Check, MoreVertical, MoreHorizontal
 } from 'lucide-vue-next'
+import notificationApi from '@/api/notification'
 
 const router = useRouter()
 
@@ -360,34 +359,6 @@ const filteredNotifications = computed(() => {
   return notifications.value
 })
 
-const iconComponents = {
-  workflow_completed: markRaw(CheckCircle),
-  workflow_failed: markRaw(XCircle),
-  workflow_scheduled: markRaw(Clock),
-  agent_completed: markRaw(Bot),
-  agent_failed: markRaw(AlertTriangle),
-  trigger_activated: markRaw(Zap),
-  alert_triggered: markRaw(Bell),
-  system_message: markRaw(Info),
-  user_invitation: markRaw(UserPlus),
-  comment: markRaw(MessageCircle),
-  mention: markRaw(AtSign)
-}
-
-const notificationThemeMap = {
-  workflow_completed: { chip: 'var(--success)', text: 'var(--notification-chip-text)' },
-  workflow_failed: { chip: 'var(--error)', text: 'var(--notification-chip-text)' },
-  workflow_scheduled: { chip: 'var(--warning)', text: 'var(--notification-chip-text)' },
-  agent_completed: { chip: 'var(--success)', text: 'var(--notification-chip-text)' },
-  agent_failed: { chip: 'var(--warning)', text: 'var(--notification-chip-text)' },
-  trigger_activated: { chip: 'var(--info)', text: 'var(--notification-chip-text)' },
-  alert_triggered: { chip: 'var(--warning)', text: 'var(--notification-chip-text)' },
-  system_message: { chip: 'var(--accent-primary)', text: 'var(--text-inverse)' },
-  user_invitation: { chip: 'var(--info)', text: 'var(--notification-chip-text)' },
-  comment: { chip: 'var(--info)', text: 'var(--notification-chip-text)' },
-  mention: { chip: 'var(--error)', text: 'var(--notification-chip-text)' }
-}
-
 const formatTime = (timestamp) => {
   if (!timestamp) return ''
   const date = new Date(timestamp)
@@ -412,64 +383,52 @@ const togglePanel = () => {
 const fetchNotifications = async () => {
   loading.value = true
   try {
-    // Mock data for demonstration
-    notifications.value = [
-      {
-        id: 1,
-        notification_type: 'workflow_completed',
-        title: '工作流执行完成',
-        message: '「数据处理流程」已成功执行完成，用时 2分30秒',
-        created_at: new Date(Date.now() - 300000).toISOString(),
-        is_read: false,
-        color: 'var(--success)',
-        link: '/workflows/1'
-      },
-      {
-        id: 2,
-        notification_type: 'workflow_failed',
-        title: '工作流执行失败',
-        message: '「API 数据同步」执行失败：连接超时',
-        created_at: new Date(Date.now() - 3600000).toISOString(),
-        is_read: false,
-        color: 'var(--error)',
-        link: '/workflows/2'
-      },
-      {
-        id: 3,
-        notification_type: 'alert_triggered',
-        title: '告警通知',
-        message: '您的 API Key 使用量已达到 80% 配额',
-        created_at: new Date(Date.now() - 86400000).toISOString(),
-        is_read: true,
-        color: 'var(--warning)',
-        link: '/models'
-      },
-      {
-        id: 4,
-        notification_type: 'system_message',
-        title: '系统公告',
-        message: 'Flowly 平台将于本周日凌晨进行例行维护',
-        created_at: new Date(Date.now() - 172800000).toISOString(),
-        is_read: true,
-        color: 'var(--accent-primary)',
-        link: '/announcements'
-      }
-    ]
+    const response = await notificationApi.getList({
+      page: page.value,
+      page_size: pageSize.value,
+    })
+    const items = response?.results || response || []
+    notifications.value = items.map((item) => ({
+      ...item,
+      notification_type: item.notificationType || item.notification_type,
+      is_read: item.isRead ?? item.is_read,
+      created_at: item.createdAt || item.created_at,
+      link: item.link || item.actionUrl || item.action_url || '',
+    }))
+    totalCount.value = response?.count ?? notifications.value.length
     unreadCount.value = notifications.value.filter(n => !n.is_read).length
-    totalCount.value = notifications.value.length
+    try {
+      const unread = await notificationApi.getUnreadCount()
+      unreadCount.value = unread?.count ?? unreadCount.value
+    } catch {
+      // fallback to list-derived count
+    }
   } catch {
-    // Silent failure - notifications can be empty
+    notifications.value = []
+    unreadCount.value = 0
+    totalCount.value = 0
   } finally {
     loading.value = false
   }
 }
 
 const markAsRead = async (notification) => {
+  if (notification.is_read) return
+  try {
+    await notificationApi.markRead(notification.id)
+  } catch {
+    // keep optimistic UI
+  }
   notification.is_read = true
   unreadCount.value = Math.max(0, unreadCount.value - 1)
 }
 
 const markAllAsRead = async () => {
+  try {
+    await notificationApi.markAllRead()
+  } catch {
+    // keep optimistic UI
+  }
   notifications.value.forEach(n => {
     n.is_read = true
   })

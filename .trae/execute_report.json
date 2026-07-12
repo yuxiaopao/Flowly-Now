@@ -1,0 +1,23 @@
+{
+  "issues": [],
+  "btn_results": {
+    "连线": "clicked (no visible feedback)",
+    "添加": "clicked (no visible feedback)",
+    "布局": "clicked (no visible feedback)",
+    "触发器": "UI: 当前后端尚未启用工作流触发器接口，暂不可创建或管理触发器。\n基本信息\n名称\n0 / 50\n描述\n触发类型\n类型\n手动触发\n定时触发\nCron 表达式\nWebhook\n高级选项\n取消\n创建触发器\n暂无触",
+    "验证": "UI: 工作流结构验证通过",
+    "保存": "UI: 发现 3 个警告: 输入节点未配置变量名 LLM 节点缺少提示词配置 引用了未定义的变量: input.user_comment",
+    "执行": "error: Locator.click: Timeout 30000ms exceeded.\nCall log:\nwaiting for locator(\"button\")",
+    "开始": "clicked (no visible feedback)"
+  },
+  "api": [
+    "200 GET api/v1/auth/user/",
+    "200 GET api/v1/auth/user/",
+    "200 GET api/v1/tools/",
+    "200 GET api/v1/workflows/a4d717cd-aecc-403b-9c2b-c8fc57f6741c/",
+    "200 GET api/v1/gateway/models/available/?type=chat",
+    "200 GET api/v1/gateway/models/available/?type=chat",
+    "404 GET api/v1/workflows/triggers/?workflow_id=a4d717cd-aecc-403b-9c2b-c8fc57f6741c",
+    "200 PATCH api/v1/workflows/a4d717cd-aecc-403b-9c2b-c8fc57f6741c/"
+  ]
+}

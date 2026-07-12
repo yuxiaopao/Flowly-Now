@@ -41,7 +41,7 @@
               plain
               @click="showDatasetDialog = true"
             >
-              <FolderOpened class="btn-icon" />
+              <FolderOpen class="btn-icon" />
               选择数据集
             </el-button>
             
@@ -61,7 +61,7 @@
                 size="small"
                 @click="clearSelectedDataset"
               >
-                <el-icon><Close /></el-icon>
+                <el-icon><X /></el-icon>
               </el-button>
             </div>
           </div>
@@ -408,7 +408,7 @@
 import { ref, reactive, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { FolderOpened, Close, Search, RefreshCw, Loader, Check, Tag, ExternalLink } from 'lucide-vue-next'
+import { FolderOpen, X, Search, Loader, Check, Tag, ExternalLink } from 'lucide-vue-next'
 import { datasetApi, formatFileSize } from '@/api/dataset'
 import { annotationApi } from '@/api/annotation'
 

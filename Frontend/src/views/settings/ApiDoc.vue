@@ -1,19 +1,17 @@
-﻿<template>
+<template>
   <div class="api-sdk-page">
-    <div class="page-header">
-      <div class="header-left">
-        <h1>API 文档</h1>
-        <p class="subtitle">
-          使用 Flowly API 构建您自己的应用
-        </p>
-      </div>
-      <div class="header-actions">
+    <PageHeader
+      compact
+      title="API 文档"
+      subtitle="使用 Flowly API 构建您自己的应用"
+    >
+      <template #actions>
         <el-button @click="showApiKeyDialog = true">
           <Key class="btn-icon" />
           管理 API Key
         </el-button>
-      </div>
-    </div>
+      </template>
+    </PageHeader>
 
     <!-- Quick Start -->
     <div class="section">
@@ -487,8 +485,10 @@ for chunk in client.workflows.stream(
 import { ref } from 'vue'
 import { Key, Copy } from 'lucide-vue-next'
 import { useAppStore } from '@/stores/app'
+import PageHeader from '@/components/layout/PageHeader.vue'
 
 const appStore = useAppStore()
+const activeTab = ref('sdk')
 const sdkLanguage = ref('javascript')
 const showApiKeyDialog = ref(false)
 const showCreateKeyDialog = ref(false)
@@ -584,24 +584,6 @@ const revokeKey = (key) => {
   margin: 0 auto;
 }
 
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 32px;
-
-  h1 {
-    margin: 0;
-    font-size: 28px;
-    font-weight: 600;
-  }
-
-  .subtitle {
-    margin: 8px 0 0;
-    color: var(--el-text-color-secondary);
-  }
-}
-
 .btn-icon {
   width: 16px;
   height: 16px;
@@ -618,8 +600,8 @@ const revokeKey = (key) => {
 }
 
 .quick-start-card {
-  background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
-  border: none;
+  background: linear-gradient(135deg, var(--bg-elevated) 0%, var(--bg-tertiary) 100%);
+  border: 1px solid var(--border-primary);
 
   :deep(.el-card__body) {
     padding: 32px;
@@ -640,8 +622,8 @@ const revokeKey = (key) => {
       width: 32px;
       height: 32px;
       border-radius: 50%;
-      background: rgba(255, 255, 255, 0.2);
-      color: white;
+      background: var(--surface-strong);
+      color: var(--text-primary);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -652,13 +634,13 @@ const revokeKey = (key) => {
     .step-content {
       h4 {
         margin: 0;
-        color: white;
+        color: var(--text-primary);
         font-size: 16px;
       }
 
       p {
         margin: 4px 0 0;
-        color: rgba(255, 255, 255, 0.8);
+        color: var(--text-secondary);
         font-size: 14px;
       }
     }
@@ -705,20 +687,26 @@ const revokeKey = (key) => {
 }
 
 .code-block {
-  background: #1e1e2e;
+  background: var(--code-bg);
+  border: 1px solid var(--code-border);
   border-radius: 8px;
   overflow: hidden;
+  transition: border-color 0.2s ease;
+
+  &:hover {
+    border-color: var(--border-hover);
+  }
 
   .code-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
     padding: 8px 16px;
-    background: rgba(255, 255, 255, 0.05);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    background: var(--code-surface);
+    border-bottom: 1px solid var(--code-border);
 
     span {
-      color: rgba(255, 255, 255, 0.7);
+      color: var(--code-muted);
       font-size: 13px;
     }
   }
@@ -726,7 +714,7 @@ const revokeKey = (key) => {
   .code-content {
     margin: 0;
     padding: 16px;
-    color: #cdd6f4;
+    color: var(--code-text);
     font-family: 'JetBrains Mono', monospace;
     font-size: 13px;
     line-height: 1.6;
@@ -741,7 +729,7 @@ const revokeKey = (key) => {
   .copy-icon {
     width: 14px;
     height: 14px;
-    color: rgba(255, 255, 255, 0.5);
+    color: var(--code-muted);
   }
 }
 

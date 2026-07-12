@@ -1,12 +1,13 @@
 import { defineConfig, devices } from '@playwright/test'
 
 export default defineConfig({
-  testDir: './tests/e2e',
+  testDir: '../tests/frontend/e2e',
+  outputDir: '../tests/artifacts/frontend/playwright-results',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   workers: process.env.CI ? 1 : undefined,
-  reporter: 'html',
+  reporter: [['html', { outputFolder: '../tests/artifacts/frontend/playwright-report' }]],
   use: {
     baseURL: 'http://localhost:5200',
     trace: 'on-first-retry',

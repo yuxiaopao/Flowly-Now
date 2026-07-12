@@ -255,7 +255,7 @@
 import { computed } from 'vue'
 import { useAppStore } from '@/stores/app'
 
-const props = defineProps({
+defineProps({
   variant: {
     type: String,
     default: 'default'

@@ -302,7 +302,9 @@ async function fetchDatasets() {
   try {
     isLoading.value = true
     const response = await datasetRecommendApi.getDatasets()
-    datasets.value = response
+    datasets.value = Array.isArray(response)
+      ? response
+      : (response?.results || response?.datasets || [])
   } catch (error) {
     console.error('Failed to fetch datasets:', error)
     ElMessage.error('加载数据集失败')

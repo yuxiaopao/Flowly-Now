@@ -1,9 +1,0 @@
-{
-  "task_id": "p2-retry-logging",
-  "status": "done",
-  "result": "实现错误重试和执行日志功能：新增 ExecutionLog 模型 + NodeExecution.retrying 状态；retry_decorator.py 提供指数退避重试装饰器；execute_node 集成重试逻辑和结构化日志记录；ExecutionLogSerializer；logs API 端点；前端 ExecutionLogsPanel 组件。",
-  "files_changed": [],
-  "files_added": [],
-  "summary": "实现错误重试和执行日志功能：新增 ExecutionLog 模型 + NodeExecution.retrying 状态；retry_decorator.py 提供指数退避重试装饰器；execute_node 集成重试逻辑和结构化日志记录；ExecutionLogSerializer；logs API 端点；前端 ExecutionLogsPanel 组件。",
-  "completed_at": "2026-05-17T17:29:15.580008+00:00"
-}

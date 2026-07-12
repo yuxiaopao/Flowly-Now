@@ -16,7 +16,7 @@ defineOptions({
   inheritAttrs: false
 })
 
-const props = defineProps({
+defineProps({
   alt: {
     type: String,
     default: ''

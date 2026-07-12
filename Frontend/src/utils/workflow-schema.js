@@ -32,7 +32,6 @@ export function validateWorkflowSchema(nodes = [], edges = []) {
   const errors = []
   const warnings = []
   const nodeErrors = {}
-  const nodeMap = new Map(nodes.map(n => [n.id, n]))
 
   // 1. 结构验证：Start/End 节点（可选，不强制要求）
   const startNodes = nodes.filter(n => n.type === 'start')
@@ -64,19 +63,19 @@ export function validateWorkflowSchema(nodes = [], edges = []) {
   }
 
   // 2. 连通性验证
-  const connectivityResult = checkConnectivity(nodes, edges, nodeMap)
+  const connectivityResult = checkConnectivity(nodes, edges)
   errors.push(...connectivityResult.errors)
   warnings.push(...connectivityResult.warnings)
 
   // 3. 类型特定验证
   for (const node of nodes) {
-    const nodeValidation = validateNodeConfig(node, nodeMap, nodes)
+    const nodeValidation = validateNodeConfig(node)
     errors.push(...nodeValidation.errors.map(e => ({ ...e, nodeId: node.id })))
     warnings.push(...nodeValidation.warnings.map(w => ({ ...w, nodeId: node.id })))
   }
 
   // 4. 变量引用验证
-  const varValidation = validateVariableReferences(nodes, edges, nodeMap)
+  const varValidation = validateVariableReferences(nodes)
   errors.push(...varValidation.errors)
   warnings.push(...varValidation.warnings)
 
@@ -121,7 +120,7 @@ export function validateWorkflowSchema(nodes = [], edges = []) {
 /**
  * 检查连通性
  */
-function checkConnectivity(nodes, edges, nodeMap) {
+function checkConnectivity(nodes, edges) {
   const errors = []
   const warnings = []
 
@@ -172,7 +171,7 @@ function checkConnectivity(nodes, edges, nodeMap) {
   // BFS 检查从 start 到 end 的可达性
   const startNode = nodes.find(n => n.type === 'start')
   if (startNode) {
-    const reachable = bfs(startNode.id, adjacency, nodes)
+    const reachable = bfs(startNode.id, adjacency)
 
     const unreachable = nodes.filter(n => {
       return n.type !== 'start' && n.type !== 'end' && !reachable.has(n.id)
@@ -200,7 +199,7 @@ function checkConnectivity(nodes, edges, nodeMap) {
 
     const endNode = nodes.find(n => n.type === 'end')
     if (endNode) {
-      const canReachEnd = bfs(endNode.id, reverseAdjacency, nodes)
+      const canReachEnd = bfs(endNode.id, reverseAdjacency)
       const cantReachEnd = nodes.filter(n => {
         return n.type !== 'end' && n.type !== 'start' && !canReachEnd.has(n.id)
       })
@@ -221,7 +220,7 @@ function checkConnectivity(nodes, edges, nodeMap) {
 /**
  * BFS 遍历
  */
-function bfs(startId, adjacency, allNodes) {
+function bfs(startId, adjacency) {
   const visited = new Set()
   const queue = [startId]
   visited.add(startId)
@@ -243,7 +242,7 @@ function bfs(startId, adjacency, allNodes) {
 /**
  * 验证单个节点配置
  */
-function validateNodeConfig(node, nodeMap, allNodes) {
+function validateNodeConfig(node) {
   const errors = []
   const warnings = []
   const config = node.data?.config || {}
@@ -286,7 +285,7 @@ function validateNodeConfig(node, nodeMap, allNodes) {
       }
       break
 
-    case 'code':
+    case 'code': {
       if (!config.code || !config.code.trim()) {
         errors.push({
           type: 'code_missing',
@@ -316,8 +315,9 @@ function validateNodeConfig(node, nodeMap, allNodes) {
         }
       }
       break
+    }
 
-    case 'switch':
+    case 'switch': {
       const branches = config.branches || []
       if (branches.length === 0) {
         errors.push({
@@ -340,6 +340,7 @@ function validateNodeConfig(node, nodeMap, allNodes) {
         })
       }
       break
+    }
 
     case 'subworkflow':
       if (!config.subworkflowId) {
@@ -371,7 +372,7 @@ function validateNodeConfig(node, nodeMap, allNodes) {
       }
       break
 
-    case 'variable':
+    case 'variable': {
       const assignments = config.assignments || []
       if (assignments.length === 0) {
         warnings.push({
@@ -382,8 +383,9 @@ function validateNodeConfig(node, nodeMap, allNodes) {
         })
       }
       break
+    }
 
-    case 'condition':
+    case 'condition': {
       const conditions = config.conditions || []
       if (conditions.length === 0) {
         warnings.push({
@@ -394,6 +396,7 @@ function validateNodeConfig(node, nodeMap, allNodes) {
         })
       }
       break
+    }
 
     case 'delay':
       if (!config.duration && !config.delayType) {
@@ -417,8 +420,9 @@ function validateNodeConfig(node, nodeMap, allNodes) {
       }
       break
 
-    case 'input':
-      if (!config.variableName) {
+    case 'input': {
+      const inputVarName = config.variableName || config.input_name || config.inputName
+      if (!inputVarName) {
         warnings.push({
           type: 'input_missing_variable',
           message: '输入节点未配置变量名',
@@ -427,6 +431,7 @@ function validateNodeConfig(node, nodeMap, allNodes) {
         })
       }
       break
+    }
 
     case 'tool':
       if (!config.tool) {
@@ -446,7 +451,7 @@ function validateNodeConfig(node, nodeMap, allNodes) {
 /**
  * 验证变量引用
  */
-function validateVariableReferences(nodes, edges, nodeMap) {
+function validateVariableReferences(nodes) {
   const errors = []
   const warnings = []
 
@@ -461,6 +466,8 @@ function validateVariableReferences(nodes, edges, nodeMap) {
     }
     if (node.type === 'input') {
       const varName = node.data?.config?.variableName
+        || node.data?.config?.input_name
+        || node.data?.config?.inputName
       if (varName) definedVars.add(varName)
     }
   }
@@ -526,8 +533,6 @@ function detectCycles(nodes, edges) {
       if (!visited.has(neighbor)) {
         if (dfs(neighbor)) return true
       } else if (recursionStack.has(neighbor)) {
-        // 发现环
-        const cycleStart = path.indexOf(neighbor)
         path.push(neighbor)
         return true
       }
@@ -585,7 +590,7 @@ function isValidUrl(string) {
     return true
   } catch (_) {
     // 可能是相对路径或不含协议的 URL
-    return /^[a-zA-Z0-9][a-zA-Z0-9\-._~:/?#\[\]@!$&'()*+,;=%]*$/.test(string)
+    return /^[a-zA-Z0-9][a-zA-Z0-9\-._~:/?#[\]@!$&'()*+,;=%]*$/.test(string)
   }
 }
 

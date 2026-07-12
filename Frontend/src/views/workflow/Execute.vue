@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="workflow-execute">
     <div class="execute-container">
       <!-- 顶部信息栏 -->
@@ -108,10 +108,10 @@
               <div
                 v-for="item in executionHistory"
                 :key="item.id"
-                :class="['history-item', `status-${item.status}`]"
-                @click="loadExecution(item.id)"
+                :class="['history-item', `status-${item.status}`, { active: resolveExecutionId(item) === executionId }]"
+                @click="loadExecution(item)"
               >
-                <span class="history-time">{{ formatDate(item.started_at) }}</span>
+                <span class="history-time">{{ formatDate(item.startedAt || item.started_at || item.queuedAt || item.queued_at) }}</span>
                 <el-tag
                   :type="getStatusType(item.status)"
                   size="small"
@@ -226,6 +226,17 @@
             >
               点击"开始执行"按钮开始执行工作流
             </div>
+          </div>
+
+          <!-- 执行产物 -->
+          <div class="artifacts-section">
+            <ExecutionArtifactsPanel
+              :node-executions="nodeExecutionsList"
+              :output-data="outputData"
+              :node-status-map="rawNodeStatus"
+              :execution="{ nodeStatus: rawNodeStatus, outputData }"
+              :node-name-map="workflowNodeNameMap"
+            />
           </div>
 
           <!-- 输出结果 -->
@@ -358,33 +369,40 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, nextTick, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useWorkflowStore } from '@/stores/workflow'
+import { useExecutionStore } from '@/stores/execution'
 import { useAppStore } from '@/stores/app'
 import { workflowApi } from '@/api/workflow'
+import { nodeExecutionsFromStatus } from '@/utils/executionArtifacts'
+import { getWebSocketUrl } from '@/config'
 import {
   ArrowLeft, Play, RefreshCw, Copy, Download,
   PlayCircle, MessageSquare, GitBranch, Hammer,
   User, FileText, Zap, Circle
 } from 'lucide-vue-next'
 import AppButton from '@/components/common/AppButton.vue'
+import ExecutionArtifactsPanel from '@/components/workflow/ExecutionArtifactsPanel.vue'
 
 const route = useRoute()
 const router = useRouter()
 const workflowStore = useWorkflowStore()
+const executionStore = useExecutionStore()
 const appStore = useAppStore()
 
 const workflowId = computed(() => route.params.id)
 
 const workflow = computed(() => workflowStore.currentWorkflow)
-const isRunning = computed(() => executionStatus.value === 'running')
+const isRunning = computed(() => ['running', 'pending', 'queued'].includes(executionStatus.value))
 const canExecute = computed(() => workflow.value?.id)
 
 const executionId = ref(null)
 const executionStatus = ref(null)
 const executionDuration = ref(null)
 const nodeStatus = ref({})
+const rawNodeStatus = ref({})
+const nodeExecutionsList = ref([])
 const outputData = ref(null)
 const streamingOutput = ref('')
 const errorMessage = ref('')
@@ -409,11 +427,16 @@ const logs = ref([])
 // WebSocket 连接
 let ws = null
 
+const EXECUTION_STEP_COUNT = 3
+
 const currentStep = computed(() => {
-  if (!executionStatus.value) return 0
-  if (executionStatus.value === 'pending') return 0
-  if (executionStatus.value === 'running') return 1
-  return 2
+  const status = executionStatus.value
+  if (!status) return 0
+  if (['pending', 'queued'].includes(status)) return 0
+  if (['running', 'paused'].includes(status)) return 1
+  // active 等于步骤总数时，全部步骤显示为已完成（含「完成」）
+  if (['completed', 'failed', 'cancelled'].includes(status)) return EXECUTION_STEP_COUNT
+  return 1
 })
 
 const formattedOutput = computed(() => {
@@ -432,43 +455,222 @@ const formattedOutput = computed(() => {
   return JSON.stringify(outputData.value, null, 2)
 })
 
+const workflowNodeNameMap = computed(() => buildWorkflowNodeLookup().nameById)
+
 onMounted(async () => {
   try {
     await workflowStore.fetchWorkflow(workflowId.value)
+    executionStore.registerEditorSnapshotListener(workflowId.value, handleStoreExecutionSnapshot)
     await fetchExecutionHistory()
-  } catch (err) {
+    await resumeExecutePageState()
+  } catch {
     appStore.error('加载工作流失败')
   }
 })
 
 onUnmounted(() => {
+  executionStore.unregisterEditorSnapshotListener(workflowId.value)
   disconnectWebSocket()
 })
 
-async function fetchExecutionHistory() {
-  try {
-    const response = await workflowApi.getExecutionHistory(workflowId.value)
-    executionHistory.value = response.results || response || []
-  } catch {
-    // Error shown via appStore notification
+function resolveExecutionId(source) {
+  if (!source) return null
+  if (typeof source === 'string' || typeof source === 'number') return String(source)
+  return source.id || source.executionId || source.execution_id || null
+}
+
+function buildWorkflowNodeLookup() {
+  const nodes = workflowStore.nodes || workflow.value?.nodes || []
+  const nameById = {}
+  const typeById = {}
+  nodes.forEach((node) => {
+    const id = node.id || node.node_id
+    if (!id) return
+    nameById[id] = node.data?.label || node.label || node.name || node.config?.label || id
+    typeById[id] = node.data?.type || node.type || node.node_type || node.nodeType || 'default'
+  })
+  return { nameById, typeById }
+}
+
+function buildNodeStatusView(execution, nodeExecutions = []) {
+  const { nameById, typeById } = buildWorkflowNodeLookup()
+  const map = {}
+
+  if (Array.isArray(nodeExecutions) && nodeExecutions.length > 0) {
+    nodeExecutions.forEach((nodeExecution) => {
+      const nodeId = nodeExecution.nodeId || nodeExecution.node_id || nodeExecution.node
+      if (!nodeId) return
+      map[nodeId] = {
+        status: nodeExecution.status || 'pending',
+        name: nodeExecution.nodeName || nodeExecution.node_name || nameById[nodeId] || nodeId,
+        type: nodeExecution.nodeType || nodeExecution.node_type || typeById[nodeId] || 'default',
+        error: nodeExecution.errorMessage || nodeExecution.error_message || null,
+        duration: nodeExecution.durationMs != null
+          ? (Number(nodeExecution.durationMs) / 1000).toFixed(1)
+          : nodeExecution.durationSeconds != null
+            ? Number(nodeExecution.durationSeconds).toFixed(1)
+            : null,
+        output: nodeExecution.outputData ?? nodeExecution.output_data ?? null,
+      }
+    })
+    return map
+  }
+
+  const raw = execution?.nodeStatus || execution?.node_status || {}
+  Object.entries(raw).forEach(([nodeId, value]) => {
+    const status = typeof value === 'string' ? value : value?.status || 'pending'
+    const snapshotName = typeof value === 'object'
+      ? (value.node_name || value.nodeName || value.node_type_display || value.nodeTypeDisplay)
+      : null
+    const snapshotType = typeof value === 'object'
+      ? (value.node_type || value.nodeType)
+      : null
+    map[nodeId] = {
+      status,
+      name: nameById[nodeId] || snapshotName || nodeId,
+      type: typeById[nodeId] || snapshotType || 'default',
+      error: typeof value === 'object' ? (value.error || value.error_message || value.errorMessage) : null,
+      output: typeof value === 'object' ? (value.output ?? value.output_data ?? value.outputData) : null,
+    }
+  })
+  return map
+}
+
+function normalizeTimelineLogs(rawLogs = []) {
+  return rawLogs.map((log) => ({
+    level: (log.level || log.type || 'info').toLowerCase(),
+    timestamp: log.timestamp || log.time || log.created_at || log.createdAt || null,
+    message: log.message || log.text || '',
+  }))
+}
+
+function applyExecutionDetail(execution, timeline = null, execId = null) {
+  const resolvedId = execId || resolveExecutionId(execution)
+  if (!resolvedId || !execution) return false
+
+  executionId.value = resolvedId
+  executionStatus.value = execution.status || null
+  outputData.value = execution.outputData ?? execution.output_data ?? null
+  rawNodeStatus.value = execution.nodeStatus ?? execution.node_status ?? {}
+  errorMessage.value = execution.errorMessage ?? execution.error_message ?? ''
+  nodeStatus.value = buildNodeStatusView(
+    execution,
+    timeline?.nodeExecutions ?? timeline?.node_executions ?? []
+  )
+  nodeExecutionsList.value = timeline?.nodeExecutions
+    ?? timeline?.node_executions
+    ?? nodeExecutionsFromStatus(execution)
+
+  const durationMs = execution.durationMs ?? execution.duration_ms
+  if (durationMs != null) {
+    executionDuration.value = (Number(durationMs) / 1000).toFixed(2)
+  } else if (execution.duration != null) {
+    executionDuration.value = Number(execution.duration).toFixed(2)
+  } else {
+    const startedAt = execution.startedAt ?? execution.started_at
+    const completedAt = execution.completedAt ?? execution.completed_at
+    if (startedAt && completedAt) {
+      executionDuration.value = ((new Date(completedAt) - new Date(startedAt)) / 1000).toFixed(2)
+    }
+  }
+
+  const rawLogs = timeline?.logs || execution.executionLogs || execution.logs || []
+  if (rawLogs.length > 0) {
+    logs.value = normalizeTimelineLogs(rawLogs)
+  }
+
+  return true
+}
+
+function handleStoreExecutionSnapshot(execution, nodeStateMap) {
+  if (!execution) return
+  const nodeExecutions = Object.entries(nodeStateMap || {}).map(([nodeId, state]) => ({
+    nodeId,
+    node_id: nodeId,
+    status: state?.status,
+    output_data: state?.output,
+    error_message: state?.error,
+  }))
+  applyExecutionDetail(execution, { nodeExecutions })
+  if (['completed', 'failed', 'cancelled'].includes(execution.status)) {
+    disconnectWebSocket()
+    fetchExecutionHistory()
   }
 }
 
-async function loadExecution(execId) {
+async function fetchExecutionHistory() {
   try {
-    const response = await workflowApi.getExecution(execId)
-    executionId.value = response.id
-    executionStatus.value = response.status
-    outputData.value = response.output_data
-    nodeStatus.value = response.node_status || {}
-    errorMessage.value = response.error_message || ''
+    const response = await workflowApi.getExecutionHistory(workflowId.value, { page_size: 20 })
+    const items = (response.results || response || [])
+      .filter((item) => resolveExecutionId(item))
+      .sort((a, b) => {
+        const ta = new Date(a.startedAt || a.started_at || a.queuedAt || a.queued_at || 0).getTime()
+        const tb = new Date(b.startedAt || b.started_at || b.queuedAt || b.queued_at || 0).getTime()
+        return tb - ta
+      })
+    executionHistory.value = items
+  } catch {
+    executionHistory.value = []
+  }
+}
 
-    if (response.started_at && response.completed_at) {
-      const start = new Date(response.started_at)
-      const end = new Date(response.completed_at)
-      executionDuration.value = ((end - start) / 1000).toFixed(2)
+async function resumeExecutePageState() {
+  const replayId = route.query.replay
+  if (replayId) {
+    await loadExecution(String(replayId))
+    return
+  }
+
+  try {
+    const resumed = await executionStore.resumeEditorExecution(workflowId.value)
+    if (resumed?.execution) {
+      applyExecutionDetail(resumed.execution, null, resumed.executionId)
+      logs.value.unshift({
+        level: 'info',
+        timestamp: new Date(),
+        message: `已恢复执行监控，ID: ${resumed.executionId}`,
+      })
+      if (isRunning.value) {
+        connectWebSocket()
+      }
+      return
     }
-  } catch (err) {
+  } catch {
+    // ignore resume errors
+  }
+
+  const active = executionHistory.value.find((item) => ['running', 'pending', 'queued', 'paused'].includes(item.status))
+  if (active) {
+    await loadExecution(active)
+  }
+}
+
+async function loadExecution(execIdOrItem) {
+  const execId = resolveExecutionId(execIdOrItem)
+  if (!execId) {
+    appStore.warning('无效的执行记录')
+    return
+  }
+
+  disconnectWebSocket()
+  try {
+    const timeline = await workflowApi.getExecutionTimeline(execId, { skipErrorToast: true })
+    const execution = timeline?.execution || timeline
+    if (!applyExecutionDetail(execution, timeline, execId)) {
+      throw new Error('empty execution payload')
+    }
+
+    logs.value.unshift({
+      level: 'info',
+      timestamp: new Date(),
+      message: `已加载执行记录: ${execId}`,
+    })
+
+    if (isRunning.value) {
+      connectWebSocket()
+      await executionStore.startEditorPolling(workflowId.value, execId)
+    }
+  } catch {
     appStore.error('加载执行记录失败')
   }
 }
@@ -479,20 +681,16 @@ async function handleExecute() {
   addLog('info', `输入参数: ${JSON.stringify(inputData)}`)
 
   try {
-    const response = await workflowApi.execute(workflowId.value, inputData)
+    const response = await workflowApi.executeAsync(workflowId.value, inputData)
 
-    executionId.value = response.executionId || response.execution_id
+    executionId.value = response.executionId || response.execution_id || response.id
     addLog('info', `执行 ID: ${executionId.value}`)
 
-    // 获取到 executionId 后再连接 WebSocket
     if (executionId.value) {
       connectWebSocket()
-    }
-
-    // 如果是异步执行，等待结果
-    if (response.taskId || response.task_id) {
-      addLog('info', '工作流已加入执行队列')
-      await pollExecutionStatus(executionId.value)
+      executionStatus.value = response.status || 'running'
+      await executionStore.startEditorPolling(workflowId.value, executionId.value)
+      await fetchExecutionHistory()
     } else {
       executionStatus.value = response.status
       outputData.value = response.outputData || response.output_data
@@ -502,6 +700,7 @@ async function handleExecute() {
       } else {
         addLog('success', '工作流执行完成')
       }
+      await fetchExecutionHistory()
     }
   } catch (err) {
     addLog('error', `执行失败: ${err.message}`)
@@ -510,44 +709,10 @@ async function handleExecute() {
   }
 }
 
-async function pollExecutionStatus(execId) {
-  const maxPolls = 300 // 5 分钟超时
-  let polls = 0
-
-  const poll = async () => {
-    if (polls >= maxPolls) {
-      addLog('error', '执行超时')
-      return
-    }
-
-    try {
-      const response = await workflowApi.getExecution(execId)
-      executionStatus.value = response.status
-      nodeStatus.value = response.node_status || {}
-
-      if (response.status === 'completed') {
-        outputData.value = response.output_data
-        addLog('success', '工作流执行完成')
-        disconnectWebSocket()
-      } else if (response.status === 'failed') {
-        errorMessage.value = response.error_message || '未知错误'
-        addLog('error', `执行失败: ${errorMessage.value}`)
-        disconnectWebSocket()
-      } else {
-        polls++
-        setTimeout(poll, 1000)
-      }
-    } catch (err) {
-      polls++
-      setTimeout(poll, 2000)
-    }
-  }
-
-  await poll()
-}
-
 function connectWebSocket() {
-  const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws/execution/${executionId.value || ''}/`
+  if (!executionId.value) return
+
+  const wsUrl = getWebSocketUrl(`/ws/execution/${executionId.value}/`)
 
   try {
     ws = new WebSocket(wsUrl)
@@ -565,7 +730,7 @@ function connectWebSocket() {
       }
     }
 
-    ws.onerror = (err) => {
+    ws.onerror = (_err) => {
       addLog('error', 'WebSocket 连接错误')
     }
 
@@ -629,7 +794,7 @@ function handleWebSocketMessage(data) {
 
     case 'execution_complete':
       executionStatus.value = 'completed'
-      outputData.value = data.output_data
+      outputData.value = data.outputData ?? data.output_data ?? data.data
       streamingOutput.value = ''
       if (data.duration) {
         executionDuration.value = data.duration.toFixed(2)
@@ -658,6 +823,8 @@ function clearExecutionState() {
   executionStatus.value = null
   executionDuration.value = null
   nodeStatus.value = {}
+  rawNodeStatus.value = {}
+  nodeExecutionsList.value = []
   outputData.value = null
   streamingOutput.value = ''
   errorMessage.value = ''
@@ -670,10 +837,12 @@ async function handleCancel() {
   try {
     await workflowApi.cancelExecution(executionId.value)
     executionStatus.value = 'cancelled'
+    executionStore.stopEditorPolling({ resetSession: true, clearActive: true })
     addLog('warn', '执行已取消')
     disconnectWebSocket()
     appStore.success('执行已取消')
-  } catch (err) {
+    await fetchExecutionHistory()
+  } catch {
     appStore.error('取消失败')
   }
 }
@@ -743,17 +912,14 @@ function copyError() {
   appStore.success('已复制到剪贴板')
 }
 
-function formatOutput(data) {
-  if (!data) return ''
-  if (typeof data === 'string') return data
-  return JSON.stringify(data, null, 2)
-}
-
 function formatLogTime(date) {
-  return new Date(date).toLocaleTimeString('zh-CN', {
+  if (!date) return '--:--:--'
+  const parsed = new Date(date)
+  if (Number.isNaN(parsed.getTime())) return '--:--:--'
+  return parsed.toLocaleTimeString('zh-CN', {
     hour: '2-digit',
     minute: '2-digit',
-    second: '2-digit'
+    second: '2-digit',
   })
 }
 
@@ -954,6 +1120,11 @@ function getNodeIcon(type) {
     background-color: var(--bg-hover);
   }
 
+  &.active {
+    background-color: color-mix(in srgb, var(--color-primary, #3b82f6) 12%, transparent);
+    outline: 1px solid color-mix(in srgb, var(--color-primary, #3b82f6) 35%, transparent);
+  }
+
   .history-time {
     font-size: $font-size-xs;
     color: var(--text-tertiary);
@@ -1043,6 +1214,7 @@ function getNodeIcon(type) {
   padding: $spacing-6;
 }
 
+.artifacts-section,
 .output-section,
 .error-section {
   margin-top: $spacing-4;

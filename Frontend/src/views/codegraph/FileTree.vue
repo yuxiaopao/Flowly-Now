@@ -18,7 +18,7 @@
         @node-expand="handleNodeExpand"
         @node-collapse="handleNodeCollapse"
       >
-        <template #default="{ node, data }">
+        <template #default="{ data }">
           <div class="tree-node-content">
             <component
               :is="getNodeIcon(data)"

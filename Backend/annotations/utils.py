@@ -137,3 +137,46 @@ def export_annotations(project, format='json'):
         'items': data,
         'total': len(data),
     }, ensure_ascii=False, indent=2)
+
+
+def export_image_text_pairs(project):
+    """
+    Export annotated items as image_text_pairs JSONL (M4.3).
+    Each line: {"image": "...", "text": "..."}
+    """
+    from .models import AnnotationItem
+
+    pairs = []
+    for item in AnnotationItem.objects.filter(project=project, status='annotated'):
+        content = item.data_content if isinstance(item.data_content, dict) else {}
+        image = (
+            content.get('image')
+            or content.get('image_path')
+            or content.get('file')
+            or content.get('path')
+            or ''
+        ).strip()
+        text = (
+            content.get('text')
+            or content.get('caption')
+            or content.get('description')
+            or item.label
+            or ''
+        ).strip()
+        if image and text:
+            pairs.append({'image': image, 'text': text})
+
+    if not pairs:
+        return {
+            'success': False,
+            'error': '无可导出的图文对（需已标注项且 data_content 含 image + text/caption/label）',
+        }
+
+    content = '\n'.join(json.dumps(p, ensure_ascii=False) for p in pairs)
+    return {
+        'success': True,
+        'format': 'image_text_pairs',
+        'pair_count': len(pairs),
+        'content': content,
+        'pairs': pairs,
+    }

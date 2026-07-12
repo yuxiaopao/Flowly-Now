@@ -77,26 +77,26 @@
               {{ node.type }}
             </span>
             <span
-              v-if="node.duration_ms || node.duration"
+              v-if="nodeDurationMs(node)"
               class="node-duration"
             >
               <Clock class="duration-icon" />
-              {{ formatDuration(node.duration_ms || node.duration) }}
+              {{ formatDuration(nodeDurationMs(node)) }}
             </span>
           </div>
 
           <!-- LLM Node Metrics -->
           <div
-            v-if="node.type === 'llm' && (node.prompt_tokens || node.completion_tokens)"
+            v-if="node.type === 'llm' && ((node.promptTokens ?? node.prompt_tokens) || (node.completionTokens ?? node.completion_tokens))"
             class="llm-metrics"
           >
             <span class="metric">
               <span class="metric-label">Prompt:</span>
-              <span class="metric-value">{{ node.prompt_tokens || 0 }}</span>
+              <span class="metric-value">{{ node.promptTokens ?? node.prompt_tokens ?? 0 }}</span>
             </span>
             <span class="metric">
               <span class="metric-label">Completion:</span>
-              <span class="metric-value">{{ node.completion_tokens || 0 }}</span>
+              <span class="metric-value">{{ node.completionTokens ?? node.completion_tokens ?? 0 }}</span>
             </span>
             <span
               v-if="node.model"
@@ -140,14 +140,13 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
 import {
   Loader, CheckCircle, XCircle, Circle, Minus,
   Clock, AlertCircle, ChevronDown, Activity,
   Play, FileText, Code, Zap, Globe, Database, Branches, ArrowRight
 } from 'lucide-vue-next'
 
-const props = defineProps({
+defineProps({
   nodes: {
     type: Array,
     default: () => []
@@ -164,8 +163,6 @@ const props = defineProps({
 
 const emit = defineEmits(['node-click'])
 
-const nodeList = computed(() => props.nodes)
-
 function handleNodeClick(node) {
   emit('node-click', node.id || node.node_id)
 }
@@ -179,6 +176,14 @@ function statusLabel(status) {
     skipped: '跳过'
   }
   return labels[status] || status || '-'
+}
+
+function nodeDurationMs(node) {
+  if (!node) return null
+  if (node.durationMs != null) return node.durationMs
+  if (node.duration_ms != null) return node.duration_ms
+  if (node.duration != null) return Math.round(Number(node.duration) * 1000)
+  return null
 }
 
 function formatDuration(ms) {
@@ -222,8 +227,8 @@ function getNodeTypeIcon(type) {
 
 <style lang="scss" scoped>
 .node-execution-timeline {
-  background: var(--el-bg-color);
-  border: 1px solid var(--el-border-color-lighter);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
   border-radius: 8px;
   padding: 16px;
 }
@@ -234,12 +239,12 @@ function getNodeTypeIcon(type) {
   align-items: center;
   margin-bottom: 16px;
   padding-bottom: 12px;
-  border-bottom: 1px solid var(--el-border-color-lighter);
+  border-bottom: 1px solid var(--border-primary);
 
   .header-label {
     font-size: 14px;
     font-weight: 600;
-    color: var(--el-text-color-primary);
+    color: var(--text-primary);
   }
 
   .live-indicator {
@@ -247,12 +252,12 @@ function getNodeTypeIcon(type) {
     align-items: center;
     gap: 6px;
     font-size: 12px;
-    color: #10b981;
+    color: var(--success);
 
     .live-dot {
       width: 8px;
       height: 8px;
-      background: #10b981;
+      background: var(--success);
       border-radius: 50%;
       animation: pulse 1.5s infinite;
     }
@@ -270,20 +275,20 @@ function getNodeTypeIcon(type) {
   padding: 12px 16px;
   border-radius: 8px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
 
   &:hover {
-    background: var(--el-fill-color-light);
+    background: var(--bg-hover);
 
     .node-content {
       .node-name {
-        color: var(--el-color-primary);
+        color: var(--color-primary);
       }
     }
   }
 
   &.active {
-    background: var(--el-color-primary-light-9);
+    background: var(--color-primary-10);
 
     .node-indicator .indicator-icon {
       transform: scale(1.1);
@@ -292,19 +297,19 @@ function getNodeTypeIcon(type) {
 
   &.running {
     .node-indicator .indicator-icon {
-      background: rgba(59, 130, 246, 0.1);
+      background: var(--info-bg);
     }
   }
 
   &.completed {
     .node-indicator .indicator-icon {
-      background: rgba(16, 185, 129, 0.1);
+      background: var(--success-bg);
     }
   }
 
   &.failed {
     .node-indicator .indicator-icon {
-      background: rgba(239, 68, 68, 0.1);
+      background: var(--error-bg);
     }
   }
 }
@@ -315,18 +320,18 @@ function getNodeTypeIcon(type) {
   top: -12px;
   width: 2px;
   height: 12px;
-  background: var(--el-border-color);
+  background: var(--border-primary);
 
   &.completed {
-    background: #10b981;
+    background: var(--success);
   }
 
   &.failed {
-    background: #ef4444;
+    background: var(--error);
   }
 
   &.running {
-    background: #3b82f6;
+    background: var(--info);
   }
 }
 
@@ -340,11 +345,11 @@ function getNodeTypeIcon(type) {
     width: 32px;
     height: 32px;
     border-radius: 50%;
-    background: var(--el-fill-color-light);
+    background: var(--bg-tertiary);
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.2s;
+    transition: background-color 0.2s ease, transform 0.2s ease;
 
     svg {
       width: 18px;
@@ -352,31 +357,31 @@ function getNodeTypeIcon(type) {
     }
 
     .icon-spin {
-      color: #3b82f6;
+      color: var(--info);
       animation: spin 1s linear infinite;
     }
 
     .icon-success {
-      color: #10b981;
+      color: var(--success);
     }
 
     .icon-error {
-      color: #ef4444;
+      color: var(--error);
     }
 
     .icon-skipped {
-      color: #9ca3af;
+      color: var(--text-tertiary);
     }
 
     .icon-pending {
-      color: #d1d5db;
+      color: var(--text-disabled);
     }
   }
 
   .node-line {
     flex: 1;
     width: 2px;
-    background: var(--el-border-color);
+    background: var(--border-primary);
     margin-top: 4px;
 
     .timeline-node:last-child & {
@@ -398,7 +403,7 @@ function getNodeTypeIcon(type) {
     .node-name {
       font-size: 14px;
       font-weight: 600;
-      color: var(--el-text-color-primary);
+      color: var(--text-primary);
       transition: color 0.2s;
     }
 
@@ -407,30 +412,31 @@ function getNodeTypeIcon(type) {
       border-radius: 12px;
       font-size: 11px;
       font-weight: 500;
+      transition: background-color 0.2s ease, color 0.2s ease;
 
       &.pending {
-        background: rgba(107, 114, 128, 0.1);
-        color: #6b7280;
+        background: var(--surface-muted);
+        color: var(--text-tertiary);
       }
 
       &.running {
-        background: rgba(59, 130, 246, 0.1);
-        color: #3b82f6;
+        background: var(--info-bg);
+        color: var(--info);
       }
 
       &.completed {
-        background: rgba(16, 185, 129, 0.1);
-        color: #10b981;
+        background: var(--success-bg);
+        color: var(--success);
       }
 
       &.failed {
-        background: rgba(239, 68, 68, 0.1);
-        color: #ef4444;
+        background: var(--error-bg);
+        color: var(--error);
       }
 
       &.skipped {
-        background: rgba(156, 163, 175, 0.1);
-        color: #9ca3af;
+        background: var(--surface-muted);
+        color: var(--text-tertiary);
       }
     }
   }
@@ -447,10 +453,10 @@ function getNodeTypeIcon(type) {
     align-items: center;
     gap: 4px;
     padding: 2px 8px;
-    background: var(--el-fill-color-light);
+    background: var(--bg-tertiary);
     border-radius: 4px;
     font-size: 12px;
-    color: var(--el-text-color-secondary);
+    color: var(--text-secondary);
     text-transform: capitalize;
 
     .type-icon {
@@ -465,7 +471,7 @@ function getNodeTypeIcon(type) {
     gap: 4px;
     font-size: 12px;
     font-family: 'JetBrains Mono', monospace;
-    color: var(--el-text-color-tertiary);
+    color: var(--text-tertiary);
 
     .duration-icon {
       width: 12px;
@@ -479,7 +485,7 @@ function getNodeTypeIcon(type) {
   gap: 16px;
   margin-top: 8px;
   padding: 8px 12px;
-  background: rgba(139, 92, 246, 0.05);
+  background: var(--surface-muted);
   border-radius: 6px;
 
   .metric {
@@ -488,12 +494,12 @@ function getNodeTypeIcon(type) {
     font-size: 12px;
 
     .metric-label {
-      color: var(--el-text-color-tertiary);
+      color: var(--text-tertiary);
     }
 
     .metric-value {
       font-family: 'JetBrains Mono', monospace;
-      color: #8b5cf6;
+      color: var(--accent-violet);
     }
   }
 }
@@ -504,10 +510,10 @@ function getNodeTypeIcon(type) {
   gap: 6px;
   margin-top: 8px;
   padding: 8px 12px;
-  background: rgba(239, 68, 68, 0.05);
+  background: var(--error-bg);
   border-radius: 6px;
   font-size: 12px;
-  color: #ef4444;
+  color: var(--error);
 
   .error-icon {
     width: 14px;
@@ -523,14 +529,15 @@ function getNodeTypeIcon(type) {
   gap: 6px;
   margin-top: 8px;
   padding: 6px 10px;
-  background: var(--el-fill-color-light);
+  background: var(--bg-tertiary);
   border-radius: 4px;
   font-size: 12px;
-  color: var(--el-text-color-tertiary);
+  color: var(--text-tertiary);
   cursor: pointer;
+  transition: background-color 0.2s ease;
 
   &:hover {
-    background: var(--el-fill-color);
+    background: var(--bg-hover);
   }
 
   .preview-icon {
@@ -550,14 +557,14 @@ function getNodeTypeIcon(type) {
   .empty-icon {
     width: 48px;
     height: 48px;
-    color: var(--el-text-color-placeholder);
+    color: var(--text-disabled);
     margin-bottom: 12px;
   }
 
   p {
     margin: 0;
     font-size: 14px;
-    color: var(--el-text-color-secondary);
+    color: var(--text-secondary);
   }
 }
 

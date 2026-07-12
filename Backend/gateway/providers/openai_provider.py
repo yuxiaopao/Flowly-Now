@@ -176,14 +176,72 @@ class OpenAIProvider(BaseProvider):
     ]
 
     def __init__(self, api_key: str = None, base_url: str = None, **kwargs):
-        super().__init__(api_key, base_url, **kwargs)
+        super().__init__(
+            api_key=(api_key or '').strip() or None,
+            base_url=(base_url or '').strip().rstrip('/') or None,
+            **kwargs,
+        )
         self._client = None
+
+    def _is_volcengine_ark(self) -> bool:
+        """Whether this provider targets Volcengine Ark (Doubao)."""
+        url = (self.base_url or '').lower()
+        return 'volces.com' in url or 'volcengine' in url
+
+    def _is_dashscope(self) -> bool:
+        """Whether this provider targets Alibaba Cloud Bailian/DashScope (compatible-mode)."""
+        url = (self.base_url or '').lower()
+        return 'dashscope' in url or 'compatible-mode' in url or '.maas.aliyuncs.com' in url
+
+    def _is_agnes(self) -> bool:
+        """Whether this provider targets Agnes AI API Hub."""
+        url = (self.base_url or '').lower()
+        return 'agnes-ai.com' in url or 'apihub.agnes' in url
+
+    def _agnes_catalog_models(self) -> List[ModelInfo]:
+        if not self._is_agnes():
+            return []
+        catalog = [
+            ('agnes-2.0-flash', 'Agnes 2.0 Flash'),
+            ('agnes-image-2.1-flash', 'Agnes Image 2.1 Flash'),
+            ('agnes-image-2.0-flash', 'Agnes Image 2.0 Flash'),
+            ('agnes-video-v2.0', 'Agnes Video v2.0'),
+        ]
+        return [
+            ModelInfo(
+                model_id=model_id,
+                name=name,
+                provider=self.provider_name,
+                model_type='chat' if model_id.startswith('agnes-2') else (
+                    'image' if 'image' in model_id else 'video'
+                ),
+                max_tokens=32768,
+                supports_streaming=True,
+                context_window=32768,
+            )
+            for model_id, name in catalog
+        ]
+
+    def supports_model(self, model_id: str) -> bool:
+        """Support OpenAI models, Volcengine Ark endpoint IDs (ep-*), DashScope Qwen, and Agnes models."""
+        if model_id and model_id.startswith('ep-') and self._is_volcengine_ark():
+            return True
+        if model_id and self._is_dashscope() and (
+            model_id.startswith('qwen') or model_id.startswith('qwq') or model_id.startswith('qvq')
+        ):
+            return True
+        if model_id and self._is_agnes() and model_id.startswith('agnes-'):
+            return True
+        return super().supports_model(model_id)
 
     def _get_client(self):
         """Get or create OpenAI client."""
         if self._client is None:
             try:
                 from openai import OpenAI
+
+                if not self.api_key:
+                    raise ValueError('OpenAI API key is not configured')
 
                 client_kwargs = {'api_key': self.api_key}
                 if self.base_url:
@@ -409,16 +467,42 @@ class OpenAIProvider(BaseProvider):
 
         return Decimal(str(input_cost + output_cost))
 
+    def _volcengine_catalog_models(self) -> List[ModelInfo]:
+        """Known Volcengine Ark chat endpoints from project constants."""
+        try:
+            from nl_to_workflow.constants import VOLCENGINE_ARK_CHAT_MODELS
+        except ImportError:
+            return []
+
+        catalog = []
+        for item in VOLCENGINE_ARK_CHAT_MODELS:
+            catalog.append(ModelInfo(
+                model_id=item['model_id'],
+                name=item.get('name', item['model_id']),
+                provider=self.provider_name,
+                model_type='chat',
+                max_tokens=item.get('max_tokens', 32768),
+                supports_streaming=item.get('supports_streaming', True),
+                context_window=item.get('context_window', 32768),
+            ))
+        return catalog
+
     def list_models(self) -> List[ModelInfo]:
         """List models available from OpenAI API."""
+        volcengine_catalog = self._volcengine_catalog_models() if self._is_volcengine_ark() else []
+        agnes_catalog = self._agnes_catalog_models() if self._is_agnes() else []
+
         try:
             client = self._get_client()
             models = client.models.list()
 
             openai_models = []
+            seen_ids = set()
+            chat_prefixes = ('gpt-', 'text-', 'dall-', 'tts-', 'whisper-', 'ep-', 'doubao')
+
             for m in models.data:
                 model_id = m.id
-                if any(prefix in model_id for prefix in ['gpt-', 'text-', 'dall-', 'tts-', 'whisper-']):
+                if any(model_id.startswith(prefix) or prefix in model_id for prefix in chat_prefixes):
                     model_type = 'chat'
                     if 'embedding' in model_id:
                         model_type = 'embedding'
@@ -433,11 +517,26 @@ class OpenAIProvider(BaseProvider):
                         provider=self.provider_name,
                         model_type=model_type
                     ))
+                    seen_ids.add(model_id)
 
-            return openai_models
+            for item in volcengine_catalog:
+                if item.model_id not in seen_ids:
+                    openai_models.append(item)
+
+            for item in agnes_catalog:
+                if item.model_id not in seen_ids:
+                    openai_models.append(item)
+
+            if openai_models:
+                return openai_models
         except Exception as e:
             logger.warning(f"Failed to list OpenAI models: {str(e)}")
-            return self.available_models
+
+        if volcengine_catalog:
+            return volcengine_catalog
+        if agnes_catalog:
+            return agnes_catalog
+        return self.available_models
 
 
 class AzureOpenAIProvider(OpenAIProvider):

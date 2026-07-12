@@ -44,7 +44,13 @@ export const useNLWorkflowStore = defineStore('nlWorkflow', {
       includeValidation: true,
       temperature: 0.7,
       maxTokens: 2048
-    }
+    },
+
+    // Editor assistant mode: chat | editor | generate
+    assistantMode: 'editor',
+
+    // Set when backend returns a workflow that should auto-apply to canvas
+    pendingAutoApply: false
   }),
 
   getters: {
@@ -106,6 +112,15 @@ export const useNLWorkflowStore = defineStore('nlWorkflow', {
       const lastAssistant = [...this.messages].reverse().find(m => m.role === 'assistant')
       if (lastAssistant) {
         lastAssistant.content = content
+        if (metadata.suggestions) lastAssistant.suggestions = metadata.suggestions
+        if (metadata.workflow) lastAssistant.workflow = metadata.workflow
+        if (metadata.changes) lastAssistant.changes = metadata.changes
+        if (metadata.nodeGuidance) lastAssistant.nodeGuidance = metadata.nodeGuidance
+        if (metadata.emailGuidance) lastAssistant.emailGuidance = metadata.emailGuidance
+        if (metadata.readyToGenerate !== undefined) lastAssistant.readyToGenerate = metadata.readyToGenerate
+        if (metadata.autoApplied !== undefined) lastAssistant.autoApplied = metadata.autoApplied
+        if (metadata.isStreaming !== undefined) lastAssistant.isStreaming = metadata.isStreaming
+        if (metadata.error) lastAssistant.error = metadata.error
         lastAssistant.metadata = { ...lastAssistant.metadata, ...metadata }
       }
     },
@@ -138,8 +153,53 @@ export const useNLWorkflowStore = defineStore('nlWorkflow', {
       }
     },
 
-    setSelectedModel(modelId) {
-      this.selectedModel = modelId
+    setAssistantMode(mode) {
+      this.assistantMode = mode
+    },
+
+    resolveAssistantMode(hasCanvasWorkflow, explicitMode) {
+      if (explicitMode) return explicitMode
+      if (hasCanvasWorkflow) {
+        if (this.assistantMode === 'chat') return 'chat'
+        if (this.assistantMode === 'generate') return 'generate'
+        return 'editor'
+      }
+      return this.assistantMode === 'generate' ? 'generate' : 'chat'
+    },
+
+    _handleStreamDone(data, fullContent) {
+      if (data.workflow_json) {
+        try {
+          this.generatedWorkflow = JSON.parse(data.workflow_json)
+        } catch {
+          // ignore parse errors
+        }
+      }
+      if (data.workflow) {
+        this.generatedWorkflow = data.workflow
+      }
+      this.streamingProgress = 100
+      const shouldAutoApply = Boolean(
+        data.workflow?.nodes?.length
+        && this.assistantMode === 'editor'
+        && (data.intent === 'modify' || data.intent === 'delete' || data.changes?.length)
+      )
+      if (shouldAutoApply) {
+        this.pendingAutoApply = true
+      }
+      this.updateLastAssistantMessage(
+        data.message || fullContent || '我理解了，您还有其他需要调整的地方吗？',
+        {
+          workflow: this.generatedWorkflow,
+          suggestions: data.suggestions || [],
+          changes: data.changes || [],
+          readyToGenerate: data.ready_to_generate || false,
+          isStreaming: false,
+          intent: data.intent,
+          autoApplied: shouldAutoApply,
+          nodeGuidance: data.node_guidance || data.nodeGuidance || null,
+        }
+      )
     },
 
     // ==================== Session Management ====================
@@ -195,12 +255,15 @@ export const useNLWorkflowStore = defineStore('nlWorkflow', {
      * @param {string} name - Optional session name
      * @returns {Promise} Resolves when streaming completes
      */
-    async streamWorkflow(description, name) {
+    async streamWorkflow(description, name, options = {}) {
       this.isGenerating = true
       this.isStreaming = true
       this.generationError = null
       this.streamingProgress = 0
       this.streamingStage = ''
+
+      const { currentWorkflow, mode: explicitMode, ...streamOptions } = options
+      const requestMode = this.resolveAssistantMode(Boolean(currentWorkflow?.nodes?.length), explicitMode)
 
       try {
         this.addAssistantMessage('', { isStreaming: true })
@@ -212,7 +275,10 @@ export const useNLWorkflowStore = defineStore('nlWorkflow', {
           description,
           name: sessionName,
           model: this.selectedModel,
-          temperature: this.settings.temperature
+          temperature: this.settings.temperature,
+          mode: requestMode,
+          ...(currentWorkflow ? { workflow: currentWorkflow } : {}),
+          ...streamOptions
         })
 
         if (!response.ok) {
@@ -224,9 +290,9 @@ export const useNLWorkflowStore = defineStore('nlWorkflow', {
         let fullContent = ''
         let buffer = ''
 
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
+        let readResult = await reader.read()
+        while (!readResult.done) {
+          const value = readResult.value
 
           const chunk = decoder.decode(value, { stream: true })
           buffer += chunk
@@ -260,19 +326,47 @@ export const useNLWorkflowStore = defineStore('nlWorkflow', {
                   case 'workflow':
                     this.generatedWorkflow = data.workflow
                     this.updateLastAssistantMessage(
-                      '工作流生成完成！',
+                      data.message || '工作流生成完成！',
                       { workflow: data.workflow, isStreaming: false }
                     )
                     break
-                    
-                  case 'done':
-                    if (data.workflow_json) {
-                      this.generatedWorkflow = JSON.parse(data.workflow_json)
+
+                  case 'node_guidance':
+                    if (data.node_guidance) {
+                      this.updateLastAssistantMessage(
+                        this.messages[this.messages.length - 1]?.content || '',
+                        { nodeGuidance: data.node_guidance }
+                      )
                     }
+                    break
+
+                  case 'email_guidance':
+                    if (data.email_guidance) {
+                      this.updateLastAssistantMessage(
+                        this.messages[this.messages.length - 1]?.content || '',
+                        { emailGuidance: data.email_guidance }
+                      )
+                    }
+                    break
+
+                  case 'changes':
+                    if (data.changes?.length) {
+                      this.updateLastAssistantMessage(
+                        this.messages[this.messages.length - 1]?.content || '',
+                        { changes: data.changes }
+                      )
+                    }
+                    break
+                    
+                  case 'ready_to_generate':
                     this.updateLastAssistantMessage(
-                      data.message || '工作流生成完成！',
-                      { workflow: this.generatedWorkflow, isStreaming: false }
+                      this.messages[this.messages.length - 1]?.content || '',
+                      { readyToGenerate: true }
                     )
+                    break
+
+                  case 'done':
+                    this._handleStreamDone(data, fullContent)
                     break
                     
                   case 'error':
@@ -296,6 +390,8 @@ export const useNLWorkflowStore = defineStore('nlWorkflow', {
               }
             }
           }
+
+          readResult = await reader.read()
         }
 
       } catch (error) {
@@ -353,7 +449,7 @@ export const useNLWorkflowStore = defineStore('nlWorkflow', {
      * @param {string} message - User message
      * @returns {Promise} Resolves when streaming completes
      */
-    async streamSendMessage(message) {
+    async streamSendMessage(message, options = {}) {
       if (!this.currentSessionId) {
         throw new Error('No active session')
       }
@@ -364,13 +460,22 @@ export const useNLWorkflowStore = defineStore('nlWorkflow', {
       this.streamingProgress = 0
       this.streamingStage = '正在处理...'
 
+      const { currentWorkflow, mode: explicitMode, ...streamOptions } = options
+      const requestMode = this.resolveAssistantMode(Boolean(currentWorkflow?.nodes?.length), explicitMode)
+
       try {
         this.addAssistantMessage('', { isStreaming: true })
 
         const response = await nlWorkflowApi.streamMessage(
           this.currentSessionId,
           message,
-          { model: this.selectedModel, temperature: this.settings.temperature }
+          {
+            model: this.selectedModel,
+            temperature: this.settings.temperature,
+            mode: requestMode,
+            ...(currentWorkflow ? { workflow: currentWorkflow } : {}),
+            ...streamOptions
+          }
         )
 
         if (!response.ok) {
@@ -382,9 +487,9 @@ export const useNLWorkflowStore = defineStore('nlWorkflow', {
         let fullContent = ''
         let buffer = ''
 
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
+        let readResult = await reader.read()
+        while (!readResult.done) {
+          const value = readResult.value
 
           const chunk = decoder.decode(value, { stream: true })
           buffer += chunk
@@ -420,15 +525,42 @@ export const useNLWorkflowStore = defineStore('nlWorkflow', {
                     )
                     break
 
-                  case 'done':
-                    if (data.workflow_json) {
-                      this.generatedWorkflow = JSON.parse(data.workflow_json)
+                  case 'node_guidance':
+                    if (data.node_guidance) {
+                      this.updateLastAssistantMessage(
+                        this.messages[this.messages.length - 1]?.content || '',
+                        { nodeGuidance: data.node_guidance }
+                      )
                     }
-                    this.streamingProgress = 100
+                    break
+
+                  case 'email_guidance':
+                    if (data.email_guidance) {
+                      this.updateLastAssistantMessage(
+                        this.messages[this.messages.length - 1]?.content || '',
+                        { emailGuidance: data.email_guidance }
+                      )
+                    }
+                    break
+
+                  case 'changes':
+                    if (data.changes?.length) {
+                      this.updateLastAssistantMessage(
+                        this.messages[this.messages.length - 1]?.content || '',
+                        { changes: data.changes }
+                      )
+                    }
+                    break
+
+                  case 'ready_to_generate':
                     this.updateLastAssistantMessage(
-                      data.message || fullContent || '我理解了，您还有其他需要调整的地方吗？',
-                      { workflow: this.generatedWorkflow, isStreaming: false }
+                      fullContent || this.messages[this.messages.length - 1]?.content || '',
+                      { readyToGenerate: true, isStreaming: false }
                     )
+                    break
+
+                  case 'done':
+                    this._handleStreamDone(data, fullContent)
                     break
 
                   case 'error':
@@ -451,6 +583,8 @@ export const useNLWorkflowStore = defineStore('nlWorkflow', {
               }
             }
           }
+
+          readResult = await reader.read()
         }
 
       } catch (error) {
@@ -492,6 +626,54 @@ export const useNLWorkflowStore = defineStore('nlWorkflow', {
       }
     },
 
+    /**
+     * Editor assistant: apply layout/modify synchronously (no SSE stream).
+     * @param {string} message
+     * @param {Object} options - { currentWorkflow, mode }
+     */
+    async applyEditorAction(message, options = {}) {
+      const { currentWorkflow, mode: explicitMode, ...rest } = options
+      if (!currentWorkflow?.nodes?.length) {
+        throw new Error('Editor workflow context is required')
+      }
+
+      this.isGenerating = true
+      this.generationError = null
+      this.streamingProgress = 0
+      this.streamingStage = '正在处理...'
+
+      const requestMode = this.resolveAssistantMode(true, explicitMode)
+
+      try {
+        this.addAssistantMessage('', { isStreaming: true })
+
+        const response = await nlWorkflowApi.applyEditorAction({
+          message,
+          workflow: currentWorkflow,
+          mode: requestMode,
+          model: this.selectedModel,
+          temperature: this.settings.temperature,
+          ...rest,
+        })
+
+        const payload = response?.data ?? response
+        this._handleStreamDone(payload, payload?.message || '')
+        return payload
+      } catch (error) {
+        this.generationError = error.message
+        this.updateLastAssistantMessage(
+          '抱歉，处理请求时遇到了问题。请稍后重试。',
+          { error: true, isStreaming: false }
+        )
+        throw error
+      } finally {
+        this.isGenerating = false
+        this.isStreaming = false
+        this.streamingProgress = 100
+        this.streamingStage = ''
+      }
+    },
+
     async confirmWorkflow() {
       if (!this.currentSessionId) {
         throw new Error('No active session to confirm')
@@ -514,8 +696,6 @@ export const useNLWorkflowStore = defineStore('nlWorkflow', {
         const response = await nlWorkflowApi.getSessions()
         this.history = response || []
         return this.history
-      } catch (error) {
-        throw error
       } finally {
         this.historyLoading = false
       }
@@ -553,6 +733,7 @@ export const useNLWorkflowStore = defineStore('nlWorkflow', {
       this.streamingProgress = 0
       this.streamingStage = ''
       this.lastIntent = null
+      this.pendingAutoApply = false
     },
 
     resetSession() {
@@ -564,6 +745,7 @@ export const useNLWorkflowStore = defineStore('nlWorkflow', {
       this.streamingStage = ''
       this.isStreaming = false
       this.lastIntent = null
+      this.pendingAutoApply = false
     }
   }
 })

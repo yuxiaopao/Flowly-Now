@@ -1,8 +1,10 @@
-﻿<template>
+<template>
   <div class="profile-settings">
-    <h2 class="section-title">
-      个人资料
-    </h2>
+    <PageHeader
+      compact
+      title="个人资料"
+      subtitle="管理您的账户信息与公开资料"
+    />
 
     <el-form
       ref="formRef"
@@ -148,6 +150,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useAppStore } from '@/stores/app'
 import AppButton from '@/components/common/AppButton.vue'
+import PageHeader from '@/components/layout/PageHeader.vue'
 
 const authStore = useAuthStore()
 const appStore = useAppStore()
@@ -251,13 +254,6 @@ async function handleChangePassword() {
 <style lang="scss" scoped>
 @use '@/assets/styles/variables.scss' as *;
 
-.section-title {
-  font-size: $font-size-xl;
-  font-weight: $font-weight-semibold;
-  color: var(--text-primary);
-  margin: 0 0 $spacing-6;
-}
-
 .profile-form {
   max-width: 500px;
 }
@@ -277,7 +273,7 @@ async function handleChangePassword() {
 
 .avatar-hint {
   font-size: $font-size-xs;
-  color: var(--text-primary)-tertiary;
+  color: var(--text-tertiary);
 }
 
 .subsection-title {

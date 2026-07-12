@@ -23,10 +23,16 @@
     "../../Frontend/src/api/**/*.{js}",
     "!../../Frontend/src/main.js"
   ],
-  "coverageDirectory": "coverage",
+  "coverageDirectory": "../artifacts/frontend/jest-coverage",
   "reporters": [
     "default",
-    "jest-junit"
+    [
+      "jest-junit",
+      {
+        "outputDirectory": "../artifacts/frontend",
+        "outputName": "jest-junit.xml"
+      }
+    ]
   ],
   "rootDir": ".",
   "maxWorkers": 1

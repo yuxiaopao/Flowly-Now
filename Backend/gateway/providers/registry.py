@@ -184,6 +184,9 @@ class ProviderRegistry:
         Returns:
             Provider name or None if not found
         """
+        if model_id and model_id.startswith('ep-') and self.get('openai'):
+            return 'openai'
+
         for name, provider_class in self._providers.items():
             available_models = None
 
@@ -350,6 +353,11 @@ class UnifiedProvider(BaseProvider):
 
     def _get_provider_for_model(self, model: str):
         """Get appropriate provider for a model."""
+        if model and model.startswith('ep-'):
+            openai_provider = self.registry.get('openai')
+            if openai_provider:
+                return openai_provider
+
         provider_name = self.registry.find_provider_for_model(model)
         if provider_name:
             return self.registry.get(provider_name)
@@ -428,6 +436,32 @@ def register_default_providers():
             api_key=anthropic_key
         )
         logger.info("Registered Anthropic provider")
+
+    # 阿里云百炼 DashScope（通义千问系列，OpenAI 兼容模式）
+    dashscope_key = getattr(settings, 'DASHSCOPE_API_KEY', None)
+    dashscope_compat_base_url = getattr(settings, 'DASHSCOPE_COMPATIBLE_BASE_URL', None)
+    if dashscope_key:
+        from .openai_provider import OpenAIProvider
+        default_registry.register(
+            'dashscope',
+            OpenAIProvider,
+            api_key=dashscope_key,
+            base_url=dashscope_compat_base_url
+        )
+        logger.info("Registered DashScope (Bailian) provider")
+
+    # Agnes AI 多模态 API Hub（OpenAI 兼容）
+    agnes_key = getattr(settings, 'AGNES_API_KEY', None)
+    agnes_base_url = getattr(settings, 'AGNES_BASE_URL', None)
+    if agnes_key:
+        from .openai_provider import OpenAIProvider
+        default_registry.register(
+            'agnes',
+            OpenAIProvider,
+            api_key=agnes_key,
+            base_url=agnes_base_url
+        )
+        logger.info("Registered Agnes AI provider")
 
     # Ollama (local) - register if reachable
     ollama_base_url = getattr(settings, 'OLLAMA_BASE_URL', None)

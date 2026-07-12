@@ -73,8 +73,8 @@
       <!-- 中间画布 -->
       <div class="canvas-container">
         <GraphCanvas
-          :nodes="store.filteredNodes"
-          :edges="store.filteredEdges"
+          :nodes="store.nodes"
+          :edges="store.edges"
           :selected-node="store.selectedNode"
           :layout="store.layout"
           :loading="store.loading"
@@ -82,6 +82,7 @@
           @node-hover="handleNodeHover"
           @zoom-change="handleZoomChange"
           @fit-view="handleFitView"
+          @layout-change="handleLayoutChangeInStore"
         />
       </div>
 
@@ -119,7 +120,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, shallowRef } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useCodeGraphStore } from '@/stores/codeGraph'
 import SearchPanel from './SearchPanel.vue'
 import FileTree from './FileTree.vue'
@@ -196,6 +197,10 @@ function handleNodeSelect(node) {
 
 function handleZoomChange(zoom) {
   store.setZoom(zoom)
+}
+
+function handleLayoutChangeInStore(newLayout) {
+  store.setLayout(newLayout)
 }
 
 function handleFitView() {

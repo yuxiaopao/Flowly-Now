@@ -3,10 +3,10 @@ Enhanced agent debugger service with step-through execution support.
 """
 
 import json
-import asyncio
-from typing import Dict, Any, List, Optional, Callable
-from dataclasses import dataclass, field
+from typing import Dict, Any, List, Optional
+from dataclasses import dataclass, field, asdict
 from enum import Enum
+from datetime import datetime
 from django.utils import timezone
 import logging
 
@@ -164,7 +164,7 @@ class DebugSession:
             'total_duration_ms': self.total_duration_ms,
             'error': self.error,
             'error_step': self.error_step,
-            'breakpoints': [bp.__dict__ for bp in self.breakpoints]
+            'breakpoints': [asdict(bp) for bp in self.breakpoints]
         }
 
 
@@ -385,7 +385,6 @@ class AgentDebugger:
         session.completed_at = str(timezone.now())
 
         if session.started_at:
-            from datetime import datetime
             start = datetime.fromisoformat(session.started_at)
             end = datetime.fromisoformat(session.completed_at)
             session.total_duration_ms = int((end - start).total_seconds() * 1000)
@@ -427,12 +426,39 @@ class AgentDebugger:
 
 # Global debugger instance
 _debuggers: Dict[int, AgentDebugger] = {}
+_debugger_last_used: Dict[int, str] = {}  # agent_id → ISO timestamp
+
+MAX_DEBUGGERS = 100  # LRU eviction cap
+DEBUGGER_TTL_SECONDS = 3600  # 1 hour
+
+
+def _evict_stale():
+    """Remove oldest debugger entries when over capacity or stale."""
+    now_str = str(timezone.now())
+    stale = []
+    for agent_id in list(_debuggers.keys()):
+        last_used = _debugger_last_used.get(agent_id)
+        if last_used:
+            from datetime import datetime
+            age = (datetime.fromisoformat(now_str) - datetime.fromisoformat(last_used)).total_seconds()
+            if age > DEBUGGER_TTL_SECONDS:
+                stale.append(agent_id)
+    for agent_id in stale:
+        _debuggers.pop(agent_id, None)
+        _debugger_last_used.pop(agent_id, None)
+    # LRU eviction if still over capacity
+    while len(_debuggers) > MAX_DEBUGGERS:
+        oldest = min(_debugger_last_used, key=_debugger_last_used.get)
+        _debuggers.pop(oldest, None)
+        _debugger_last_used.pop(oldest, None)
 
 
 def get_debugger(agent_id: int) -> AgentDebugger:
-    """Get or create a debugger for an agent."""
+    """Get or create a debugger for an agent, with LRU eviction."""
+    _evict_stale()
     if agent_id not in _debuggers:
         _debuggers[agent_id] = AgentDebugger(agent_id)
+    _debugger_last_used[agent_id] = str(timezone.now())
     return _debuggers[agent_id]
 
 
@@ -440,3 +466,4 @@ def cleanup_debugger(agent_id: int):
     """Clean up a debugger."""
     if agent_id in _debuggers:
         del _debuggers[agent_id]
+    _debugger_last_used.pop(agent_id, None)

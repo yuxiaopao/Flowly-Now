@@ -1,6 +1,6 @@
-﻿<template>
+<template>
   <div
-    class="domain-node"
+    :style="{ '--node-accent': nodeColor }" class="domain-node"
     :class="{ selected, expanded: isExpanded }"
     @click.stop="handleSelect"
   >
@@ -10,16 +10,7 @@
     />
 
     <div class="node-header">
-      <div
-        class="node-type-badge"
-        :style="{ backgroundColor: nodeColor + '22', borderColor: nodeColor }"
-      >
-        <FileOutput
-          class="badge-icon"
-          :style="{ color: nodeColor }"
-        />
-        <span :style="{ color: nodeColor }">文件写入</span>
-      </div>
+      <NodeTypeBadge :node-type="NODE_TYPE" />
       <button
         class="action-btn"
         @click.stop="toggleExpand"
@@ -33,12 +24,14 @@
 
     <div class="node-name-section">
       <input
+        :id="id ? `node-label-${id}` : undefined"
+        name="node-label"
         v-model="localName"
         class="node-name-input"
         placeholder="节点名称..."
         @blur="handleChange"
         @keydown.enter="handleChange"
-        @click.stop
+        @click.stop="handleSelect"
       >
     </div>
 
@@ -197,6 +190,9 @@
 import { ref, watch } from 'vue'
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
 import { FileOutput, ChevronDown } from 'lucide-vue-next'
+import NodeTypeBadge from '@/components/workflow/nodes/NodeTypeBadge.vue'
+import { useNodePresentation } from '@/composables/useNodePresentation'
+
 
 const props = defineProps({
   id: { type: String, default: '' },
@@ -204,11 +200,13 @@ const props = defineProps({
   selected: { type: Boolean, default: false }
 })
 
+const NODE_TYPE = 'file_writer'
+const { nodeIcon, nodeColor, nodeLabel } = useNodePresentation(NODE_TYPE)
+
 const emit = defineEmits(['select'])
 const { updateNodeData } = useVueFlow()
 
 const isExpanded = ref(false)
-const nodeColor = '#10b981'
 
 const localName = ref(props.data.label || '文件写入')
 const localConfig = ref({
@@ -241,6 +239,7 @@ watch(() => props.data, (d) => {
 }, { deep: true })
 
 function toggleExpand() {
+  handleSelect()
   isExpanded.value = !isExpanded.value
 }
 

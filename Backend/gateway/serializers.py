@@ -74,7 +74,7 @@ class UserAPIKeySerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'created_at', 'updated_at']
 
     def get_masked_key(self, obj):
-        return obj.get_masked_value()
+        return obj.get_masked_data()
 
     def get_provider_display(self, obj):
         return obj.get_service_type_display() if obj.service_type else ''

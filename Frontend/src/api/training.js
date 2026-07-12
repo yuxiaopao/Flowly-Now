@@ -1,4 +1,5 @@
 import apiClient from './index'
+import { getWebSocketUrl } from '@/config'
 
 export default {
   // Training Jobs
@@ -52,5 +53,51 @@ export default {
   // GPU Info
   getGpuInfo() {
     return apiClient.get('/training/training-jobs/gpu-info/')
+  },
+
+  // YOLO Training Runs
+  listYoloRuns(params) {
+    return apiClient.get('/training/yolo-runs/', { params })
+  },
+  getYoloRun(id) {
+    return apiClient.get(`/training/yolo-runs/${id}/`)
+  },
+  createYoloRun(data) {
+    return apiClient.post('/training/yolo-runs/', data)
+  },
+  cancelYoloRun(id) {
+    return apiClient.post(`/training/yolo-runs/${id}/cancel/`)
+  },
+  retryYoloRun(id, data) {
+    return apiClient.post(`/training/yolo-runs/${id}/retry/`, data || {})
+  },
+  getYoloMetricsHistory(id) {
+    return apiClient.get(`/training/yolo-runs/${id}/metrics_history/`)
+  },
+  getYoloTrainingPlots(id) {
+    return apiClient.get(`/training/yolo-runs/${id}/plots/`)
+  },
+  getYoloPlotImage(id, name) {
+    return apiClient.get(`/training/yolo-runs/${id}/plot/`, {
+      params: { name },
+      responseType: 'blob',
+    })
+  },
+  downloadYoloArtifact(id, artifact = 'pt') {
+    return apiClient.get(`/training/yolo-runs/${id}/download/`, {
+      params: { artifact },
+      responseType: 'blob'
+    })
+  },
+  getYoloWebSocketUrl(id) {
+    return getWebSocketUrl(`/ws/training/${id}/`)
+  },
+
+  getOptions() {
+    return apiClient.get('/training/training-jobs/options/')
+  },
+
+  analyzeDataset(data) {
+    return apiClient.post('/training/training-jobs/analyze-dataset/', data)
   },
 }

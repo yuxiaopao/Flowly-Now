@@ -1,0 +1,109 @@
+// 导航 / 快捷入口语义强调色 — 全部引用主题 accent 令牌
+// pure-bw / high-contrast 自动降级为灰阶或高饱和无障碍色
+
+$nav-accent-keys: 'blue', 'emerald', 'amber', 'rose';
+
+@each $key in $nav-accent-keys {
+  .nav-item--#{$key},
+  .quick-action--#{$key},
+  .feature-pill--#{$key} {
+    --item-accent: var(--accent-#{$key});
+    --item-accent-soft: var(--accent-#{$key}-soft);
+    --item-accent-bg: var(--accent-#{$key}-bg);
+  }
+}
+
+.nav-item[class*='nav-item--'] {
+  .nav-icon-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    flex-shrink: 0;
+    transition: background-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .nav-icon {
+    width: 18px;
+    height: 18px;
+    color: var(--text-tertiary);
+    transition: color 0.2s ease, transform 0.2s ease;
+  }
+
+  &:hover {
+    .nav-icon-wrap {
+      background: var(--item-accent-bg);
+      box-shadow: inset 0 0 0 1px var(--item-accent-soft);
+    }
+
+    .nav-icon {
+      color: var(--item-accent);
+    }
+  }
+
+  &.active {
+    background: var(--accent-muted);
+    border-color: var(--item-accent-soft);
+
+    .nav-icon-wrap {
+      background: var(--item-accent-bg);
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--item-accent) 35%, transparent);
+    }
+
+    .nav-icon {
+      color: var(--item-accent);
+    }
+  }
+}
+
+.quick-action[class*='quick-action--'] {
+  .quick-action-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    background: var(--item-accent-bg);
+    color: var(--item-accent);
+    box-shadow: inset 0 0 0 1px var(--item-accent-soft);
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+  }
+
+  &:hover .quick-action-icon {
+    transform: scale(1.06);
+    box-shadow: inset 0 0 0 1px var(--item-accent), 0 4px 16px var(--item-accent-soft);
+  }
+}
+
+.feature-pill[class*='feature-pill--'] {
+  .icon {
+    color: var(--item-accent) !important;
+  }
+
+  .feature-icon {
+    background: var(--item-accent-bg) !important;
+    box-shadow: inset 0 0 0 1px var(--item-accent-soft) !important;
+  }
+}
+
+.intro-feature--blue svg { color: var(--accent-blue); }
+.intro-feature--emerald svg { color: var(--accent-emerald); }
+.intro-feature--amber svg { color: var(--accent-amber); }
+
+.intro-feature--blue { --intro-icon-bg: var(--accent-blue-bg); --item-accent-soft: var(--accent-blue-soft); }
+.intro-feature--emerald { --intro-icon-bg: var(--accent-emerald-bg); --item-accent-soft: var(--accent-emerald-soft); }
+.intro-feature--amber { --intro-icon-bg: var(--accent-amber-bg); --item-accent-soft: var(--accent-amber-soft); }
+
+.intro-feature {
+  svg {
+    padding: 6px;
+    width: 30px !important;
+    height: 30px !important;
+    border-radius: 8px;
+    background: var(--intro-icon-bg);
+    box-shadow: inset 0 0 0 1px var(--item-accent-soft, var(--accent-blue-soft));
+  }
+}

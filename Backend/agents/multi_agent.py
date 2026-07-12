@@ -8,8 +8,10 @@ from typing import Dict, Any, Optional, List
 
 from dataclasses import dataclass, field
 from enum import Enum
+from concurrent.futures import ThreadPoolExecutor
 
 from config.constants import DEFAULT_LLM_MODEL, DEFAULT_TEMPERATURE
+from .engine import AgentEngine
 
 logger = logging.getLogger(__name__)
 
@@ -146,13 +148,17 @@ class MultiAgentOrchestrator:
 
         try:
             # Initialize with coordinator or default orchestration
-            if self.coordinator:
-                result = await self._run_with_coordinator(initial_task)
-            else:
-                result = await self._run_default(initial_task)
-
+            coro = self._run_with_coordinator(initial_task) if self.coordinator else self._run_default(initial_task)
+            result = await asyncio.wait_for(coro, timeout=self.timeout_seconds)
             return result
 
+        except asyncio.TimeoutError:
+            logger.error(f"Multi-agent execution timed out after {self.timeout_seconds}s")
+            return TaskResult(
+                success=False,
+                error=f"协作任务执行超时（超过 {self.timeout_seconds} 秒）",
+                output=None
+            )
         except Exception as e:
             logger.error(f"Multi-agent execution failed: {e}")
             return TaskResult(
@@ -181,6 +187,14 @@ class MultiAgentOrchestrator:
         ))
 
         # Execute plan
+        if not isinstance(plan, dict):
+            logger.warning(f"Coordinators returned non-dict plan (type={type(plan).__name__}), skipping execution")
+            return TaskResult(
+                success=False,
+                error=str(plan)[:200],
+                output=None,
+            )
+
         for step in plan.get("steps", []):
             agent_name = step.get("agent")
             if agent_name not in self.agents:
@@ -202,12 +216,14 @@ class MultiAgentOrchestrator:
             # Coordinator reviews
             if self.coordinator:
                 feedback = await self.coordinator.reflect(result)
-                if feedback.get("needs_revision"):
+                feedback_str = feedback if isinstance(feedback, str) else ""
+                feedback_dict = feedback if isinstance(feedback, dict) else {}
+                if feedback_dict.get("needs_revision"):
                     # Send back for revision
                     self.send_message(AgentMessage(
                         from_agent=self.coordinator.name,
                         to_agent=agent_name,
-                        content=feedback.get("message", ""),
+                        content=feedback_dict.get("message", feedback_str),
                         message_type="feedback"
                     ))
 
@@ -280,7 +296,7 @@ class MultiAgentOrchestrator:
         return {
             "is_running": self.is_running,
             "iteration_count": self.iteration_count,
-            "agents": [a.name for a in self.agents.values()],
+            "agents": list(self.agents.keys()),
             "messages_pending": len(self.message_queue),
             "context_keys": list(self.shared_context.keys())
         }
@@ -405,26 +421,29 @@ def create_multi_agent_chain(
         agents: Dict of agent configs with name, role, system_prompt, tools
         llm_config: LLM configuration (model, api_key, etc.)
     """
-    from .engine import AgentEngine
-
     agent_instances = {}
 
     for name, config in agents.items():
         role = AgentRole(config.get("role", "executor"))
+        model = config.get("model") or llm_config.get("model", DEFAULT_LLM_MODEL)
+        temperature = config.get("temperature", llm_config.get("temperature", DEFAULT_TEMPERATURE))
 
-        # Create agent engine
         engine = AgentEngine(
             system_prompt=config.get("system_prompt", ""),
-            model=llm_config.get("model", DEFAULT_LLM_MODEL),
-            temperature=llm_config.get("temperature", DEFAULT_TEMPERATURE),
-            tools=config.get("tools", [])
+            model=model,
+            temperature=temperature,
+            tools=config.get("tools", []),
+            knowledge_collection_ids=config.get("knowledge_collection_ids", [])
         )
 
         # Wrap as BaseAgent
         agent = MultiAgentWrapper(
             name=name,
             role=role,
-            engine=engine
+            engine=engine,
+            system_prompt=config.get("system_prompt", ""),
+            model=model,
+            temperature=temperature
         )
         agent_instances[name] = agent
 
@@ -432,6 +451,14 @@ def create_multi_agent_chain(
         agents=agent_instances,
         max_iterations=llm_config.get("max_iterations", 10)
     )
+
+
+_executor = ThreadPoolExecutor(max_workers=4)
+
+
+def _sync_chat(engine: AgentEngine, message: str) -> Dict[str, Any]:
+    """Run sync engine.chat() in a thread pool."""
+    return engine.chat(message)
 
 
 class MultiAgentWrapper(BaseAgent):
@@ -442,30 +469,136 @@ class MultiAgentWrapper(BaseAgent):
         name: str,
         role: AgentRole,
         engine,
-        system_prompt: str = ""
+        system_prompt: str = "",
+        model: str = DEFAULT_LLM_MODEL,
+        temperature: float = DEFAULT_TEMPERATURE
     ):
         super().__init__(
             name=name,
             role=role,
             system_prompt=system_prompt,
-            tools=engine.tools
+            tools=engine.tools,
+            model=model,
+            temperature=temperature
         )
         self.engine = engine
 
     async def think(self, context: Dict[str, Any]) -> str:
-        """Generate thought/action based on context."""
+        """Generate role-aware response based on context.
+
+        - PLANNER: returns a JSON plan dict string with steps.
+        - EXECUTOR: returns the refined task instruction.
+        - CRITIC: returns feedback on the execution result.
+        - REPORTER: returns a structured final report.
+        """
         task = context.get("task", "")
-        return task
+        available_agents = context.get("available_agents", [])
+
+        if self.role == AgentRole.PLANNER:
+            prompt = self._build_planner_prompt(task, available_agents)
+        elif self.role == AgentRole.EXECUTOR:
+            plan = context.get("plan", {})
+            prompt = self._build_executor_prompt(task, plan)
+        elif self.role == AgentRole.CRITIC:
+            execution = context.get("execution")
+            prompt = self._build_critic_prompt(execution)
+        elif self.role == AgentRole.REPORTER:
+            all_results = context.get("all_results", {})
+            prompt = self._build_reporter_prompt(all_results)
+        elif self.role == AgentRole.COORDINATOR:
+            prompt = self._build_coordinator_prompt(task, available_agents)
+        else:
+            prompt = task
+
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(
+            _executor, _sync_chat, self.engine, prompt
+        )
+        response = result.get("response", "") if isinstance(result, dict) else ""
+
+        # Attempt to parse as JSON plan (for PLANNER and COORDINATOR)
+        if self.role in (AgentRole.PLANNER, AgentRole.COORDINATOR):
+            import json
+            try:
+                parsed = json.loads(response)
+                if isinstance(parsed, dict):
+                    return json.dumps(parsed)
+            except (json.JSONDecodeError, ValueError):
+                # Not valid JSON — wrap raw text in a steps plan
+                return json.dumps({"steps": [{"agent": "executor", "description": response}]})
+
+        return response
+
+    def _build_planner_prompt(self, task: str, available_agents: List[str]) -> str:
+        return (
+            f"You are a planning agent. Decompose the following task into "
+            f"ordered steps. Available agents: {', '.join(available_agents)}.\n\n"
+            f"Task: {task}\n\n"
+            f"Return ONLY a valid JSON object with a 'steps' key, each step having "
+            f"'agent' (one of: {', '.join(available_agents)}) and 'description' fields.\n"
+            f"Example: {{'steps': [{{'agent': 'executor', 'description': '...'}}]}}"
+        )
+
+    def _build_executor_prompt(self, task: str, plan: Dict) -> str:
+        steps_text = ""
+        if isinstance(plan, dict):
+            steps = plan.get("steps", [])
+            if steps:
+                steps_text = "\n".join(
+                    f"- {i+1}. {s.get('description', s)}" for i, s in enumerate(steps)
+                )
+        plan_section = f"Plan:\n{steps_text}\n\n" if steps_text else ""
+        return (
+            f"You are an executor agent. Execute the following task.\n\n"
+            f"Task: {task}\n"
+            f"{plan_section}"
+            f"Perform the task and report your findings concisely."
+        )
+
+    def _build_critic_prompt(self, execution) -> str:
+        exec_output = ""
+        if hasattr(execution, "output"):
+            exec_output = str(execution.output) if execution.output else ""
+        elif isinstance(execution, dict):
+            exec_output = str(execution.get("output", ""))
+        elif execution:
+            exec_output = str(execution)
+        return (
+            f"You are a critic agent. Review the following execution result and "
+            f"determine if it meets the task requirements. "
+            f"If improvements are needed, describe what should be revised.\n\n"
+            f"Execution result:\n{exec_output}\n\n"
+            f"Respond with either 'APPROVED' or 'NEEDS_REVISION: <reason>'."
+        )
+
+    def _build_reporter_prompt(self, all_results: Dict) -> str:
+        return (
+            f"You are a reporter agent. Synthesize the following results into a "
+            f"clear, structured final report.\n\n"
+            f"Results: {all_results}\n\n"
+            f"Provide a comprehensive summary with key findings and conclusions."
+        )
+
+    def _build_coordinator_prompt(self, task: str, available_agents: List[str]) -> str:
+        return (
+            f"You are a coordinator agent. Break down the following task into "
+            f"agent assignments. Available agents: {', '.join(available_agents)}.\n\n"
+            f"Task: {task}\n\n"
+            f"Return a JSON plan: {{'steps': [{{'agent': '...', 'description': '...'}}, ...]}}"
+        )
 
     async def act(self, thought: str) -> TaskResult:
         """Execute action using the agent engine."""
         try:
-            result = self.engine.chat(thought)
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                _executor, _sync_chat, self.engine, thought
+            )
             return TaskResult(
-                success=result.get("success", False),
-                output=result.get("response"),
+                success=result.get("success", False) if isinstance(result, dict) else False,
+                output=result.get("response") if isinstance(result, dict) else str(result),
                 agent=self.name,
-                metadata=result
+                metadata=result if isinstance(result, dict) else {}
             )
         except Exception as e:
             return TaskResult(

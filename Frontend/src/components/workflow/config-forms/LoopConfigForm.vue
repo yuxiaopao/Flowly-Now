@@ -250,7 +250,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, watch } from 'vue'
+import { reactive, computed, watch } from 'vue'
 import { Repeat, RefreshCw, List } from 'lucide-vue-next'
 
 const props = defineProps({

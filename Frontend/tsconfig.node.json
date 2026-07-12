@@ -6,15 +6,14 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "moduleResolution": "bundler",
-    "allowImportingTsExtensions": true,
+    "allowJs": true,
     "isolatedModules": true,
     "moduleDetection": "force",
-    "composite": true,
-    "noEmit": false,
+    "noEmit": true,
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["vite.config.ts", "vite.config.js"]
+  "include": ["vite.config.js"]
 }

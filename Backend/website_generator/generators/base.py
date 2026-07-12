@@ -5,6 +5,7 @@ Base class for website generators.
 import os
 import json
 import logging
+import re
 from abc import ABC, abstractmethod
 from typing import Dict, Any, List, Optional
 
@@ -49,7 +50,68 @@ class BaseGenerator(ABC):
         self.port = config.get('port', 5000)
         self.name = config.get('name', 'Generated AI Website')
         self.description = config.get('description', '')
+        self.profile = config.get('profile') or {}
+        self.wizard = config.get('wizard') or {}
         self.generated_files: List[str] = []
+
+    def get_site_title(self) -> str:
+        return (self.wizard.get('siteName') or self.name or 'AI 识别系统').strip()
+
+    def get_site_subtitle(self) -> str:
+        if self.wizard.get('usageDescription'):
+            return str(self.wizard['usageDescription']).strip()
+        if self.profile.get('scenario'):
+            return str(self.profile['scenario']).strip()
+        return (self.description or 'AI-powered recognition service').strip()
+
+    def get_primary_color(self) -> str:
+        color = (self.wizard.get('primaryColor') or '').strip()
+        if color and re.match(r'^#[0-9A-Fa-f]{6}$', color):
+            return color
+        tone = (self.profile.get('ui_tone') or '')
+        if tone == 'alert_red':
+            return '#ef4444'
+        if tone == 'industrial_warning':
+            return '#f59e0b'
+        if tone == 'quality_inspect':
+            return '#06b6d4'
+        return '#f59e0b'
+
+    def get_upload_hint(self) -> str:
+        hints = self.profile.get('copy_hints') or []
+        if hints:
+            return str(hints[0])
+        return '点击或拖拽上传图片进行识别'
+
+    def get_db_engine(self) -> str:
+        from ..site_factory.db_templates import normalize_db_engine
+        return normalize_db_engine(self.config.get('dbEngine') or self.config.get('db_engine'))
+
+    def write_db_scaffold(self, extra_sql: str = '', extra_sql_mysql: str = '') -> List[str]:
+        """Write schema.sql + init_db.py for configured DB engine."""
+        from ..site_factory.db_templates import get_schema_sql, get_init_db_py
+        engine = self.get_db_engine()
+        files = []
+        schema = get_schema_sql(engine)
+        extra = extra_sql_mysql if engine == 'mysql' and extra_sql_mysql else extra_sql
+        if extra:
+            schema = schema.strip() + '\n' + extra.strip() + '\n'
+        files.append(self._write_file('backend/db/schema.sql', schema))
+        files.append(self._write_file('backend/db/init_db.py', get_init_db_py(engine)))
+        files.append(self._write_file('backend/db/__init__.py', ''))
+        return files
+
+    def get_disclaimer_html(self) -> str:
+        text = (self.wizard.get('disclaimer') or '').strip()
+        if not text:
+            return ''
+        return f'<footer class="site-disclaimer">{text}</footer>'
+
+    def get_modern_css_variables(self, primary: str = '') -> str:
+        """Shared modern CSS scaffold for generated sites."""
+        from .modern_templates import get_modern_css_block
+        primary = primary or self.get_primary_color()
+        return get_modern_css_block().replace('--site-primary, #f59e0b', primary)
 
     def generate(self) -> Dict[str, Any]:
         """
@@ -99,10 +161,16 @@ class BaseGenerator(ABC):
             config_files = self._generate_config_files()
             self.generated_files.extend(config_files)
 
+            # Copy trained weights into backend/ so generated sites are self-contained
+            copied_model = self._copy_model_weights_if_present()
+            if copied_model:
+                logger.info('Copied model weights to generated site: %s', copied_model)
+
             return {
                 'success': True,
                 'generated_files': self.generated_files,
-                'output_dir': self.output_dir
+                'output_dir': self.output_dir,
+                'model_asset': copied_model or '',
             }
 
         except Exception as e:
@@ -125,6 +193,21 @@ class BaseGenerator(ABC):
         if not os.path.exists(path):
             os.makedirs(path, exist_ok=True)
             logger.debug(f"Created directory: {path}")
+
+    def _copy_model_weights_if_present(self) -> str:
+        """Copy model_path into backend/ for portable generated sites."""
+        import shutil
+
+        src = (self.model_path or '').strip()
+        if not src or not os.path.isfile(src):
+            return ''
+
+        dest_name = os.path.basename(src) or 'best.pt'
+        dest = os.path.join(self.output_dir, 'backend', dest_name)
+        os.makedirs(os.path.dirname(dest), exist_ok=True)
+        shutil.copy2(src, dest)
+        self.generated_files.append(dest)
+        return dest_name
 
     def _write_file(self, relative_path: str, content: str) -> str:
         """
@@ -447,7 +530,7 @@ Upload an image or data for prediction.
 
 **Response**:
 ```json
-{result_type}
+{{"boxes": [], "model_info": {{}}, "latency_ms": 12.5}}
 ```
 
 ### GET /health

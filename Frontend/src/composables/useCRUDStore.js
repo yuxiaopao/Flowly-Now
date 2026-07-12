@@ -17,7 +17,6 @@ import { ref, computed } from 'vue'
 export function useCRUDStore(options = {}) {
   const {
     api,
-    name = 'item',
     transformResponse = (r) => r,
     transformRequest = (r) => r
   } = options

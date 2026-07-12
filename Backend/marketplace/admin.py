@@ -6,6 +6,14 @@ from django.contrib import admin
 from .models import TemplateCategory, WorkflowTemplate, TemplateInstall, TemplateRating, TemplateComment, TemplateFavorite
 
 
+MARKETPLACE_TEMPLATE_ADMIN_LIST_FILTERS = (
+    'category',
+    'is_published',
+    'is_featured',
+    'is_verified',
+)
+
+
 @admin.register(TemplateCategory)
 class TemplateCategoryAdmin(admin.ModelAdmin):
     list_display = ('name', 'slug', 'icon', 'order')
@@ -16,7 +24,7 @@ class TemplateCategoryAdmin(admin.ModelAdmin):
 class WorkflowTemplateAdmin(admin.ModelAdmin):
     list_display = ('name', 'category', 'created_by', 'is_published', 'is_featured',
                    'install_count', 'avg_rating', 'created_at')
-    list_filter = ('category', 'is_published', 'is_featured', 'is_verified')
+    list_filter = MARKETPLACE_TEMPLATE_ADMIN_LIST_FILTERS
     search_fields = ('name', 'description', 'tags')
     readonly_fields = ('install_count', 'avg_rating', 'created_at', 'updated_at')
 

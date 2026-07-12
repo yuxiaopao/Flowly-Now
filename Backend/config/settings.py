@@ -14,6 +14,21 @@ from config.constants import (
     CELERY_TASK_TIME_LIMIT,
     DATA_UPLOAD_MAX_MEMORY_SIZE,
     DATA_UPLOAD_MAX_FORM_FIELD_SIZE,
+    OLLAMA_NUM_CTX as DEFAULT_OLLAMA_NUM_CTX,
+    DEFAULT_OLLAMA_EMBEDDING_MODEL,
+    DEFAULT_OLLAMA_MODEL,
+    DEFAULT_LLM_MODEL,
+    DEFAULT_EMBEDDING_MODEL,
+    DEFAULT_TEMPERATURE,
+    DEFAULT_MAX_TOKENS,
+)
+from admin.constants import (
+    PLATFORM_ADMIN_COPYRIGHT,
+    PLATFORM_ADMIN_HEADER,
+    PLATFORM_ADMIN_INDEX_TITLE,
+    PLATFORM_ADMIN_PANEL_TITLE,
+    PLATFORM_ADMIN_TITLE,
+    PLATFORM_ADMIN_WELCOME_SIGN,
 )
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -55,6 +70,17 @@ ALLOWED_HOSTS = [h.strip() for h in ALLOWED_HOSTS if h.strip()]
 if not DEBUG and not ALLOWED_HOSTS:
     raise ValueError("ALLOWED_HOSTS must be set in production!")
 
+# ─── Admin / Session 安全（Django Admin 独立入口 :8000/admin/） ───
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = 'Lax'
+CSRF_COOKIE_HTTPONLY = True
+CSRF_COOKIE_SAMESITE = 'Lax'
+SESSION_COOKIE_AGE = 86400 if DEBUG else 28800  # 生产环境 Admin 会话 8 小时
+SESSION_SAVE_EVERY_REQUEST = not DEBUG
+SECURE_BROWSER_XSS_FILTER = True
+SECURE_CONTENT_TYPE_NOSNIFF = True
+X_FRAME_OPTIONS = 'DENY'
+
 # =============================================================================
 # Data Upload Security Limits
 # =============================================================================
@@ -79,10 +105,10 @@ INSTALLED_APPS = [
     'channels',
     'drf_spectacular',
     # Local apps
+    'datasets',   # must be before core/augmentation due to cross-app FK lazy refs
     'users',
     'core',
     'workflows',
-    'datasets',
     'agents',
     'nl_to_workflow',
     'prompts',
@@ -130,6 +156,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'admin.context_processors.flowly_admin',
             ],
         },
     },
@@ -177,31 +204,75 @@ TIME_ZONE = 'Asia/Shanghai'
 USE_I18N = True
 USE_TZ = True
 
+# 用户端 Frontend URL（Admin 外链、模板 {{ frontend_url }}）
+FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:5200').rstrip('/')
+# 对外暴露的后端 API 根地址（Webhook/SSE/前端运行时配置）
+PUBLIC_API_BASE_URL = os.getenv('PUBLIC_API_BASE_URL', 'http://127.0.0.1:8000').rstrip('/')
+# WebSocket 根地址（空则 runtime_config 从 PUBLIC_API_BASE_URL 推导）
+PUBLIC_WS_URL = os.getenv('PUBLIC_WS_URL', '').strip()
+LOGIN_URL = '/admin/login/'
+LOGIN_REDIRECT_URL = '/admin/'
+
 # ─────────────────────────────────────────────────────────────────
 # Jazzmin Admin Theme Configuration
 # 美化 Django Admin 界面
 # ─────────────────────────────────────────────────────────────────
 JAZZMIN_SETTINGS = {
     # 顶部品牌栏
-    "site_brand": "e-Flowly 管理系统",
-    "site_logo": "admin/img/logo.svg",
-    "site_logo_width": 40,
+    "site_brand": PLATFORM_ADMIN_TITLE,
+    "site_logo": "admin/img/logo.png",
+    "site_logo_width": 120,
+    "site_logo_classes": "brand-image elevation-3",
 
     # 登录页
-    "login_logo": "admin/img/logo.svg",
-    "login_logo_height": 60,
+    "login_logo": "admin/img/logo.png",
+    "login_logo_height": 72,
+    "site_icon": "admin/img/logo.png",
 
     # 标题与页脚
-    "site_header": "e-Flowly Admin",
-    "site_title": "e-Flowly 管理系统",
-    "copyright": "e-Flowly © 2024-2026",
+    "site_header": PLATFORM_ADMIN_HEADER,
+    "site_title": PLATFORM_ADMIN_TITLE,
+    "copyright": PLATFORM_ADMIN_COPYRIGHT,
 
-    # 顶部导航栏
+    # 顶部导航栏（Flowly Tab 栏已承担主导航，此处仅保留外链）
     "topmenu_links": [
-        {"name": "控制台", "url": "/admin/", "icon": "fas fa-cogs"},
         {"name": "API 文档", "url": "/api/docs/", "new_window": True, "icon": "fas fa-book"},
-        {"name": "前台首页", "url": "/", "new_window": True, "icon": "fas fa-home"},
+        {"name": "用户端", "url": f"{FRONTEND_URL}/", "new_window": True, "icon": "fas fa-external-link-alt"},
     ],
+
+    # 侧边栏自定义链接（Tab 已覆盖的入口不再重复；仅保留配置中心快捷链）
+    "custom_links": {
+        "admin": [{
+            "name": "平台配置中心",
+            "url": "/admin/flowly/settings/",
+            "icon": "fas fa-cogs",
+            "permissions": ["auth.view_user"],
+        }],
+    },
+
+    # 模型图标
+    "icons": {
+        "auth": "fas fa-users-cog",
+        "auth.user": "fas fa-user",
+        "auth.group": "fas fa-users",
+        "workflows": "fas fa-project-diagram",
+        "workflows.workflow": "fas fa-sitemap",
+        "workflows.workflowexecution": "fas fa-play-circle",
+        "workflows.node": "fas fa-circle-nodes",
+        "workflows.edge": "fas fa-link",
+        "gateway": "fas fa-brain",
+        "gateway.modelprovider": "fas fa-cloud",
+        "gateway.aimodel": "fas fa-microchip",
+        "agents": "fas fa-robot",
+        "agents.agent": "fas fa-robot",
+        "users": "fas fa-user-shield",
+        "users.user": "fas fa-user",
+        "admin": "fas fa-cogs",
+        "admin.systemsetting": "fas fa-sliders-h",
+        "core": "fas fa-database",
+        "datasets": "fas fa-table",
+        "tenants": "fas fa-building",
+    },
 
     # 用户菜单（右上角）
     "user_menu": {
@@ -212,20 +283,31 @@ JAZZMIN_SETTINGS = {
         ],
     },
 
-    # 侧边栏
+    # 侧边栏（False = 按应用分组，可独立展开/收起子菜单）
     "show_sidebar": True,
-    "navigation_expanded": True,
+    "navigation_expanded": False,
 
     # 变更列表视图
     "order_with_respect_to": [
+        "workflows",
         "workflows.Workflow",
+        "workflows.WorkflowExecution",
         "workflows.Node",
         "workflows.Edge",
+        "agents",
+        "agents.Agent",
+        "users",
+        "admin",
+        "gateway",
+        "features",
+        "auth",
+        "tenants",
+        "datasets",
     ],
 
     # 主题色配置
     "ui_theme": "default",
-    "show_ui_builder": True,
+    "show_ui_builder": False,
     "use_htmx": True,
 
     # 隐藏默认链接
@@ -248,8 +330,8 @@ JAZZMIN_SETTINGS = {
         "maroon": "#e74c3c",
         "purple": "#9b59b6",
         "orange": "#f39c12",
-        "blue": "#3498db",
-        "light-blue": "#3bee17",
+        "blue": "#1d4ed8",
+        "light-blue": "#2563eb",
         "green": "#27ae60",
         "red": "#c0392b",
         "dark-blue": "#2c3e50",
@@ -265,7 +347,7 @@ JAZZMIN_SETTINGS = {
         "danger": "btn-outline-danger",
     },
 
-    # 自定义 CSS
+    # 自定义 CSS（tokens 通过 custom_admin @import 引入）
     "custom_css": "admin/css/custom_admin.css",
 
     # 自定义 JS
@@ -276,23 +358,23 @@ JAZZMIN_UI_TWEAKS = {
     "navbar_small_text": False,
     "footer_small_text": False,
     "body_small_text": False,
-    "brand_colour": "navbar-info",
-    "accent_colour": "accent-warning",
+    "brand_colour": "navbar-white",
+    "accent_colour": "accent-primary",
     "logo_colour": "navbar-dark",
     "sidebar_nav_compact_style": False,
     "sidebar_nav_flat_style": False,
     "sidebar_nav_legacy_style": False,
     "sidebar_nav_child_indent": True,
-    "admin_title": "e-Flowly 管理系统",
-    "welcome_sign": "欢迎使用 e-Flowly 智能工作流平台",
+    "admin_title": PLATFORM_ADMIN_TITLE,
+    "welcome_sign": PLATFORM_ADMIN_WELCOME_SIGN,
 }
 
 # ─────────────────────────────────────────────────────────────────
 # 自定义 Admin Site 配置
 # ─────────────────────────────────────────────────────────────────
-ADMIN_SITE_HEADER = "e-Flowly 管理系统"
-ADMIN_SITE_TITLE = "e-Flowly Admin"
-ADMIN_INDEX_TITLE = "欢迎来到 e-Flowly 管理控制台"
+ADMIN_SITE_HEADER = PLATFORM_ADMIN_TITLE
+ADMIN_SITE_TITLE = PLATFORM_ADMIN_HEADER
+ADMIN_INDEX_TITLE = PLATFORM_ADMIN_INDEX_TITLE
 
 # ─────────────────────────────────────────────────────────────────
 # 静态文件
@@ -308,6 +390,25 @@ STATICFILES_DIRS = [
 # Media files
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
+MEDIA_PUBLIC_BASE_URL = os.getenv(
+    'MEDIA_PUBLIC_BASE_URL',
+    os.getenv('PUBLIC_API_BASE_URL', 'http://127.0.0.1:8000'),
+).rstrip('/')
+
+# Video translation / FFmpeg
+FFMPEG_BINARY = os.getenv('FFMPEG_BINARY', 'ffmpeg')
+FFPROBE_BINARY = os.getenv('FFPROBE_BINARY', 'ffprobe')
+VIDEO_TRANSLATION_MAX_DURATION_SEC = int(os.getenv('VIDEO_TRANSLATION_MAX_DURATION_SEC', '300'))
+VIDEO_TRANSLATION_MAX_FILE_MB = int(os.getenv('VIDEO_TRANSLATION_MAX_FILE_MB', '200'))
+VIDEO_TRANSLATION_ASR_PROVIDER = os.getenv('VIDEO_TRANSLATION_ASR_PROVIDER', 'local_whisper').strip()
+VIDEO_TRANSLATION_TTS_PROVIDER = os.getenv('VIDEO_TRANSLATION_TTS_PROVIDER', 'pyttsx3').strip()
+VIDEO_TRANSLATION_LIP_SYNC_PROVIDER = os.getenv('VIDEO_TRANSLATION_LIP_SYNC_PROVIDER', 'ffmpeg').strip()
+WHISPER_MODEL_SIZE = os.getenv('WHISPER_MODEL_SIZE', 'base').strip()
+WHISPER_DEVICE = os.getenv('WHISPER_DEVICE', 'cpu').strip()
+WHISPER_COMPUTE_TYPE = os.getenv('WHISPER_COMPUTE_TYPE', 'int8').strip()
+
+# System backup output directory (admin panel data backup)
+BACKUP_DIR = os.getenv('BACKUP_DIR', str(BASE_DIR / 'backups'))
 
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
@@ -353,6 +454,14 @@ REST_FRAMEWORK = {
 # SECURITY: CORS_ALLOWED_ORIGINS must be explicitly configured - no default fallback in production.
 _CORS_ORIGINS_RAW = os.getenv('CORS_ALLOWED_ORIGINS', '')
 CORS_ALLOWED_ORIGINS = [o.strip() for o in _CORS_ORIGINS_RAW.split(',') if o.strip()]
+# Development defaults when CORS_ALLOWED_ORIGINS is not configured
+if DEBUG and not CORS_ALLOWED_ORIGINS:
+    CORS_ALLOWED_ORIGINS = [
+        'http://localhost:5200',
+        'http://127.0.0.1:5200',
+        'http://localhost:5173',
+        'http://127.0.0.1:5173',
+    ]
 # SECURITY: Require explicit CORS origins in production
 if not DEBUG and not CORS_ALLOWED_ORIGINS:
     raise ValueError(
@@ -431,16 +540,51 @@ except ImportError:
         }
     }
 
-# OpenAI API configuration
-OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '')
-OPENAI_BASE_URL = os.getenv('OPENAI_BASE_URL', 'https://api.openai.com/v1')
+# OpenAI API configuration (also used for Volcengine Ark / Doubao OpenAI-compatible API)
+OPENAI_API_KEY = (
+    os.getenv('OPENAI_API_KEY')
+    or os.getenv('VOLCENGINE_API_KEY')
+    or os.getenv('ARK_API_KEY')
+    or ''
+).strip()
+OPENAI_BASE_URL = (
+    os.getenv('OPENAI_BASE_URL') or 'https://api.openai.com/v1'
+).strip().rstrip('/')
 
 # Anthropic API configuration
 ANTHROPIC_API_KEY = os.getenv('ANTHROPIC_API_KEY', '')
 
+# 阿里云百炼 DashScope 配置（多模态：文生图/文生视频/语音合成/语音识别 + LLM 兼容模式）
+# DASHSCOPE_API_KEY 同时用于 REST 服务端点与 OpenAI 兼容端点鉴权
+DASHSCOPE_API_KEY = os.getenv('DASHSCOPE_API_KEY', '').strip()
+# DashScope 原生 REST API 根地址（文生图/文生视频/语音合成/语音识别等 AIGC 服务）
+DASHSCOPE_BASE_URL = (
+    os.getenv('DASHSCOPE_BASE_URL') or 'https://dashscope.aliyuncs.com/api/v1'
+).strip().rstrip('/')
+# DashScope OpenAI 兼容模式地址（用于 LLM 对话节点接入通义千问系列模型）
+DASHSCOPE_COMPATIBLE_BASE_URL = (
+    os.getenv('DASHSCOPE_COMPATIBLE_BASE_URL') or 'https://dashscope.aliyuncs.com/compatible-mode/v1'
+).strip().rstrip('/')
+
+# Agnes AI 多模态 API Hub（OpenAI 兼容：LLM / 文生图 / 文生视频）
+AGNES_API_KEY = os.getenv('AGNES_API_KEY', '').strip()
+AGNES_BASE_URL = (
+    os.getenv('AGNES_BASE_URL') or 'https://apihub.agnes-ai.com/v1'
+).strip().rstrip('/')
+
 # Ollama (local LLM) configuration
 OLLAMA_BASE_URL = os.getenv('OLLAMA_BASE_URL', 'http://localhost:11434')
-OLLAMA_MODEL = os.getenv('OLLAMA_MODEL', 'qwen2.5-coder:7b')
+OLLAMA_MODEL = os.getenv('OLLAMA_MODEL', DEFAULT_OLLAMA_MODEL)
+DEFAULT_LLM_MODEL = os.getenv('DEFAULT_LLM_MODEL', DEFAULT_LLM_MODEL)
+DEFAULT_EMBEDDING_MODEL = os.getenv('DEFAULT_EMBEDDING_MODEL', DEFAULT_EMBEDDING_MODEL)
+DEFAULT_TEMPERATURE = float(os.getenv('DEFAULT_TEMPERATURE', str(DEFAULT_TEMPERATURE)))
+DEFAULT_MAX_TOKENS = int(os.getenv('DEFAULT_MAX_TOKENS', str(DEFAULT_MAX_TOKENS)))
+# Chat context window (tokens) requested from Ollama; capped by default to avoid
+# exhausting host RAM with large-context models (see config/constants.py OLLAMA_NUM_CTX).
+OLLAMA_NUM_CTX = int(os.getenv('OLLAMA_NUM_CTX', str(DEFAULT_OLLAMA_NUM_CTX)))
+# Local embedding model served by Ollama, used as a RAG fallback when no OpenAI-compatible
+# embeddings API key is configured (see rag/services.py EmbeddingService).
+OLLAMA_EMBEDDING_MODEL = os.getenv('OLLAMA_EMBEDDING_MODEL', DEFAULT_OLLAMA_EMBEDDING_MODEL)
 
 # Z-Image-Turbo (local image generation) configuration
 ZIMAGE_MODEL_ID = os.getenv('ZIMAGE_MODEL_ID', 'Tongyi-MAI/Z-Image-Turbo')
@@ -453,8 +597,48 @@ ZIMAGE_DEFAULT_WIDTH = int(os.getenv('ZIMAGE_DEFAULT_WIDTH', '1024'))
 ZIMAGE_DEFAULT_HEIGHT = int(os.getenv('ZIMAGE_DEFAULT_HEIGHT', '1024'))
 
 # NL-to-Workflow configuration
-NL_WORKFLOW_MODEL = os.getenv('NL_WORKFLOW_MODEL', 'qwen2.5-coder:7b')
+_NL_MODEL_DEFAULT = (
+    os.getenv('NL_WORKFLOW_MODEL')
+    or ('agnes-2.0-flash' if os.getenv('AGNES_API_KEY') else DEFAULT_OLLAMA_MODEL)
+)
+NL_WORKFLOW_MODEL = _NL_MODEL_DEFAULT
 NL_WORKFLOW_TEMPERATURE = float(os.getenv('NL_WORKFLOW_TEMPERATURE', '0.7'))
+# Pre-generation chat: lower token cap for faster first-token / completion
+NL_CHAT_MAX_TOKENS = int(os.getenv('NL_CHAT_MAX_TOKENS', '512'))
+NL_EDITOR_MAX_TOKENS = int(os.getenv('NL_EDITOR_MAX_TOKENS', '2048'))
+NL_GENERATE_MAX_TOKENS = int(os.getenv('NL_GENERATE_MAX_TOKENS', '4096'))
+# AI-first: use LLM to autonomously design workflows; templates only when LLM unavailable
+# or when NL_WORKFLOW_USE_TEMPLATES=true (offline/dev fallback).
+NL_WORKFLOW_USE_TEMPLATES = os.getenv('NL_WORKFLOW_USE_TEMPLATES', 'false').lower() in ('true', '1', 'yes')
+NL_WORKFLOW_TEMPLATE_FALLBACK = os.getenv('NL_WORKFLOW_TEMPLATE_FALLBACK', 'true').lower() in ('true', '1', 'yes')
+# Project Agent / profiler: prefer LLM enrichment when any provider is configured
+SITE_AGENT_PREFER_LLM = os.getenv('SITE_AGENT_PREFER_LLM', 'true').lower() in ('true', '1', 'yes')
+SITE_AGENT_MODEL = os.getenv('SITE_AGENT_MODEL', '')  # empty → NL_WORKFLOW_MODEL
+
+# ─────────────────────────────────────────────────────────────────
+# Email (SMTP) Configuration
+# These serve as FALLBACK defaults when a workflow's email node
+# does not provide its own SMTP configuration.
+# ─────────────────────────────────────────────────────────────────
+EMAIL_HOST = os.getenv('EMAIL_HOST', '')
+EMAIL_PORT = int(os.getenv('EMAIL_PORT', '587') or 587)
+EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'true').lower() in ('true', '1', 'yes')
+EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
+DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', '') or 'noreply@flowly.local'
+# Django's SMTP backend blocks indefinitely by default (EMAIL_TIMEOUT=None) if the
+# SMTP server is unreachable (e.g. outbound port 25/465/587 blocked by the network),
+# which would hang the invite-email HTTP request. Cap it so failures surface quickly.
+EMAIL_TIMEOUT = int(os.getenv('EMAIL_TIMEOUT', '10'))
+
+# No SMTP server configured (e.g. local dev) → fall back to the console backend
+# so outgoing emails (password reset, team invitations, ...) are still visible
+# in the server log instead of silently failing or raising exceptions.
+EMAIL_BACKEND = os.getenv(
+    'EMAIL_BACKEND',
+    'django.core.mail.backends.smtp.EmailBackend' if EMAIL_HOST
+    else 'django.core.mail.backends.console.EmailBackend'
+)
 
 # ─────────────────────────────────────────────────────────────────
 # LangSmith Tracing Configuration

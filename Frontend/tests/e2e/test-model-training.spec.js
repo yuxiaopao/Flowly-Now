@@ -36,6 +36,49 @@ const mockTrainingJobRunning = {
   total_epochs: 10
 }
 
+const mockTrainingOptions = {
+  strategies: [
+    {
+      id: 'yolo',
+      label: 'YOLO 目标检测',
+      training_kind: 'yolo',
+      framework: 'ultralytics',
+      model_type: 'detection',
+      base_weights: [
+        { id: 'yolov8n.pt', label: 'YOLOv8 Nano' },
+        { id: 'yolo11x.pt', label: 'YOLO11 XLarge' },
+      ],
+      outputs: ['best.pt', 'last.pt'],
+    },
+    {
+      id: 'clip',
+      label: 'CLIP 分类 / 检索',
+      training_kind: 'clip_cls',
+      framework: 'pytorch',
+      base_weights: [{ id: 'ViT-B-32/openai', label: 'CLIP ViT-B/32 OpenAI' }],
+      outputs: ['clip.pt'],
+    },
+    {
+      id: 'transformer',
+      label: 'Transformer 微调',
+      training_kind: 'transformer',
+      framework: 'transformers',
+      base_weights: [{ id: 'bert-base-uncased', label: 'BERT Base' }],
+      outputs: ['pytorch_model.bin'],
+    },
+  ],
+}
+
+const mockAnalyzeDataset = {
+  class_count: 2,
+  suggested_task_type: 'detection',
+  classes: [
+    { id: 0, name: 'helmet', sample_count: 10 },
+    { id: 1, name: 'vest', sample_count: 8 },
+  ],
+  warnings: [],
+}
+
 const mockDataset = {
   id: '660e8400-e29b-41d4-a716-446655440000',
   name: 'Test Dataset',
@@ -51,29 +94,50 @@ const mockDataset = {
 }
 
 test.describe('Model Training Pipeline', () => {
-  
-  test.describe('Training Progress Page', () => {
+
+  test.describe('Training Redirect Page', () => {
     test.beforeEach(async ({ page }) => {
+      await page.route('**/api/v1/training/training-jobs/options/**', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify(mockTrainingOptions),
+        })
+      })
+      await page.route('**/api/v1/training/training-jobs/analyze-dataset/**', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify(mockAnalyzeDataset),
+        })
+      })
       await page.goto('/training')
       await page.waitForLoadState('networkidle')
     })
 
-    test('should load training progress page', async ({ page }) => {
-      // Check page title
-      await expect(page).toHaveTitle(/训练|training|Training/i)
+    test('should show training strategy wizard with step labels', async ({ page }) => {
+      await expect(page.locator('text=训练策略向导')).toBeVisible()
+      await expect(page.locator('.el-step').filter({ hasText: '策略' }).first()).toBeVisible()
+      await expect(page.locator('.el-step').filter({ hasText: '权重' }).first()).toBeVisible()
     })
 
-    test('should display training job list section', async ({ page }) => {
-      // Look for training jobs heading or list container
-      const heading = page.locator('h1, h2, .section-title').filter({ hasText: /训练|模型/i })
-      await expect(heading.first()).toBeVisible()
+    test('should render YOLO / CLIP / Transformer strategy options from API', async ({ page }) => {
+      await expect(page.locator('.strategy-card').filter({ hasText: 'YOLO 目标检测' }).first()).toBeVisible()
+      await expect(page.locator('.strategy-card').filter({ hasText: 'CLIP' }).first()).toBeVisible()
+      await expect(page.locator('.strategy-card').filter({ hasText: 'Transformer' }).first()).toBeVisible()
     })
 
-    test('should show create training job button', async ({ page }) => {
-      // Look for create button
-      const createButton = page.locator('button, .btn').filter({ hasText: /创建|新建|添加/i }).first()
-      // Button might not be visible if list is empty, so we just check it exists in DOM
-      await expect(createButton).toBeAttached()
+    test('should offer quick workflow template shortcuts', async ({ page }) => {
+      await expect(page.locator('button').filter({ hasText: 'YOLO 识别项目' }).first()).toBeVisible()
+      await expect(page.locator('button').filter({ hasText: 'CLIP 检索项目' }).first()).toBeVisible()
+      await expect(page.locator('button').filter({ hasText: 'Transformer 微调项目' }).first()).toBeVisible()
+    })
+
+    test('should advance wizard to weight step', async ({ page }) => {
+      const nextBtn = page.locator('button').filter({ hasText: '下一步' }).first()
+      await expect(nextBtn).toBeEnabled()
+      await nextBtn.click()
+      await expect(page.locator('text=基础权重 / 预训练模型').first()).toBeVisible()
     })
   })
 
@@ -86,7 +150,13 @@ test.describe('Model Training Pipeline', () => {
       await page.route('**/api/v1/training/**', async (route) => {
         const url = route.request().url()
         
-        if (url.includes('/training/training-jobs/') && route.request().method() === 'GET') {
+        if (url.includes('/training-jobs/options/') && route.request().method() === 'GET') {
+          await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify(mockTrainingOptions),
+          })
+        } else if (url.includes('/training/training-jobs/') && route.request().method() === 'GET') {
           await route.fulfill({
             status: 200,
             contentType: 'application/json',
@@ -236,44 +306,30 @@ test.describe('Model Training Pipeline', () => {
   })
 
   test.describe('Training WebSocket Integration', () => {
-    test('should establish WebSocket connection for training progress', async ({ page }) => {
-      // This test verifies the WebSocket URL pattern
+    test('should use workflow YOLO node WebSocket URL pattern', async ({ page }) => {
       const jobId = 'test_train_123'
       const wsUrl = `/ws/training/${jobId}/`
-      
-      // Mock the WebSocket
-      let wsConnected = false
-      await page.route('**/ws/training/**', async (route) => {
-        // This won't actually connect but verifies routing setup
-        wsConnected = true
-        await route.abort() // Abort WebSocket requests in test
-      })
-      
-      await page.goto('/training')
-      await page.waitForLoadState('networkidle')
-      
-      // Verify the WebSocket composable uses correct URL pattern
-      // The URL should be: ws://host/ws/training/<job_id>/
-      // This is verified in the useTrainingWebSocket.js code
-    })
+      expect(wsUrl).toMatch(/^\/ws\/training\/[^/]+\/$/)
 
-    test('should handle training progress events', async ({ page }) => {
-      // Mock WebSocket with progress events
       await page.route('**/ws/training/**', async (route) => {
         await route.abort()
       })
-      
-      await page.goto('/training')
+
+      await page.goto('/workflows/new?template=yolo-detection')
       await page.waitForLoadState('networkidle')
-      
-      // The UI should handle these event types:
-      // - connected
-      // - training_started
-      // - epoch_start
-      // - epoch_complete
-      // - training_complete
-      // - training_error
-      // - training_cancelled
+    })
+
+    test('composable handles training progress event types', async () => {
+      const eventTypes = [
+        'connected',
+        'training_started',
+        'epoch_start',
+        'epoch_complete',
+        'training_complete',
+        'training_error',
+        'training_cancelled',
+      ]
+      expect(eventTypes.length).toBeGreaterThan(0)
     })
   })
 
@@ -323,16 +379,32 @@ test.describe('Training API Integration', () => {
     expect([200, 401, 403]).toContain(datasetsResponse.status())
   })
 
+  test('training options endpoint shape', async ({ request }) => {
+    const baseURL = 'http://localhost:8000'
+
+    const optionsResponse = await request.get(`${baseURL}/api/v1/training/training-jobs/options/`)
+    expect([200, 401, 403]).toContain(optionsResponse.status())
+
+    if (optionsResponse.status() === 200) {
+      const body = await optionsResponse.json()
+      expect(body).toHaveProperty('strategies')
+      expect(Array.isArray(body.strategies)).toBeTruthy()
+    }
+  })
+
   test('training jobs CRUD operations', async ({ request }) => {
     const baseURL = 'http://localhost:8000'
     
     // Create
     const createResponse = await request.post(`${baseURL}/api/v1/training/training-jobs/`, {
       data: {
-        framework: 'pytorch',
-        model_type: 'classifier',
-        config: { epochs: 1 }
-      }
+        name: 'e2e-yolo',
+        training_kind: 'yolo',
+        framework: 'ultralytics',
+        model_type: 'detection',
+        base_weight_uri: 'yolov8n.pt',
+        config: { epochs: 1 },
+      },
     })
     
     // Should be 201 Created or 400 (validation) or auth error

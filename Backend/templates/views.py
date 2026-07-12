@@ -103,26 +103,27 @@ class WorkflowTemplateViewSet(viewsets.ModelViewSet):
         return WorkflowTemplateDetailSerializer
 
     def _serialize_templates(self, templates, request):
-        return WorkflowTemplateListSerializer(templates, many=True, context={'request': request}).data
+        serializer = WorkflowTemplateListSerializer(templates, many=True, context={'request': request})
+        return serializer.data
 
     @action(detail=False, methods=['get'])
     def featured(self, request):
         """Get featured templates."""
         templates = self.get_queryset().filter(
             is_verified=True
-        ).order_by('-use_count', '-rating')[:8]
+        ).select_related('category', 'created_by').order_by('-use_count', '-rating')[:8]
         return Response(self._serialize_templates(templates, request))
 
     @action(detail=False, methods=['get'])
     def popular(self, request):
         """Get popular templates."""
-        templates = self.get_queryset().order_by('-use_count')[:12]
+        templates = self.get_queryset().select_related('category', 'created_by').order_by('-use_count')[:12]
         return Response(self._serialize_templates(templates, request))
 
     @action(detail=False, methods=['get'])
     def recent(self, request):
         """Get recently published templates."""
-        templates = self.get_queryset().order_by('-published_at', '-created_at')[:12]
+        templates = self.get_queryset().select_related('category', 'created_by').order_by('-published_at', '-created_at')[:12]
         return Response(self._serialize_templates(templates, request))
 
     @action(detail=True, methods=['get'])

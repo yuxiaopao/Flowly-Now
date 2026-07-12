@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, computed, watch } from 'vue'
+import { ref, computed } from 'vue'
 
 // 可用的主题列表
 export const THEMES = [
@@ -415,14 +415,9 @@ export const useAppStore = defineStore('app', () => {
         confirmText: options.confirmText || '确定',
         cancelText: options.cancelText || '取消',
         confirmType: options.confirmType || 'primary',
-        onConfirm: () => {
-          closeModal(options._modalId)
-          resolve(true)
-        },
-        onCancel: () => {
-          closeModal(options._modalId)
-          resolve(false)
-        }
+        closeOnOverlay: options.closeOnOverlay !== false,
+        onConfirm: () => resolve(true),
+        onCancel: () => resolve(false),
       })
     })
   }

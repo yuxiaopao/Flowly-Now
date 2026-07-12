@@ -13,7 +13,8 @@ export const useAuthStore = defineStore('auth', () => {
 
   // Getters
   const isAuthenticated = computed(() => !!token.value)
-  const isAdmin = computed(() => user.value?.is_staff || false)
+  // 响应拦截器会将后端字段转为 camelCase（is_staff -> isStaff）
+  const isAdmin = computed(() => Boolean(user.value?.isStaff || user.value?.isSuperuser))
   const userName = computed(() => user.value?.username || '')
   const userEmail = computed(() => user.value?.email || '')
 
@@ -38,7 +39,15 @@ export const useAuthStore = defineStore('auth', () => {
 
       return response
     } catch (err) {
-      error.value = err.message
+      const apiMessage = err.response?.data
+        ? (typeof err.response.data === 'string'
+          ? err.response.data
+          : err.response.data?.non_field_errors?.[0]
+            || err.response.data?.detail
+            || err.response.data?.message
+            || err.response.data?.error)
+        : null
+      error.value = apiMessage || err.message
       throw err
     } finally {
       isLoading.value = false
@@ -52,7 +61,15 @@ export const useAuthStore = defineStore('auth', () => {
       const response = await authApi.register(userData)
       return response
     } catch (err) {
-      error.value = err.message
+      const apiMessage = err.response?.data
+        ? (typeof err.response.data === 'string'
+          ? err.response.data
+          : err.response.data?.non_field_errors?.[0]
+            || err.response.data?.detail
+            || err.response.data?.message
+            || err.response.data?.error)
+        : null
+      error.value = apiMessage || err.message
       throw err
     } finally {
       isLoading.value = false
@@ -109,7 +126,15 @@ export const useAuthStore = defineStore('auth', () => {
       user.value = { ...user.value, ...response }
       return response
     } catch (err) {
-      error.value = err.message
+      const apiMessage = err.response?.data
+        ? (typeof err.response.data === 'string'
+          ? err.response.data
+          : err.response.data?.non_field_errors?.[0]
+            || err.response.data?.detail
+            || err.response.data?.message
+            || err.response.data?.error)
+        : null
+      error.value = apiMessage || err.message
       throw err
     } finally {
       isLoading.value = false
@@ -123,7 +148,15 @@ export const useAuthStore = defineStore('auth', () => {
       const response = await authApi.changePassword(passwords)
       return response
     } catch (err) {
-      error.value = err.message
+      const apiMessage = err.response?.data
+        ? (typeof err.response.data === 'string'
+          ? err.response.data
+          : err.response.data?.non_field_errors?.[0]
+            || err.response.data?.detail
+            || err.response.data?.message
+            || err.response.data?.error)
+        : null
+      error.value = apiMessage || err.message
       throw err
     } finally {
       isLoading.value = false

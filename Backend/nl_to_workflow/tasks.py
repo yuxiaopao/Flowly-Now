@@ -27,7 +27,7 @@ def generate_workflow_async(self, session_id: int):
         session.save()
 
         # Generate workflow
-        service = NLToWorkflowService()
+        service = NLToWorkflowService(user=session.user)
         result = service.generate_workflow(session.description, session.name)
 
         if 'error' not in result:
@@ -81,13 +81,15 @@ def continue_conversation_async(self, session_id: int, message: str):
         session.save()
 
         # Continue generation
-        service = NLToWorkflowService()
+        service = NLToWorkflowService(user=session.user)
         result = service.continue_conversation(session.messages, message, session.workflow_json)
 
         if 'error' not in result:
             session.status = 'completed'
             if result.get('workflow'):
                 session.workflow_json = result['workflow']
+                # 清除旧的已保存工作流关联，确保 confirm 保存的是最新生成的工作流
+                session.workflow = None
         else:
             session.status = 'failed'
             session.error_message = result.get('message', 'Continuation failed')

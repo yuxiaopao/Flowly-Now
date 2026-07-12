@@ -189,8 +189,12 @@ class OllamaProvider(BaseProvider):
                     'temperature': temperature,
                     'num_predict': max_tokens,
                     'top_p': top_p,
+                    'num_ctx': kwargs.get('num_ctx', 4096),
                 }
             }
+            for opt_key in ('num_ctx', 'num_gpu', 'num_thread'):
+                if opt_key in kwargs and opt_key not in payload['options']:
+                    payload['options'][opt_key] = kwargs[opt_key]
             
             # Add tools/function calling support if provided
             if tools:

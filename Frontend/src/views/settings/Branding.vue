@@ -1,13 +1,10 @@
-﻿<template>
+<template>
   <div class="branding-settings-page">
-    <div class="page-header">
-      <div class="header-left">
-        <h1>品牌定制</h1>
-        <p class="subtitle">
-          自定义您的平台外观和品牌标识
-        </p>
-      </div>
-    </div>
+    <PageHeader
+      compact
+      title="品牌定制"
+      subtitle="自定义您的平台外观和品牌标识"
+    />
 
     <el-tabs
       v-model="activeTab"
@@ -657,6 +654,7 @@ import {
 import { useAppStore } from '@/stores/app'
 import { useBrandingStore } from '@/stores/branding'
 import { APP_CONFIG } from '@/config'
+import PageHeader from '@/components/layout/PageHeader.vue'
 
 const appStore = useAppStore()
 
@@ -877,21 +875,6 @@ onMounted(async () => {
 .branding-settings-page {
   padding: 24px;
   max-width: 1200px;
-}
-
-.page-header {
-  margin-bottom: 24px;
-
-  h1 {
-    margin: 0;
-    font-size: 24px;
-    font-weight: 600;
-  }
-
-  .subtitle {
-    margin: 8px 0 0;
-    color: var(--el-text-color-secondary);
-  }
 }
 
 .btn-icon {

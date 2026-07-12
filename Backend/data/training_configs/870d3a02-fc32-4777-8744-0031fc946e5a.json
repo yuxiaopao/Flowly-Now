@@ -1,0 +1,15 @@
+{
+  "job_id": "870d3a02-fc32-4777-8744-0031fc946e5a",
+  "training_kind": "yolo",
+  "framework": "ultralytics",
+  "model_type": "detection",
+  "yolo_version": "v8",
+  "model_variant": "n",
+  "dataset_id": "",
+  "dataset_path": "",
+  "dataset_yaml_path": "demo/datasets/traffic_signs/data.yaml",
+  "dataset_source_mode": "",
+  "annotation_project_id": "",
+  "class_names": [],
+  "config": {}
+}

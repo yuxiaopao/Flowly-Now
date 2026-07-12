@@ -5,10 +5,10 @@
       <button
         v-if="!visible"
         class="assistant-trigger"
-        :class="themeClass"
+        :class="[themeClass, { 'is-dragging': triggerDragging }]"
         :style="triggerStyle"
-        title="AI 工作流助手"
-        @click="openAssistant"
+        title="AI 工作流助手（可拖动）"
+        @click="handleTriggerClick"
         @mousedown="startTriggerDrag"
       >
         <div class="trigger-inner">
@@ -76,7 +76,7 @@
               >
                 <div class="session-item-content">
                   <span class="session-name">{{ session.name || '新对话' }}</span>
-                  <span class="session-time">{{ formatSessionTime(session.updated_at || session.created_at) }}</span>
+                  <span class="session-time">{{ formatSessionTime(session.updatedAt || session.updated_at || session.createdAt || session.created_at) }}</span>
                 </div>
                 <div class="session-actions">
                   <button
@@ -133,6 +133,14 @@
               </div>
             </div>
             <div class="header-actions">
+              <button
+                class="header-btn"
+                title="规则引擎优化（不消耗 LLM）"
+                :disabled="optimizing || !props.nodes.length"
+                @click="runOptimizeWorkflow"
+              >
+                <Sparkles class="btn-icon-sm" />
+              </button>
               <button
                 class="header-btn"
                 title="清除对话"
@@ -242,11 +250,13 @@
                     v-if="msg.content"
                     class="msg-bubble"
                   >
+                    <!-- eslint-disable vue/no-v-html -->
                     <div
                       v-if="msg.isHtml"
                       class="msg-html"
                       v-html="msg.content"
                     />
+                    <!-- eslint-enable vue/no-v-html -->
                     <pre
                       v-else
                       class="msg-text"
@@ -292,6 +302,173 @@
                     </button>
                   </div>
 
+                  <!-- Ready to generate -->
+                  <div
+                    v-if="msg.readyToGenerate"
+                    class="ready-generate-bar"
+                  >
+                    <button
+                      class="ready-generate-btn"
+                      @click="triggerGenerateFromChat"
+                    >
+                      <Wand2 class="btn-icon-xs" />
+                      现在就生成工作流
+                    </button>
+                  </div>
+
+                  <!-- Optimization results -->
+                  <div
+                    v-if="msg.optimizationResult"
+                    class="optimization-result-card"
+                  >
+                    <div class="optimization-result-header">
+                      <Sparkles class="card-icon" />
+                      <div>
+                        <strong>规则引擎优化分析</strong>
+                        <span class="optimization-meta">不消耗 LLM 额度</span>
+                      </div>
+                    </div>
+                    <div
+                      v-if="msg.optimizationResult.suggestions?.length === 0"
+                      class="optimization-empty"
+                    >
+                      <CheckCircle class="empty-icon success" />
+                      <span>工作流状态良好，未发现需要优化的问题</span>
+                    </div>
+                    <div
+                      v-else
+                      class="optimization-suggestions"
+                    >
+                      <div
+                        v-for="(suggestion, si) in msg.optimizationResult.suggestions"
+                        :key="si"
+                        class="optimization-suggestion"
+                        :class="suggestion.severity"
+                      >
+                        <div class="suggestion-top">
+                          <el-tag
+                            size="small"
+                            :type="getSeverityTagType(suggestion.severity)"
+                          >
+                            {{ getSeverityLabel(suggestion.severity) }}
+                          </el-tag>
+                          <el-tag
+                            size="small"
+                            :type="getTypeTagType(suggestion.type)"
+                          >
+                            {{ getTypeLabel(suggestion.type) }}
+                          </el-tag>
+                        </div>
+                        <h5>{{ suggestion.title }}</h5>
+                        <p>{{ suggestion.description }}</p>
+                        <div
+                          v-if="suggestion.expectedBenefit"
+                          class="benefit-tag"
+                        >
+                          <TrendingUp class="benefit-icon" />
+                          {{ suggestion.expectedBenefit }}
+                        </div>
+                        <div class="suggestion-actions">
+                          <button
+                            v-if="suggestion.affectedNodes?.length"
+                            class="opt-action-btn"
+                            @click="emitHighlightNodes(suggestion.affectedNodes)"
+                          >
+                            <MapPin class="btn-icon-xs" /> 定位节点
+                          </button>
+                          <button
+                            v-if="suggestion.autoApplicable"
+                            class="opt-action-btn primary"
+                            @click="emitApplyFix(suggestion, msg)"
+                          >
+                            <Sparkles class="btn-icon-xs" /> 应用修复
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Workflow update card -->
+                  <div
+                    v-if="msg.workflow?.nodes?.length"
+                    class="workflow-update-card"
+                  >
+                    <div class="workflow-update-header">
+                      <GitBranch class="card-icon" />
+                      <div>
+                        <strong>{{ msg.workflow.name || '工作流更新' }}</strong>
+                        <span class="workflow-update-meta">
+                          {{ msg.workflow.nodes.length }} 节点 · {{ msg.workflow.edges?.length || 0 }} 连线
+                        </span>
+                      </div>
+                    </div>
+                    <p
+                      v-if="msg.workflow.description"
+                      class="workflow-update-desc"
+                    >
+                      {{ msg.workflow.description }}
+                    </p>
+                    <div
+                      v-if="msg.changes?.length"
+                      class="workflow-changes"
+                    >
+                      <span class="changes-label">变更：</span>
+                      <span
+                        v-for="(change, ci) in msg.changes.slice(0, 4)"
+                        :key="ci"
+                        class="change-tag"
+                      >{{ change }}</span>
+                    </div>
+                    <button
+                      class="apply-workflow-btn"
+                      @click="applyWorkflowToEditor(msg.workflow)"
+                    >
+                      {{ msg.autoApplied ? '已应用到画布（点击重新应用）' : '应用到画布' }}
+                    </button>
+                  </div>
+
+                  <!-- Config guidance -->
+                  <div
+                    v-if="msg.nodeGuidance?.length || msg.emailGuidance"
+                    class="config-guidance"
+                  >
+                    <div class="guidance-title">
+                      <AlertTriangle class="guidance-icon" />
+                      配置提醒
+                    </div>
+                    <div
+                      v-if="msg.emailGuidance"
+                      class="guidance-block"
+                    >
+                      <strong>{{ msg.emailGuidance.title || '邮件节点' }}</strong>
+                      <p>{{ msg.emailGuidance.description }}</p>
+                      <ul v-if="msg.emailGuidance.missing_fields?.length">
+                        <li
+                          v-for="field in msg.emailGuidance.missing_fields"
+                          :key="field"
+                        >
+                          {{ field }}
+                        </li>
+                      </ul>
+                    </div>
+                    <div
+                      v-for="(guide, gi) in (msg.nodeGuidance || [])"
+                      :key="gi"
+                      class="guidance-block"
+                    >
+                      <strong>{{ guide.node_name || guide.node_type }}</strong>
+                      <p>{{ guide.message || guide.description }}</p>
+                      <ul v-if="guide.missing_fields?.length">
+                        <li
+                          v-for="field in guide.missing_fields"
+                          :key="field"
+                        >
+                          {{ field }}
+                        </li>
+                      </ul>
+                    </div>
+                  </div>
+
                   <!-- Loading indicator -->
                   <div
                     v-if="msg.loading"
@@ -327,6 +504,22 @@
 
           <!-- Input Area -->
           <div class="assistant-input">
+            <div class="mode-chips">
+              <button
+                v-for="chip in modeChips"
+                :key="chip.value"
+                class="mode-chip"
+                :class="{ active: nlStore.assistantMode === chip.value }"
+                :title="chip.title"
+                @click="setAssistantMode(chip.value)"
+              >
+                <component
+                  :is="chip.icon"
+                  class="chip-icon"
+                />
+                {{ chip.label }}
+              </button>
+            </div>
             <div class="input-wrapper">
               <textarea
                 ref="inputField"
@@ -355,8 +548,9 @@
               </button>
             </div>
             <div class="input-hints">
+              <span class="hint">{{ modeHint }}</span>
+              <span class="hint"><kbd>/optimize</kbd> 规则优化</span>
               <span class="hint"><kbd>Enter</kbd> 发送</span>
-              <span class="hint"><kbd>Shift+Enter</kbd> 换行</span>
             </div>
           </div>
         </div>
@@ -371,14 +565,18 @@ import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
 import { useNLWorkflowStore } from '@/stores/nlWorkflow'
 import {
-  Sparkles, Trash2, Minus, X, Send, Loader2, Copy,
-  Lightbulb, Wand2, Puzzle, FileText, Zap,
-  Menu, Plus, Pencil, ChevronDown
+  Trash2, Minus, X, Send, Loader2, Copy,
+  Lightbulb, Wand2, Puzzle, Zap, GitBranch, AlertTriangle,
+  Menu, Plus, Pencil, ChevronDown, Sparkles, MapPin, TrendingUp, CheckCircle,
+  LayoutGrid, MessageSquare
 } from 'lucide-vue-next'
+import { ElMessage } from 'element-plus'
+import { optimizeWorkflow } from '@/api/workflow'
 import logoBlack from '@/assets/logos/logo.png'
 import logoWhite from '@/assets/logos/logow.png'
 import { ElMessageBox } from 'element-plus'
 import { nlWorkflowApi } from '@/api/nl-workflow'
+import { vueFlowToNlWorkflow } from '@/utils/workflowTransform'
 
 const props = defineProps({
   modelValue: {
@@ -392,10 +590,14 @@ const props = defineProps({
   edges: {
     type: Array,
     default: () => []
+  },
+  workflowName: {
+    type: String,
+    default: '未命名工作流'
   }
 })
 
-const emit = defineEmits(['update:modelValue'])
+const emit = defineEmits(['update:modelValue', 'apply-workflow', 'highlight-nodes', 'apply-fix'])
 
 const appStore = useAppStore()
 const authStore = useAuthStore()
@@ -410,6 +612,8 @@ const sidebarOpen = ref(false)
 const historySearch = ref('')
 const historyLoading = ref(false)
 const showScrollBtn = ref(false)
+const optimizing = ref(false)
+const OPTIMIZE_DIMENSIONS = ['performance', 'error_handling', 'maintainability', 'cost', 'security']
 
 // Drag state - panel
 const panelPos = ref({ x: null, y: null })
@@ -419,7 +623,12 @@ const panelDragOffset = ref({ x: 0, y: 0 })
 // Drag state - trigger
 const triggerPos = ref({ x: null, y: null })
 const triggerDragging = ref(false)
+const triggerDidDrag = ref(false)
 const triggerDragOffset = ref({ x: 0, y: 0 })
+const triggerDragStart = ref({ x: 0, y: 0 })
+
+const TRIGGER_SIZE = 48
+const TRIGGER_DRAG_THRESHOLD = 5
 
 // Computed
 const isDarkTheme = computed(() => {
@@ -475,12 +684,88 @@ const triggerStyle = computed(() => {
 const themeClass = computed(() => 'trigger-theme-' + appStore.theme)
 
 // Suggestions for welcome screen
-const suggestions = [
-  { text: '帮我设计一个翻译工作流', icon: Zap },
-  { text: '添加一个LLM节点', icon: Puzzle },
-  { text: '优化现有的工作流', icon: Wand2 },
-  { text: '如何设置条件分支', icon: Lightbulb },
-]
+const suggestions = computed(() => {
+  const hasCanvasWorkflow = props.nodes.length > 0
+  if (hasCanvasWorkflow) {
+    const hasVideoPipeline = props.nodes.some(n =>
+      ['video_upload', 'subtitle_generation', 'subtitle_translate'].includes(n.type)
+    )
+    if (hasVideoPipeline) {
+      return [
+        { text: '帮我自动排布节点', icon: LayoutGrid },
+        { text: '添加日语翻译处理链', icon: Puzzle },
+        { text: '检查哪些节点还需要配置', icon: AlertTriangle },
+        { text: '/optimize', icon: Sparkles },
+      ]
+    }
+    return [
+      { text: '帮我自动排布节点', icon: LayoutGrid },
+      { text: '帮我在当前工作流中添加一个 LLM 节点', icon: Puzzle },
+      { text: '检查哪些节点还需要配置', icon: AlertTriangle },
+      { text: '/optimize', icon: Sparkles },
+    ]
+  }
+  return [
+    { text: '帮我设计视频多语言翻译工作流（分节点）', icon: Zap },
+    { text: '创建一个客服问答机器人', icon: Puzzle },
+    { text: '设计数据处理流水线', icon: Wand2 },
+    { text: '如何设置条件分支', icon: Lightbulb },
+  ]
+})
+
+const modeChips = computed(() => {
+  const hasCanvas = props.nodes.length > 0
+  const chips = [
+    { value: 'chat', label: '讨论', title: '只对话，不自动改动画布', icon: MessageSquare },
+    { value: 'editor', label: '排布助手', title: '理解需求并直接修改/排布画布', icon: LayoutGrid },
+    { value: 'generate', label: '生成', title: '根据对话生成全新工作流', icon: Wand2 },
+  ]
+  if (!hasCanvas) {
+    return chips.filter(c => c.value !== 'editor')
+  }
+  return chips
+})
+
+const modeHint = computed(() => {
+  const map = {
+    chat: '讨论模式：仅对话建议，不改动画布',
+    editor: '排布助手：修改/排布将自动应用到画布',
+    generate: '生成模式：根据描述生成工作流',
+  }
+  return map[nlStore.assistantMode] || map.editor
+})
+
+function setAssistantMode(mode) {
+  nlStore.setAssistantMode(mode)
+}
+
+function syncDefaultAssistantMode() {
+  if (props.nodes.length > 0) {
+    if (nlStore.assistantMode === 'chat' || nlStore.assistantMode === 'generate') return
+    nlStore.setAssistantMode('editor')
+  } else if (nlStore.assistantMode === 'editor') {
+    nlStore.setAssistantMode('chat')
+  }
+}
+
+function buildEditorWorkflowContext() {
+  if (!props.nodes.length) return null
+  return vueFlowToNlWorkflow(props.nodes, props.edges, {
+    name: props.workflowName
+  })
+}
+
+async function triggerGenerateFromChat() {
+  nlStore.setAssistantMode('generate')
+  inputMessage.value = '现在就生成工作流'
+  await sendMessage()
+}
+
+function applyWorkflowToEditor(workflow) {
+  if (!workflow?.nodes?.length) return
+  emit('apply-workflow', workflow)
+  nlStore.pendingAutoApply = false
+}
 
 // Sync with parent
 watch(() => props.modelValue, (val) => {
@@ -490,6 +775,7 @@ watch(() => props.modelValue, (val) => {
 watch(visible, (val) => {
   emit('update:modelValue', val)
   if (val) {
+    syncDefaultAssistantMode()
     nextTick(() => {
       inputField.value?.focus()
       scrollToBottom()
@@ -498,6 +784,39 @@ watch(visible, (val) => {
     nlStore.loadModels()
   }
 })
+
+watch(
+  () => props.nodes.length,
+  (len) => {
+    if (len > 0) {
+      syncDefaultAssistantMode()
+    }
+  }
+)
+
+watch(
+  () => nlStore.pendingAutoApply,
+  (pending) => {
+    if (!pending || !visible.value) return
+    const workflow = nlStore.generatedWorkflow
+    if (workflow?.nodes?.length) {
+      applyWorkflowToEditor(workflow)
+      appStore.success('排布助手已自动应用到画布')
+    }
+    nlStore.pendingAutoApply = false
+  }
+)
+
+watch(
+  () => nlStore.generatedWorkflow,
+  (workflow) => {
+    if (!visible.value || !workflow?.nodes?.length) return
+    const lastAssistant = [...nlStore.messages].reverse().find(m => m.role === 'assistant')
+    if (lastAssistant && !lastAssistant.workflow) {
+      lastAssistant.workflow = workflow
+    }
+  }
+)
 
 // ==================== Drag Logic ====================
 
@@ -535,39 +854,59 @@ function stopPanelDrag() {
 }
 
 function startTriggerDrag(e) {
-  if (e.target.closest('button') && !e.target.closest('.trigger-ring')) return
+  if (e.button !== 0) return
+
+  triggerDidDrag.value = false
   triggerDragging.value = true
+  triggerDragStart.value = { x: e.clientX, y: e.clientY }
+
   const el = e.currentTarget
   const rect = el.getBoundingClientRect()
+
+  if (triggerPos.value.x === null || triggerPos.value.y === null) {
+    triggerPos.value = { x: rect.left, y: rect.top }
+  }
+
   triggerDragOffset.value = {
     x: e.clientX - rect.left,
-    y: e.clientY - rect.top
+    y: e.clientY - rect.top,
   }
+
   document.addEventListener('mousemove', onTriggerDrag)
   document.addEventListener('mouseup', stopTriggerDrag)
 }
 
 function onTriggerDrag(e) {
   if (!triggerDragging.value) return
-  let x = e.clientX - triggerDragOffset.value.x
-  let y = e.clientY - triggerDragOffset.value.y
-  const clamped = clampPosition(x, y, 48, 48)
-  triggerPos.value = clamped
+
+  const dx = e.clientX - triggerDragStart.value.x
+  const dy = e.clientY - triggerDragStart.value.y
+  if (Math.abs(dx) > TRIGGER_DRAG_THRESHOLD || Math.abs(dy) > TRIGGER_DRAG_THRESHOLD) {
+    triggerDidDrag.value = true
+  }
+
+  const x = e.clientX - triggerDragOffset.value.x
+  const y = e.clientY - triggerDragOffset.value.y
+  triggerPos.value = clampPosition(x, y, TRIGGER_SIZE, TRIGGER_SIZE)
 }
 
 function stopTriggerDrag() {
-  if (triggerDragging.value) {
-    triggerDragging.value = false
-    document.removeEventListener('mousemove', onTriggerDrag)
-    document.removeEventListener('mouseup', stopTriggerDrag)
-    const el = document.querySelector('.assistant-trigger')
-    if (el) {
-      const rect = el.getBoundingClientRect()
-      const snapped = snapToEdge(rect.left, rect.top, 48, 48)
-      triggerPos.value = snapped
-    }
-    saveTriggerPos()
+  if (!triggerDragging.value) return
+
+  triggerDragging.value = false
+  document.removeEventListener('mousemove', onTriggerDrag)
+  document.removeEventListener('mouseup', stopTriggerDrag)
+  saveTriggerPos()
+}
+
+function handleTriggerClick(e) {
+  if (triggerDidDrag.value) {
+    e.preventDefault()
+    e.stopPropagation()
+    triggerDidDrag.value = false
+    return
   }
+  openAssistant()
 }
 
 function getPanelScreenRect() {
@@ -635,7 +974,9 @@ function loadPositions() {
     if (p) panelPos.value = JSON.parse(p)
     const t = localStorage.getItem('assistant-trigger-pos')
     if (t) triggerPos.value = JSON.parse(t)
-  } catch {}
+  } catch {
+    // ignore invalid saved panel/trigger position JSON
+  }
 }
 
 // ==================== Panel Controls ====================
@@ -662,7 +1003,9 @@ async function handleClearChat() {
       type: 'warning'
     })
     nlStore.resetSession()
-  } catch {}
+  } catch {
+    // user dismissed clear-chat confirm dialog
+  }
 }
 
 // ==================== Conversation Management ====================
@@ -689,7 +1032,9 @@ async function handleSwitchSession(session) {
         timestamp: m.timestamp || Date.now()
       }))
     }
-  } catch {}
+  } catch {
+    // session history unavailable; continue with empty messages
+  }
   sidebarOpen.value = false
   nextTick(() => scrollToBottom())
 }
@@ -704,7 +1049,9 @@ async function handleRenameSession(session) {
     })
     await nlWorkflowApi.updateSession(sid, { name: newName })
     await nlStore.loadHistory()
-  } catch {}
+  } catch {
+    // user dismissed rename prompt or rename failed
+  }
 }
 
 async function handleDeleteSession(session) {
@@ -719,14 +1066,25 @@ async function handleDeleteSession(session) {
     if (nlStore.currentSessionId === sid) {
       nlStore.resetSession()
     }
-  } catch {}
+  } catch {
+    // user dismissed delete confirm dialog
+  }
 }
 
 // ==================== Message Handling ====================
 
 async function sendMessage() {
   const text = inputMessage.value.trim()
-  if (!text || nlStore.isGenerating) return
+  if (!text || nlStore.isGenerating || optimizing.value) return
+
+  if (text === '/optimize' || text.startsWith('/optimize ')) {
+    inputMessage.value = ''
+    nextTick(() => {
+      if (inputField.value) inputField.value.style.height = 'auto'
+    })
+    await runOptimizeWorkflow()
+    return
+  }
 
   inputMessage.value = ''
   nextTick(() => {
@@ -735,19 +1093,25 @@ async function sendMessage() {
     }
   })
 
-  // Ensure model is loaded (no-op if already loaded)
   if (!nlStore.selectedModel && nlStore.models.length === 0) {
     nlStore.loadModels()
   }
 
+  const currentWorkflow = buildEditorWorkflowContext()
+
   try {
-    if (!nlStore.currentSessionId) {
+    const mode = nlStore.assistantMode
+
+    if (currentWorkflow && mode === 'editor') {
+      nlStore.addUserMessage(text)
+      await nlStore.applyEditorAction(text, { currentWorkflow, mode })
+    } else if (!nlStore.currentSessionId) {
       nlStore.clearMessages()
       nlStore.addUserMessage(text)
-      await nlStore.streamWorkflow(text)
+      await nlStore.streamWorkflow(text, `Editor Assistant ${Date.now()}`, { currentWorkflow, mode })
     } else {
       nlStore.addUserMessage(text)
-      await nlStore.streamSendMessage(text)
+      await nlStore.streamSendMessage(text, { currentWorkflow, mode })
     }
   } catch (err) {
     nlStore.updateLastAssistantMessage('抱歉，处理请求时遇到了问题。请稍后重试。', { error: true })
@@ -757,8 +1121,109 @@ async function sendMessage() {
 }
 
 async function sendSuggestion(text) {
+  if (text === '/optimize') {
+    await runOptimizeWorkflow()
+    return
+  }
   inputMessage.value = text
   await sendMessage()
+}
+
+function buildOptimizerPayload() {
+  return {
+    nodes: props.nodes.map(n => ({
+      id: n.id,
+      type: n.type,
+      label: n.data?.label,
+      config: n.data?.config
+    })),
+    edges: props.edges,
+    dimensions: OPTIMIZE_DIMENSIONS
+  }
+}
+
+async function runOptimizeWorkflow() {
+  if (!props.nodes.length) {
+    appStore.warning('画布为空，无法优化')
+    return
+  }
+  if (optimizing.value) return
+
+  optimizing.value = true
+  nlStore.addUserMessage('/optimize')
+  const loadingMsg = {
+    role: 'assistant',
+    content: '正在使用规则引擎分析当前工作流…',
+    loading: true,
+    timestamp: Date.now()
+  }
+  nlStore.messages.push(loadingMsg)
+
+  try {
+    const result = await optimizeWorkflow(buildOptimizerPayload())
+    const suggestions = result?.suggestions || result?.data?.suggestions || []
+    const idx = nlStore.messages.indexOf(loadingMsg)
+    const assistantMsg = {
+      role: 'assistant',
+      content: suggestions.length
+        ? `分析完成，发现 ${suggestions.length} 条优化建议（规则引擎，不消耗 LLM）。`
+        : '分析完成，工作流状态良好。',
+      optimizationResult: { suggestions },
+      timestamp: Date.now()
+    }
+    if (idx >= 0) {
+      nlStore.messages.splice(idx, 1, assistantMsg)
+    } else {
+      nlStore.messages.push(assistantMsg)
+    }
+  } catch (err) {
+    const idx = nlStore.messages.indexOf(loadingMsg)
+    const errorMsg = {
+      role: 'assistant',
+      content: `优化分析失败：${err.message || '未知错误'}`,
+      timestamp: Date.now(),
+      error: true
+    }
+    if (idx >= 0) nlStore.messages.splice(idx, 1, errorMsg)
+    ElMessage.error(errorMsg.content)
+  } finally {
+    optimizing.value = false
+    nextTick(() => scrollToBottom())
+  }
+}
+
+function emitHighlightNodes(nodeIds) {
+  emit('highlight-nodes', nodeIds)
+}
+
+function emitApplyFix(suggestion, msg) {
+  emit('apply-fix', suggestion)
+  if (msg?.optimizationResult?.suggestions) {
+    msg.optimizationResult.suggestions = msg.optimizationResult.suggestions.filter(s => s !== suggestion)
+  }
+  appStore.success('已应用优化建议')
+}
+
+function getSeverityTagType(severity) {
+  return { critical: 'danger', warning: 'warning', info: 'info' }[severity] || 'info'
+}
+
+function getSeverityLabel(severity) {
+  return { critical: '严重', warning: '警告', info: '建议' }[severity] || severity
+}
+
+function getTypeTagType(type) {
+  return { performance: 'warning', error_handling: 'danger', maintainability: '', cost: 'success', security: 'info' }[type] || ''
+}
+
+function getTypeLabel(type) {
+  return {
+    performance: '性能',
+    error_handling: '错误处理',
+    maintainability: '可维护性',
+    cost: '成本',
+    security: '安全'
+  }[type] || type
 }
 
 // ==================== Scroll ====================
@@ -819,17 +1284,18 @@ function handleKeyDown(e) {
 
 onMounted(() => {
   loadPositions()
+  syncDefaultAssistantMode()
   document.addEventListener('keydown', handleKeyDown)
 })
 
 onUnmounted(() => {
   document.removeEventListener('keydown', handleKeyDown)
+  document.removeEventListener('mousemove', onTriggerDrag)
+  document.removeEventListener('mouseup', stopTriggerDrag)
 })
 </script>
 
 <style lang="scss" scoped>
-@use '@/assets/styles/variables.scss' as *;
-
 // ==================== Layout ====================
 .workflow-assistant {
   position: fixed;
@@ -840,12 +1306,10 @@ onUnmounted(() => {
   max-height: 560px;
   display: flex;
   flex-direction: row;
-  background: var(--assistant-bg, #1a1a2e);
-  border: 1px solid var(--assistant-border, rgba(255, 255, 255, 0.1));
+  background: var(--assistant-bg);
+  border: 1px solid var(--assistant-border);
   border-radius: 20px;
-  box-shadow:
-    0 25px 80px rgba(0, 0, 0, 0.6),
-    0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+  box-shadow: var(--shadow-xl);
   overflow: hidden;
 
   &.sidebar-open {
@@ -867,8 +1331,8 @@ onUnmounted(() => {
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  background: rgba(0, 0, 0, 0.2);
-  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--assistant-bg-subtle);
+  border-right: 1px solid var(--assistant-border-subtle);
   overflow: hidden;
 }
 
@@ -877,13 +1341,13 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   padding: 12px 12px 8px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid var(--assistant-border-subtle);
 }
 
 .sidebar-title {
   font-size: 12px;
   font-weight: 700;
-  color: var(--assistant-text, #e2e8f0);
+  color: var(--assistant-text);
   letter-spacing: 0.02em;
 }
 
@@ -898,17 +1362,17 @@ onUnmounted(() => {
   border: none;
   border-radius: 6px;
   cursor: pointer;
-  color: rgba(255, 255, 255, 0.4);
-  transition: all 0.15s ease;
+  color: var(--assistant-text-secondary);
+  transition: all 0.2s ease;
 
   &:hover {
-    background: rgba(255, 255, 255, 0.08);
-    color: rgba(255, 255, 255, 0.8);
+    background: var(--bg-hover);
+    color: var(--assistant-text);
   }
 
   &.danger:hover {
-    background: rgba(239, 68, 68, 0.15);
-    color: #ef4444;
+    background: var(--error-bg);
+    color: var(--error);
   }
 }
 
@@ -919,19 +1383,20 @@ onUnmounted(() => {
 .search-input {
   width: 100%;
   padding: 6px 10px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--surface-muted);
+  border: 1px solid var(--assistant-border-subtle);
   border-radius: 8px;
-  color: var(--assistant-text, #e2e8f0);
+  color: var(--assistant-text);
   font-size: 11px;
   outline: none;
   box-sizing: border-box;
+  transition: all 0.2s ease;
 
-  &::placeholder { color: rgba(255, 255, 255, 0.3); }
+  &::placeholder { color: var(--assistant-text-tertiary); }
 
   &:focus {
-    border-color: rgba(59, 130, 246, 0.4);
-    background: rgba(255, 255, 255, 0.07);
+    border-color: var(--assistant-accent-border);
+    background: var(--assistant-bg-focus);
   }
 }
 
@@ -945,18 +1410,18 @@ onUnmounted(() => {
   align-items: center;
   gap: 6px;
   padding: 7px 12px;
-  background: rgba(59, 130, 246, 0.15);
-  border: 1px solid rgba(59, 130, 246, 0.3);
+  background: var(--assistant-accent-bg);
+  border: 1px solid var(--assistant-accent-border);
   border-radius: 8px;
   cursor: pointer;
-  color: #60a5fa;
+  color: var(--assistant-accent-text);
   font-size: 12px;
   font-weight: 500;
-  transition: all 0.15s ease;
+  transition: all 0.2s ease;
 
   &:hover {
-    background: rgba(59, 130, 246, 0.25);
-    border-color: rgba(59, 130, 246, 0.5);
+    background: var(--color-primary-20);
+    border-color: var(--color-primary-50);
   }
 }
 
@@ -967,7 +1432,7 @@ onUnmounted(() => {
 
   &::-webkit-scrollbar { width: 3px; }
   &::-webkit-scrollbar-track { background: transparent; }
-  &::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+  &::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 2px; }
 
   &.loading {
     opacity: 0.5;
@@ -981,18 +1446,18 @@ onUnmounted(() => {
   padding: 8px 6px;
   border-radius: 8px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all 0.2s ease;
   gap: 4px;
 
   &:hover {
-    background: rgba(255, 255, 255, 0.05);
+    background: var(--bg-hover);
     .session-actions { opacity: 1; }
   }
 
   &.active {
-    background: rgba(59, 130, 246, 0.15);
-    border: 1px solid rgba(59, 130, 246, 0.25);
-    .session-name { color: #60a5fa; }
+    background: var(--assistant-accent-bg);
+    border: 1px solid var(--assistant-accent-border);
+    .session-name { color: var(--assistant-accent-text); }
   }
 }
 
@@ -1007,7 +1472,7 @@ onUnmounted(() => {
 .session-name {
   font-size: 11px;
   font-weight: 500;
-  color: var(--assistant-text, #e2e8f0);
+  color: var(--assistant-text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1015,14 +1480,14 @@ onUnmounted(() => {
 
 .session-time {
   font-size: 9px;
-  color: rgba(255, 255, 255, 0.3);
+  color: var(--assistant-text-tertiary);
 }
 
 .session-actions {
   display: flex;
   gap: 2px;
   opacity: 0;
-  transition: opacity 0.15s ease;
+  transition: opacity 0.2s ease;
   flex-shrink: 0;
 }
 
@@ -1037,7 +1502,7 @@ onUnmounted(() => {
   text-align: center;
   padding: 20px 10px;
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.3);
+  color: var(--assistant-text-tertiary);
 }
 
 // Sidebar transitions
@@ -1058,8 +1523,8 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   padding: 12px 14px;
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(139, 92, 246, 0.1) 100%);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: linear-gradient(135deg, var(--color-primary-10) 0%, var(--color-primary-05) 100%);
+  border-bottom: 1px solid var(--assistant-border-subtle);
   flex-shrink: 0;
   cursor: grab;
   user-select: none;
@@ -1079,16 +1544,16 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--surface-muted);
+  border: 1px solid var(--assistant-border-subtle);
   border-radius: 8px;
   cursor: pointer;
-  color: rgba(255, 255, 255, 0.5);
-  transition: all 0.15s ease;
+  color: var(--assistant-text-secondary);
+  transition: all 0.2s ease;
 
   &:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: rgba(255, 255, 255, 0.8);
+    background: var(--bg-hover);
+    color: var(--assistant-text);
   }
 }
 
@@ -1099,7 +1564,7 @@ onUnmounted(() => {
     margin: 0;
     font-size: 13px;
     font-weight: 700;
-    color: var(--assistant-text, #e2e8f0);
+    color: var(--assistant-text);
     letter-spacing: 0.01em;
     white-space: nowrap;
     overflow: hidden;
@@ -1109,10 +1574,10 @@ onUnmounted(() => {
 
   .header-status {
     font-size: 10px;
-    color: #10b981;
+    color: var(--success);
 
     &.thinking {
-      color: #f59e0b;
+      color: var(--warning);
     }
   }
 }
@@ -1128,16 +1593,16 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--surface-muted);
+  border: 1px solid var(--assistant-border-subtle);
   border-radius: 8px;
   cursor: pointer;
-  color: rgba(255, 255, 255, 0.4);
-  transition: all 0.15s ease;
+  color: var(--assistant-text-secondary);
+  transition: all 0.2s ease;
 
   &:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: rgba(255, 255, 255, 0.8);
+    background: var(--bg-hover);
+    color: var(--assistant-text);
   }
 }
 
@@ -1156,7 +1621,7 @@ onUnmounted(() => {
 
   &::-webkit-scrollbar { width: 4px; }
   &::-webkit-scrollbar-track { background: transparent; }
-  &::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
+  &::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 4px; }
 }
 
 .scroll-bottom-btn {
@@ -1175,14 +1640,10 @@ onUnmounted(() => {
   color: var(--assistant-accent-text);
   box-shadow: var(--assistant-accent-shadow);
   z-index: 2;
-  transition: all 0.15s ease;
+  transition: all 0.2s ease;
 
   &:hover {
-  background: var(--assistant-accent-bg);
-  border: 1px solid var(--assistant-accent-border);
-  cursor: pointer;
-  color: var(--assistant-accent-text);
-  transform: scale(1.1);
+    transform: scale(1.1);
   }
 }
 
@@ -1199,9 +1660,9 @@ onUnmounted(() => {
     height: 56px;
     border-radius: 50%;
     overflow: hidden;
-    border: 2px solid rgba(255, 255, 255, 0.15);
+    border: 2px solid var(--assistant-border);
     margin-bottom: 14px;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    box-shadow: var(--shadow-md);
   }
 
   .welcome-img {
@@ -1214,13 +1675,13 @@ onUnmounted(() => {
     margin: 0 0 8px;
     font-size: 15px;
     font-weight: 700;
-    color: var(--assistant-text, #e2e8f0);
+    color: var(--assistant-text);
   }
 
   .welcome-desc {
     margin: 0 0 14px;
     font-size: 11px;
-    color: rgba(255, 255, 255, 0.4);
+    color: var(--assistant-text-secondary);
   }
 }
 
@@ -1236,11 +1697,11 @@ onUnmounted(() => {
   align-items: center;
   gap: 8px;
   padding: 10px 14px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--surface-muted);
+  border: 1px solid var(--assistant-border-subtle);
   border-radius: 10px;
   cursor: pointer;
-  color: var(--assistant-text, #e2e8f0);
+  color: var(--assistant-text);
   font-size: 12px;
   font-weight: 500;
   text-align: left;
@@ -1276,10 +1737,11 @@ onUnmounted(() => {
   height: 28px;
   border-radius: 50%;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--assistant-border-subtle);
   flex-shrink: 0;
 
-.msg-user-avatar {
+  // 修复：原写法 .msg-avatar .msg-user-avatar 为后代选择器，永远不匹配同一元素
+  &.msg-user-avatar {
     background-color: var(--assistant-bg-subtle);
     display: flex;
     align-items: center;
@@ -1312,12 +1774,6 @@ onUnmounted(() => {
   max-height: 70%;
 }
 
-.avatar-icon {
-  width: 14px;
-  height: 14px;
-  color: white;
-}
-
 .msg-content {
   flex: 1;
   min-width: 0;
@@ -1336,10 +1792,10 @@ onUnmounted(() => {
   word-break: break-word;
 
   .ai-message & {
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: var(--surface-muted);
+    border: 1px solid var(--assistant-border-subtle);
     border-bottom-left-radius: 4px;
-    color: var(--assistant-text, #e2e8f0);
+    color: var(--assistant-text);
   }
 
   .user-message & {
@@ -1358,7 +1814,7 @@ onUnmounted(() => {
 .msg-html {
   :deep(p) { margin: 0 0 8px; &:last-child { margin: 0; } }
   :deep(code) {
-    background: rgba(0, 0, 0, 0.2);
+    background: var(--surface-strong);
     padding: 1px 4px;
     border-radius: 3px;
     font-size: 11px;
@@ -1375,8 +1831,8 @@ onUnmounted(() => {
 }
 
 .code-block {
-  background: #0d1117;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--code-bg);
+  border: 1px solid var(--code-border);
   border-radius: 10px;
   overflow: hidden;
 }
@@ -1386,15 +1842,15 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   padding: 6px 12px;
-  background: rgba(255, 255, 255, 0.04);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--code-surface);
+  border-bottom: 1px solid var(--code-border);
 
   .code-lang {
     font-size: 10px;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.08em;
-    color: rgba(255, 255, 255, 0.4);
+    color: var(--code-muted);
   }
 }
 
@@ -1403,17 +1859,17 @@ onUnmounted(() => {
   align-items: center;
   gap: 4px;
   padding: 2px 8px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--surface-muted);
+  border: 1px solid var(--assistant-border-subtle);
   border-radius: 4px;
   cursor: pointer;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--assistant-text-secondary);
   font-size: 10px;
-  transition: all 0.15s ease;
+  transition: all 0.2s ease;
 
   &:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: rgba(255, 255, 255, 0.8);
+    background: var(--bg-hover);
+    color: var(--assistant-text);
   }
 
   .copy-icon { width: 10px; height: 10px; }
@@ -1424,13 +1880,13 @@ onUnmounted(() => {
   padding: 10px 12px;
   font-size: 11px;
   font-family: 'JetBrains Mono', monospace;
-  color: #a5d6ff;
+  color: var(--code-text);
   overflow-x: auto;
   line-height: 1.5;
 
   &::-webkit-scrollbar { height: 4px; }
   &::-webkit-scrollbar-track { background: transparent; }
-  &::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+  &::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 2px; }
 }
 
 // Suggestions in messages
@@ -1450,11 +1906,243 @@ onUnmounted(() => {
   color: var(--assistant-accent-text);
   font-size: 11px;
   font-weight: 500;
-  transition: all 0.15s ease;
+  transition: all 0.2s ease;
 
   &:hover {
+    background: var(--color-primary-20);
+    border-color: var(--color-primary-50);
+  }
+}
+
+.optimization-result-card {
+  margin-top: 10px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--assistant-border-subtle);
+  background: var(--surface-muted);
+}
+
+.optimization-result-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 10px;
+
+  .card-icon {
+    width: 16px;
+    height: 16px;
+    margin-top: 2px;
+    color: var(--assistant-accent-text);
+  }
+}
+
+.optimization-meta {
+  display: block;
+  font-size: 10px;
+  color: var(--assistant-text-secondary);
+  margin-top: 2px;
+}
+
+.optimization-empty {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--success);
+
+  .empty-icon {
+    width: 16px;
+    height: 16px;
+  }
+}
+
+.optimization-suggestions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.optimization-suggestion {
+  padding: 10px;
+  border-radius: 10px;
+  border-left: 3px solid var(--assistant-border);
+  background: var(--assistant-bg);
+
+  &.critical { border-left-color: var(--error); }
+  &.warning { border-left-color: var(--warning); }
+  &.info { border-left-color: var(--color-primary); }
+
+  h5 {
+    margin: 6px 0 4px;
+    font-size: 12px;
+  }
+
+  p {
+    margin: 0 0 8px;
+    font-size: 11px;
+    color: var(--assistant-text-secondary);
+    line-height: 1.5;
+  }
+}
+
+.suggestion-top {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.benefit-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  background: rgba(16, 185, 129, 0.1);
+  color: #10b981;
+  border-radius: 12px;
+  font-size: 10px;
+  margin-bottom: 8px;
+
+  .benefit-icon {
+    width: 10px;
+    height: 10px;
+  }
+}
+
+.suggestion-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.opt-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--assistant-border-subtle);
+  background: var(--surface-muted);
+  color: var(--assistant-text);
+  font-size: 10px;
+  cursor: pointer;
+
+  &.primary {
     background: var(--assistant-accent-bg);
     border-color: var(--assistant-accent-border);
+    color: var(--assistant-accent-text);
+  }
+}
+
+.workflow-update-card {
+  margin-top: 10px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--assistant-accent-border);
+  background: var(--assistant-accent-bg);
+}
+
+.workflow-update-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+
+  .card-icon {
+    width: 16px;
+    height: 16px;
+    margin-top: 2px;
+    color: var(--assistant-accent-text);
+  }
+}
+
+.workflow-update-meta {
+  display: block;
+  font-size: 11px;
+  color: var(--assistant-text-secondary);
+  margin-top: 2px;
+}
+
+.workflow-update-desc {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--assistant-text-secondary);
+  line-height: 1.5;
+}
+
+.workflow-changes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+  align-items: center;
+}
+
+.changes-label {
+  font-size: 11px;
+  color: var(--assistant-text-secondary);
+}
+
+.change-tag {
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--surface-muted);
+  color: var(--assistant-text-secondary);
+}
+
+.apply-workflow-btn {
+  margin-top: 10px;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 10px;
+  background: var(--color-primary);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+
+  &:hover {
+    opacity: 0.92;
+  }
+}
+
+.config-guidance {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.guidance-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.guidance-icon {
+  width: 14px;
+  height: 14px;
+  color: #f59e0b;
+}
+
+.guidance-block {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--assistant-text-secondary);
+
+  & + & {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(245, 158, 11, 0.15);
+  }
+
+  ul {
+    margin: 4px 0 0;
+    padding-left: 16px;
   }
 }
 
@@ -1469,7 +2157,7 @@ onUnmounted(() => {
   span {
     width: 6px;
     height: 6px;
-    background: rgba(255, 255, 255, 0.4);
+    background: var(--assistant-text-secondary);
     border-radius: 50%;
     animation: dot-bounce 1.4s infinite ease-in-out;
 
@@ -1486,32 +2174,83 @@ onUnmounted(() => {
 .msg-time {
   display: block;
   font-size: 9px;
-  color: rgba(255, 255, 255, 0.25);
+  color: var(--assistant-text-tertiary);
   margin-top: 4px;
 }
 
 // ==================== Input ====================
 .assistant-input {
   padding: 12px 14px 10px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(0, 0, 0, 0.15);
+  border-top: 1px solid var(--assistant-border-subtle);
+  background: var(--assistant-bg-subtle);
   flex-shrink: 0;
+}
+
+.mode-chips {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.mode-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--assistant-border-subtle);
+  background: var(--surface-muted);
+  color: var(--assistant-text-secondary);
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+
+  .chip-icon {
+    width: 11px;
+    height: 11px;
+  }
+
+  &.active {
+    background: var(--assistant-accent-bg);
+    border-color: var(--assistant-accent-border);
+    color: var(--assistant-accent-text);
+  }
+}
+
+.ready-generate-bar {
+  margin-top: 8px;
+}
+
+.ready-generate-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: none;
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-light) 100%);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
 }
 
 .input-wrapper {
   display: flex;
   align-items: flex-end;
   gap: 8px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--surface-muted);
+  border: 1px solid var(--assistant-border);
   border-radius: 14px;
   padding: 6px 6px 6px 14px;
-  transition: all 0.15s ease;
+  transition: all 0.2s ease;
 
   &:focus-within {
     border-color: var(--assistant-accent-border);
     background: var(--assistant-bg-focus);
-    box-shadow: 0 0 0 3px var(--assistant-accent-shadow);
+    box-shadow: 0 0 0 3px var(--color-primary-10);
   }
 }
 
@@ -1520,7 +2259,7 @@ onUnmounted(() => {
   background: transparent;
   border: none;
   outline: none;
-  color: var(--assistant-text, #e2e8f0);
+  color: var(--assistant-text);
   font-size: 12px;
   line-height: 1.5;
   resize: none;
@@ -1528,7 +2267,7 @@ onUnmounted(() => {
   max-height: 120px;
   font-family: inherit;
 
-  &::placeholder { color: rgba(255, 255, 255, 0.3); }
+  &::placeholder { color: var(--assistant-text-tertiary); }
 }
 
 .send-btn {
@@ -1538,8 +2277,10 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-light) 100%);
+  border: none;
+  border-radius: 10px;
   cursor: pointer;
-  color: white;
+  color: var(--text-inverse);
   transition: all 0.2s ease;
   flex-shrink: 0;
 
@@ -1573,11 +2314,11 @@ onUnmounted(() => {
 
   .hint {
     font-size: 10px;
-    color: rgba(255, 255, 255, 0.25);
+    color: var(--assistant-text-tertiary);
 
     kbd {
-      background: rgba(255, 255, 255, 0.06);
-      border: 1px solid rgba(255, 255, 255, 0.1);
+      background: var(--surface-muted);
+      border: 1px solid var(--assistant-border-subtle);
       border-radius: 3px;
       padding: 0 4px;
       font-size: 9px;
@@ -1597,17 +2338,24 @@ onUnmounted(() => {
   background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-light) 100%);
   border: none;
   border-radius: 50%;
-  cursor: pointer;
+  cursor: grab;
   box-shadow: var(--assistant-accent-shadow);
-  transition: filter 0.2s ease;
+  transition: filter 0.2s ease, box-shadow 0.2s ease;
   user-select: none;
+  touch-action: none;
 
-  &:hover {
+  &.is-dragging {
+    cursor: grabbing;
+    transition: none;
+    box-shadow: var(--assistant-accent-shadow-hover);
+  }
+
+  &:hover:not(.is-dragging) {
     filter: brightness(1.15);
     box-shadow: var(--assistant-accent-shadow-hover);
   }
 
-  &:active {
+  &:active:not(.is-dragging) {
     filter: brightness(0.9);
   }
 
@@ -1621,9 +2369,20 @@ onUnmounted(() => {
     justify-content: center;
   }
 
+  .trigger-logo-wrap {
+    background: var(--assistant-bg);
+    border-radius: 50%;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
   .trigger-avatar {
     width: 100%;
     height: 100%;
+    border-radius: 50%;
     object-fit: contain;
     max-width: 70%;
     max-height: 70%;
@@ -1683,508 +2442,25 @@ onUnmounted(() => {
 }
 
 // ==================== Theme Variables ====================
-// ==================== Theme Variables ====================
-
-// Base defaults (dark)
-.workflow-assistant {
-  --assistant-bg: #1a1a2e;
-  --assistant-bg-subtle: #252542;
-  --assistant-bg-focus: rgba(255, 255, 255, 0.07);
-  --assistant-border: rgba(255, 255, 255, 0.1);
-  --assistant-border-subtle: rgba(255, 255, 255, 0.06);
-  --assistant-text: #e2e8f0;
-  --assistant-text-secondary: rgba(255, 255, 255, 0.5);
-  --assistant-text-tertiary: rgba(255, 255, 255, 0.25);
-  --assistant-accent-bg: rgba(6, 182, 212, 0.12);
-  --assistant-accent-border: rgba(6, 182, 212, 0.3);
-  --assistant-accent-text: #06b6d4;
-  --assistant-accent-shadow: 0 4px 12px rgba(6, 182, 212, 0.3);
-  --assistant-accent-shadow-hover: 0 6px 20px rgba(6, 182, 212, 0.4);
-  --assistant-user-bubble-bg: rgba(6, 182, 212, 0.15);
-  --assistant-user-bubble-text: #22d3ee;
-}
-
-// Dark theme
-[data-theme="dark"] {
-  .workflow-assistant {
-    --assistant-bg: #1a1a2e;
-    --assistant-bg-subtle: #252542;
-    --assistant-bg-focus: rgba(255, 255, 255, 0.07);
-    --assistant-border: rgba(255, 255, 255, 0.1);
-    --assistant-border-subtle: rgba(255, 255, 255, 0.06);
-    --assistant-text: #e2e8f0;
-    --assistant-text-secondary: rgba(255, 255, 255, 0.5);
-    --assistant-text-tertiary: rgba(255, 255, 255, 0.25);
-    --assistant-accent-bg: rgba(6, 182, 212, 0.12);
-    --assistant-accent-border: rgba(6, 182, 212, 0.3);
-    --assistant-accent-text: #06b6d4;
-    --assistant-accent-shadow: 0 4px 12px rgba(6, 182, 212, 0.3);
-    --assistant-accent-shadow-hover: 0 6px 20px rgba(6, 182, 212, 0.4);
-    --assistant-user-bubble-bg: rgba(6, 182, 212, 0.15);
-    --assistant-user-bubble-text: #22d3ee;
-  }
-  .assistant-trigger {
-    background: linear-gradient(135deg, #06b6d4 0%, #22d3ee 100%);
-    box-shadow: 0 8px 32px rgba(6, 182, 212, 0.4);
-  }
-  .assistant-trigger:hover {
-    box-shadow: 0 12px 40px rgba(6, 182, 212, 0.5);
-  }
-  .assistant-trigger .trigger-ring {
-    border-color: rgba(6, 182, 212, 0.3);
-  }
-  .assistant-trigger .trigger-logo-wrap {
-    background: #1a1a2e;
-    border-radius: 50%;
-    width: 100%;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-  .assistant-trigger .trigger-avatar {
-    border-radius: 50%;
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
-    max-width: 70%;
-    max-height: 70%;
-  }
-
-  .workflow-assistant .assistant-header {
-    background: rgba(6, 182, 212, 0.08);
-    border-color: rgba(255, 255, 255, 0.06);
-  }
-  .workflow-assistant .suggestion-pill {
-    background: rgba(255, 255, 255, 0.04);
-    border-color: rgba(255, 255, 255, 0.08);
-    color: #e2e8f0;
-  }
-  .workflow-assistant .suggestion-pill:hover {
-    background: rgba(6, 182, 212, 0.12);
-    border-color: rgba(6, 182, 212, 0.3);
-  }
-  .workflow-assistant .suggestion-pill .pill-icon { color: #06b6d4; }
-  .workflow-assistant .msg-bubble.ai-message {
-    background: rgba(255, 255, 255, 0.06);
-    border-color: rgba(255, 255, 255, 0.08);
-  }
-  .workflow-assistant .msg-user-avatar { background-color: rgba(6, 182, 212, 0.1); }
-  .workflow-assistant .msg-user-avatar .avatar-initial { color: rgba(255, 255, 255, 0.5); }
-  .workflow-assistant .session-item:hover { background: rgba(255, 255, 255, 0.05); }
-  .workflow-assistant .session-item.active { background: rgba(6, 182, 212, 0.1); }
-  .workflow-assistant .session-item.active .session-name { color: #06b6d4; }
-  .workflow-assistant .conversation-sidebar { background: rgba(0, 0, 0, 0.15); }
-  .workflow-assistant .msg-time { color: rgba(255, 255, 255, 0.25); }
-  .workflow-assistant .welcome-title { color: #e2e8f0; }
-  .workflow-assistant .welcome-desc { color: rgba(255, 255, 255, 0.5); }
-  .workflow-assistant .welcome-avatar { border-color: rgba(255, 255, 255, 0.1); }
-  .workflow-assistant .input-hints .hint { color: rgba(255, 255, 255, 0.25); }
-  .workflow-assistant .input-field { color: #e2e8f0; }
-  .workflow-assistant .assistant-input { background: rgba(0, 0, 0, 0.1); }
-  .workflow-assistant .input-wrapper {
-    background: rgba(255, 255, 255, 0.04);
-    border-color: rgba(255, 255, 255, 0.08);
-  }
-  .workflow-assistant .input-wrapper:focus-within {
-    border-color: rgba(6, 182, 212, 0.3);
-    background: rgba(255, 255, 255, 0.07);
-    box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.1);
-  }
-  .workflow-assistant .header-title { color: #e2e8f0; }
-  .workflow-assistant .header-btn {
-    background: rgba(255, 255, 255, 0.04);
-    border-color: rgba(255, 255, 255, 0.08);
-    color: rgba(255, 255, 255, 0.4);
-  }
-  .workflow-assistant .header-btn:hover {
-    background: rgba(255, 255, 255, 0.08);
-    color: rgba(255, 255, 255, 0.8);
-  }
-  .workflow-assistant .sidebar-toggle-btn {
-    background: rgba(255, 255, 255, 0.04);
-    border-color: rgba(255, 255, 255, 0.08);
-    color: rgba(255, 255, 255, 0.4);
-  }
-  .workflow-assistant .sidebar-toggle-btn:hover {
-    background: rgba(255, 255, 255, 0.08);
-    color: rgba(255, 255, 255, 0.8);
-  }
-  .workflow-assistant .new-conv-btn {
-    background: rgba(6, 182, 212, 0.1);
-    border-color: rgba(6, 182, 212, 0.2);
-    color: #06b6d4;
-  }
-  .workflow-assistant .new-conv-btn:hover { background: rgba(6, 182, 212, 0.18); }
-  .workflow-assistant .sidebar-title { color: #e2e8f0; }
-  .workflow-assistant .session-name { color: #e2e8f0; }
-  .workflow-assistant .session-time { color: rgba(255, 255, 255, 0.25); }
-  .workflow-assistant .search-input {
-    background: rgba(255, 255, 255, 0.04);
-    border-color: rgba(255, 255, 255, 0.08);
-    color: #e2e8f0;
-  }
-  .workflow-assistant .search-input::placeholder { color: rgba(255, 255, 255, 0.25); }
-  .workflow-assistant .search-input:focus { background: rgba(255, 255, 255, 0.06); }
-  .workflow-assistant .assistant-messages::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); }
-  .workflow-assistant .session-list::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.08); }
-  .workflow-assistant .sidebar-header { border-color: rgba(255, 255, 255, 0.05); }
-  .workflow-assistant .sidebar-close-btn, .workflow-assistant .session-action-btn { color: rgba(255, 255, 255, 0.4); }
-  .workflow-assistant .sidebar-close-btn:hover, .workflow-assistant .session-action-btn:hover {
-    background: rgba(255, 255, 255, 0.08);
-    color: rgba(255, 255, 255, 0.8);
-  }
-  .workflow-assistant .code-block { background: #0d1117; }
-  .workflow-assistant .code-header { background: rgba(255, 255, 255, 0.03); border-color: rgba(255, 255, 255, 0.05); }
-  .workflow-assistant .code-header .code-lang { color: rgba(255, 255, 255, 0.35); }
-  .workflow-assistant .copy-btn { background: rgba(255, 255, 255, 0.05); border-color: rgba(255, 255, 255, 0.08); color: rgba(255, 255, 255, 0.4); }
-  .workflow-assistant .copy-btn:hover { background: rgba(255, 255, 255, 0.08); color: rgba(255, 255, 255, 0.7); }
-  .workflow-assistant .code-content { color: #a5d6ff; }
-  .workflow-assistant .input-hints kbd { background: rgba(255, 255, 255, 0.05); border-color: rgba(255, 255, 255, 0.08); }
-  .workflow-assistant .ai-status-dot { background: #10b981; border-color: #1a1a2e; }
-  .workflow-assistant .header-status { color: #10b981; }
-  .workflow-assistant .header-status.thinking { color: #f59e0b; }
-  .workflow-assistant .empty-sessions { color: rgba(255, 255, 255, 0.3); }
-  .workflow-assistant .welcome-avatar { box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3); }
-}
-
-// Light theme
-[data-theme="light"] {
-  .workflow-assistant {
-    --assistant-bg: #ffffff;
-    --assistant-bg-subtle: #f1f5f9;
-    --assistant-bg-focus: rgba(0, 0, 0, 0.04);
-    --assistant-border: rgba(0, 0, 0, 0.1);
-    --assistant-border-subtle: rgba(0, 0, 0, 0.06);
-    --assistant-text: #1e293b;
-    --assistant-text-secondary: rgba(0, 0, 0, 0.45);
-    --assistant-text-tertiary: rgba(0, 0, 0, 0.25);
-    --assistant-accent-bg: rgba(6, 182, 212, 0.08);
-    --assistant-accent-border: rgba(6, 182, 212, 0.2);
-    --assistant-accent-text: #0891b2;
-    --assistant-accent-shadow: 0 4px 12px rgba(6, 182, 212, 0.2);
-    --assistant-accent-shadow-hover: 0 6px 20px rgba(6, 182, 212, 0.3);
-    --assistant-user-bubble-bg: rgba(6, 182, 212, 0.1);
-    --assistant-user-bubble-text: #0e7490;
-  }
-  .assistant-trigger {
-    background: linear-gradient(135deg, #0891b2 0%, #06b6d4 100%);
-    box-shadow: 0 8px 32px rgba(6, 182, 212, 0.3);
-  }
-  .assistant-trigger:hover {
-    box-shadow: 0 12px 40px rgba(6, 182, 212, 0.4);
-  }
-  .assistant-trigger .trigger-ring {
-    border-color: rgba(6, 182, 212, 0.3);
-  }
-  .assistant-trigger .trigger-logo-wrap {
-    background: #ffffff;
-    border-radius: 50%;
-    width: 100%;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-  .assistant-trigger .trigger-avatar {
-    border-radius: 50%;
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
-    max-width: 70%;
-    max-height: 70%;
-  }
-
-  .workflow-assistant .assistant-header {
-    background: rgba(6, 182, 212, 0.06);
-    border-color: rgba(0, 0, 0, 0.06);
-  }
-  .workflow-assistant .msg-bubble.ai-message {
-    background: rgba(0, 0, 0, 0.04);
-    border-color: rgba(0, 0, 0, 0.08);
-  }
-  .workflow-assistant .msg-user-avatar { background-color: rgba(0, 0, 0, 0.06); }
-  .workflow-assistant .msg-user-avatar .avatar-initial { color: rgba(0, 0, 0, 0.45); }
-  .workflow-assistant .suggestion-pill {
-    background: rgba(0, 0, 0, 0.04);
-    border-color: rgba(0, 0, 0, 0.08);
-    color: #1e293b;
-  }
-  .workflow-assistant .suggestion-pill:hover {
-    background: rgba(6, 182, 212, 0.08);
-    border-color: rgba(6, 182, 212, 0.2);
-  }
-  .workflow-assistant .suggestion-pill .pill-icon { color: #0891b2; }
-  .workflow-assistant .session-item:hover { background: rgba(0, 0, 0, 0.04); }
-  .workflow-assistant .session-item.active { background: rgba(6, 182, 212, 0.08); }
-  .workflow-assistant .session-item.active .session-name { color: #0891b2; }
-  .workflow-assistant .conversation-sidebar { background: rgba(0, 0, 0, 0.02); }
-  .workflow-assistant .msg-time { color: rgba(0, 0, 0, 0.25); }
-  .workflow-assistant .welcome-title { color: #1e293b; }
-  .workflow-assistant .welcome-desc { color: rgba(0, 0, 0, 0.45); }
-  .workflow-assistant .welcome-avatar { border-color: rgba(0, 0, 0, 0.1); }
-  .workflow-assistant .input-hints .hint { color: rgba(0, 0, 0, 0.3); }
-  .workflow-assistant .input-field { color: #1e293b; }
-  .workflow-assistant .assistant-input { background: rgba(0, 0, 0, 0.03); }
-  .workflow-assistant .input-wrapper {
-    background: rgba(0, 0, 0, 0.04);
-    border-color: rgba(0, 0, 0, 0.1);
-  }
-  .workflow-assistant .input-wrapper:focus-within {
-    border-color: rgba(6, 182, 212, 0.2);
-    background: rgba(0, 0, 0, 0.05);
-    box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.08);
-  }
-  .workflow-assistant .header-title { color: #1e293b; }
-  .workflow-assistant .header-btn {
-    background: rgba(0, 0, 0, 0.04);
-    border-color: rgba(0, 0, 0, 0.08);
-    color: rgba(0, 0, 0, 0.45);
-  }
-  .workflow-assistant .header-btn:hover {
-    background: rgba(0, 0, 0, 0.08);
-    color: #1e293b;
-  }
-  .workflow-assistant .sidebar-toggle-btn {
-    background: rgba(0, 0, 0, 0.04);
-    border-color: rgba(0, 0, 0, 0.08);
-    color: rgba(0, 0, 0, 0.45);
-  }
-  .workflow-assistant .sidebar-toggle-btn:hover {
-    background: rgba(0, 0, 0, 0.08);
-    color: #1e293b;
-  }
-  .workflow-assistant .new-conv-btn {
-    background: rgba(6, 182, 212, 0.08);
-    border-color: rgba(6, 182, 212, 0.2);
-    color: #0891b2;
-  }
-  .workflow-assistant .new-conv-btn:hover { background: rgba(6, 182, 212, 0.15); }
-  .workflow-assistant .sidebar-title { color: #1e293b; }
-  .workflow-assistant .session-name { color: #1e293b; }
-  .workflow-assistant .session-time { color: rgba(0, 0, 0, 0.25); }
-  .workflow-assistant .search-input {
-    background: rgba(0, 0, 0, 0.04);
-    border-color: rgba(0, 0, 0, 0.1);
-    color: #1e293b;
-  }
-  .workflow-assistant .search-input::placeholder { color: rgba(0, 0, 0, 0.25); }
-  .workflow-assistant .search-input:focus { background: rgba(0, 0, 0, 0.06); }
-  .workflow-assistant .assistant-messages::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.1); }
-  .workflow-assistant .session-list::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.08); }
-  .workflow-assistant .sidebar-header { border-color: rgba(0, 0, 0, 0.05); }
-  .workflow-assistant .sidebar-close-btn, .workflow-assistant .session-action-btn { color: rgba(0, 0, 0, 0.45); }
-  .workflow-assistant .sidebar-close-btn:hover, .workflow-assistant .session-action-btn:hover {
-    background: rgba(0, 0, 0, 0.08);
-    color: #1e293b;
-  }
-  .workflow-assistant .code-block { background: #0d1117; }
-  .workflow-assistant .code-header { background: rgba(0, 0, 0, 0.03); border-color: rgba(0, 0, 0, 0.05); }
-  .workflow-assistant .code-header .code-lang { color: rgba(0, 0, 0, 0.35); }
-  .workflow-assistant .copy-btn { background: rgba(0, 0, 0, 0.04); border-color: rgba(0, 0, 0, 0.08); color: rgba(0, 0, 0, 0.45); }
-  .workflow-assistant .copy-btn:hover { background: rgba(0, 0, 0, 0.08); color: #1e293b; }
-  .workflow-assistant .code-content { color: #7dd3fc; }
-  .workflow-assistant .input-hints kbd { background: rgba(0, 0, 0, 0.04); border-color: rgba(0, 0, 0, 0.08); }
-  .workflow-assistant .ai-status-dot { background: #10b981; border-color: #ffffff; }
-  .workflow-assistant .header-status { color: #10b981; }
-  .workflow-assistant .header-status.thinking { color: #b45309; }
-  .workflow-assistant .empty-sessions { color: rgba(0, 0, 0, 0.3); }
-  .workflow-assistant .welcome-avatar { box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1); }
-}
-
-// Pure B&W theme
-[data-theme="pure-bw"] {
-  .workflow-assistant {
-    --assistant-bg: #ffffff;
-    --assistant-bg-subtle: #f5f5f5;
-    --assistant-bg-focus: rgba(0, 0, 0, 0.05);
-    --assistant-border: #111111;
-    --assistant-border-subtle: #e5e5e5;
-    --assistant-text: #111111;
-    --assistant-text-secondary: #555555;
-    --assistant-text-tertiary: #999999;
-    --assistant-accent-bg: rgba(0, 0, 0, 0.06);
-    --assistant-accent-border: rgba(0, 0, 0, 0.2);
-    --assistant-accent-text: #111111;
-    --assistant-accent-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-    --assistant-accent-shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.2);
-    --assistant-user-bubble-bg: rgba(0, 0, 0, 0.1);
-    --assistant-user-bubble-text: #111111;
-  }
-  .assistant-trigger {
-    background: linear-gradient(135deg, #111111 0%, #333333 100%);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
-  }
-  .assistant-trigger:hover {
-    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
-  }
-  .assistant-trigger .trigger-ring {
-    border-color: rgba(0, 0, 0, 0.2);
-  }
-  .assistant-trigger .trigger-logo-wrap {
-    background: #ffffff;
-    border-radius: 50%;
-    width: 100%;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-  .assistant-trigger .trigger-avatar {
-    border-radius: 50%;
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
-    max-width: 70%;
-    max-height: 70%;
-  }
-
-  .workflow-assistant .assistant-header { background: #f5f5f5; border-color: #e5e5e5; }
-  .workflow-assistant .msg-bubble.ai-message { background: rgba(0, 0, 0, 0.04); border-color: #e5e5e5; }
-  .workflow-assistant .msg-user-avatar { background-color: #f5f5f5; }
-  .workflow-assistant .msg-user-avatar .avatar-initial { color: #555555; }
-  .workflow-assistant .suggestion-pill { background: rgba(0, 0, 0, 0.04); border-color: #e5e5e5; color: #111111; }
-  .workflow-assistant .suggestion-pill:hover { background: rgba(0, 0, 0, 0.08); }
-  .workflow-assistant .suggestion-pill .pill-icon { color: #111111; }
-  .workflow-assistant .session-item:hover { background: rgba(0, 0, 0, 0.04); }
-  .workflow-assistant .session-item.active { background: rgba(0, 0, 0, 0.08); }
-  .workflow-assistant .conversation-sidebar { background: #fafafa; }
-  .workflow-assistant .msg-time { color: #999999; }
-  .workflow-assistant .welcome-title { color: #111111; }
-  .workflow-assistant .welcome-desc { color: #555555; }
-  .workflow-assistant .welcome-avatar { border-color: #e5e5e5; }
-  .workflow-assistant .input-hints .hint { color: #999999; }
-  .workflow-assistant .input-field { color: #111111; }
-  .workflow-assistant .assistant-input { background: #f5f5f5; }
-  .workflow-assistant .input-wrapper { background: rgba(0, 0, 0, 0.04); border-color: #e5e5e5; }
-  .workflow-assistant .input-wrapper:focus-within { border-color: rgba(0, 0, 0, 0.2); }
-  .workflow-assistant .header-title { color: #111111; }
-  .workflow-assistant .header-btn { background: rgba(0, 0, 0, 0.04); border-color: #e5e5e5; color: #555555; }
-  .workflow-assistant .header-btn:hover { background: rgba(0, 0, 0, 0.08); color: #111111; }
-  .workflow-assistant .sidebar-toggle-btn { background: rgba(0, 0, 0, 0.04); border-color: #e5e5e5; color: #555555; }
-  .workflow-assistant .sidebar-toggle-btn:hover { background: rgba(0, 0, 0, 0.08); color: #111111; }
-  .workflow-assistant .new-conv-btn { background: rgba(0, 0, 0, 0.06); border-color: rgba(0, 0, 0, 0.15); color: #111111; }
-  .workflow-assistant .new-conv-btn:hover { background: rgba(0, 0, 0, 0.1); }
-  .workflow-assistant .sidebar-title { color: #111111; }
-  .workflow-assistant .session-name { color: #111111; }
-  .workflow-assistant .session-time { color: #999999; }
-  .workflow-assistant .search-input { background: rgba(0, 0, 0, 0.04); border-color: #e5e5e5; color: #111111; }
-  .workflow-assistant .search-input::placeholder { color: #999999; }
-  .workflow-assistant .assistant-messages::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.1); }
-  .workflow-assistant .session-list::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.08); }
-  .workflow-assistant .sidebar-header { border-color: #e5e5e5; }
-  .workflow-assistant .sidebar-close-btn, .workflow-assistant .session-action-btn { color: #555555; }
-  .workflow-assistant .sidebar-close-btn:hover, .workflow-assistant .session-action-btn:hover { background: rgba(0, 0, 0, 0.08); color: #111111; }
-  .workflow-assistant .code-block { background: #0d1117; }
-  .workflow-assistant .code-header { background: rgba(0, 0, 0, 0.03); border-color: rgba(0, 0, 0, 0.05); }
-  .workflow-assistant .code-header .code-lang { color: #555555; }
-  .workflow-assistant .copy-btn { background: rgba(0, 0, 0, 0.04); border-color: #e5e5e5; color: #555555; }
-  .workflow-assistant .copy-btn:hover { background: rgba(0, 0, 0, 0.08); color: #111111; }
-  .workflow-assistant .code-content { color: #888888; }
-  .workflow-assistant .input-hints kbd { background: rgba(0, 0, 0, 0.04); border-color: #e5e5e5; }
-  .workflow-assistant .ai-status-dot { background: #111111; border-color: #ffffff; }
-  .workflow-assistant .header-status { color: #111111; }
-  .workflow-assistant .header-status.thinking { color: #555555; }
-  .workflow-assistant .empty-sessions { color: #999999; }
-  .workflow-assistant .welcome-avatar { box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1); }
-}
-
-// High Contrast theme
-[data-theme="high-contrast"] {
-  .workflow-assistant {
-    --assistant-bg: #000000;
-    --assistant-bg-subtle: #111111;
-    --assistant-bg-focus: rgba(255, 255, 0, 0.05);
-    --assistant-border: #ffff00;
-    --assistant-border-subtle: rgba(255, 255, 0, 0.3);
-    --assistant-text: #ffffff;
-    --assistant-text-secondary: #ffff00;
-    --assistant-text-tertiary: rgba(255, 255, 255, 0.6);
-    --assistant-accent-bg: rgba(255, 255, 0, 0.15);
-    --assistant-accent-border: #ffff00;
-    --assistant-accent-text: #ffff00;
-    --assistant-accent-shadow: 0 0 8px rgba(255, 255, 0, 0.4);
-    --assistant-accent-shadow-hover: 0 0 12px rgba(255, 255, 0, 0.6);
-    --assistant-user-bubble-bg: rgba(255, 255, 0, 0.12);
-    --assistant-user-bubble-text: #ffff00;
-  }
-  .assistant-trigger {
-    background: linear-gradient(135deg, #000000 0%, #111111 100%);
-    box-shadow: 0 0 12px rgba(255, 255, 0, 0.6);
-    border: 2px solid #ffff00;
-  }
-  .assistant-trigger:hover {
-    box-shadow: 0 0 20px rgba(255, 255, 0, 0.8);
-  }
-  .assistant-trigger .trigger-ring {
-    border-color: rgba(255, 255, 0, 0.5);
-  }
-  .assistant-trigger .trigger-logo-wrap {
-    background: #000000;
-    border-radius: 50%;
-    width: 100%;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-  .assistant-trigger .trigger-avatar {
-    border-radius: 50%;
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
-    max-width: 70%;
-    max-height: 70%;
-  }
-
-  .workflow-assistant .assistant-header { background: #111111; border-color: #ffff00; }
-  .workflow-assistant .msg-bubble.ai-message { background: #111111; border-color: rgba(255, 255, 0, 0.3); }
-  .workflow-assistant .msg-user-avatar { background-color: #222222; }
-  .workflow-assistant .msg-user-avatar .avatar-initial { color: #ffff00; }
-  .workflow-assistant .suggestion-pill { background: rgba(255, 255, 0, 0.08); border-color: #ffff00; color: #ffffff; }
-  .workflow-assistant .suggestion-pill:hover { background: rgba(255, 255, 0, 0.15); }
-  .workflow-assistant .suggestion-pill .pill-icon { color: #ffff00; }
-  .workflow-assistant .session-item:hover { background: rgba(255, 255, 0, 0.08); }
-  .workflow-assistant .session-item.active { background: rgba(255, 255, 0, 0.15); }
-  .workflow-assistant .conversation-sidebar { background: #0a0a0a; }
-  .workflow-assistant .msg-time { color: rgba(255, 255, 255, 0.6); }
-  .workflow-assistant .welcome-title { color: #ffffff; }
-  .workflow-assistant .welcome-desc { color: #ffff00; }
-  .workflow-assistant .welcome-avatar { border-color: #ffff00; }
-  .workflow-assistant .input-hints .hint { color: rgba(255, 255, 255, 0.6); }
-  .workflow-assistant .input-field { color: #ffffff; }
-  .workflow-assistant .assistant-input { background: #0a0a0a; }
-  .workflow-assistant .input-wrapper { background: rgba(255, 255, 0, 0.05); border-color: #ffff00; }
-  .workflow-assistant .input-wrapper:focus-within { border-color: #ffff00; }
-  .workflow-assistant .header-title { color: #ffffff; }
-  .workflow-assistant .header-btn { background: rgba(255, 255, 0, 0.08); border-color: #ffff00; color: #ffffff; }
-  .workflow-assistant .header-btn:hover { background: rgba(255, 255, 0, 0.15); }
-  .workflow-assistant .sidebar-toggle-btn { background: rgba(255, 255, 0, 0.08); border-color: #ffff00; color: #ffffff; }
-  .workflow-assistant .sidebar-toggle-btn:hover { background: rgba(255, 255, 0, 0.15); }
-  .workflow-assistant .new-conv-btn { background: rgba(255, 255, 0, 0.08); border-color: #ffff00; color: #ffffff; }
-  .workflow-assistant .new-conv-btn:hover { background: rgba(255, 255, 0, 0.15); }
-  .workflow-assistant .sidebar-title { color: #ffffff; }
-  .workflow-assistant .session-name { color: #ffffff; }
-  .workflow-assistant .session-time { color: rgba(255, 255, 255, 0.6); }
-  .workflow-assistant .search-input { background: rgba(255, 255, 0, 0.05); border-color: #ffff00; color: #ffffff; }
-  .workflow-assistant .search-input::placeholder { color: rgba(255, 255, 255, 0.6); }
-  .workflow-assistant .assistant-messages::-webkit-scrollbar-thumb { background: rgba(255, 255, 0, 0.3); }
-  .workflow-assistant .session-list::-webkit-scrollbar-thumb { background: rgba(255, 255, 0, 0.2); }
-  .workflow-assistant .sidebar-header { border-color: rgba(255, 255, 0, 0.3); }
-  .workflow-assistant .sidebar-close-btn, .workflow-assistant .session-action-btn { color: #ffffff; }
-  .workflow-assistant .sidebar-close-btn:hover, .workflow-assistant .session-action-btn:hover { background: rgba(255, 255, 0, 0.15); }
-  .workflow-assistant .code-block { background: #0a0a0a; }
-  .workflow-assistant .code-header { background: rgba(255, 255, 0, 0.03); border-color: rgba(255, 255, 0, 0.2); }
-  .workflow-assistant .code-header .code-lang { color: #ffff00; }
-  .workflow-assistant .copy-btn { background: rgba(255, 255, 0, 0.05); border-color: #ffff00; color: #ffffff; }
-  .workflow-assistant .copy-btn:hover { background: rgba(255, 255, 0, 0.1); }
-  .workflow-assistant .code-content { color: #ffffff; }
-  .workflow-assistant .input-hints kbd { background: rgba(255, 255, 0, 0.05); border-color: #ffff00; }
-  .workflow-assistant .ai-status-dot { background: #ffff00; border-color: #000000; }
-  .workflow-assistant .header-status { color: #ffff00; }
-  .workflow-assistant .header-status.thinking { color: #ffffff; }
-  .workflow-assistant .empty-sessions { color: rgba(255, 255, 255, 0.6); }
-  .workflow-assistant .welcome-avatar { box-shadow: 0 0 8px rgba(255, 255, 0, 0.3); }
+// 组件局部变量统一引用全局主题变量（themes.scss），四个主题自动适配，
+// 无需再按主题重复定义色块。面板与悬浮按钮是两个独立根节点，需同时声明。
+.workflow-assistant,
+.assistant-trigger {
+  --assistant-bg: var(--bg-secondary);
+  --assistant-bg-subtle: var(--bg-tertiary);
+  --assistant-bg-focus: var(--surface-strong);
+  --assistant-border: var(--border-secondary);
+  --assistant-border-subtle: var(--border-primary);
+  --assistant-text: var(--text-primary);
+  --assistant-text-secondary: var(--text-secondary);
+  --assistant-text-tertiary: var(--text-tertiary);
+  --assistant-accent-bg: var(--color-primary-10);
+  --assistant-accent-border: var(--color-primary-30);
+  --assistant-accent-text: var(--color-primary);
+  --assistant-accent-shadow: 0 4px 12px var(--color-primary-30);
+  --assistant-accent-shadow-hover: 0 6px 20px var(--color-primary-50);
+  --assistant-user-bubble-bg: var(--color-primary-10);
+  --assistant-user-bubble-text: var(--color-primary);
 }
 
 </style>

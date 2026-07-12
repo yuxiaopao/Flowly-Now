@@ -1,46 +1,52 @@
 import { request } from './index'
 
+const TENANT_RESOURCE = '/tenants/tenants'
+
 export const tenantApi = {
   // Tenants
   getTenants(params = {}) {
-    return request.get('/tenants/', params)
+    return request.get(`${TENANT_RESOURCE}/`, params)
   },
 
   getTenant(id) {
-    return request.get(`/tenants/${id}/`)
+    return request.get(`${TENANT_RESOURCE}/${id}/`)
   },
 
   createTenant(data) {
-    return request.post('/tenants/', data)
+    return request.post(`${TENANT_RESOURCE}/`, data)
   },
 
   updateTenant(id, data) {
-    return request.patch(`/tenants/${id}/`, data)
+    return request.patch(`${TENANT_RESOURCE}/${id}/`, data)
   },
 
   deleteTenant(id) {
-    return request.delete(`/tenants/${id}/`)
+    return request.delete(`${TENANT_RESOURCE}/${id}/`)
   },
 
   getTenantUsage(id) {
-    return request.get(`/tenants/${id}/usage/`)
+    return request.get(`${TENANT_RESOURCE}/${id}/usage/`)
   },
 
   getTenantMembers(id) {
-    return request.get(`/tenants/${id}/members/`)
+    return request.get(`${TENANT_RESOURCE}/${id}/members/`)
   },
 
   inviteMember(tenantId, data) {
-    return request.post(`/tenants/${tenantId}/invite/`, data)
+    return request.post(`${TENANT_RESOURCE}/${tenantId}/invite/`, data)
   },
 
   removeMember(tenantId, memberId) {
-    return request.delete(`/tenants/${tenantId}/remove_member/`, { member_id: memberId })
+    return request.delete(`${TENANT_RESOURCE}/${tenantId}/remove_member/`, { member_id: memberId })
+  },
+
+  updateMemberRole(memberId, data) {
+    return request.patch(`/tenants/memberships/${memberId}/update_role/`, data)
   },
 
   // Memberships
   getMyMemberships() {
-    return request.get('/tenants/memberships/my_memberships/')
+    return request.get('/tenants/memberships/')
   },
 
   // Invitations

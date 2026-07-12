@@ -6,12 +6,12 @@
     <svg
       v-if="nodes && nodes.length > 0"
       class="preview-svg"
-      :viewBox="`0 0 ${VW} ${VH}`"
+      :viewBox="`0 0 ${viewWidth} ${viewHeight}`"
       preserveAspectRatio="xMidYMid meet"
     >
       <defs>
         <pattern
-          id="preview-grid"
+          :id="gridPatternId"
           width="16"
           height="16"
           patternUnits="userSpaceOnUse"
@@ -27,24 +27,19 @@
       <rect
         width="100%"
         height="100%"
-        fill="url(#preview-grid)"
+        :fill="`url(#${gridPatternId})`"
         class="preview-grid-rect"
       />
 
-      <!-- Edges -->
       <g class="preview-edges">
         <polyline
           v-for="edge in renderedEdges"
           :key="edge.id"
-          :points="edge.isPoly
-            ? `${edge.x1},${edge.y1} ${edge.polyX || edge.x1},${edge.polyY || edge.y1} ${edge.x2},${edge.y2}`
-            : `${edge.x1},${edge.y1} ${edge.x2},${edge.y2}`
-          "
+          :points="edge.points"
           class="preview-edge"
         />
       </g>
 
-      <!-- Nodes -->
       <g class="preview-nodes">
         <g
           v-for="node in renderedNodes"
@@ -69,16 +64,6 @@
           >{{ node.shortLabel }}</text>
         </g>
       </g>
-
-      <!-- Empty hint -->
-      <text
-        v-if="!nodes || nodes.length === 0"
-        :x="VW / 2"
-        :y="VH / 2"
-        class="preview-empty-text"
-        dominant-baseline="middle"
-        text-anchor="middle"
-      >暂无节点</text>
     </svg>
     <div
       v-else
@@ -96,16 +81,25 @@ import { GitBranch } from 'lucide-vue-next'
 const props = defineProps({
   nodes: {
     type: Array,
-    default: () => []
-  }
+    default: () => [],
+  },
+  edges: {
+    type: Array,
+    default: () => [],
+  },
 })
 
-// 节点尺寸
+const gridPatternId = `preview-grid-${Math.random().toString(36).slice(2, 9)}`
+
 const NODE_W = 36
 const NODE_H = 18
-const NODE_R = 4  // 节点圆角
+const VW = 220
+const VH = 100
+const PAD = 12
+const H_GAP = 40
+const V_GAP = 30
+const COLS = 4
 
-// 类型 -> 颜色映射
 const TYPE_COLORS = {
   start:  { color: '#10b981', bg: 'rgba(16,185,129,0.15)' },
   end:    { color: '#ef4444', bg: 'rgba(239,68,68,0.15)' },
@@ -142,11 +136,6 @@ const TYPE_COLORS = {
 
 const DEFAULT_COLOR = { color: '#6b7280', bg: 'rgba(107,114,128,0.15)' }
 
-function getNodeStyle(type) {
-  return TYPE_COLORS[type] || DEFAULT_COLOR
-}
-
-// 节点短名称映射
 const TYPE_LABELS = {
   start: 'S', end: 'E', llm: 'L', prompt: 'P',
   input: 'I', output: 'O', code: 'X', variable: 'V',
@@ -160,112 +149,127 @@ const TYPE_LABELS = {
   csv_transform: 'CT', json_transform: 'JT',
   dataset_upload: 'DU', data_annotation: 'DA', data_augmentation: 'Dx',
   model_training: 'MT', model_evaluation: 'ME', model_deployment: 'MD',
-  website_generator: 'WG', image_editing: 'IE', subtitle_generation: 'SG',
+  website_generator: 'WG', backend_setup: 'BE', frontend_setup: 'FE', ui_beautify: 'UI', site_code_review: 'CR',
+  environment_provision: 'EP', site_qa: 'QA', site_preview: 'PV', project_agent: 'PA',
+  image_editing: 'IE', subtitle_generation: 'SG',
   reranker: 'RR',
 }
 
-function getShortLabel(type) {
-  return TYPE_LABELS[type] || type?.charAt(0).toUpperCase() || '?'
+function getNodeStyle(type) {
+  return TYPE_COLORS[type] || DEFAULT_COLOR
 }
 
-// 视图尺寸
-const VW = 220
-const VH = 100
+function getShortLabel(type) {
+  return TYPE_LABELS[type] || type?.charAt(0)?.toUpperCase() || '?'
+}
 
-// 将节点映射到 SVG 坐标
-const PAD = 16
-const H_GAP = 40  // 节点水平间隔
-const V_GAP = 30  // 节点垂直换行间距
-const COLS = 4    // 每行最多节点数
+function hasRealPositions(nodeList) {
+  return nodeList.some((n) => {
+    const x = Number(n.position?.x)
+    const y = Number(n.position?.y)
+    return Number.isFinite(x) && Number.isFinite(y) && (x !== 0 || y !== 0)
+  })
+}
 
-const renderedNodes = computed(() => {
-  if (!props.nodes || props.nodes.length === 0) return []
+const layout = computed(() => {
+  const ns = (props.nodes || []).slice(0, 30)
+  if (!ns.length) {
+    return { viewWidth: VW, viewHeight: VH, nodes: [], edges: [] }
+  }
 
-  const ns = props.nodes.slice(0, 20)  // 最多 20 个
-  const NW = NODE_W
-  const NH = NODE_H
+  if (hasRealPositions(ns)) {
+    const positions = ns.map((n) => ({
+      x: Number(n.position?.x) || 0,
+      y: Number(n.position?.y) || 0,
+    }))
+    const minX = Math.min(...positions.map((p) => p.x))
+    const minY = Math.min(...positions.map((p) => p.y))
+    const maxX = Math.max(...positions.map((p) => p.x))
+    const maxY = Math.max(...positions.map((p) => p.y))
+    const contentW = Math.max(maxX - minX + NODE_W + PAD * 2, 80)
+    const contentH = Math.max(maxY - minY + NODE_H + PAD * 2, 48)
+    const scale = Math.min(VW / contentW, VH / contentH, 1.5)
 
-  return ns.map((n, i) => {
+    const nodeMap = {}
+    const renderedNodes = ns.map((n) => {
+      const style = getNodeStyle(n.type)
+      const cx = Math.round(((Number(n.position?.x) || 0) - minX + PAD) * scale)
+      const cy = Math.round(((Number(n.position?.y) || 0) - minY + PAD) * scale)
+      nodeMap[String(n.id)] = { cx, cy }
+      return {
+        id: n.id,
+        cx,
+        cy,
+        type: n.type,
+        shortLabel: getShortLabel(n.type),
+        color: style.color,
+        bgColor: style.bg,
+      }
+    })
+
+    const renderedEdges = (props.edges || [])
+      .map((edge, index) => {
+        const source = nodeMap[String(edge.source)]
+        const target = nodeMap[String(edge.target)]
+        if (!source || !target) return null
+        return {
+          id: edge.id || `edge-${index}`,
+          points: `${source.cx + NODE_W / 2},${source.cy + NODE_H / 2} ${target.cx + NODE_W / 2},${target.cy + NODE_H / 2}`,
+        }
+      })
+      .filter(Boolean)
+
+    return {
+      viewWidth: VW,
+      viewHeight: VH,
+      nodes: renderedNodes,
+      edges: renderedEdges,
+    }
+  }
+
+  const renderedNodes = ns.map((n, i) => {
     const row = Math.floor(i / COLS)
     const col = i % COLS
-    // 自动布局：每行 COLS 个，自动换行
-    const cx = PAD + col * (NW + H_GAP)
-    const cy = PAD + row * (NH + V_GAP)
     const style = getNodeStyle(n.type)
     return {
       id: n.id,
-      cx,
-      cy,
+      cx: PAD + col * (NODE_W + H_GAP),
+      cy: PAD + row * (NODE_H + V_GAP),
       type: n.type,
       shortLabel: getShortLabel(n.type),
       color: style.color,
       bgColor: style.bg,
     }
   })
-})
 
-// 按布局顺序相邻节点自动连线
-const renderedEdges = computed(() => {
-  const ns = renderedNodes.value
-  if (ns.length < 2) return []
-
-  const edges = []
-  for (let i = 0; i < ns.length - 1; i++) {
-    const a = ns[i]
-    const b = ns[i + 1]
-    const sameRow = Math.floor(i / COLS) === Math.floor((i + 1) / COLS)
-    if (sameRow) {
-      edges.push({
-        id: `e-${i}`,
-        x1: a.cx + NODE_W,
-        y1: a.cy + NODE_H / 2,
-        x2: b.cx,
-        y2: b.cy + NODE_H / 2,
-      })
-    } else {
-      // 换行：先从上一行末尾水平线走，再垂直向下，再水平进入下一行开头
-      const lastOfRow = ns[Math.floor(i / COLS) * COLS + COLS - 1]
-      if (lastOfRow) {
-        const midX = lastOfRow.cx + NODE_W + 10
-        const midY = a.cy + NODE_H / 2
-        const midY2 = b.cy + NODE_H / 2
-        edges.push({
-          id: `e-${i}-h1`,
-          x1: a.cx + NODE_W,
-          y1: midY,
-          x2: midX,
-          y2: midY,
-          isPoly: true,
-          polyY: midY2,
-          polyX: midX,
-        })
-        edges.push({
-          id: `e-${i}-v`,
-          x1: midX,
-          y1: midY,
-          x2: midX,
-          y2: midY2,
-          isPoly: true,
-        })
-        edges.push({
-          id: `e-${i}-h2`,
-          x1: midX,
-          y1: midY2,
-          x2: b.cx,
-          y2: midY2,
-          isPoly: true,
-        })
-      }
-    }
+  const renderedEdges = []
+  for (let i = 0; i < renderedNodes.length - 1; i += 1) {
+    const a = renderedNodes[i]
+    const b = renderedNodes[i + 1]
+    renderedEdges.push({
+      id: `e-${i}`,
+      points: `${a.cx + NODE_W},${a.cy + NODE_H / 2} ${b.cx},${b.cy + NODE_H / 2}`,
+    })
   }
-  return edges
+
+  return {
+    viewWidth: VW,
+    viewHeight: VH,
+    nodes: renderedNodes,
+    edges: renderedEdges,
+  }
 })
+
+const viewWidth = computed(() => layout.value.viewWidth)
+const viewHeight = computed(() => layout.value.viewHeight)
+const renderedNodes = computed(() => layout.value.nodes)
+const renderedEdges = computed(() => layout.value.edges)
 </script>
 
 <style lang="scss" scoped>
 .workflow-preview {
   width: 100%;
-  height: 100px;
+  height: 100%;
   border-radius: 8px;
   overflow: hidden;
   background-color: var(--canvas-bg, var(--bg-tertiary));
@@ -273,7 +277,6 @@ const renderedEdges = computed(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--border-primary);
 }
 
 .preview-svg {
@@ -289,7 +292,8 @@ const renderedEdges = computed(() => {
 .preview-edge {
   stroke: var(--border-primary);
   stroke-width: 1;
-  opacity: 0.5;
+  fill: none;
+  opacity: 0.55;
 }
 
 .preview-node-label {
@@ -297,12 +301,6 @@ const renderedEdges = computed(() => {
   font-weight: 700;
   fill: var(--text-primary);
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
-}
-
-.preview-empty-text {
-  font-size: 10px;
-  fill: var(--text-tertiary);
-  font-family: inherit;
 }
 
 .preview-empty {

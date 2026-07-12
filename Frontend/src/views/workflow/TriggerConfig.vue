@@ -6,6 +6,16 @@
     direction="rtl"
     :before-close="handleClose"
   >
+    <!-- 后端能力未启用提示 -->
+    <el-alert
+      v-if="!triggerFeatureAvailable"
+      :title="triggerFeatureMessage || '当前环境未启用工作流触发器能力'"
+      type="warning"
+      :closable="false"
+      show-icon
+      class="trigger-feature-alert"
+    />
+
     <!-- 触发器列表（已存在触发器时显示） -->
     <div
       v-if="triggers.length > 0 && !editingTrigger"
@@ -543,6 +553,7 @@
       >
         <el-button
           type="primary"
+          :disabled="!triggerFeatureAvailable"
           @click="createNew"
         >
           <Plus class="btn-icon" /> 添加触发器
@@ -560,6 +571,7 @@ import {
 } from 'lucide-vue-next'
 import { getTriggerTypeLabel, getExecutionStatusType, formatTriggerDate, CRON_PRESETS } from '@/types/trigger'
 import * as triggerApi from '@/api/trigger'
+import { getPublicApiUrl } from '@/config'
 
 // =============================================================================
 // Props & Emits
@@ -590,6 +602,8 @@ const cronPreviewLoading = ref(false)
 const cronPreview = ref([])
 const selectedPreset = ref('')
 const triggerExecutions = ref([])
+const triggerFeatureAvailable = ref(true)
+const triggerFeatureMessage = ref('')
 
 const formRef = ref(null)
 
@@ -637,9 +651,39 @@ const formRules = {
 
 const generatedWebhookUrl = computed(() => {
   if (!triggerId.value) return ''
-  const baseUrl = window.location.origin
-  return `${baseUrl}/api/v1/workflows/triggers/${triggerId.value}/webhook/`
+  return getPublicApiUrl(`/workflows/triggers/${triggerId.value}/webhook/`)
 })
+
+function getErrorMessage(error, fallback = '操作失败') {
+  const responseData = error?.response?.data
+
+  if (typeof responseData?.detail === 'string' && responseData.detail) return responseData.detail
+  if (typeof responseData?.message === 'string' && responseData.message) return responseData.message
+  if (typeof responseData?.error === 'string' && responseData.error) return responseData.error
+
+  if (responseData && typeof responseData === 'object') {
+    const fieldMessage = Object.values(responseData)
+      .flat()
+      .find(value => typeof value === 'string' && value)
+    if (fieldMessage) return fieldMessage
+  }
+
+  if (typeof error?.message === 'string' && error.message) return error.message
+  return fallback
+}
+
+function resetDrawerState() {
+  editingTrigger.value = null
+  triggerId.value = null
+  triggers.value = []
+  triggerExecutions.value = []
+  triggerFeatureAvailable.value = true
+  triggerFeatureMessage.value = ''
+  saving.value = false
+  cronPreviewLoading.value = false
+  resetFormData()
+  formRef.value?.clearValidate()
+}
 
 // =============================================================================
 // 方法
@@ -652,11 +696,19 @@ async function loadTriggers() {
   if (!props.workflowId) return
 
   try {
+    triggerFeatureAvailable.value = true
+    triggerFeatureMessage.value = ''
     const response = await triggerApi.getTriggers({ workflow_id: props.workflowId })
     triggers.value = response.results || response || []
   } catch (error) {
-    // API 可能还未实现，使用空数组
     triggers.value = []
+    if (error?.response?.status === 404) {
+      triggerFeatureAvailable.value = false
+      triggerFeatureMessage.value = '当前后端尚未启用工作流触发器接口，暂不可创建或管理触发器。'
+      return
+    }
+    triggerFeatureAvailable.value = true
+    triggerFeatureMessage.value = '触发器列表加载失败，请稍后重试。'
   }
 }
 
@@ -664,13 +716,17 @@ async function loadTriggers() {
  * 加载触发器执行历史
  */
 async function loadTriggerExecutions() {
-  if (!triggerId.value) return
+  if (!triggerId.value || !triggerFeatureAvailable.value) return
 
   try {
     const response = await triggerApi.getTriggerExecutions(triggerId.value, { page_size: 10 })
     triggerExecutions.value = response.results || response || []
   } catch (error) {
     triggerExecutions.value = []
+    if (error?.response?.status === 404) {
+      triggerFeatureAvailable.value = false
+      triggerFeatureMessage.value = '当前后端尚未启用工作流触发器接口，暂不可创建或管理触发器。'
+    }
   }
 }
 
@@ -678,6 +734,11 @@ async function loadTriggerExecutions() {
  * 创建新触发器
  */
 function createNew() {
+  if (!triggerFeatureAvailable.value) {
+    ElMessage.warning(triggerFeatureMessage.value || '当前环境未启用触发器后端能力')
+    return
+  }
+
   editingTrigger.value = {
     name: '',
     description: '',
@@ -746,6 +807,7 @@ function resetFormData() {
 function cancelEdit() {
   editingTrigger.value = null
   triggerId.value = null
+  triggerExecutions.value = []
   resetFormData()
   formRef.value?.clearValidate()
 }
@@ -754,6 +816,11 @@ function cancelEdit() {
  * 保存触发器
  */
 async function handleSaveTrigger() {
+  if (!triggerFeatureAvailable.value) {
+    ElMessage.warning(triggerFeatureMessage.value || '当前环境未启用触发器后端能力')
+    return
+  }
+
   if (!formRef.value) return
 
   try {
@@ -797,7 +864,7 @@ async function handleSaveTrigger() {
     await loadTriggers()
     cancelEdit()
   } catch (error) {
-    ElMessage.error('保存失败：' + (error.message || '未知错误'))
+    ElMessage.error(`保存失败：${getErrorMessage(error, '请检查触发器配置后重试')}`)
   } finally {
     saving.value = false
   }
@@ -812,7 +879,7 @@ async function handleToggleTrigger(id, enabled) {
     ElMessage.success(enabled ? '触发器已启用' : '触发器已禁用')
     await loadTriggers()
   } catch (error) {
-    ElMessage.error('切换状态失败')
+    ElMessage.error(`切换状态失败：${getErrorMessage(error, '请稍后重试')}`)
     // 回滚 UI
     const trigger = triggers.value.find(t => t.id === id)
     if (trigger) {
@@ -830,7 +897,7 @@ async function handleRemoveTrigger(id) {
     ElMessage.success('触发器已删除')
     await loadTriggers()
   } catch (error) {
-    ElMessage.error('删除失败')
+    ElMessage.error(`删除失败：${getErrorMessage(error, '请稍后重试')}`)
   }
 }
 
@@ -855,7 +922,7 @@ function applyPreset(expression) {
  * 获取 Cron 表达式预览
  */
 async function fetchCronPreview() {
-  if (!formData.cronExpression) {
+  if (!formData.cronExpression || !triggerFeatureAvailable.value) {
     cronPreview.value = []
     return
   }
@@ -866,7 +933,10 @@ async function fetchCronPreview() {
     const preview = await triggerApi.getCronPreview(formData.cronExpression, 5)
     cronPreview.value = preview || []
   } catch (error) {
-    // API 可能未实现，使用本地计算
+    if (error?.response?.status === 404) {
+      triggerFeatureAvailable.value = false
+      triggerFeatureMessage.value = '当前后端尚未启用工作流触发器接口，暂不可创建或管理触发器。'
+    }
     cronPreview.value = []
   } finally {
     cronPreviewLoading.value = false
@@ -891,6 +961,11 @@ async function copyWebhookUrl() {
  * 测试 Webhook
  */
 async function testCurrentWebhook() {
+  if (!triggerFeatureAvailable.value) {
+    ElMessage.warning(triggerFeatureMessage.value || '当前环境未启用触发器后端能力')
+    return
+  }
+
   if (!triggerId.value) return
 
   try {
@@ -905,7 +980,7 @@ async function testCurrentWebhook() {
       ElMessage.warning(result.message || 'Webhook 测试失败')
     }
   } catch (error) {
-    ElMessage.error('测试失败：' + (error.message || '未知错误'))
+    ElMessage.error(`测试失败：${getErrorMessage(error, '请确认 Webhook 触发器配置是否正确')}`)
   }
 }
 
@@ -934,6 +1009,7 @@ function removeMapping(index) {
  * 关闭抽屉
  */
 function handleClose() {
+  resetDrawerState()
   emit('update:visible', false)
 }
 
@@ -944,7 +1020,10 @@ function handleClose() {
 watch(() => props.visible, (newVal) => {
   if (newVal) {
     loadTriggers()
+    return
   }
+
+  resetDrawerState()
 })
 
 watch(() => props.workflowId, () => {
@@ -967,6 +1046,10 @@ onMounted(() => {
 <style lang="scss" scoped>
 .trigger-list {
   padding: 0 16px;
+}
+
+.trigger-feature-alert {
+  margin: 0 16px 16px;
 }
 
 .list-header {

@@ -8,6 +8,7 @@ from . import views
 
 router = DefaultRouter()
 router.register(r'training-jobs', views.TrainingJobViewSet)
+router.register(r'yolo-runs', views.YoloTrainingRunViewSet, basename='yolo-run')
 router.register(r'datasets', views.DatasetViewSet)
 
 urlpatterns = [

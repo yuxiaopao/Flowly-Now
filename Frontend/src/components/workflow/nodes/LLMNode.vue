@@ -2,6 +2,7 @@
   <div
     class="llm-node"
     :class="{ selected, expanded: isExpanded, 'is-running': isRunning, 'is-completed': isCompleted, 'is-failed': isFailed }"
+    :style="{ '--node-accent': nodeColor }"
     @click.stop="handleSelect"
   >
     <Handle
@@ -11,32 +12,19 @@
     />
 
     <div class="node-header">
-      <div class="node-type-badge">
-        <Zap class="badge-icon" />
-        <span>LLM</span>
-      </div>
-      <div class="node-actions">
-        <button
-          class="action-btn"
-          :title="isExpanded ? '收起' : '展开'"
-          @click.stop="toggleExpand"
-        >
-          <ChevronDown
-            class="action-icon"
-            :class="{ rotated: isExpanded }"
-          />
-        </button>
-      </div>
+      <NodeTypeBadge :node-type="NODE_TYPE" compact />
     </div>
 
     <div class="node-name-section">
       <input
+        :id="id ? `node-label-${id}` : undefined"
         v-model="localName"
         class="node-name-input"
+        name="node-label"
         placeholder="节点名称..."
         @blur="handleNameChange"
         @keydown.enter="handleNameChange"
-        @click.stop
+        @click.stop="handleSelect"
       >
     </div>
 
@@ -307,12 +295,18 @@ import { Zap, ChevronDown, ChevronRight, Settings, Loader, Terminal } from 'luci
 import { APP_CONFIG } from '@/config'
 import { useWorkflowStore } from '@/stores/workflow'
 import { useExecutionStore } from '@/stores/execution'
+import NodeTypeBadge from '@/components/workflow/nodes/NodeTypeBadge.vue'
+import { useNodePresentation } from '@/composables/useNodePresentation'
+
 
 const props = defineProps({
   id: { type: String, default: '' },
   data: { type: Object, default: () => ({}) },
   selected: { type: Boolean, default: false }
 })
+
+const NODE_TYPE = 'llm'
+const { nodeIcon, nodeColor, nodeLabel } = useNodePresentation(NODE_TYPE)
 
 const emit = defineEmits(['update:data', 'select'])
 
@@ -425,7 +419,10 @@ watch(() => props.data, (newData) => {
   }
 }, { deep: true })
 
-function toggleExpand() { isExpanded.value = !isExpanded.value }
+function toggleExpand() {
+  handleSelect()
+  isExpanded.value = !isExpanded.value
+}
 
 function handleNameChange() {
   if (props.id) {

@@ -1,6 +1,36 @@
 import apiClient from './index'
+import { formatFileSize } from '@/utils/formatters'
 
-export default {
+export { formatFileSize }
+
+const FORMAT_BY_EXTENSION = {
+  csv: 'csv',
+  json: 'json',
+  jsonl: 'jsonl',
+  txt: 'text',
+  tsv: 'tsv',
+  parquet: 'parquet',
+  xlsx: 'xlsx',
+  xls: 'xlsx',
+}
+
+export function detectFormatFromFilename(filename = '') {
+  const ext = filename.split('.').pop()?.toLowerCase() || ''
+  return FORMAT_BY_EXTENSION[ext] || 'unknown'
+}
+
+export function createDatasetFormData(file, meta = {}) {
+  const formData = new FormData()
+  formData.append('file', file)
+  Object.entries(meta).forEach(([key, value]) => {
+    if (value !== undefined && value !== null) {
+      formData.append(key, value)
+    }
+  })
+  return formData
+}
+
+export const datasetApi = {
   list(params) {
     return apiClient.get('/training/datasets/', { params })
   },
@@ -16,9 +46,10 @@ export default {
   delete(id) {
     return apiClient.delete(`/training/datasets/${id}/`)
   },
-  upload(formData) {
+  upload(formData, onUploadProgress) {
     return apiClient.post('/training/datasets/', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
+      headers: { 'Content-Type': 'multipart/form-data' },
+      ...(onUploadProgress ? { onUploadProgress } : {}),
     })
   },
   preview(id, page = 1) {
@@ -27,4 +58,9 @@ export default {
   stats(id) {
     return apiClient.get(`/training/datasets/${id}/stats/`)
   },
+  download(id) {
+    return apiClient.get(`/training/datasets/${id}/download/`, { responseType: 'blob' })
+  },
 }
+
+export default datasetApi

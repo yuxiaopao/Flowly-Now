@@ -1,0 +1,28 @@
+{
+  "job_id": "4fe2f09a-cdbd-4f7b-a9f4-6ee72a00b743",
+  "training_kind": "yolo",
+  "framework": "ultralytics",
+  "model_type": "detection",
+  "config": {
+    "base_weight_uri": "yolo11x.pt",
+    "training_kind": "yolo",
+    "framework": "ultralytics",
+    "model_type": "detection",
+    "yolo_version": "v11",
+    "model_variant": "x"
+  },
+  "dataset_id": "",
+  "dataset_path": "",
+  "dataset_yaml_path": "E:/datasets/helmet/dataset.yaml",
+  "dataset_source_mode": "",
+  "annotation_project_id": "",
+  "class_names": [
+    "helmet",
+    "vest"
+  ],
+  "yolo_version": "v11",
+  "model_variant": "x",
+  "base_weight_uri": "yolo11x.pt",
+  "base_weight_path": "",
+  "hyperparameters": {}
+}

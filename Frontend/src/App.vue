@@ -1,7 +1,14 @@
 <template>
   <div :data-theme="appStore.theme">
     <component :is="layoutComponent">
-      <router-view />
+      <router-view v-slot="{ Component }">
+        <KeepAlive :include="['WorkflowEditor']">
+          <component
+            :is="Component"
+            v-if="Component"
+          />
+        </KeepAlive>
+      </router-view>
     </component>
 
     <!-- Global components -->
@@ -22,15 +29,21 @@ import ToastContainer from '@/components/common/ToastContainer.vue'
 import GlobalModal from '@/components/common/GlobalModal.vue'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
+import { useSiteConfigStore } from '@/stores/siteConfig'
 import { useThemeFavicon } from '@/composables/useThemeFavicon'
+import { useDesktopAgentBridge } from '@/composables/useDesktopAgentBridge'
 
 const route = useRoute()
 const appStore = useAppStore()
 const authStore = useAuthStore()
+const siteConfigStore = useSiteConfigStore()
 const commandPaletteRef = ref(null)
 
 // Initialize theme favicon
 useThemeFavicon()
+
+// Electron: auto-connect GPU agent when user is authenticated
+useDesktopAgentBridge(authStore)
 
 const layoutComponent = computed(() => {
   const layout = route.meta.layout
@@ -48,10 +61,9 @@ const layoutComponent = computed(() => {
 })
 
 onMounted(async () => {
-  // Initialize app
   appStore.init()
+  siteConfigStore.fetchPublicConfig()
 
-  // If token exists, fetch user info
   if (authStore.token && !authStore.user) {
     try {
       await authStore.fetchUserInfo()

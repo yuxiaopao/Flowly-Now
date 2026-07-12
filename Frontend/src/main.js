@@ -9,6 +9,12 @@ import router from './router'
 // 导入全局样式
 import './assets/styles/variables.scss'
 import './assets/styles/themes.scss'
+import './assets/styles/page-layout.scss'
+import './assets/styles/motion.scss'
+import './assets/styles/surface-system.scss'
+import './assets/styles/nav-accents.scss'
+import './styles/workflow-domain-node.scss'
+import './styles/vue-flow-custom-node-overrides.scss'
 
 // 创建应用实例
 const app = createApp(App)

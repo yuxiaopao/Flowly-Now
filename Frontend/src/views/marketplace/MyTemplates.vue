@@ -1,25 +1,19 @@
 <template>
-  <div class="my-templates-page">
-    <!-- Page Header -->
-    <div class="page-header">
-      <div class="header-bg">
-        <div class="gradient-orb orb-1" />
-        <div class="gradient-orb orb-2" />
-      </div>
-      <div class="header-content">
-        <div class="header-text">
-          <h1>My Templates</h1>
-          <p>Manage your saved and created workflow templates</p>
-        </div>
+  <PageShell width="wide">
+    <PageHeader
+      title="我的模板"
+      subtitle="管理你保存和创建的工作流模板"
+    >
+      <template #actions>
         <button
           class="create-btn"
           @click="createNewTemplate"
         >
           <Plus :size="18" />
-          <span>New Template</span>
+          <span>新建模板</span>
         </button>
-      </div>
-    </div>
+      </template>
+    </PageHeader>
 
     <!-- Tabs -->
     <div class="templates-tabs">
@@ -58,12 +52,13 @@
       <!-- Templates List -->
       <div
         v-else-if="filteredItems.length > 0"
-        class="templates-list"
+        class="templates-list anim-stagger"
       >
         <div
           v-for="item in filteredItems"
           :key="item.id"
-          class="template-row"
+          class="template-row hover-lift"
+          :class="getCategoryAccentClass(getTemplateCategory(item))"
           @click="openTemplate(item)"
         >
           <div
@@ -82,14 +77,14 @@
           <div class="row-meta">
             <span class="meta-item">
               <GitBranch :size="14" />
-              {{ getTemplateNodeCount(item) }} nodes
+              {{ getTemplateNodeCount(item) }} 个节点
             </span>
             <span class="meta-item">
               <Calendar :size="14" />
-              {{ formatDate(item.created_at) }}
+              {{ formatDate(item.createdAt ?? item.created_at) }}
             </span>
             <span
-              v-if="item.is_featured"
+              v-if="item.isFeatured ?? item.is_featured"
               class="meta-badge featured"
             >
               <Star
@@ -142,7 +137,7 @@
       <!-- Empty State -->
       <div
         v-else
-        class="empty-state"
+        class="empty-state anim-fade-in"
       >
         <div class="empty-icon-wrapper">
           <component
@@ -158,7 +153,7 @@
           @click="createNewTemplate"
         >
           <Plus :size="16" />
-          Create Your First Template
+          创建你的第一个模板
         </button>
         <router-link
           v-else-if="activeTab === 'saved'"
@@ -178,11 +173,11 @@
         class="modal-overlay"
         @click.self="closeDeleteModal"
       >
-        <div class="delete-modal">
+        <div class="delete-modal anim-scale-in">
           <div class="modal-icon">
             <AlertTriangle :size="32" />
           </div>
-          <h3>Delete Template</h3>
+          <h3>删除模板</h3>
           <p>Are you sure you want to delete "{{ templateToDelete?.name }}"? This action cannot be undone.</p>
           <div class="modal-actions">
             <button
@@ -202,17 +197,21 @@
         </div>
       </div>
     </Teleport>
-  </div>
+  </PageShell>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { 
+import PageShell from '@/components/layout/PageShell.vue'
+import PageHeader from '@/components/layout/PageHeader.vue'
+import {
   Plus, Sparkles, GitBranch, Calendar, Pencil, Trash2, Copy, Share2,
   Star, Globe, FolderOpen, Bookmark, FileCode, Compass, AlertTriangle
 } from 'lucide-vue-next'
+import { ElMessage } from 'element-plus'
 import { useMarketplaceStore } from '@/stores/marketplace'
+import { useAppStore } from '@/stores/app'
 import {
   getTemplateCategory,
   getTemplateNodeCount,
@@ -221,6 +220,7 @@ import {
 
 const router = useRouter()
 const store = useMarketplaceStore()
+const appStore = useAppStore()
 
 const loading = ref(false)
 const activeTab = ref('created')
@@ -229,20 +229,20 @@ const showDeleteModal = ref(false)
 const templateToDelete = ref(null)
 const isDeleting = ref(false)
 
-const tabs = [
-  { id: 'created', label: 'Created', icon: FileCode },
-  { id: 'saved', label: 'Saved', icon: Bookmark },
-  { id: 'shared', label: 'Shared', icon: Share2 },
-]
+const tabs = computed(() => [
+  { id: 'created', label: '已创建', icon: FileCode },
+  { id: 'saved', label: '已收藏', icon: Bookmark },
+  { id: 'shared', label: '已分享', icon: Share2 },
+])
 
 const filteredItems = computed(() => {
   switch (activeTab.value) {
     case 'created':
-      return myTemplates.value.filter(t => t.is_own || t.author_is_current_user)
+      return myTemplates.value
     case 'saved':
-      return myTemplates.value.filter(t => t.is_saved || t.is_bookmarked)
+      return myTemplates.value.filter(t => t.isSaved ?? t.is_saved ?? t.isBookmarked ?? t.is_bookmarked)
     case 'shared':
-      return myTemplates.value.filter(t => t.is_shared)
+      return myTemplates.value.filter(t => isTemplatePublic(t))
     default:
       return myTemplates.value
   }
@@ -251,11 +251,11 @@ const filteredItems = computed(() => {
 function getTabCount(tabId) {
   switch (tabId) {
     case 'created':
-      return myTemplates.value.filter(t => t.is_own || t.author_is_current_user).length
+      return myTemplates.value.length
     case 'saved':
-      return myTemplates.value.filter(t => t.is_saved || t.is_bookmarked).length
+      return myTemplates.value.filter(t => t.isSaved ?? t.is_saved ?? t.isBookmarked ?? t.is_bookmarked).length
     case 'shared':
-      return myTemplates.value.filter(t => t.is_shared).length
+      return myTemplates.value.filter(t => isTemplatePublic(t)).length
     default:
       return 0
   }
@@ -284,6 +284,23 @@ function getCategoryGradient(category) {
   return colors[category] || 'linear-gradient(135deg, #6366f1 0%, #818cf8 100%)'
 }
 
+// 纯展示用：分类 → 主题彩色边框工具类（motion.scss）
+const categoryAccentClassMap = {
+  multimodal: 'border-accent-rose',
+  data: 'border-accent-amber',
+  mlops: 'border-accent-amber',
+  rag: 'border-accent-cyan',
+  agent: 'border-accent-violet',
+  utility: 'border-accent-emerald',
+  ai: 'border-accent-violet',
+  automation: 'border-accent-cyan',
+  default: 'border-accent-blue'
+}
+
+function getCategoryAccentClass(category) {
+  return categoryAccentClassMap[category?.toLowerCase()] || categoryAccentClassMap.default
+}
+
 function formatDate(d) {
   if (!d) return '—'
   const date = new Date(d)
@@ -308,18 +325,18 @@ function getEmptyIcon() {
 
 function getEmptyTitle() {
   switch (activeTab.value) {
-    case 'created': return 'No templates created yet'
-    case 'saved': return 'No saved templates'
-    case 'shared': return 'No shared templates'
-    default: return 'No templates'
+    case 'created': return '还没有创建的模板'
+    case 'saved': return '暂无收藏的模板'
+    case 'shared': return '暂无已分享的模板'
+    default: return '暂无模板'
   }
 }
 
 function getEmptyDescription() {
   switch (activeTab.value) {
-    case 'created': return 'Create your first workflow template and share it with the community'
-    case 'saved': return 'Save templates from the marketplace to access them here'
-    case 'shared': return 'Templates you share will appear here'
+    case 'created': return '创建你的第一个工作流模板，分享给社区'
+    case 'saved': return '从模板市场收藏的模板将在此显示'
+    case 'shared': return '你分享的模板将出现在这里'
     default: return ''
   }
 }
@@ -336,15 +353,47 @@ function editTemplate(item) {
   router.push({ name: 'WorkflowEdit', params: { id: item.workflow_id || item.id } })
 }
 
-function duplicateTemplate(item) {
-  // TODO: Implement duplicate functionality
-  console.log('Duplicate template:', item.id)
+function buildDuplicateSlug(name) {
+  const base = String(name || 'template')
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9-]/g, '')
+    .slice(0, 40) || 'template'
+  return `${base}-copy-${Date.now()}`
 }
 
-function shareTemplate(item) {
-  // TODO: Implement share functionality
+async function duplicateTemplate(item) {
+  try {
+    const source = item.workflowData || item.workflow_data
+      ? item
+      : await store.fetchTemplate(item.id)
+    const duplicated = await store.createTemplate({
+      name: `${source.name || item.name} (副本)`,
+      slug: buildDuplicateSlug(source.name || item.name),
+      description: source.description || item.description || '',
+      category: source.category || item.category || null,
+      tags: source.tags || item.tags || [],
+      workflowData: source.workflowData || source.workflow_data || {},
+      nodes: source.nodes || [],
+      edges: source.edges || [],
+      isPublished: false,
+    })
+    myTemplates.value.unshift(duplicated)
+    appStore.success('模板已复制')
+  } catch (error) {
+    console.error('Failed to duplicate template:', error)
+    appStore.error('复制模板失败')
+  }
+}
+
+async function shareTemplate(item) {
   const url = `${window.location.origin}/marketplace/${item.id}`
-  navigator.clipboard.writeText(url)
+  try {
+    await navigator.clipboard.writeText(url)
+    ElMessage.success('分享链接已复制到剪贴板')
+  } catch {
+    ElMessage.info(url)
+  }
 }
 
 function deleteTemplate(item) {
@@ -361,7 +410,7 @@ async function confirmDelete() {
   if (!templateToDelete.value) return
   isDeleting.value = true
   try {
-    // TODO: Call API to delete template
+    await store.deleteTemplate(templateToDelete.value.id)
     myTemplates.value = myTemplates.value.filter(t => t.id !== templateToDelete.value.id)
     closeDeleteModal()
   } catch (error) {
@@ -378,8 +427,8 @@ function createNewTemplate() {
 async function loadTemplates() {
   loading.value = true
   try {
-    const result = await store.fetchMyTemplates()
-    myTemplates.value = result?.results || result || []
+    await store.fetchMyTemplates()
+    myTemplates.value = store.myTemplates
   } catch (error) {
     console.error('Failed to load templates:', error)
     myTemplates.value = []
@@ -393,100 +442,33 @@ onMounted(() => {
 </script>
 
 <style lang="scss" scoped>
-.my-templates-page {
-  min-height: 100vh;
-  background: #09090b;
-  position: relative;
-}
+@use '@/assets/styles/variables.scss' as *;
 
-// Page Header
-.page-header {
-  position: relative;
-  padding: 48px 24px 32px;
-  overflow: hidden;
+.create-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: $spacing-2;
+  padding: $spacing-3 $spacing-5;
+  background: var(--accent-primary);
+  border: none;
+  border-radius: $radius-lg;
+  color: var(--text-inverse);
+  font-size: $font-size-sm;
+  font-weight: $font-weight-semibold;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
 
-  .header-bg {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-
-    .gradient-orb {
-      position: absolute;
-      border-radius: 50%;
-      filter: blur(100px);
-      opacity: 0.25;
-
-      &.orb-1 {
-        width: 400px;
-        height: 400px;
-        background: radial-gradient(circle, rgba(139, 92, 246, 0.3) 0%, transparent 70%);
-        top: -150px;
-        right: 10%;
-      }
-
-      &.orb-2 {
-        width: 300px;
-        height: 300px;
-        background: radial-gradient(circle, rgba(6, 182, 212, 0.2) 0%, transparent 70%);
-        bottom: -100px;
-        left: 5%;
-      }
-    }
-  }
-
-  .header-content {
-    position: relative;
-    max-width: 1200px;
-    margin: 0 auto;
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 24px;
-
-    .header-text {
-      h1 {
-        font-size: 32px;
-        font-weight: 700;
-        background: linear-gradient(135deg, #fff 0%, #a78bfa 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
-        margin-bottom: 6px;
-      }
-
-      p {
-        font-size: 15px;
-        color: rgba(255, 255, 255, 0.5);
-      }
-    }
-
-    .create-btn {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 14px 24px;
-      background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
-      border: none;
-      border-radius: 12px;
-      color: white;
-      font-size: 14px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.25s;
-      box-shadow: 0 4px 20px rgba(139, 92, 246, 0.35);
-
-      &:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 8px 30px rgba(139, 92, 246, 0.45);
-      }
-    }
+  &:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-md);
   }
 }
 
 // Tabs
 .templates-tabs {
-  padding: 0 24px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 0;
+  margin-bottom: $spacing-6;
+  border-bottom: 1px solid var(--border-primary);
 
   .tabs-container {
     max-width: 1200px;
@@ -503,7 +485,7 @@ onMounted(() => {
     background: transparent;
     border: none;
     border-bottom: 2px solid transparent;
-    color: rgba(255, 255, 255, 0.5);
+    color: var(--text-tertiary);
     font-size: 14px;
     font-weight: 500;
     cursor: pointer;
@@ -512,23 +494,23 @@ onMounted(() => {
 
     .tab-count {
       padding: 3px 10px;
-      background: rgba(255, 255, 255, 0.05);
+      background: var(--surface-muted);
       border-radius: 10px;
       font-size: 12px;
-      color: rgba(255, 255, 255, 0.5);
+      color: var(--text-tertiary);
     }
 
     &:hover {
-      color: rgba(255, 255, 255, 0.8);
+      color: var(--text-primary);
     }
 
     &.active {
-      color: #a78bfa;
-      border-bottom-color: #a78bfa;
+      color: var(--accent-violet);
+      border-bottom-color: var(--accent-violet);
 
       .tab-count {
-        background: rgba(139, 92, 246, 0.15);
-        color: #a78bfa;
+        background: var(--accent-violet-soft);
+        color: var(--accent-violet);
       }
     }
   }
@@ -552,17 +534,23 @@ onMounted(() => {
     align-items: center;
     gap: 20px;
     padding: 20px 24px;
-    background: rgba(255, 255, 255, 0.02);
-    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: var(--card-bg);
+    border: 1px solid var(--border-primary);
     border-radius: 16px;
     cursor: pointer;
-    transition: all 0.25s;
 
     &:hover {
-      background: rgba(255, 255, 255, 0.04);
-      border-color: rgba(255, 255, 255, 0.1);
+      background: var(--bg-hover);
       transform: translateX(4px);
     }
+
+    // hover 时分类彩边加深（覆盖全局 .border-accent-* 的 soft 色）
+    &.border-accent-cyan:hover    { border-color: var(--accent-cyan) !important; }
+    &.border-accent-violet:hover  { border-color: var(--accent-violet) !important; }
+    &.border-accent-amber:hover   { border-color: var(--accent-amber) !important; }
+    &.border-accent-emerald:hover { border-color: var(--accent-emerald) !important; }
+    &.border-accent-rose:hover    { border-color: var(--accent-rose) !important; }
+    &.border-accent-blue:hover    { border-color: var(--accent-blue) !important; }
 
     .row-icon {
       width: 52px;
@@ -582,13 +570,13 @@ onMounted(() => {
       h3 {
         font-size: 16px;
         font-weight: 600;
-        color: rgba(255, 255, 255, 0.9);
+        color: var(--text-primary);
         margin-bottom: 4px;
       }
 
       p {
         font-size: 13px;
-        color: rgba(255, 255, 255, 0.45);
+        color: var(--text-tertiary);
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -605,7 +593,7 @@ onMounted(() => {
         align-items: center;
         gap: 6px;
         font-size: 13px;
-        color: rgba(255, 255, 255, 0.45);
+        color: var(--text-tertiary);
         white-space: nowrap;
       }
 
@@ -619,13 +607,13 @@ onMounted(() => {
         font-weight: 600;
 
         &.featured {
-          background: rgba(245, 158, 11, 0.15);
-          color: #fbbf24;
+          background: var(--accent-amber-soft);
+          color: var(--accent-amber);
         }
 
         &.published {
-          background: rgba(16, 185, 129, 0.15);
-          color: #10b981;
+          background: var(--success-bg);
+          color: var(--success);
         }
       }
     }
@@ -640,22 +628,22 @@ onMounted(() => {
         justify-content: center;
         width: 40px;
         height: 40px;
-        background: rgba(255, 255, 255, 0.05);
-        border: 1px solid rgba(255, 255, 255, 0.08);
+        background: var(--surface-muted);
+        border: 1px solid var(--border-primary);
         border-radius: 10px;
-        color: rgba(255, 255, 255, 0.6);
+        color: var(--text-tertiary);
         cursor: pointer;
         transition: all 0.2s;
 
         &:hover {
-          background: rgba(255, 255, 255, 0.1);
-          color: rgba(255, 255, 255, 0.9);
+          background: var(--bg-hover);
+          color: var(--text-primary);
         }
 
         &.danger:hover {
-          background: rgba(239, 68, 68, 0.1);
-          border-color: rgba(239, 68, 68, 0.2);
-          color: #ef4444;
+          background: var(--error-bg);
+          border-color: var(--error-bg);
+          color: var(--error);
         }
       }
     }
@@ -670,7 +658,7 @@ onMounted(() => {
 
   .skeleton-row {
     height: 92px;
-    background: linear-gradient(90deg, rgba(255,255,255,0.02) 0%, rgba(255,255,255,0.04) 50%, rgba(255,255,255,0.02) 100%);
+    background: linear-gradient(90deg, var(--surface-muted) 0%, var(--surface-strong) 50%, var(--surface-muted) 100%);
     background-size: 200% 100%;
     border-radius: 16px;
     animation: shimmer 1.5s infinite;
@@ -686,25 +674,25 @@ onMounted(() => {
     width: 96px;
     height: 96px;
     margin: 0 auto 24px;
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: var(--surface-muted);
+    border: 1px solid var(--border-primary);
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    color: rgba(255, 255, 255, 0.2);
+    color: var(--text-disabled);
   }
 
   h3 {
     font-size: 18px;
     font-weight: 600;
-    color: rgba(255, 255, 255, 0.8);
+    color: var(--text-primary);
     margin-bottom: 8px;
   }
 
   p {
     font-size: 14px;
-    color: rgba(255, 255, 255, 0.4);
+    color: var(--text-tertiary);
     margin-bottom: 24px;
     max-width: 400px;
     margin-left: auto;
@@ -717,10 +705,10 @@ onMounted(() => {
     align-items: center;
     gap: 8px;
     padding: 12px 24px;
-    background: rgba(139, 92, 246, 0.15);
-    border: 1px solid rgba(139, 92, 246, 0.3);
+    background: var(--accent-violet-soft);
+    border: 1px solid var(--accent-violet-soft);
     border-radius: 10px;
-    color: #a78bfa;
+    color: var(--accent-violet);
     font-size: 14px;
     font-weight: 500;
     text-decoration: none;
@@ -728,7 +716,7 @@ onMounted(() => {
     transition: all 0.2s;
 
     &:hover {
-      background: rgba(139, 92, 246, 0.25);
+      border-color: var(--accent-violet);
     }
   }
 }
@@ -737,7 +725,7 @@ onMounted(() => {
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.7);
+  background: var(--bg-overlay);
   backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
@@ -746,8 +734,8 @@ onMounted(() => {
   padding: 24px;
 
   .delete-modal {
-    background: #18181b;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-primary);
     border-radius: 20px;
     padding: 32px;
     max-width: 420px;
@@ -758,24 +746,24 @@ onMounted(() => {
       width: 64px;
       height: 64px;
       margin: 0 auto 20px;
-      background: rgba(239, 68, 68, 0.1);
+      background: var(--error-bg);
       border-radius: 50%;
       display: flex;
       align-items: center;
       justify-content: center;
-      color: #ef4444;
+      color: var(--error);
     }
 
     h3 {
       font-size: 20px;
       font-weight: 600;
-      color: rgba(255, 255, 255, 0.95);
+      color: var(--text-primary);
       margin-bottom: 10px;
     }
 
     p {
       font-size: 14px;
-      color: rgba(255, 255, 255, 0.5);
+      color: var(--text-secondary);
       margin-bottom: 28px;
       line-height: 1.5;
     }
@@ -787,34 +775,34 @@ onMounted(() => {
       .cancel-btn {
         flex: 1;
         padding: 12px 20px;
-        background: rgba(255, 255, 255, 0.05);
-        border: 1px solid rgba(255, 255, 255, 0.1);
+        background: var(--surface-muted);
+        border: 1px solid var(--border-primary);
         border-radius: 10px;
-        color: rgba(255, 255, 255, 0.8);
+        color: var(--text-primary);
         font-size: 14px;
         font-weight: 500;
         cursor: pointer;
         transition: all 0.2s;
 
         &:hover {
-          background: rgba(255, 255, 255, 0.08);
+          background: var(--bg-hover);
         }
       }
 
       .delete-btn {
         flex: 1;
         padding: 12px 20px;
-        background: #ef4444;
+        background: var(--error);
         border: none;
         border-radius: 10px;
-        color: white;
+        color: var(--text-inverse);
         font-size: 14px;
         font-weight: 600;
         cursor: pointer;
         transition: all 0.2s;
 
         &:hover:not(:disabled) {
-          background: #dc2626;
+          filter: brightness(0.92);
         }
 
         &:disabled {
@@ -833,17 +821,9 @@ onMounted(() => {
 
 // Responsive
 @media (max-width: 768px) {
-  .page-header {
-    padding: 32px 16px 24px;
-
-    .header-content {
-      flex-direction: column;
-
-      .create-btn {
-        width: 100%;
-        justify-content: center;
-      }
-    }
+  .create-btn {
+    width: 100%;
+    justify-content: center;
   }
 
   .templates-tabs {

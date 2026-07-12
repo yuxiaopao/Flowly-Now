@@ -1,13 +1,10 @@
 <template>
   <div class="billing-page">
-    <div class="page-header">
-      <div class="header-left">
-        <h1>订阅管理</h1>
-        <p class="subtitle">
-          管理您的订阅计划和账单
-        </p>
-      </div>
-    </div>
+    <PageHeader
+      compact
+      title="订阅管理"
+      subtitle="管理您的订阅计划和账单"
+    />
 
     <!-- Current Plan -->
     <div class="current-plan-section">
@@ -22,7 +19,7 @@
             </div>
             <div class="plan-details">
               <h3>{{ currentPlan.price }}<span v-if="currentPlan.price !== '免费'">/月</span></h3>
-              <p>包含 {{ currentPlan.features.max_workflows }} 个工作流，{{ currentPlan.features.max_members }} 位成员</p>
+              <p>包含 {{ planFeatureLimits.max_workflows }} 个工作流，{{ planFeatureLimits.max_members }} 位成员</p>
             </div>
           </div>
           <div class="plan-actions">
@@ -265,6 +262,7 @@ import { Check, AlertTriangle } from 'lucide-vue-next'
 import { ElMessageBox } from 'element-plus'
 import { useAppStore } from '@/stores/app'
 import { useBillingStore } from '@/stores/billing'
+import PageHeader from '@/components/layout/PageHeader.vue'
 
 const appStore = useAppStore()
 const billingStore = useBillingStore()
@@ -276,37 +274,44 @@ const isUpgrading = ref(false)
 
 const currentPlan = computed(() => {
   const sub = billingStore.subscription
-  if (!sub) {
-    return {
-      type: 'free',
-      name: '免费版',
-      price: '免费',
-      color: '#10b981',
-      features: { max_workflows: 5, max_members: 1 }
-    }
-  }
   const planColors = {
     free: '#10b981',
     starter: '#3b82f6',
     professional: '#3b82f6',
     enterprise: '#f59e0b'
   }
+  if (!sub) {
+    return {
+      type: 'free',
+      name: '免费版',
+      price: '免费',
+      color: planColors.free,
+    }
+  }
+  const planType = sub.planType ?? sub.plan_type ?? 'free'
+  const planName = sub.planName ?? sub.plan_type_display ?? sub.planTypeDisplay ?? planType
+  const monthlyPrice = sub.monthlyPrice ?? sub.monthly_price
   return {
-    type: sub.plan_type,
-    name: sub.plan_name || sub.plan_type,
-    price: sub.monthly_price ? `¥${sub.monthly_price}` : '免费',
-    color: planColors[sub.plan_type] || '#3b82f6',
-    features: billingStore.usageLimits
+    type: planType,
+    name: planName,
+    price: monthlyPrice ? `¥${monthlyPrice}` : '免费',
+    color: planColors[planType] || '#3b82f6',
   }
 })
 
+const planFeatureLimits = computed(() => billingStore.usageLimits)
+
 const usage = computed(() => {
-  const u = billingStore.currentUsage?.current_usage || {}
+  const u = billingStore.currentUsage?.currentUsage
+    || billingStore.currentUsage?.current_usage
+    || {}
   return {
-    workflows: u.workflow_count || 0,
-    executions: u.execution_count || 0,
-    storage: u.storage_used_mb ? (u.storage_used_mb / 1024).toFixed(1) : 0,
-    api_calls: u.api_call_count || 0
+    workflows: u.workflowCount ?? u.workflow_count ?? 0,
+    executions: u.executionCount ?? u.execution_count ?? 0,
+    storage: (u.storageUsedMb ?? u.storage_used_mb)
+      ? Number((Number(u.storageUsedMb ?? u.storage_used_mb) / 1024).toFixed(1))
+      : 0,
+    api_calls: u.apiCallCount ?? u.api_call_count ?? 0
   }
 })
 
@@ -358,21 +363,36 @@ const availablePlans = computed(() => {
     ]
   }
 
-  for (const [key, value] of Object.entries(plansData)) {
-    value.tiers?.forEach(tier => {
-      plans.push({
-        type: tier.plan_type,
-        name: tier.name,
-        price: tier.monthly_price ? `¥${tier.monthly_price}` : '免费',
-        description: tier.description,
-        featured: tier.is_featured,
-        action: tier.plan_type === currentPlan.value.type ? '当前套餐' : '升级',
-        highlights: tier.features?.map(f => f.description) || []
-      })
+  for (const [planType, value] of Object.entries(plansData)) {
+    const tiers = value?.tiers || []
+    const tier = tiers.find(t => (t.billingCycle ?? t.billing_cycle) === 'monthly') || tiers[0]
+    if (!tier) continue
+
+    const type = tier.planType ?? tier.plan_type ?? planType
+    const priceVal = Number(tier.price ?? tier.monthlyPrice ?? tier.monthly_price ?? 0)
+    const maxWorkflows = tier.maxWorkflows ?? tier.max_workflows
+    const maxExecutions = tier.maxExecutionsPerMonth ?? tier.max_executions_per_month
+    const maxMembers = tier.maxTeamMembers ?? tier.max_team_members
+
+    plans.push({
+      type,
+      name: value.name || tier.planTypeDisplay || tier.plan_type_display || type,
+      price: priceVal > 0 ? `¥${priceVal}` : '免费',
+      description: value.description || '',
+      featured: type === 'professional',
+      action: type === currentPlan.value.type ? '当前套餐' : (type === 'enterprise' ? '联系销售' : '升级'),
+      highlights: [
+        `${maxWorkflows} 个工作流`,
+        `每月 ${maxExecutions} 次执行`,
+        `${maxMembers} 位团队成员`,
+      ],
     })
   }
 
-  return plans
+  return plans.sort((a, b) => {
+    const order = ['free', 'starter', 'professional', 'enterprise']
+    return order.indexOf(a.type) - order.indexOf(b.type)
+  })
 })
 
 const upgradeOptions = computed(() => {
@@ -380,7 +400,8 @@ const upgradeOptions = computed(() => {
 })
 
 const billingHistory = computed(() => {
-  return billingStore.invoices.map(inv => ({
+  const list = Array.isArray(billingStore.invoices) ? billingStore.invoices : []
+  return list.map(inv => ({
     date: inv.period_start ? inv.period_start.substring(0, 7) : inv.created_at?.substring(0, 7),
     description: inv.description || `${inv.invoice_number} - 发票`,
     amount: inv.total_amount ? `¥${inv.total_amount}` : '-',
@@ -440,21 +461,12 @@ const cancelSubscription = async () => {
   }
 }
 
-const downloadInvoice = async (id) => {
-  try {
-    const res = await billingStore.downloadInvoice?.(id)
-    appStore.success('发票下载已开始')
-  } catch (error) {
-    appStore.error('下载失败')
-  }
-}
-
 onMounted(async () => {
+  await billingStore.fetchSubscription()
   await Promise.all([
-    billingStore.fetchSubscription(),
     billingStore.fetchPlans(),
     billingStore.fetchUsage(),
-    billingStore.fetchInvoices()
+    billingStore.fetchInvoices(),
   ])
 })
 </script>
@@ -464,21 +476,6 @@ onMounted(async () => {
   padding: 24px;
   max-width: 1200px;
   margin: 0 auto;
-}
-
-.page-header {
-  margin-bottom: 32px;
-
-  h1 {
-    margin: 0;
-    font-size: 28px;
-    font-weight: 600;
-  }
-
-  .subtitle {
-    margin: 8px 0 0;
-    color: var(--el-text-color-secondary);
-  }
 }
 
 .current-plan-section {

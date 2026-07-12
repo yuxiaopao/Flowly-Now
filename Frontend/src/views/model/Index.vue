@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="model-list">
     <div class="page-header">
       <div class="header-left">
@@ -235,7 +235,7 @@
                       <Play class="menu-icon" />
                       测试连接
                     </el-dropdown-item>
-                    <el-dropdown-item @click="handleToggleDefault(model)">
+                    <el-dropdown-item @click="handleToggleDefault">
                       <Star class="menu-icon" />
                       {{ model.is_default ? '取消默认' : '设为默认' }}
                     </el-dropdown-item>
@@ -318,7 +318,7 @@
               </div>
               <div class="stat-content">
                 <div class="stat-value">
-                  {{ apiAggregate.overall.total_calls.toLocaleString() }}
+                  {{ (apiAggregate.overall?.total_calls ?? 0).toLocaleString() }}
                 </div>
                 <div class="stat-label">
                   API 调用次数
@@ -331,7 +331,7 @@
               </div>
               <div class="stat-content">
                 <div class="stat-value">
-                  {{ formatNumber(apiAggregate.overall.total_tokens) }}
+                  {{ formatNumber(apiAggregate.overall?.total_tokens) }}
                 </div>
                 <div class="stat-label">
                   Token 使用量
@@ -344,7 +344,7 @@
               </div>
               <div class="stat-content">
                 <div class="stat-value">
-                  ${{ apiAggregate.overall.total_cost.toFixed(4) }}
+                  ${{ (apiAggregate.overall?.total_cost ?? 0).toFixed(4) }}
                 </div>
                 <div class="stat-label">
                   费用
@@ -357,7 +357,7 @@
               </div>
               <div class="stat-content">
                 <div class="stat-value">
-                  {{ apiAggregate.overall.avg_latency }}ms
+                  {{ apiAggregate.overall?.avg_latency ?? 0 }}ms
                 </div>
                 <div class="stat-label">
                   平均延迟
@@ -386,7 +386,7 @@
                   label="调用次数"
                 >
                   <template #default="{ row }">
-                    {{ row.calls.toLocaleString() }}
+                    {{ (row.calls ?? 0).toLocaleString() }}
                   </template>
                 </el-table-column>
                 <el-table-column
@@ -423,7 +423,7 @@
                   label="调用次数"
                 >
                   <template #default="{ row }">
-                    {{ row.calls.toLocaleString() }}
+                    {{ (row.calls ?? 0).toLocaleString() }}
                   </template>
                 </el-table-column>
                 <el-table-column
@@ -501,7 +501,7 @@
             width="120"
           >
             <template #default="{ row }">
-              {{ row.input_tokens.toLocaleString() }}
+              {{ (row.input_tokens ?? 0).toLocaleString() }}
             </template>
           </el-table-column>
           <el-table-column
@@ -510,7 +510,7 @@
             width="120"
           >
             <template #default="{ row }">
-              {{ row.output_tokens.toLocaleString() }}
+              {{ (row.output_tokens ?? 0).toLocaleString() }}
             </template>
           </el-table-column>
           <el-table-column
@@ -567,7 +567,7 @@
         >
           <el-input
             v-model="apiKeyForm.name"
-            placeholder="例如：我的 OpenAI Key"
+            placeholder="例如：我的 OpenAI 密钥"
           />
         </el-form-item>
         <el-form-item
@@ -694,7 +694,7 @@ import {
   Edit, Trash2, CheckCircle, Play, Star, Zap, Code, Eye,
   Clock, Activity, Cpu, DollarSign, RefreshCw
 } from 'lucide-vue-next'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { formatNumber as formatCompactNumber } from '@/utils/formatters'
 
 const gatewayStore = useGatewayStore()
 const appStore = useAppStore()
@@ -763,13 +763,13 @@ const filteredModels = computed(() => {
 
 function getProviderType(provider) {
   const types = {
-    openai: '',
+    openai: 'primary',
     anthropic: 'warning',
     azure: 'success',
     google: 'info',
-    custom: ''
+    custom: 'info',
   }
-  return types[provider] || ''
+  return types[provider] || undefined
 }
 
 function getProviderLabel(provider) {
@@ -799,10 +799,7 @@ function formatDateTime(date) {
 }
 
 function formatNumber(num) {
-  if (!num) return '0'
-  if (num >= 1000000) return `${(num / 1000000).toFixed(2)}M`
-  if (num >= 1000) return `${(num / 1000).toFixed(2)}K`
-  return num.toString()
+  return formatCompactNumber(num ?? 0)
 }
 
 function editAPIKey(key) {
@@ -891,7 +888,7 @@ async function handleTest() {
   }
 }
 
-async function handleToggleDefault(model) {
+async function handleToggleDefault() {
   try {
     appStore.info('该功能需要管理员权限')
   } catch (err) {
@@ -950,7 +947,7 @@ onMounted(async () => {
 
   .subtitle {
     font-size: $font-size-sm;
-    color: var(--text-primary)-secondary;
+    color: var(--text-secondary);
     margin: $spacing-1 0 0;
   }
 }
@@ -973,7 +970,7 @@ onMounted(async () => {
   .empty-icon {
     width: 64px;
     height: 64px;
-    color: var(--text-primary)-tertiary;
+    color: var(--text-tertiary);
     margin-bottom: $spacing-4;
   }
 
@@ -983,7 +980,7 @@ onMounted(async () => {
   }
 
   p {
-    color: var(--text-primary)-secondary;
+    color: var(--text-secondary);
     margin: 0 0 $spacing-4;
   }
 }
@@ -995,7 +992,7 @@ onMounted(async () => {
 }
 
 .api-key-card {
-  background: var(--bg-primary)-secondary;
+  background: var(--bg-secondary);
   border: 1px solid var(--border-primary);
   border-radius: $radius-xl;
   padding: $spacing-4;
@@ -1024,11 +1021,11 @@ onMounted(async () => {
   code {
     display: block;
     padding: $spacing-2 $spacing-3;
-    background: var(--bg-primary)-tertiary;
+    background: var(--bg-tertiary);
     border-radius: $radius-md;
     font-family: monospace;
     font-size: $font-size-sm;
-    color: var(--text-primary)-secondary;
+    color: var(--text-secondary);
   }
 }
 
@@ -1037,7 +1034,7 @@ onMounted(async () => {
   gap: $spacing-4;
   margin-bottom: $spacing-3;
   font-size: $font-size-xs;
-  color: var(--text-primary)-tertiary;
+  color: var(--text-tertiary);
 
   .meta-item {
     display: flex;
@@ -1077,7 +1074,7 @@ onMounted(async () => {
 }
 
 .model-card {
-  background: var(--bg-primary)-secondary;
+  background: var(--bg-secondary);
   border: 1px solid var(--border-primary);
   border-radius: $radius-xl;
   padding: $spacing-4;
@@ -1140,7 +1137,7 @@ onMounted(async () => {
 
 .model-id {
   font-size: $font-size-xs;
-  color: var(--text-primary)-tertiary;
+  color: var(--text-tertiary);
   margin: 0 0 $spacing-3;
 }
 
@@ -1161,7 +1158,7 @@ onMounted(async () => {
     align-items: center;
     gap: $spacing-1;
     font-size: $font-size-xs;
-    color: var(--text-primary)-tertiary;
+    color: var(--text-tertiary);
   }
 
   .cap-icon {
@@ -1183,7 +1180,7 @@ onMounted(async () => {
   }
 
   .price-label {
-    color: var(--text-primary)-tertiary;
+    color: var(--text-tertiary);
   }
 
   .price-value {
@@ -1214,7 +1211,7 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: $spacing-4;
-  background: var(--bg-primary)-secondary;
+  background: var(--bg-secondary);
   border: 1px solid var(--border-primary);
   border-radius: $radius-xl;
   padding: $spacing-4;
@@ -1242,7 +1239,7 @@ onMounted(async () => {
 
   .stat-label {
     font-size: $font-size-sm;
-    color: var(--text-primary)-secondary;
+    color: var(--text-secondary);
   }
 }
 
@@ -1253,7 +1250,7 @@ onMounted(async () => {
 }
 
 .stats-section {
-  background: var(--bg-primary)-secondary;
+  background: var(--bg-secondary);
   border: 1px solid var(--border-primary);
   border-radius: $radius-xl;
   padding: $spacing-4;
@@ -1274,7 +1271,7 @@ onMounted(async () => {
 .test-result {
   margin-top: $spacing-4;
   padding: $spacing-4;
-  background: var(--bg-primary)-tertiary;
+  background: var(--bg-tertiary);
   border-radius: $radius-lg;
 
   h4 {

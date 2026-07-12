@@ -8,6 +8,7 @@ import signal
 import os
 import sys
 import time
+from datetime import timedelta
 from pathlib import Path
 from celery import shared_task, Task
 from celery.exceptions import SoftTimeLimitExceeded
@@ -15,6 +16,56 @@ from django.utils import timezone
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _utc_timestamp():
+    return timezone.now().isoformat()
+
+
+def _format_eta(seconds: int) -> str:
+    if seconds <= 0:
+        return '约 0 分钟'
+    hours, remainder = divmod(int(seconds), 3600)
+    minutes, _ = divmod(remainder, 60)
+    if hours > 0:
+        return f'约 {hours} 小时 {minutes} 分钟'
+    return f'约 {minutes} 分钟'
+
+
+def _build_ws_event(event: str, data: dict) -> dict:
+    return {
+        'event': event,
+        'version': '1.0',
+        'timestamp': _utc_timestamp(),
+        'data': data,
+    }
+
+
+def _extract_yolo_metrics(data: dict) -> dict:
+    metrics = data.get('metrics', {}) or {}
+    loss = data.get('loss', {}) or {}
+    gpu = data.get('gpu', {}) or {}
+    timing = data.get('timing', {}) or {}
+    return {
+        'loss_box': data.get('loss_box', loss.get('box')),
+        'loss_cls': data.get('loss_cls', loss.get('cls')),
+        'loss_dfl': data.get('loss_dfl', loss.get('dfl')),
+        'precision': data.get('precision', metrics.get('precision')),
+        'recall': data.get('recall', metrics.get('recall')),
+        'map50': data.get('mAP50', metrics.get('mAP50')),
+        'map50_95': data.get('mAP50_95', metrics.get('mAP50_95')),
+        'fitness': data.get('fitness', metrics.get('fitness')),
+        'learning_rate': data.get('learning_rate', data.get('lr')),
+        'gpu': gpu,
+        'timing': timing,
+        'preview_samples': data.get('preview_samples', []),
+        'best_epoch': data.get('best_epoch', 0),
+    }
+
+
+def _append_if_number(target: list, value):
+    if isinstance(value, (int, float)):
+        target.append(value)
 
 
 class TrainingTask(Task):
@@ -97,11 +148,19 @@ def run_training_task(self, training_job_id: str, config_path: str = None, outpu
     job.started_at = timezone.now()
     job.save(update_fields=['status', 'job_id', 'started_at', 'updated_at'])
     
-    _broadcast_training_event(job_id, 'training_started', {
-        'job_id': str(job_id),
+    _broadcast_training_event(job_id, 'training_started', _build_ws_event('training_started', {
+        'training_run_id': str(job_id),
         'status': 'running',
+        'gpu': job.gpu_info or {},
+        'config_summary': {
+            'yolo_version': job.yolo_version,
+            'model_variant': job.model_variant,
+            'epochs': job.total_epochs,
+            'batch_size': (job.config or {}).get('batch_size') or (job.config or {}).get('batchSize'),
+            'image_size': (job.config or {}).get('image_size') or (job.config or {}).get('imageSize'),
+        },
         'message': 'Training started'
-    })
+    }))
     
     # Build command
     script_path = Path(__file__).parent.parent.parent / 'scripts' / 'train_model.py'
@@ -164,64 +223,219 @@ def run_training_task(self, training_job_id: str, config_path: str = None, outpu
                 epoch = data.get('epoch', 0)
                 total = data.get('total_epochs', 0)
                 progress = data.get('progress', 0)
-                
+
                 job.current_epoch = epoch
                 job.total_epochs = total
                 job.progress = progress
-                job.save(update_fields=['current_epoch', 'total_epochs', 'progress', 'updated_at'])
-                
-                _broadcast_training_event(job_id, 'epoch_start', {
-                    'job_id': str(job_id),
+                if total > 0 and job.started_at and epoch > 0:
+                    elapsed_seconds = int((timezone.now() - job.started_at).total_seconds())
+                    estimated_total = int(elapsed_seconds / epoch * total)
+                    job.estimated_duration_seconds = estimated_total
+                    job.eta_seconds = max(estimated_total - elapsed_seconds, 0)
+                job.save(update_fields=['current_epoch', 'total_epochs', 'progress', 'estimated_duration_seconds', 'eta_seconds', 'updated_at'])
+
+                _broadcast_training_event(job_id, 'epoch_start', _build_ws_event('epoch_start', {
+                    'training_run_id': str(job_id),
                     'epoch': epoch,
                     'total_epochs': total,
-                    'progress': progress,
-                })
-            
+                    'progress_percent': progress,
+                }))
+
             elif event_type == 'epoch_complete':
                 epoch = data.get('epoch', 0)
                 total = data.get('total_epochs', 0)
-                train_loss = data.get('train_loss')
-                train_acc = data.get('train_acc')
-                val_loss = data.get('val_loss')
-                val_acc = data.get('val_acc')
                 progress = data.get('progress', 0)
-                
-                metrics = {
-                    'train_loss': train_loss,
-                    'train_acc': train_acc,
-                    'val_loss': val_loss,
-                    'val_acc': val_acc,
-                }
-                all_metrics.append(metrics)
-                
-                job.current_epoch = epoch
-                job.total_epochs = total
-                job.progress = progress
-                job.current_loss = train_loss
-                job.current_metric = val_acc
-                job.metrics = metrics
-                job.save(update_fields=[
-                    'current_epoch', 'total_epochs', 'progress',
-                    'current_loss', 'current_metric', 'metrics', 'updated_at'
-                ])
-                
-                # Add to metrics history
-                job.add_metrics_entry(epoch, loss=train_loss, metric=val_acc)
-                
-                _broadcast_training_event(job_id, 'epoch_complete', {
-                    'job_id': str(job_id),
-                    'epoch': epoch,
-                    'total_epochs': total,
-                    'metrics': metrics,
-                    'progress': progress,
-                })
+
+                if job.training_kind == 'yolo':
+                    yolo_metrics = _extract_yolo_metrics(data)
+                    elapsed_seconds = int((timezone.now() - job.started_at).total_seconds()) if job.started_at else 0
+                    estimated_total = job.estimated_duration_seconds
+                    eta_seconds = job.eta_seconds
+                    if total > 0 and epoch > 0 and elapsed_seconds > 0:
+                        estimated_total = int(elapsed_seconds / epoch * total)
+                        eta_seconds = max(estimated_total - elapsed_seconds, 0)
+
+                    metrics = {
+                        'precision': yolo_metrics['precision'],
+                        'recall': yolo_metrics['recall'],
+                        'mAP50': yolo_metrics['map50'],
+                        'mAP50_95': yolo_metrics['map50_95'],
+                        'fitness': yolo_metrics['fitness'],
+                    }
+
+                    job.current_epoch = epoch
+                    job.total_epochs = total
+                    job.progress = progress
+                    job.current_loss = yolo_metrics['loss_box'] or 0.0
+                    job.current_metric = yolo_metrics['map50'] or 0.0
+                    job.learning_rate = yolo_metrics['learning_rate'] or 0.0
+                    job.metrics = metrics
+                    job.estimated_duration_seconds = estimated_total
+                    job.eta_seconds = eta_seconds
+                    job.preview_samples = yolo_metrics['preview_samples'] or []
+                    job.best_epoch = yolo_metrics['best_epoch'] or job.best_epoch
+                    job.best_fitness = yolo_metrics['fitness'] or job.best_fitness
+                    _append_if_number(job.loss_box_history, yolo_metrics['loss_box'])
+                    _append_if_number(job.loss_cls_history, yolo_metrics['loss_cls'])
+                    _append_if_number(job.loss_dfl_history, yolo_metrics['loss_dfl'])
+                    _append_if_number(job.precision_history, yolo_metrics['precision'])
+                    _append_if_number(job.recall_history, yolo_metrics['recall'])
+                    _append_if_number(job.map50_history, yolo_metrics['map50'])
+                    _append_if_number(job.map50_95_history, yolo_metrics['map50_95'])
+                    if yolo_metrics['gpu']:
+                        job.gpu_info = {**(job.gpu_info or {}), **yolo_metrics['gpu']}
+                    job.metrics_history.append({
+                        'epoch': epoch,
+                        'loss': {
+                            'box': yolo_metrics['loss_box'],
+                            'cls': yolo_metrics['loss_cls'],
+                            'dfl': yolo_metrics['loss_dfl'],
+                        },
+                        'metrics': metrics,
+                        'learning_rate': yolo_metrics['learning_rate'],
+                        'timing': {
+                            'elapsed_seconds': elapsed_seconds,
+                            'eta_seconds': eta_seconds,
+                            'eta_formatted': _format_eta(eta_seconds),
+                            'estimated_completion_at': (timezone.now() + timedelta(seconds=eta_seconds)).isoformat() if eta_seconds else timezone.now().isoformat(),
+                        },
+                        'gpu': yolo_metrics['gpu'],
+                        'preview_samples': yolo_metrics['preview_samples'],
+                        'timestamp': _utc_timestamp(),
+                    })
+                    job.save(update_fields=[
+                        'current_epoch', 'total_epochs', 'progress', 'current_loss', 'current_metric',
+                        'learning_rate', 'metrics', 'estimated_duration_seconds', 'eta_seconds',
+                        'preview_samples', 'best_epoch', 'best_fitness', 'gpu_info', 'metrics_history',
+                        'loss_box_history', 'loss_cls_history', 'loss_dfl_history', 'precision_history',
+                        'recall_history', 'map50_history', 'map50_95_history', 'updated_at'
+                    ])
+
+                    _broadcast_training_event(job_id, 'training_progress', _build_ws_event('training_progress', {
+                        'training_run_id': str(job_id),
+                        'status': 'running',
+                        'epoch': epoch,
+                        'total_epochs': total,
+                        'progress_percent': progress,
+                        'loss': {
+                            'box': yolo_metrics['loss_box'],
+                            'cls': yolo_metrics['loss_cls'],
+                            'dfl': yolo_metrics['loss_dfl'],
+                        },
+                        'metrics': metrics,
+                        'learning_rate': yolo_metrics['learning_rate'],
+                        'gpu': job.gpu_info or {},
+                        'timing': {
+                            'elapsed_seconds': elapsed_seconds,
+                            'eta_seconds': eta_seconds,
+                            'eta_formatted': _format_eta(eta_seconds),
+                            'estimated_completion_at': (timezone.now() + timedelta(seconds=eta_seconds)).isoformat() if eta_seconds else timezone.now().isoformat(),
+                        },
+                        'best': {
+                            'epoch': job.best_epoch,
+                            'fitness': job.best_fitness,
+                        },
+                        'preview_samples': job.preview_samples or [],
+                    }))
+
+                    _broadcast_training_event(job_id, 'epoch_complete', _build_ws_event('epoch_complete', {
+                        'training_run_id': str(job_id),
+                        'epoch': epoch,
+                        'total_epochs': total,
+                        'saved_checkpoint': False,
+                        'checkpoint_path': '',
+                    }))
+                else:
+                    train_loss = data.get('train_loss')
+                    train_acc = data.get('train_acc')
+                    val_loss = data.get('val_loss')
+                    val_acc = data.get('val_acc')
+
+                    metrics = {
+                        'train_loss': train_loss,
+                        'train_acc': train_acc,
+                        'val_loss': val_loss,
+                        'val_acc': val_acc,
+                    }
+                    all_metrics.append(metrics)
+
+                    job.current_epoch = epoch
+                    job.total_epochs = total
+                    job.progress = progress
+                    job.current_loss = train_loss
+                    job.current_metric = val_acc
+                    job.metrics = metrics
+                    job.save(update_fields=[
+                        'current_epoch', 'total_epochs', 'progress',
+                        'current_loss', 'current_metric', 'metrics', 'updated_at'
+                    ])
+
+                    job.add_metrics_entry(epoch, loss=train_loss, metric=val_acc)
+
+                    _broadcast_training_event(job_id, 'epoch_complete', {
+                        'job_id': str(job_id),
+                        'epoch': epoch,
+                        'total_epochs': total,
+                        'metrics': metrics,
+                        'progress': progress,
+                    })
             
             elif event_type == 'training_complete':
+                if job.training_kind == 'yolo':
+                    best_weight_path = data.get('best_weight_path') or data.get('model_path', '')
+                    last_weight_path = data.get('last_weight_path', '')
+                    exported_artifacts = data.get('exported_artifacts', {}) or {}
+                    final_metrics = data.get('final_metrics', {}) or {}
+                    duration_seconds = data.get('total_time') or data.get('duration_seconds', 0)
+
+                    job.model_path = best_weight_path
+                    job.best_weight_path = best_weight_path
+                    job.last_weight_path = last_weight_path
+                    job.exported_artifacts = exported_artifacts
+                    job.status = 'completed'
+                    job.completed_at = timezone.now()
+                    job.duration_seconds = duration_seconds or (int((job.completed_at - job.started_at).total_seconds()) if job.started_at else 0)
+                    job.progress = 100
+                    job.current_metric = final_metrics.get('mAP50', job.current_metric)
+                    job.best_fitness = final_metrics.get('fitness', job.best_fitness)
+                    job.metrics = final_metrics
+                    job.save(update_fields=[
+                        'model_path', 'best_weight_path', 'last_weight_path', 'exported_artifacts',
+                        'status', 'completed_at', 'duration_seconds', 'progress',
+                        'current_metric', 'best_fitness', 'metrics', 'updated_at'
+                    ])
+
+                    _broadcast_training_event(job_id, 'training_complete', _build_ws_event('training_complete', {
+                        'training_run_id': str(job_id),
+                        'status': 'completed',
+                        'artifacts': {
+                            'best_weight_path': best_weight_path,
+                            'last_weight_path': last_weight_path,
+                            'exported_artifacts': exported_artifacts,
+                        },
+                        'final_metrics': final_metrics,
+                        'duration_seconds': job.duration_seconds,
+                        'next_actions': {
+                            'can_download': True,
+                            'can_generate_site': True,
+                            'recommended_project_name': job.name or 'YOLO Detection System',
+                        }
+                    }))
+
+                    logger.info(f"YOLO training job {job_id} completed successfully. Model: {best_weight_path}")
+                    return {
+                        'job_id': str(job_id),
+                        'status': 'completed',
+                        'model_path': best_weight_path,
+                        'duration_seconds': job.duration_seconds,
+                        'final_metrics': final_metrics,
+                    }
+
                 model_path = data.get('model_path', '')
                 total_time = data.get('total_time', 0)
                 best_val_acc = data.get('best_val_acc', 0)
                 training_history = data.get('training_history', [])
-                
+
                 job.model_path = model_path
                 job.status = 'completed'
                 job.completed_at = timezone.now()
@@ -234,7 +448,7 @@ def run_training_task(self, training_job_id: str, config_path: str = None, outpu
                     'model_path', 'status', 'completed_at', 'duration_seconds',
                     'progress', 'current_metric', 'metrics_history', 'updated_at'
                 ])
-                
+
                 _broadcast_training_event(job_id, 'training_complete', {
                     'job_id': str(job_id),
                     'model_path': model_path,
@@ -242,7 +456,7 @@ def run_training_task(self, training_job_id: str, config_path: str = None, outpu
                     'best_val_acc': best_val_acc,
                     'training_history': training_history,
                 })
-                
+
                 logger.info(f"Training job {job_id} completed successfully. Model: {model_path}")
                 return {
                     'job_id': str(job_id),
@@ -510,8 +724,9 @@ def list_training_jobs(framework: str = None, status: str = None, limit: int = 5
     
     queryset = queryset[:limit]
 
+    results = []
     for job in queryset.only('id', 'name', 'status', 'framework', 'progress', 'created_at'):
-        result.append({
+        results.append({
             'id': str(job.id),
             'name': job.name,
             'status': job.status,
@@ -519,4 +734,4 @@ def list_training_jobs(framework: str = None, status: str = None, limit: int = 5
             'progress': job.progress,
             'created_at': job.created_at.isoformat(),
         })
-    return result
+    return results

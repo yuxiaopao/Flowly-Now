@@ -32,7 +32,7 @@
         </div>
         <div class="stat-content">
           <div class="stat-value">
-            {{ statistics.total_jobs || 0 }}
+            {{ statistics.totalJobs ?? statistics.total_jobs ?? 0 }}
           </div>
           <div class="stat-label">
             总任务数
@@ -49,7 +49,7 @@
         </div>
         <div class="stat-content">
           <div class="stat-value">
-            {{ statistics.completed_jobs || 0 }}
+            {{ statistics.completedJobs ?? statistics.completed_jobs ?? 0 }}
           </div>
           <div class="stat-label">
             已完成
@@ -66,7 +66,7 @@
         </div>
         <div class="stat-content">
           <div class="stat-value">
-            {{ statistics.running_jobs || 0 }}
+            {{ statistics.runningJobs ?? statistics.running_jobs ?? 0 }}
           </div>
           <div class="stat-label">
             运行中
@@ -83,7 +83,7 @@
         </div>
         <div class="stat-content">
           <div class="stat-value">
-            {{ statistics.failed_jobs || 0 }}
+            {{ statistics.failedJobs ?? statistics.failed_jobs ?? 0 }}
           </div>
           <div class="stat-label">
             失败
@@ -188,7 +188,7 @@
                 :size="16"
                 class="dataset-icon"
               />
-              <span>{{ row.input_dataset_name || '-' }}</span>
+              <span>{{ row.inputDatasetName || row.input_dataset_name || '-' }}</span>
             </div>
           </template>
         </el-table-column>
@@ -203,7 +203,7 @@
               size="small"
               :type="getStrategyTagType(row.strategy)"
             >
-              {{ row.strategy_display || row.strategy }}
+              {{ row.strategyDisplay || row.strategy_display || row.strategy }}
             </el-tag>
           </template>
         </el-table-column>
@@ -225,7 +225,7 @@
           align="right"
         >
           <template #default="{ row }">
-            {{ row.original_count || 0 }}
+            {{ row.originalCount ?? row.original_count ?? 0 }}
           </template>
         </el-table-column>
 
@@ -236,7 +236,7 @@
           align="right"
         >
           <template #default="{ row }">
-            <span class="augmented-value">{{ row.augmented_count || 0 }}</span>
+            <span class="augmented-value">{{ row.augmentedCount ?? row.augmented_count ?? 0 }}</span>
           </template>
         </el-table-column>
 
@@ -258,7 +258,7 @@
                 >
                   <Loader />
                 </el-icon>
-                {{ row.status_display || row.status }}
+                {{ row.statusDisplay || row.status_display || row.status }}
               </el-tag>
               <el-progress
                 v-if="row.status === 'running'"
@@ -277,7 +277,7 @@
           width="160"
         >
           <template #default="{ row }">
-            {{ formatDate(row.created_at) }}
+            {{ formatDate(row.createdAt || row.created_at) }}
           </template>
         </el-table-column>
 
@@ -321,7 +321,7 @@
               </el-button>
 
               <el-button
-                v-if="row.status === 'completed' && row.output_dataset"
+                v-if="row.status === 'completed' && (row.outputDataset || row.output_dataset)"
                 type="success"
                 link
                 size="small"
@@ -372,7 +372,7 @@
     <!-- Job Details Drawer -->
     <el-drawer
       v-model="showDetails"
-      :title="`任务详情: ${selectedJob?.input_dataset_name || ''}`"
+      :title="`任务详情: ${selectedJob?.inputDatasetName || selectedJob?.input_dataset_name || ''}`"
       size="500px"
       :before-close="closeDetails"
     >
@@ -395,7 +395,7 @@
                 :type="getStatusTagType(selectedJob.status)"
                 size="small"
               >
-                {{ selectedJob.status_display || selectedJob.status }}
+                {{ selectedJob.statusDisplay || selectedJob.status_display || selectedJob.status }}
               </el-tag>
             </div>
             <div class="detail-item">
@@ -404,7 +404,7 @@
                 :type="getStrategyTagType(selectedJob.strategy)"
                 size="small"
               >
-                {{ selectedJob.strategy_display || selectedJob.strategy }}
+                {{ selectedJob.strategyDisplay || selectedJob.strategy_display || selectedJob.strategy }}
               </el-tag>
             </div>
             <div class="detail-item">
@@ -421,11 +421,11 @@
           <div class="detail-grid">
             <div class="detail-item">
               <span class="detail-label">原始样本</span>
-              <span class="detail-value">{{ selectedJob.original_count || 0 }}</span>
+              <span class="detail-value">{{ selectedJob.originalCount ?? selectedJob.original_count ?? 0 }}</span>
             </div>
             <div class="detail-item">
               <span class="detail-label">增强后样本</span>
-              <span class="detail-value augmented-value">{{ selectedJob.augmented_count || 0 }}</span>
+              <span class="detail-value augmented-value">{{ selectedJob.augmentedCount ?? selectedJob.augmented_count ?? 0 }}</span>
             </div>
           </div>
         </div>
@@ -445,7 +445,7 @@
         </div>
 
         <div
-          v-if="selectedJob.error_message"
+          v-if="selectedJob.errorMessage || selectedJob.error_message"
           class="detail-section"
         >
           <h4 class="detail-title">
@@ -453,7 +453,7 @@
           </h4>
           <div class="error-message">
             <AlertCircle :size="16" />
-            {{ selectedJob.error_message }}
+            {{ selectedJob.errorMessage || selectedJob.error_message }}
           </div>
         </div>
 
@@ -464,34 +464,34 @@
           <div class="detail-grid">
             <div class="detail-item">
               <span class="detail-label">创建时间</span>
-              <span class="detail-value">{{ formatDate(selectedJob.created_at) }}</span>
+              <span class="detail-value">{{ formatDate(selectedJob.createdAt || selectedJob.created_at) }}</span>
             </div>
             <div
-              v-if="selectedJob.started_at"
+              v-if="selectedJob.startedAt || selectedJob.started_at"
               class="detail-item"
             >
               <span class="detail-label">开始时间</span>
-              <span class="detail-value">{{ formatDate(selectedJob.started_at) }}</span>
+              <span class="detail-value">{{ formatDate(selectedJob.startedAt || selectedJob.started_at) }}</span>
             </div>
             <div
-              v-if="selectedJob.completed_at"
+              v-if="selectedJob.completedAt || selectedJob.completed_at"
               class="detail-item"
             >
               <span class="detail-label">完成时间</span>
-              <span class="detail-value">{{ formatDate(selectedJob.completed_at) }}</span>
+              <span class="detail-value">{{ formatDate(selectedJob.completedAt || selectedJob.completed_at) }}</span>
             </div>
             <div
-              v-if="selectedJob.duration_seconds"
+              v-if="selectedJob.durationSeconds ?? selectedJob.duration_seconds"
               class="detail-item"
             >
               <span class="detail-label">执行时长</span>
-              <span class="detail-value">{{ formatDuration(selectedJob.duration_seconds) }}</span>
+              <span class="detail-value">{{ formatDuration(selectedJob.durationSeconds ?? selectedJob.duration_seconds) }}</span>
             </div>
           </div>
         </div>
 
         <div
-          v-if="selectedJob.output_dataset"
+          v-if="selectedJob.outputDataset || selectedJob.output_dataset"
           class="detail-section"
         >
           <h4 class="detail-title">
@@ -500,8 +500,8 @@
           <div class="output-dataset-card">
             <Database :size="20" />
             <div class="output-info">
-              <span class="output-name">{{ selectedJob.output_dataset_name || '输出数据集' }}</span>
-              <span class="output-id">{{ selectedJob.output_dataset }}</span>
+              <span class="output-name">{{ selectedJob.outputDatasetName || selectedJob.output_dataset_name || '输出数据集' }}</span>
+              <span class="output-id">{{ selectedJob.outputDataset || selectedJob.output_dataset }}</span>
             </div>
             <el-button
               type="primary"
@@ -540,7 +540,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Layers, RefreshCw, CheckCircle, Loader, XCircle,
-  Database, Search, AlertCircle
+  Database, AlertCircle
 } from 'lucide-vue-next'
 import { augmentationApi } from '@/api/augmentation'
 
@@ -691,8 +691,9 @@ const retryJob = async (job) => {
 }
 
 const viewOutputDataset = (job) => {
-  if (job.output_dataset) {
-    router.push(`/datasets/${job.output_dataset}`)
+  const datasetId = job.outputDataset || job.output_dataset
+  if (datasetId) {
+    router.push(`/datasets/${datasetId}`)
   }
 }
 

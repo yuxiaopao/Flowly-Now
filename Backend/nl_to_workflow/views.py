@@ -12,17 +12,28 @@ from rest_framework.permissions import IsAuthenticated
 from django.db import transaction
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import cache_page
+from django.conf import settings
+
 try:
     from ratelimit.decorators import ratelimit
 except ImportError:
     from django_ratelimit.decorators import ratelimit
 
 from .models import NLSession
-from .services import get_nl_service, NLToWorkflowService, analyze_intent
+from .services import get_nl_service, NLToWorkflowService, analyze_intent, get_email_config_guidance, get_node_config_guidance
+from .constants import resolve_initial_stream_mode, normalize_request_mode
 from workflows.models import Workflow, Node, Edge
 from workflows.serializers import WorkflowDetailSerializer, NodeSerializer, EdgeSerializer
-from config.constants import DEFAULT_MAX_TOKENS
+from config.constants import (
+    DEFAULT_MAX_TOKENS,
+    RATE_LIMIT_NL_EDITOR_APPLY,
+    RATE_LIMIT_NL_PREVIEW,
+    RATE_LIMIT_NL_STREAM,
+)
 
+import logging
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Constants - externalized from code for maintainability
@@ -40,35 +51,189 @@ ERROR_NO_PROVIDER = '没有可用的 LLM provider'
 STREAM_CHUNK_SIZE = 1024
 
 
-def get_nl_service_for_request(request, model=None, temperature=DEFAULT_TEMPERATURE):
+def _normalize_rate_limit(rate: str) -> str:
+    """Normalize config rate strings for django-ratelimit (e.g. 5/minute → 5/m)."""
+    return rate.replace('/minute', '/m').replace('minute', 'm')
+
+
+NL_STREAM_RATE = _normalize_rate_limit(
+    getattr(settings, 'NL_WORKFLOW_STREAM_RATE', None)
+    or (RATE_LIMIT_NL_STREAM if not getattr(settings, 'DEBUG', False) else '20/m')
+)
+NL_PREVIEW_RATE = _normalize_rate_limit(
+    getattr(settings, 'NL_WORKFLOW_PREVIEW_RATE', None) or RATE_LIMIT_NL_PREVIEW
+)
+NL_EDITOR_APPLY_RATE = _normalize_rate_limit(
+    getattr(settings, 'NL_WORKFLOW_EDITOR_APPLY_RATE', None)
+    or (RATE_LIMIT_NL_EDITOR_APPLY if not getattr(settings, 'DEBUG', False) else '60/m')
+)
+
+
+def _sse_data(payload):
+    """Serialize SSE payload with explicit UTF-8 encoding safety."""
+    return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+
+def _resolve_current_workflow(request, session):
+    """Prefer editor-provided workflow snapshot, fallback to session state."""
+    incoming = request.data.get('workflow') or request.data.get('workflow_json')
+    if isinstance(incoming, dict) and incoming.get('nodes'):
+        return incoming
+    if session.workflow_json and session.workflow_json.get('nodes'):
+        return session.workflow_json
+    return None
+
+
+def _yield_conversation_stream_events(nl_service, session, user_message, prior_messages, mode=None):
+    """Stream SSE events for continue_conversation (chat, modify, or generate)."""
+    current_workflow = session.workflow_json if session.workflow_json else None
+    assistant_content = ''
+    workflow = None
+    suggestions = []
+    changes = []
+    intent = 'chat'
+    ready_to_generate = False
+
+    for chunk in nl_service.continue_conversation_streaming(
+        prior_messages,
+        user_message,
+        current_workflow=current_workflow,
+        mode=mode,
+    ):
+        if isinstance(chunk, str):
+            chunk_data = json.loads(chunk)
+        else:
+            chunk_data = chunk
+
+        chunk_type = chunk_data.get('type')
+
+        if chunk_type == 'intent':
+            intent = chunk_data.get('intent', intent)
+            yield _sse_data(chunk_data)
+            continue
+
+        if chunk_type == 'token':
+            assistant_content += chunk_data.get('content', '')
+            yield _sse_data(chunk_data)
+            continue
+
+        if chunk_type == 'workflow':
+            workflow = chunk_data.get('workflow')
+            if workflow:
+                session.workflow_json = workflow
+                session.workflow_name = workflow.get('name', session.workflow_name)
+                session.workflow = None
+                session.save()
+            yield _sse_data(chunk_data)
+            continue
+
+        if chunk_type == 'progress':
+            yield _sse_data(chunk_data)
+            continue
+
+        if chunk_type == 'error':
+            session.status = 'failed'
+            session.error_message = chunk_data.get('error', 'Unknown error')
+            session.save()
+            yield _sse_data(chunk_data)
+            return
+
+        if chunk_type == 'done':
+            assistant_content = chunk_data.get('message') or assistant_content
+            workflow = chunk_data.get('workflow') or workflow
+            suggestions = chunk_data.get('suggestions', [])
+            changes = chunk_data.get('changes', [])
+            intent = chunk_data.get('intent', intent)
+            ready_to_generate = chunk_data.get('ready_to_generate', False)
+
+            if workflow:
+                session.workflow_json = workflow
+                session.workflow_name = workflow.get('name', session.workflow_name)
+                session.workflow = None
+
+                email_guidance = get_email_config_guidance(workflow)
+                if email_guidance:
+                    yield _sse_data({'type': 'email_guidance', 'email_guidance': email_guidance})
+
+                node_guidance = get_node_config_guidance(workflow)
+                if node_guidance:
+                    yield _sse_data({'type': 'node_guidance', 'node_guidance': node_guidance})
+
+            session.messages.append({'role': 'assistant', 'content': assistant_content})
+            session.status = 'completed'
+            session.save()
+
+            if suggestions:
+                yield _sse_data({'type': 'suggestions', 'suggestions': suggestions})
+            if changes:
+                yield _sse_data({'type': 'changes', 'changes': changes})
+            if ready_to_generate:
+                yield _sse_data({'type': 'ready_to_generate', 'ready_to_generate': True})
+
+            yield _sse_data({
+                'type': 'done',
+                'message': assistant_content,
+                'workflow': workflow,
+                'intent': intent,
+                'ready_to_generate': ready_to_generate,
+                'progress': 100,
+            })
+            return
+
+        # Pass through other event types (suggestions, email_guidance, node_guidance, etc.)
+        yield _sse_data(chunk_data)
+
+
+def get_nl_service_for_request(request, model=None, temperature=DEFAULT_TEMPERATURE, mode=None):
     """Create an NL service configured for the current request."""
+    request_mode = normalize_request_mode(mode) or 'chat'
+    if request_mode == 'generate':
+        max_tokens = int(getattr(settings, 'NL_GENERATE_MAX_TOKENS', DEFAULT_MAX_TOKENS))
+    elif request_mode == 'editor':
+        max_tokens = int(getattr(settings, 'NL_EDITOR_MAX_TOKENS', 2048))
+    else:
+        max_tokens = int(getattr(settings, 'NL_CHAT_MAX_TOKENS', 512))
     return get_nl_service(
         model=model,
         temperature=temperature,
-        max_tokens=DEFAULT_MAX_TOKENS,
+        max_tokens=max_tokens,
         user=request.user
     )
 
 
 def _build_session_response(session, include_workflow=False):
     """Build a consistent session response dict."""
+    workflow_json = session.workflow_json or {}
+    # Compute guidance for old sessions that don't have it stored
+    if workflow_json.get('nodes'):
+        if '_node_guidance' not in workflow_json:
+            node_guidance = get_node_config_guidance(workflow_json)
+            if node_guidance:
+                workflow_json = dict(workflow_json)
+                workflow_json['_node_guidance'] = node_guidance
+        if '_email_guidance' not in workflow_json:
+            email_guidance = get_email_config_guidance(workflow_json)
+            if email_guidance:
+                workflow_json = dict(workflow_json)
+                workflow_json['_email_guidance'] = email_guidance
+
     data = {
         'session_id': session.id,
         'name': session.name,
         'description': session.description,
         'workflow_id': session.workflow_id,
-        'workflow_json': session.workflow_json,
+        'workflow_json': workflow_json,
         'workflow_name': session.workflow_name,
         'status': session.status,
         'error_message': session.error_message or None,
         'messages': session.messages,
-        'node_count': len(session.workflow_json.get('nodes', [])) if session.workflow_json else 0,
-        'edge_count': len(session.workflow_json.get('edges', [])) if session.workflow_json else 0,
+        'node_count': len(workflow_json.get('nodes', [])),
+        'edge_count': len(workflow_json.get('edges', [])),
         'created_at': session.created_at,
         'updated_at': session.updated_at,
     }
-    if include_workflow and session.workflow_json:
-        data['workflow'] = session.workflow_json
+    if include_workflow and workflow_json:
+        data['workflow'] = workflow_json
     return data
 
 
@@ -97,11 +262,23 @@ class NLModelListView(APIView):
         """Return available models from the provider registry."""
         service = NLToWorkflowService(user=request.user)
         models = service.list_available_models()
+        include_all = str(request.query_params.get('include_all', '')).lower() in ('1', 'true', 'yes')
+        if not include_all:
+            agnes_models = [
+                m for m in models
+                if 'agnes' in str(m.get('model_id', '')).lower()
+                or str(m.get('provider', '')).lower() == 'agnes'
+            ]
+            if agnes_models:
+                models = agnes_models
         default_model = service._resolve_model() or (models[0]['model_id'] if models else None)
+        if default_model and not any(m.get('model_id') == default_model for m in models):
+            default_model = models[0]['model_id'] if models else default_model
         return Response({
             'models': models,
             'default': default_model,
-            'count': len(models)
+            'count': len(models),
+            'scope': 'all' if include_all else 'agnes_default',
         })
 
 
@@ -131,6 +308,7 @@ class NLSessionViewSet(APIView):
         )
         model = request.data.get('model')
         temperature = float(request.data.get('temperature', DEFAULT_TEMPERATURE))
+        mode = request.data.get('mode')
 
         if not description:
             return Response(
@@ -142,15 +320,42 @@ class NLSessionViewSet(APIView):
             user=request.user,
             name=name,
             description=description,
-            messages=[]
+            messages=[{'role': 'user', 'content': description}],
         )
 
-        import traceback as tb_module
         try:
-            nl_service = get_nl_service_for_request(request, model=model, temperature=temperature)
+            stream_mode = resolve_initial_stream_mode(
+                description,
+                has_workflow=False,
+                prior_messages=[],
+                explicit_mode=mode,
+            )
+            nl_service = get_nl_service_for_request(
+                request, model=model, temperature=temperature, mode=stream_mode
+            )
 
-            import logging
-            logger = logging.getLogger(__name__)
+            if stream_mode == 'chat':
+                response = nl_service.continue_conversation(
+                    [], description, current_workflow=None, mode=mode
+                )
+                session.messages.append({
+                    'role': 'assistant',
+                    'content': response.get('message', ''),
+                })
+                session.status = 'completed'
+                session.save()
+                return Response({
+                    'session_id': session.id,
+                    'id': session.id,
+                    'workflow_json': response.get('workflow'),
+                    'workflow': response.get('workflow'),
+                    'status': session.status,
+                    'message': response.get('message', ''),
+                    'suggestions': response.get('suggestions', []),
+                    'intent': response.get('intent', 'chat'),
+                    'ready_to_generate': response.get('ready_to_generate', False),
+                })
+
             logger.info(f"NL service created, model={model}")
 
             workflow_data = nl_service.generate_workflow(description)
@@ -180,22 +385,20 @@ class NLSessionViewSet(APIView):
                 'workflow': workflow_data,  # Alias for backward compatibility
                 'workflow_name': session.workflow_name,
                 'status': session.status,
-                'message': '工作流生成成功'
+                'message': '工作流生成成功',
+                'email_guidance': workflow_data.get('_email_guidance'),
             })
 
         except Exception as e:
-            import traceback
             session.status = 'failed'
             session.error_message = str(e)
             session.save()
-            import logging
-            logging.getLogger(__name__).exception(f"NL workflow generation failed: {e}")
+            logger.exception(f"NL workflow generation failed: {e}")
             return Response({
                 'session_id': session.id,
-                'error': str(e),
+                'error': '生成工作流时遇到了问题，请重试',
                 'status': 'failed',
-                'traceback': traceback.format_exc(),
-            }, status=status.HTTP_400_BAD_REQUEST)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class NLSessionDetailView(APIView):
@@ -239,7 +442,12 @@ class NLSessionDetailView(APIView):
 
         name = request.data.get('name')
         if name is not None:
-            session.name = name.strip()[:200]
+            if len(name.strip()) > 200:
+                return Response(
+                    {'error': '会话名称不能超过 200 个字符'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            session.name = name.strip()
             session.save(update_fields=['name', 'updated_at'])
 
         return Response({
@@ -267,6 +475,7 @@ class NLSessionMessageView(APIView):
         user_message = request.data.get('message', '')
         model = request.data.get('model')
         temperature = float(request.data.get('temperature', DEFAULT_TEMPERATURE))
+        mode = request.data.get('mode')
 
         if not user_message:
             return Response(
@@ -274,17 +483,27 @@ class NLSessionMessageView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
+        user_msg_index = len(session.messages)
         session.messages.append({
             'role': 'user',
             'content': user_message
         })
+        session.save()
 
         try:
-            nl_service = get_nl_service_for_request(request, model=model, temperature=temperature)
+            nl_service = get_nl_service_for_request(
+                request, model=model, temperature=temperature, mode=mode
+            )
+            current_workflow = _resolve_current_workflow(request, session)
+            if current_workflow:
+                session.workflow_json = current_workflow
+                session.save()
+
             response = nl_service.continue_conversation(
                 session.messages[:-1],
                 user_message,
-                current_workflow=session.workflow_json if session.workflow_json else None
+                current_workflow=current_workflow,
+                mode=mode,
             )
 
             session.messages.append({
@@ -296,6 +515,8 @@ class NLSessionMessageView(APIView):
             if response.get('workflow'):
                 session.workflow_json = response['workflow']
                 session.workflow_name = response['workflow'].get('name', session.workflow_name)
+                # 清除旧的已保存工作流关联，确保 confirm 保存的是最新生成的工作流
+                session.workflow = None
 
             session.save()
 
@@ -304,12 +525,24 @@ class NLSessionMessageView(APIView):
                 'suggestions': response.get('suggestions', []),
                 'workflow_json': response.get('workflow'),
                 'workflow': response.get('workflow'),  # Alias for backward compatibility
-                'changes': response.get('changes', [])
+                'changes': response.get('changes', []),
+                'intent': response.get('intent', 'chat'),
+                'ready_to_generate': response.get('ready_to_generate', False),
+                'email_guidance': get_email_config_guidance(response.get('workflow', {})) if response.get('workflow') else None,
+                'node_guidance': get_node_config_guidance(response.get('workflow', {})) if response.get('workflow') else None,
             })
 
         except Exception as e:
+            # Roll back the user message we just appended
+            session.messages = session.messages[:user_msg_index]
+            session.status = 'failed'
+            session.error_message = str(e)
+            session.save()
+            logger.exception(f"NL message stream failed: {e}")
             return Response({
-                'error': str(e)
+                'session_id': session.id,
+                'error': '生成回复时遇到了问题，请重试',
+                'status': 'failed',
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -325,7 +558,7 @@ class NLSessionMessageStreamView(APIView):
 
     permission_classes = [IsAuthenticated]
 
-    @method_decorator(ratelimit(key='user', rate='5/m', method='POST', block=True))
+    @method_decorator(ratelimit(key='user', rate=NL_STREAM_RATE, method='POST', block=True))
     def post(self, request, session_id):
         """Send a message and stream the response."""
         try:
@@ -339,6 +572,7 @@ class NLSessionMessageStreamView(APIView):
         user_message = request.data.get('message', '')
         model = request.data.get('model')
         temperature = float(request.data.get('temperature', DEFAULT_TEMPERATURE))
+        mode = request.data.get('mode')
 
         if not user_message:
             return Response(
@@ -350,59 +584,35 @@ class NLSessionMessageStreamView(APIView):
             'role': 'user',
             'content': user_message
         })
+        session.save()
+
+        current_workflow = _resolve_current_workflow(request, session)
+        if current_workflow:
+            session.workflow_json = current_workflow
+            session.save()
 
         def generate_stream():
             """Generator for streaming response."""
             try:
-                nl_service = get_nl_service_for_request(request, model=model, temperature=temperature)
-                
-                # Yield initial progress
-                yield f"data: {json.dumps({'type': 'progress', 'stage': 'thinking', 'message': '正在理解您的需求...', 'progress': 10}, ensure_ascii=False)}\n\n"
-                
-                # Continue conversation
-                response = nl_service.continue_conversation(
-                    session.messages[:-1],
-                    user_message,
-                    current_workflow=session.workflow_json if session.workflow_json else None
+                nl_service = get_nl_service_for_request(
+                    request, model=model, temperature=temperature, mode=mode
                 )
-                
-                # Yield workflow if updated
-                if response.get('workflow'):
-                    session.workflow_json = response['workflow']
-                    session.workflow_name = response['workflow'].get('name', session.workflow_name)
-                    session.save()
-                    
-                    yield f"data: {json.dumps({'type': 'workflow', 'workflow': response['workflow'], 'progress': 80}, ensure_ascii=False)}\n\n"
-                
-                # Save assistant message
-                assistant_content = response.get('message', '')
-                session.messages.append({
-                    'role': 'assistant',
-                    'content': assistant_content
-                })
-                session.save()
-                
-                # Yield suggestions
-                suggestions = response.get('suggestions', [])
-                if suggestions:
-                    yield f"data: {json.dumps({'type': 'suggestions', 'suggestions': suggestions}, ensure_ascii=False)}\n\n"
-                
-                # Yield changes if any
-                changes = response.get('changes', [])
-                if changes:
-                    yield f"data: {json.dumps({'type': 'changes', 'changes': changes}, ensure_ascii=False)}\n\n"
-                
-                # Yield final done message
-                yield f"data: {json.dumps({'type': 'done', 'message': assistant_content, 'progress': 100}, ensure_ascii=False)}\n\n"
-                
+
+                for event in _yield_conversation_stream_events(
+                    nl_service,
+                    session,
+                    user_message,
+                    session.messages[:-1],
+                    mode=mode,
+                ):
+                    yield event
             except Exception as e:
-                import logging
-                logging.exception("Streaming message failed")
-                yield f"data: {json.dumps({'type': 'error', 'error': str(e)}, ensure_ascii=False)}\n\n"
+                logger.exception("Streaming message failed")
+                yield _sse_data({'type': 'error', 'error': str(e)})
         
         response = StreamingHttpResponse(
             generate_stream(),
-            content_type='text/event-stream'
+            content_type='text/event-stream; charset=utf-8'
         )
         response['Cache-Control'] = 'no-cache'
         response['X-Accel-Buffering'] = 'no'
@@ -431,6 +641,31 @@ class NLSessionConfirmView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
+        if session.workflow_id:
+            prefetched_workflow = Workflow.objects.prefetch_related('nodes', 'edges').filter(
+                id=session.workflow_id,
+                owner=request.user
+            ).first()
+            if prefetched_workflow:
+                node_serializer = NodeSerializer(list(prefetched_workflow.nodes.all()), many=True)
+                edge_serializer = EdgeSerializer(list(prefetched_workflow.edges.all()), many=True)
+                workflow_serializer = WorkflowDetailSerializer(
+                    prefetched_workflow,
+                    context={
+                        'request': request,
+                        'nodes': node_serializer.data,
+                        'edges': edge_serializer.data,
+                    }
+                )
+                return Response({
+                    'workflow_id': prefetched_workflow.id,
+                    'workflow_json': workflow_serializer.data,
+                    'workflow': workflow_serializer.data,
+                    'session_id': session.id,
+                    'status': session.status,
+                    'message': '工作流已保存'
+                })
+
         workflow_data = session.workflow_json
 
         # Create workflow
@@ -448,8 +683,10 @@ class NLSessionConfirmView(APIView):
                 workflow=workflow,
                 node_type=node_data.get('type', 'llm'),
                 name=node_data.get('name', 'Node'),
-                position_x=node_data.get('position', {}).get('x', 0),
-                position_y=node_data.get('position', {}).get('y', 0),
+                # 不使用 LLM 生成的位置，让前端 Editor 加载时自动布局
+                # 否则 NL 生成的随机位置会导致节点重叠
+                position_x=0,
+                position_y=0,
                 config=node_data.get('config', {})
             )
             node_id_map[node_data['id']] = node.id
@@ -505,7 +742,7 @@ class NLWorkflowPreviewView(APIView):
 
     permission_classes = [IsAuthenticated]
 
-    @method_decorator(ratelimit(key='user', rate='10/m', method='POST', block=True))
+    @method_decorator(ratelimit(key='user', rate=NL_PREVIEW_RATE, method='POST', block=True))
     def post(self, request):
         """Preview workflow from description without saving."""
         description = request.data.get('description', '')
@@ -519,7 +756,9 @@ class NLWorkflowPreviewView(APIView):
             )
 
         try:
-            nl_service = get_nl_service_for_request(request, model=model, temperature=temperature)
+            nl_service = get_nl_service_for_request(
+                request, model=model, temperature=temperature, mode='generate'
+            )
             workflow_data = nl_service.generate_workflow(
                 description,
                 include_validation=True
@@ -545,13 +784,77 @@ class NLWorkflowPreviewView(APIView):
                 'workflow_json': workflow_data,
                 'workflow': workflow_data,  # Alias for backward compatibility
                 'validation': workflow_data.get('validation'),
-                'message': '预览生成成功'
+                'message': '预览生成成功',
+                'email_guidance': workflow_data.get('_email_guidance'),
             })
 
         except Exception as e:
+            logger.exception(f"NL preview failed: {e}")
             return Response({
-                'error': str(e)
+                'error': '预览生成时遇到了问题，请重试'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class NLEditorApplyView(APIView):
+    """
+    Synchronous editor assistant actions (layout / template modify / editor chat).
+
+    POST /api/v1/nl-workflow/editor/apply/
+    Body: { message, workflow, mode?, model?, temperature? }
+
+    Used by the workflow editor assistant to avoid SSE stream rate limits for
+    deterministic canvas updates.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    @method_decorator(ratelimit(key='user', rate=NL_EDITOR_APPLY_RATE, method='POST', block=True))
+    def post(self, request):
+        user_message = request.data.get('message', '')
+        workflow = request.data.get('workflow') or request.data.get('workflow_json')
+        model = request.data.get('model')
+        temperature = float(request.data.get('temperature', DEFAULT_TEMPERATURE))
+        mode = request.data.get('mode', 'editor')
+
+        if not user_message:
+            return Response(
+                {'error': ERROR_NO_MESSAGE},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not isinstance(workflow, dict) or not workflow.get('nodes'):
+            return Response(
+                {'error': '请提供当前画布工作流'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            nl_service = get_nl_service_for_request(
+                request, model=model, temperature=temperature, mode=mode
+            )
+            result = nl_service.continue_conversation(
+                [],
+                user_message,
+                current_workflow=workflow,
+                mode=mode,
+            )
+            response_workflow = result.get('workflow')
+            return Response({
+                'message': result.get('message', ''),
+                'workflow': response_workflow,
+                'workflow_json': response_workflow,
+                'suggestions': result.get('suggestions', []),
+                'changes': result.get('changes', []),
+                'intent': result.get('intent', 'modify'),
+                'ready_to_generate': result.get('ready_to_generate', False),
+                'node_guidance': result.get('node_guidance'),
+            })
+        except Exception as e:
+            logger.exception('NL editor apply failed: %s', e)
+            return Response(
+                {'error': '处理请求时遇到了问题，请重试'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
 
 class NLWorkflowStreamView(APIView):
@@ -566,7 +869,7 @@ class NLWorkflowStreamView(APIView):
 
     permission_classes = [IsAuthenticated]
 
-    @method_decorator(ratelimit(key='user', rate='5/m', method='POST', block=True))
+    @method_decorator(ratelimit(key='user', rate=NL_STREAM_RATE, method='POST', block=True))
     def post(self, request):
         """Generate workflow with streaming response."""
         description = request.data.get('description', '')
@@ -576,6 +879,8 @@ class NLWorkflowStreamView(APIView):
         )
         model = request.data.get('model')
         temperature = float(request.data.get('temperature', DEFAULT_TEMPERATURE))
+        existing_workflow = request.data.get('workflow') or request.data.get('workflow_json')
+        mode = request.data.get('mode')
 
         if not description:
             return Response(
@@ -584,7 +889,19 @@ class NLWorkflowStreamView(APIView):
             )
 
         try:
-            nl_service = get_nl_service_for_request(request, model=model, temperature=temperature)
+            has_workflow = (
+                isinstance(existing_workflow, dict)
+                and existing_workflow.get('nodes')
+            )
+            stream_mode = resolve_initial_stream_mode(
+                description,
+                has_workflow=has_workflow,
+                prior_messages=[],
+                explicit_mode=mode,
+            )
+            nl_service = get_nl_service_for_request(
+                request, model=model, temperature=temperature, mode=stream_mode
+            )
             
             # Create session for tracking
             session = NLSession.objects.create(
@@ -593,48 +910,102 @@ class NLWorkflowStreamView(APIView):
                 description=description,
                 status='processing',
                 model_used=model or '',
-                messages=[]
+                messages=[{'role': 'user', 'content': description}],
+                workflow_json=(
+                    existing_workflow
+                    if isinstance(existing_workflow, dict) and existing_workflow.get('nodes')
+                    else {}
+                ),
+                workflow_name=(
+                    (existing_workflow or {}).get('name', name)
+                    if isinstance(existing_workflow, dict) and existing_workflow.get('nodes')
+                    else name
+                ),
             )
             
             def generate_stream():
                 """Generator for streaming response."""
                 try:
-                    # Yield session info
-                    yield f"data: {json.dumps({'type': 'session', 'session_id': str(session.id)}, ensure_ascii=False)}\n\n"
-                    
-                    # Generate workflow with streaming
+                    yield _sse_data({'type': 'session', 'session_id': str(session.id)})
+
+                    has_workflow = (
+                        isinstance(existing_workflow, dict)
+                        and existing_workflow.get('nodes')
+                    )
+
+                    if has_workflow:
+                        for event in _yield_conversation_stream_events(
+                            nl_service,
+                            session,
+                            description,
+                            [],
+                            mode=mode,
+                        ):
+                            yield event
+                        return
+
+                    stream_mode = resolve_initial_stream_mode(
+                        description,
+                        has_workflow=False,
+                        prior_messages=[],
+                        explicit_mode=mode,
+                    )
+
+                    if stream_mode == 'chat':
+                        for event in _yield_conversation_stream_events(
+                            nl_service,
+                            session,
+                            description,
+                            [],
+                            mode=mode,
+                        ):
+                            yield event
+                        return
+
+                    # Generate workflow with streaming from scratch
+                    assistant_saved = False
                     for chunk in nl_service.generate_workflow_streaming(description):
                         if isinstance(chunk, str):
                             chunk_data = json.loads(chunk)
                         else:
                             chunk_data = chunk
-                        
-                        # Format as SSE
-                        yield f"data: {json.dumps(chunk_data, ensure_ascii=False)}\n\n"
-                        
-                        # If we got a workflow, update session
+
+                        yield _sse_data(chunk_data)
+
                         if chunk_data.get('type') == 'workflow':
                             workflow = chunk_data.get('workflow', {})
                             session.workflow_json = workflow
                             session.workflow_name = workflow.get('name', name)
                             session.status = 'completed'
-                            session.messages.append({
-                                'role': 'assistant',
-                                'content': f'已生成工作流: {session.workflow_name}'
-                            })
+                            if not assistant_saved:
+                                session.messages.append({
+                                    'role': 'assistant',
+                                    'content': f'已生成工作流: {session.workflow_name}',
+                                })
+                                assistant_saved = True
+                            session.save()
+                        elif chunk_data.get('type') == 'done':
+                            workflow = chunk_data.get('workflow')
+                            if workflow:
+                                session.workflow_json = workflow
+                                session.workflow_name = workflow.get('name', name)
+                            msg = chunk_data.get('message') or f'已生成工作流: {session.workflow_name}'
+                            if not assistant_saved:
+                                session.messages.append({'role': 'assistant', 'content': msg})
+                                assistant_saved = True
+                            session.status = 'completed'
                             session.save()
                         elif chunk_data.get('type') == 'error':
                             session.status = 'failed'
                             session.error_message = chunk_data.get('error', 'Unknown error')
                             session.save()
-                    
+
                 except Exception as e:
-                    import logging
-                    logging.exception("Streaming generation failed")
+                    logger.exception("Streaming generation failed")
                     session.status = 'failed'
                     session.error_message = str(e)
                     session.save()
-                    yield f"data: {json.dumps({'type': 'error', 'error': str(e)}, ensure_ascii=False)}\n\n"
+                    yield _sse_data({'type': 'error', 'error': str(e)})
             
             response = StreamingHttpResponse(
                 generate_stream(),
@@ -645,10 +1016,9 @@ class NLWorkflowStreamView(APIView):
             return response
             
         except Exception as e:
-            import logging
-            logging.exception("Stream view failed")
+            logger.exception("Stream view failed")
             return Response({
-                'error': str(e)
+                'error': '流式生成时遇到了问题，请重试'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 

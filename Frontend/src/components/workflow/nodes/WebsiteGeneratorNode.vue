@@ -1,6 +1,6 @@
 <template>
   <div
-    class="domain-node web-gen-node"
+    :style="{ '--node-accent': nodeColor }" class="domain-node web-gen-node"
     :class="{ selected, expanded: isExpanded, 'is-running': isRunning, 'is-completed': isCompleted, 'is-failed': isFailed }"
     @click.stop="handleSelect"
   >
@@ -10,16 +10,7 @@
     />
 
     <div class="node-header">
-      <div
-        class="node-type-badge"
-        :style="{ backgroundColor: nodeColor + '22', borderColor: nodeColor }"
-      >
-        <Globe
-          class="badge-icon"
-          :style="{ color: nodeColor }"
-        />
-        <span :style="{ color: nodeColor }">网站生成</span>
-      </div>
+      <NodeTypeBadge :node-type="NODE_TYPE" />
       <button
         class="action-btn"
         @click.stop="toggleExpand"
@@ -33,12 +24,14 @@
 
     <div class="node-name-section">
       <input
+        :id="id ? `node-label-${id}` : undefined"
+        name="node-label"
         v-model="localName"
         class="node-name-input"
         placeholder="节点名称..."
         @blur="handleChange"
         @keydown.enter="handleChange"
-        @click.stop
+        @click.stop="handleSelect"
       >
     </div>
 
@@ -234,7 +227,16 @@
             size="small"
             placeholder="生成的网站输出路径"
             @change="handleChange"
-          />
+          >
+            <template v-if="isDesktop" #append>
+              <el-button size="small" @click="pickOutputDir">
+                <FolderOpen class="btn-icon-inline" />
+              </el-button>
+            </template>
+          </el-input>
+          <p v-if="isDesktop" class="config-hint">
+            将写入你选择的本地文件夹
+          </p>
         </div>
         <div class="config-section">
           <label class="config-label">样式</label>
@@ -274,8 +276,12 @@
 <script setup>
 import { ref, watch, computed } from 'vue'
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
-import { Globe, ChevronDown, Layout, Loader } from 'lucide-vue-next'
+import { Globe, ChevronDown, Layout, Loader, FolderOpen } from 'lucide-vue-next'
 import { useExecutionStore } from '@/stores/execution'
+import NodeTypeBadge from '@/components/workflow/nodes/NodeTypeBadge.vue'
+import { useNodePresentation } from '@/composables/useNodePresentation'
+import { useDesktopRuntime } from '@/composables/useDesktopRuntime'
+
 
 const props = defineProps({
   id: { type: String, default: '' },
@@ -283,12 +289,23 @@ const props = defineProps({
   selected: { type: Boolean, default: false }
 })
 
+const NODE_TYPE = 'website_generator'
+const { nodeColor } = useNodePresentation(NODE_TYPE)
+
 const emit = defineEmits(['select'])
 const { updateNodeData } = useVueFlow()
 const executionStore = useExecutionStore()
+const { isDesktop, selectDirectory } = useDesktopRuntime()
+
+async function pickOutputDir() {
+  const dir = await selectDirectory({ title: '选择网站生成的本地文件夹' })
+  if (dir) {
+    localConfig.value.outputDir = dir
+    handleChange()
+  }
+}
 
 const isExpanded = ref(false)
-const nodeColor = '#8b5cf6'
 
 const localName = ref(props.data.label || '网站生成')
 const localConfig = ref({
@@ -321,8 +338,6 @@ const outputUrl = computed(() => {
   return null
 })
 
-const showPreview = computed(() => isCompleted.value && (previewImage.value || outputUrl.value))
-
 const buildProgress = ref(0)
 let buildInterval = null
 
@@ -350,7 +365,10 @@ watch(() => props.data, (d) => {
   }
 }, { deep: true })
 
-function toggleExpand() { isExpanded.value = !isExpanded.value }
+function toggleExpand() {
+  handleSelect()
+  isExpanded.value = !isExpanded.value
+}
 
 function handleChange() {
   if (props.id) updateNodeData(props.id, { label: localName.value, config: { ...localConfig.value } })
@@ -545,6 +563,8 @@ function handleSelect() {
 .expanded-config { border-top: 1px solid rgba(255, 255, 255, 0.06); padding: 8px 12px 10px; display: flex; flex-direction: column; gap: 10px; }
 .config-section { display: flex; flex-direction: column; gap: 5px; }
 .config-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(255, 255, 255, 0.4); }
+.config-hint { margin: 2px 0 0; font-size: 9px; color: rgba(255, 255, 255, 0.35); }
+.btn-icon-inline { width: 14px; height: 14px; }
 :deep(.el-select), :deep(.el-input), :deep(.el-input-number) { width: 100%; .el-input__wrapper { background: rgba(255, 255, 255, 0.05) !important; border: 1px solid rgba(255, 255, 255, 0.1) !important; box-shadow: none !important; border-radius: 6px; } .el-input__inner { color: var(--node-text, #e5e5e5) !important; font-size: 12px !important; } }
 .expand-enter-active, .expand-leave-active { transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1); overflow: hidden; }
 .expand-enter-from, .expand-leave-to { opacity: 0; max-height: 0; }

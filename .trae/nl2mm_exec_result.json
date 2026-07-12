@@ -1,0 +1,201 @@
+{
+  "id": "e26d0e42-d275-42f5-8bfa-d2e94fb54f24",
+  "workflow": "1af841ac-b6d3-4752-b470-8d2c354ab9ad",
+  "workflow_name": "文生图再生视频工作流",
+  "status": "completed",
+  "status_display": "已完成",
+  "input_data": {
+    "text": "生成一只猫",
+    "prompt": "生成一只猫",
+    "user_input": "生成一只猫"
+  },
+  "output_data": {
+    "duration": null,
+    "ended_at": null,
+    "metadata": {
+      "user_id": 1036,
+      "workflow_id": "1af841ac-b6d3-4752-b470-8d2c354ab9ad",
+      "execution_id": "e26d0e42-d275-42f5-8bfa-d2e94fb54f24"
+    },
+    "variables": {
+      "mode": "image_to_video",
+      "text": "生成一只猫",
+      "count": 1,
+      "input": "生成一只猫",
+      "model": "agnes-video-v2.0",
+      "images": [
+        {
+          "url": "https://platform-outputs.agnes-ai.space/images/t2i/9d3a1d3c5c3a440ebf231d3be3c0cf4d.png"
+        }
+      ],
+      "prompt": "生成一只猫",
+      "result": "https://platform-outputs.agnes-ai.space/videos/agnes-video-v2.0/video_20618927a7d743c08328376fba018cb0.mp4",
+      "status": "completed",
+      "task_id": "task_Xw86Bkyr9FfXadgcFSjvkkXRQUpzpd9L",
+      "duration": 5.0,
+      "provider": "agnes",
+      "video_url": "https://platform-outputs.agnes-ai.space/videos/agnes-video-v2.0/video_81c5bc82ad4547fd83acc8fabf80a28b.mp4",
+      "resolution": "720p",
+      "user_input": "生成一只猫",
+      "input_image": "https://platform-outputs.agnes-ai.space/images/t2i/9d3a1d3c5c3a440ebf231d3be3c0cf4d.png",
+      "接收描述_output": {
+        "text": "生成一只猫",
+        "input": "生成一只猫",
+        "prompt": "生成一只猫",
+        "user_input": "生成一只猫"
+      },
+      "生成图像_output": {
+        "count": 1,
+        "model": "agnes-image-2.1-flash",
+        "images": [
+          {
+            "url": "https://platform-outputs.agnes-ai.space/images/t2i/9d3a1d3c5c3a440ebf231d3be3c0cf4d.png"
+          }
+        ],
+        "provider": "agnes"
+      },
+      "生成视频_output": {
+        "mode": "image_to_video",
+        "model": "agnes-video-v2.0",
+        "prompt": "生成一只猫",
+        "status": "completed",
+        "task_id": "task_Xw86Bkyr9FfXadgcFSjvkkXRQUpzpd9L",
+        "duration": 5.0,
+        "provider": "agnes",
+        "video_url": "https://platform-outputs.agnes-ai.space/videos/agnes-video-v2.0/video_81c5bc82ad4547fd83acc8fabf80a28b.mp4",
+        "resolution": "720p",
+        "input_image": "https://platform-outputs.agnes-ai.space/images/t2i/9d3a1d3c5c3a440ebf231d3be3c0cf4d.png"
+      },
+      "返回视频_output": {
+        "result": "https://platform-outputs.agnes-ai.space/videos/agnes-video-v2.0/video_20618927a7d743c08328376fba018cb0.mp4",
+        "_format": "json",
+        "_display": "https://platform-outputs.agnes-ai.space/videos/agnes-video-v2.0/video_20618927a7d743c08328376fba018cb0.mp4"
+      }
+    },
+    "input_data": {
+      "text": "生成一只猫",
+      "prompt": "生成一只猫",
+      "user_input": "生成一只猫"
+    },
+    "started_at": "2026-07-09T16:15:00.011546",
+    "node_outputs": {
+      "09976a4b-d33b-4eaf-a747-0c952d6bc158": {
+        "mode": "image_to_video",
+        "model": "agnes-video-v2.0",
+        "prompt": "生成一只猫",
+        "status": "completed",
+        "task_id": "task_Xw86Bkyr9FfXadgcFSjvkkXRQUpzpd9L",
+        "duration": 5.0,
+        "provider": "agnes",
+        "video_url": "https://platform-outputs.agnes-ai.space/videos/agnes-video-v2.0/video_81c5bc82ad4547fd83acc8fabf80a28b.mp4",
+        "resolution": "720p",
+        "input_image": "https://platform-outputs.agnes-ai.space/images/t2i/9d3a1d3c5c3a440ebf231d3be3c0cf4d.png"
+      },
+      "27b7f854-35e7-458e-90a0-7502b7406be7": {
+        "count": 1,
+        "model": "agnes-image-2.1-flash",
+        "images": [
+          {
+            "url": "https://platform-outputs.agnes-ai.space/images/t2i/9d3a1d3c5c3a440ebf231d3be3c0cf4d.png"
+          }
+        ],
+        "provider": "agnes"
+      },
+      "36af23ff-9d2f-491a-bd7c-ac288fa11daf": {
+        "result": "https://platform-outputs.agnes-ai.space/videos/agnes-video-v2.0/video_20618927a7d743c08328376fba018cb0.mp4",
+        "_format": "json",
+        "_display": "https://platform-outputs.agnes-ai.space/videos/agnes-video-v2.0/video_20618927a7d743c08328376fba018cb0.mp4"
+      },
+      "a8673905-c26b-4e65-acb7-c2365f9062ee": {
+        "text": "生成一只猫",
+        "input": "生成一只猫",
+        "prompt": "生成一只猫",
+        "user_input": "生成一只猫"
+      }
+    }
+  },
+  "error_message": null,
+  "node_status": {
+    "09976a4b-d33b-4eaf-a747-0c952d6bc158": {
+      "error": null,
+      "output": {
+        "mode": "image_to_video",
+        "model": "agnes-video-v2.0",
+        "prompt": "生成一只猫",
+        "status": "completed",
+        "task_id": "task_Xw86Bkyr9FfXadgcFSjvkkXRQUpzpd9L",
+        "duration": 5.0,
+        "provider": "agnes",
+        "video_url": "https://platform-outputs.agnes-ai.space/videos/agnes-video-v2.0/video_81c5bc82ad4547fd83acc8fabf80a28b.mp4",
+        "resolution": "720p",
+        "input_image": "https://platform-outputs.agnes-ai.space/images/t2i/9d3a1d3c5c3a440ebf231d3be3c0cf4d.png"
+      },
+      "status": "completed",
+      "updated_at": "2026-07-09T08:22:03.125828+00:00"
+    },
+    "27b7f854-35e7-458e-90a0-7502b7406be7": {
+      "error": null,
+      "output": {
+        "count": 1,
+        "model": "agnes-image-2.1-flash",
+        "images": [
+          {
+            "url": "https://platform-outputs.agnes-ai.space/images/t2i/9d3a1d3c5c3a440ebf231d3be3c0cf4d.png"
+          }
+        ],
+        "provider": "agnes"
+      },
+      "status": "completed",
+      "updated_at": "2026-07-09T08:15:10.609179+00:00"
+    },
+    "36af23ff-9d2f-491a-bd7c-ac288fa11daf": {
+      "error": null,
+      "output": {
+        "result": "https://platform-outputs.agnes-ai.space/videos/agnes-video-v2.0/video_20618927a7d743c08328376fba018cb0.mp4",
+        "_format": "json",
+        "_display": "https://platform-outputs.agnes-ai.space/videos/agnes-video-v2.0/video_20618927a7d743c08328376fba018cb0.mp4"
+      },
+      "status": "completed",
+      "updated_at": "2026-07-09T08:22:03.246786+00:00"
+    },
+    "63e2d90e-ae45-45b7-8207-ca1fc3f4d1d0": {
+      "error": null,
+      "output": {},
+      "status": "completed",
+      "updated_at": "2026-07-09T08:15:00.014644+00:00"
+    },
+    "8b84da1c-dbcb-4e4d-bfbd-e58d695f8b09": {
+      "error": null,
+      "output": {},
+      "status": "completed",
+      "updated_at": "2026-07-09T08:22:03.268909+00:00"
+    },
+    "a8673905-c26b-4e65-acb7-c2365f9062ee": {
+      "error": null,
+      "output": {
+        "text": "生成一只猫",
+        "input": "生成一只猫",
+        "prompt": "生成一只猫",
+        "user_input": "生成一只猫"
+      },
+      "status": "completed",
+      "updated_at": "2026-07-09T08:15:00.072353+00:00"
+    }
+  },
+  "node_status_summary": {
+    "total": 6,
+    "pending": 0,
+    "running": 0,
+    "completed": 6,
+    "failed": 0,
+    "skipped": 0
+  },
+  "started_at": "2026-07-09T16:14:59.985796+08:00",
+  "completed_at": "2026-07-09T16:22:03.275996+08:00",
+  "duration": 423.2902,
+  "triggered_by": 1036,
+  "triggered_by_name": "nlwftest",
+  "trigger_type": "manual",
+  "task_id": "b0434991-d024-4879-9ffb-14389a4e9588",
+  "version": 1
+}

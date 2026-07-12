@@ -108,12 +108,33 @@ class GraphAnalyzer:
         hotspots = self.find_hotspots()
         enriched_nodes = self._enrich_nodes(structure.nodes, metrics)
 
+        # 函数节点以特殊 type 标记，合并进前端节点列表
+        func_nodes_as_graph = []
+        for fn in structure.func_nodes:
+            func_nodes_as_graph.append({
+                'id': fn.id,
+                'name': fn.name,
+                'type': 'function',
+                'module': fn.id.split('::')[0] if '::' in fn.id else '',
+                'signature': fn.signature,
+                'lineno': fn.lineno,
+            })
+
+        # 所有节点：文件节点 + 函数节点
+        all_nodes = enriched_nodes + func_nodes_as_graph
+
+        # 所有边：文件间依赖边 + 函数调用边
+        all_edges = (
+            [e.to_dict() for e in structure.edges] +
+            [fe.to_dict() for fe in structure.func_edges]
+        )
+
         return AnalysisResult(
             project_id=project_id,
             project_name=project_name,
             project_path=structure.root_path,
-            nodes=enriched_nodes,
-            edges=[e.to_dict() for e in structure.edges],
+            nodes=all_nodes,
+            edges=all_edges,
             stats=structure.stats,
             cycles=cycles,
             hotspots=hotspots,

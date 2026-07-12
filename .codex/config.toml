@@ -1,0 +1,16 @@
+[mcp_servers.ollama-coder]
+command = "node"
+args = ['C:\Users\18984\.npm-global\node_modules\ollama-mcp\dist\index.js']
+
+[mcp_servers.ollama-coder.env]
+OLLAMA_HOST = "http://localhost:11434"
+
+[mcp_servers.playwright]
+command = "npx"
+args = [
+    "-y",
+    "@playwright/mcp@latest",
+]
+
+[mcp_servers.playwright.env]
+PLAYWRIGHT_HEADLESS = "false"

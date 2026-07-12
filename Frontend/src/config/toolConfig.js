@@ -9,6 +9,7 @@ export const TOOL_LABELS = {
   text_template: '文本模板',
   json_parser: 'JSON 解析',
   datetime: '日期时间',
+  knowledge_base: '知识库检索',
 }
 
 // Get tool label by tool name

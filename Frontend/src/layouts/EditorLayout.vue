@@ -6,9 +6,6 @@
 
 <script setup>
 import { onMounted, onUnmounted } from 'vue'
-import { useAppStore } from '@/stores/app'
-
-const appStore = useAppStore()
 
 onMounted(() => {
   // 编辑器布局下隐藏顶部栏等

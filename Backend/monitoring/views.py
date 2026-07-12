@@ -11,6 +11,8 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 
+from tenants.access import can_view_resource, get_accessible_workflow_queryset
+
 logger = logging.getLogger(__name__)
 
 from .models import ExecutionLog, AlertRule, Alert, Metric, NotificationChannel, Notification
@@ -34,7 +36,7 @@ class ExecutionLogViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self):
         """Get logs for user's workflows."""
         return ExecutionLog.objects.filter(
-            workflow_execution__workflow__owner=self.request.user
+            workflow_execution__workflow__in=get_accessible_workflow_queryset(self.request.user)
         ).select_related('workflow_execution')
 
 
@@ -406,7 +408,8 @@ class AnalyticsViewSet(viewsets.ViewSet):
 
     permission_classes = [IsAuthenticated]
 
-    def list(self, request):
+    @action(detail=False, methods=['get'])
+    def overview(self, request):
         """Get overview analytics."""
         now = timezone.now()
         days = int(request.query_params.get('days', 30))
@@ -645,7 +648,8 @@ class ExecutionStatsViewSet(viewsets.ViewSet):
             'successRate': round(success_rate, 2),
             'periodSuccessRate': round(period_success_rate, 2),
             'successTrend': success_trend,
-            'avgDuration': round(float(avg_duration_seconds or 0), 2),
+            'avgDuration': round(float(avg_duration_seconds or 0) * 1000, 2),
+            'avgDurationMs': round(float(avg_duration_seconds or 0) * 1000, 2),
             'avgDurationSeconds': round(float(avg_duration_seconds or 0), 2),
             'period': days,
             'periodCompleted': period_completed,
@@ -749,13 +753,14 @@ class HealthCheckViewSet(viewsets.ViewSet):
 
         from workflows.models import WorkflowExecution
 
-        recent_executions = WorkflowExecution.objects.filter(
+        base_qs = WorkflowExecution.objects.filter(
             workflow__owner=request.user
-        ).order_by('-started_at')[:10]
+        ).order_by('-started_at')
 
+        recent_executions = base_qs[:10]
         total_recent = recent_executions.count()
-        recent_failed = recent_executions.filter(status='failed').count()
-        recent_completed = recent_executions.filter(status='completed').count()
+        recent_failed = sum(1 for execution in recent_executions if execution.status == 'failed')
+        recent_completed = sum(1 for execution in recent_executions if execution.status == 'completed')
 
         overall_status = 'healthy'
         if total_recent > 0:
@@ -847,7 +852,8 @@ class ResourceUsageViewSet(viewsets.ViewSet):
                     'name': workflow.name,
                     'healthScore': health_score,
                     'successRate': round(success_rate, 1),
-                    'avgDuration': round(avg_duration_seconds, 0),
+                    'avgDuration': round(avg_duration_seconds * 1000, 0) if completed_durations else 0,
+                    'avgDurationMs': round(avg_duration_seconds * 1000, 0) if completed_durations else 0,
                 })
 
         workflows.sort(key=lambda x: x['healthScore'])

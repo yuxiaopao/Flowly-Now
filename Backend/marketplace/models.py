@@ -93,7 +93,7 @@ class TemplateInstall(models.Model):
     user = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
-        related_name='template_installs',
+        related_name='mp_template_installs',
         verbose_name='用户'
     )
     template = models.ForeignKey(
@@ -132,7 +132,7 @@ class TemplateRating(models.Model):
     user = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
-        related_name='template_ratings',
+        related_name='mp_template_ratings',
         verbose_name='用户'
     )
     template = models.ForeignKey(

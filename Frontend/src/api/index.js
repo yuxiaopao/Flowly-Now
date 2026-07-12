@@ -1,6 +1,5 @@
 import axios from 'axios'
 import Cookies from 'js-cookie'
-import { ElMessageBox } from 'element-plus'
 import router from '@/router'
 import { APP_CONFIG, getApiBaseUrl } from '@/config'
 import { reactive } from 'vue'
@@ -67,8 +66,13 @@ api.interceptors.request.use(
       config.headers.Authorization = `Bearer ${token}`
     }
 
-    // 自动转换请求数据: camelCase -> snake_case
-    if (config.data && typeof config.data === 'object') {
+    // FormData / Blob 不做字段转换，并移除默认 JSON Content-Type 以便浏览器设置 boundary
+    if (config.data instanceof FormData || config.data instanceof Blob) {
+      if (config.headers) {
+        delete config.headers['Content-Type']
+      }
+    } else if (config.data && typeof config.data === 'object') {
+      // 自动转换请求数据: camelCase -> snake_case
       config.data = toSnakeCaseKeys(config.data)
     }
 
@@ -96,23 +100,82 @@ function getAppStore() {
   return _appStore
 }
 
-function extractErrorMessage(data) {
-  if (!data || typeof data !== 'object') return null
+function isHtmlErrorPayload(data) {
+  if (typeof data !== 'string') return false
+  const trimmed = data.trimStart().toLowerCase()
+  return trimmed.startsWith('<!doctype') || trimmed.startsWith('<html') || trimmed.includes('<title>page not found')
+}
 
-  // 处理 errors 对象中的具体错误信息
-  if (data.errors && typeof data.errors === 'object') {
-    const messages = []
-    for (const [, value] of Object.entries(data.errors)) {
-      if (Array.isArray(value)) {
-        messages.push(...value)
-      } else if (typeof value === 'string') {
-        messages.push(value)
-      }
-    }
-    if (messages.length > 0) return messages.join('；')
+function extractErrorMessage(data) {
+  if (!data) return null
+  if (typeof data === 'string') {
+    if (isHtmlErrorPayload(data)) return null
+    return data.length > 500 ? `${data.slice(0, 500)}…` : data
   }
 
-  return data.error_message || data.error || data.message || data.detail || null
+  if (typeof data === 'object') {
+    // DRF ValidationError / 登录失败等
+    if (Array.isArray(data.non_field_errors) && data.non_field_errors.length > 0) {
+      return data.non_field_errors.join('；')
+    }
+
+    if (Array.isArray(data.detail) && data.detail.length > 0) {
+      return data.detail.map((item) => (typeof item === 'string' ? item : item?.msg || String(item))).join('；')
+    }
+
+    // 处理 errors 对象中的具体错误信息
+    if (data.errors && typeof data.errors === 'object') {
+      const messages = []
+      for (const [, value] of Object.entries(data.errors)) {
+        if (Array.isArray(value)) {
+          messages.push(...value)
+        } else if (typeof value === 'string') {
+          messages.push(value)
+        }
+      }
+      if (messages.length > 0) return messages.join('；')
+    }
+
+    const direct = data.error_message || data.error || data.message || data.detail
+    if (direct) return typeof direct === 'string' ? direct : JSON.stringify(direct)
+
+    // 字段级校验错误，如 { username: ['该字段是必填项'] }
+    const fieldMessages = []
+    for (const [key, value] of Object.entries(data)) {
+      if (['errors', 'code', 'data'].includes(key)) continue
+      if (Array.isArray(value)) {
+        fieldMessages.push(...value.map((item) => (typeof item === 'string' ? item : String(item))))
+      } else if (typeof value === 'string') {
+        fieldMessages.push(value)
+      }
+    }
+    if (fieldMessages.length > 0) return fieldMessages.join('；')
+  }
+
+  return null
+}
+
+/** 无需登录态的认证接口（401 应展示业务错误，而非「请先登录」） */
+const AUTH_PUBLIC_PATHS = [
+  '/auth/login/',
+  '/auth/register/',
+  '/auth/refresh/',
+  '/auth/password-reset/',
+  '/auth/password-reset/confirm/',
+  '/auth/verify-email/',
+  '/auth/verify-email/resend/',
+]
+
+function isAuthPublicRequest(config) {
+  const url = config?.url || ''
+  return AUTH_PUBLIC_PATHS.some((path) => url.includes(path))
+}
+
+function isAuthPageRoute() {
+  const path = router.currentRoute.value?.path || ''
+  return ['/login', '/register', '/forgot-password', '/reset-password'].some(
+    (authPath) => path === authPath || path.startsWith(`${authPath}/`)
+  )
 }
 
 // =============================================================================
@@ -122,6 +185,10 @@ function extractErrorMessage(data) {
 api.interceptors.response.use(
   (response) => {
     requestState.pending--
+
+    if (response.config?.responseType === 'blob') {
+      return response.data
+    }
 
     let responseData = response.data
 
@@ -149,16 +216,31 @@ api.interceptors.response.use(
     }
 
     if (!response) {
-      getAppStore()?.error('网络连接失败，请检查网络')
+      const retryableMethod = (config?.method || 'get').toLowerCase()
+      const canRetryNetwork = !config?._networkRetry && ['get', 'head', 'options'].includes(retryableMethod)
+
+      if (canRetryNetwork) {
+        config._networkRetry = true
+        await new Promise(resolve => setTimeout(resolve, 800))
+        requestState.pending++
+        return api(config)
+      }
+
+      getAppStore()?.error(
+        error.code === 'ERR_NETWORK' || `${error.message || ''}`.includes('Network Error')
+          ? '无法连接后端服务，请确认 Django 已在 127.0.0.1:8000 启动'
+          : '网络连接失败，请检查网络',
+      )
       return Promise.reject(error)
     }
 
     const status = response.status
     const originalRequest = config
+    const skipErrorToast = Boolean(originalRequest?.skipErrorToast)
     const errorMsg = extractErrorMessage(response.data)
 
     switch (status) {
-      case 400:
+      case 400: {
         const detail = response.data?.detail || response.data?.error || response.data?.message
         if (detail) {
           getAppStore()?.error(`请求参数错误: ${detail}`)
@@ -171,7 +253,14 @@ api.interceptors.response.use(
           }
         }
         break
-      case 401:
+      }
+      case 401: {
+        // 登录/注册等公开认证接口：直接展示后端返回的具体原因
+        if (isAuthPublicRequest(originalRequest)) {
+          getAppStore()?.error(extractErrorMessage(response.data) || '认证失败，请检查输入')
+          break
+        }
+
         // 尝试刷新 Token
         const refreshToken = Cookies.get('refresh_token') || localStorage.getItem('refresh_token')
         if (refreshToken && !originalRequest._retry) {
@@ -181,7 +270,14 @@ api.interceptors.response.use(
               `${APP_CONFIG.apiBaseUrl}${APP_CONFIG.apiPrefix}/auth/refresh/`,
               { refresh: refreshToken }
             )
-            const { access } = res.data
+            let refreshData = res.data
+            if (refreshData && typeof refreshData === 'object' && 'code' in refreshData && 'data' in refreshData) {
+              refreshData = refreshData.data
+            }
+            const access = refreshData?.access
+            if (!access) {
+              throw new Error('refresh response missing access token')
+            }
             Cookies.set('access_token', access, { expires: 1 })
             localStorage.setItem('access_token', access)
             originalRequest.headers.Authorization = `Bearer ${access}`
@@ -192,7 +288,9 @@ api.interceptors.response.use(
             Cookies.remove('refresh_token')
             localStorage.removeItem('access_token')
             localStorage.removeItem('refresh_token')
-            router.push('/login')
+            if (!isAuthPageRoute()) {
+              router.push('/login')
+            }
             getAppStore()?.error('登录已过期，请重新登录')
           }
         } else {
@@ -200,17 +298,24 @@ api.interceptors.response.use(
           Cookies.remove('refresh_token')
           localStorage.removeItem('access_token')
           localStorage.removeItem('refresh_token')
-          router.push('/login')
-          getAppStore()?.error('请先登录')
+          if (!isAuthPageRoute()) {
+            router.push('/login')
+            getAppStore()?.error(extractErrorMessage(response.data) || '请先登录')
+          }
         }
         break
+      }
       case 403:
-        getAppStore()?.error(errorMsg || '没有权限访问此资源')
+        if (!skipErrorToast) {
+          getAppStore()?.error(errorMsg || '没有权限访问此资源')
+        }
         break
       case 404:
-        getAppStore()?.error(errorMsg || '请求的资源不存在')
+        if (!skipErrorToast) {
+          getAppStore()?.error(errorMsg || '请求的资源不存在')
+        }
         break
-      case 422:
+      case 422: {
         // 表单验证错误 - 转换字段名后显示
         const errors = response.data
         if (typeof errors === 'object' && errors !== null) {
@@ -219,6 +324,7 @@ api.interceptors.response.use(
           getAppStore()?.error(messages || '数据验证失败')
         }
         break
+      }
       case 429:
         getAppStore()?.warning('请求过于频繁，请稍后再试')
         break

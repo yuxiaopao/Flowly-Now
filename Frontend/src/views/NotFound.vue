@@ -59,7 +59,7 @@ import AppButton from '@/components/common/AppButton.vue'
 
 .not-found-description {
   font-size: $font-size-base;
-  color: var(--text-primary)-secondary;
+  color: var(--text-secondary);
   margin: 0 0 $spacing-8;
 }
 

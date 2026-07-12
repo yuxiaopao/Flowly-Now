@@ -43,8 +43,39 @@ pip install -r requirements.txt
 cd Backend
 python manage.py migrate
 
-# 运行开发服务器
-python manage.py runserver
+# 运行开发服务器（仅 HTTP，WebSocket 不可用）
+python manage.py runserver 127.0.0.1:8000
+
+# 需要 WebSocket（训练实时进度、工作流执行推送）时使用 Daphne：
+# Windows PowerShell
+#   .\scripts\run_dev_asgi.ps1
+# Linux/macOS
+#   daphne -b 127.0.0.1 -p 8000 config.asgi:application
+#
+# 前端 .env 需配置：VITE_WS_URL=ws://127.0.0.1:8000
+# WebSocket 鉴权：浏览器握手无法带 Authorization 头，前端 getWebSocketUrl() 会自动追加 ?token=<JWT>
+```
+
+### 3.1 演示数据与 API 冒烟
+
+```bash
+cd Backend
+
+# 创建/更新测试账号并写入演示数据
+python scripts/ensure_smoke_test_user.py
+python manage.py seed_demo_data --email=nlwftest@flowly.test
+
+# 需 Daphne 运行中，验证用户端 API + WebSocket（约 60 项）
+python scripts/frontend_user_api_smoke_test.py
+```
+
+默认测试账号：`nlwftest@flowly.test` / `Test123456!`
+
+### 3.2 Celery（异步工作流/YOLO 训练）
+
+```bash
+# Redis 需已启动（6379）
+celery -A config worker -l INFO -P solo
 ```
 
 ### 4. 前端启动
@@ -75,7 +106,7 @@ docker run -d -p 6379:6379 redis:7
 前端使用 Vite 开发服务器，支持热模块替换 (HMR)。
 
 ```
-http://localhost:5173
+http://localhost:5200
 ```
 
 ### 后端热重载

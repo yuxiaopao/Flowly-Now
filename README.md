@@ -1,35 +1,79 @@
-# e-Flowly - AI Agent 工作流编排平台
+# Flowly - AI Agent 工作流编排平台
 
-> 一个功能强大的 AI Agent 工作流编排平台，支持自然语言生成工作流、可视化编辑器、多模态模型集成。
+> 企业级 AI Agent 工作流编排平台，支持自然语言生成工作流、可视化编辑器、多模态模型集成、桌面端 GPU 训练与平台级管理后台。
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.12+](https://img.shields.io/badge/Python-3.12+-green.svg)](https://www.python.org/)
+[![Vue.js 3](https://img.shields.io/badge/Vue-3-42b883.svg)](https://vuejs.org/)
+[![Django 5.x](https://img.shields.io/badge/Django-5.x-red.svg)](https://www.djangoproject.com/)
 
 ---
 
 ## 目录
 
 - [项目概述](#项目概述)
+- [核心特性](#核心特性)
 - [系统架构](#系统架构)
 - [技术栈](#技术栈)
-- [核心功能](#核心功能)
+- [管理后台](#管理后台)
+- [NL to Workflow 工作原理](#nl-to-workflow-工作原理)
+- [多 Agent 协作系统](#多-agent-协作系统)
 - [项目结构](#项目结构)
 - [快速开始](#快速开始)
+- [核心模块详解](#核心模块详解)
 - [API 接口](#api-接口)
 - [前端路由](#前端路由)
 - [数据库模型](#数据库模型)
 - [环境变量](#环境变量)
-- [部署架构](#部署架构)
+- [部署与基础设施](#部署与基础设施)
+- [测试体系](#测试体系)
+- [文档索引](#文档索引)
+- [贡献指南](#贡献指南)
+- [License](#license)
 
 ---
 
 ## 项目概述
 
-**e-Flowly** 是一个企业级 AI Agent 工作流编排平台，核心特性包括：
+**Flowly** 是一个企业级 AI Agent 工作流编排平台，旨在降低 AI 工作流的创建门槛，让用户通过自然语言即可快速构建复杂的 AI 工作流。
 
-- **自然语言生成工作流**：通过自然语言描述自动生成工作流
-- **可视化工作流编辑器**：基于 Vue Flow 的拖拽式编辑器
-- **多模态模型支持**：集成 LLM、图像生成、视频生成、音频处理等多种 AI 能力
-- **RAG 知识库**：支持向量检索增强生成
-- **团队协作**：多租户、权限管理、模板市场
-- **模型训练**：支持自定义模型训练流程
+平台核心围绕两大能力构建：**自然语言生成工作流**（NL to Workflow）和**可视化工作流编辑**，结合多模型网关、多租户协作、RAG 知识库、模型训练、网站生成器以及**三层管理后台**等企业级功能，适用于问答机器人、数据处理流水线、内容生成系统、智能客服、ML 站点工厂等多种业务场景。
+
+---
+
+## 核心特性
+
+### 自然语言生成工作流
+
+通过自然语言描述，自动解析用户意图并生成完整的工作流定义（DAG 结构）。系统支持多轮对话修改、流式响应、DAG 验证，覆盖问答机器人、数据处理、翻译、内容生成等 7 种工作流类型。
+
+### 可视化工作流编辑器
+
+基于 Vue Flow 构建的拖拽式编辑器，支持 20+ 节点类型（LLM、条件分支、代码执行、工具调用、邮件、网页抓取、YOLO 训练等），提供版本控制、历史记录和工作流对比功能。
+
+### 多 Agent 协作系统
+
+基于 ReAct 模式实现的多 Agent 编排，支持 Planner（规划）、Executor（执行）、Critic（评审）、Reporter（报告）、Coordinator（协调）等多种角色，通过消息队列实现 Agent 间协作。
+
+### AI 模型网关
+
+统一的 AI 模型接入层，支持 OpenAI、Anthropic Claude、Ollama、DashScope 等多模型，通过 `ProviderRegistry` 注册机制灵活扩展，内置 Token 用量统计和成本估算。
+
+### RAG 知识库
+
+支持 Qdrant、Milvus、Chroma、Pinecone 等主流向量数据库，提供文档上传、分块策略、语义检索全链路能力。
+
+### 桌面客户端（Desktop）
+
+Electron 桌面端加载与 Web 相同的 Frontend UI，并通过本地 WebSocket Agent 提供 GPU 训练能力（YOLO / ultralytics），适合离线训练与本地算力场景。
+
+### 企业级功能
+
+- **多租户隔离**：基于 Tenant / Workspace 的资源隔离与成员管理
+- **权限体系**：RBAC 角色权限控制，精确到接口级别的权限配置
+- **工作流模板市场**：用户可发布、分享、复用工作流模板
+- **完整执行链路**：支持手动、定时、Webhook、API 多种触发方式
+- **平台管理后台**：Jazzmin 美化 Admin + REST Admin API + Vue 管理页
 
 ---
 
@@ -38,288 +82,400 @@
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                                 用户层                                       │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐       │
-│  │   Web UI    │  │  Admin UI   │  │  API Client │  │   CLI       │       │
-│  │  (Vue.js)   │  │ (Jazzmin)   │  │   (REST)    │  │             │       │
-│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘  └─────────────┘       │
-└─────────┼────────────────┼────────────────┼─────────────────────────────────┘
-          │                │                │
-          ▼                ▼                ▼
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐         │
+│  │   Web UI    │  │  Admin UI   │  │  Desktop    │  │  API Client │         │
+│  │  (Vue 3)    │  │  (Jazzmin + │  │ (Electron)  │  │   (REST)    │         │
+│  │  :5200      │  │  Vue /admin)│  │             │  │             │         │
+│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘         │
+└─────────┼────────────────┼────────────────┼────────────────┼────────────────┘
+          │                  │                │                │
+          ▼                  ▼                ▼                ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                              API 网关层                                      │
-│  ┌─────────────────────────────────────────────────────────────────────┐  │
-│  │                        Django REST Framework                          │  │
-│  │  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐      │  │
-│  │  │ Workflow│ │  Agent  │ │ NL→WF   │ │  RAG    │ │ Gateway │      │  │
-│  │  │  APIs   │ │  APIs   │ │  APIs   │ │  APIs   │ │  APIs   │      │  │
-│  │  └─────────┘ └─────────┘ └─────────┘ └─────────┘ └─────────┘      │  │
-│  └─────────────────────────────────────────────────────────────────────┘  │
-│                              │ ASGI (Daphne)                                │
-└──────────────────────────────┼─────────────────────────────────────────────┘
-                               │
-          ┌────────────────────┼────────────────────┐
-          │                    │                    │
-          ▼                    ▼                    ▼
-┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐
-│     MySQL       │  │  PostgreSQL     │  │     Redis       │
-│  (主数据库)      │  │ (+pgvector)     │  │  (缓存/队列)     │
-│   Port: 3306    │  │   Port: 5432    │  │   Port: 6379    │
-└─────────────────┘  └─────────────────┘  └─────────────────┘
-          │                    │                    │
-          │                    │                    ▼
-          │                    │            ┌─────────────────┐
-          │                    │            │  Celery Worker  │
-          │                    │            │  (异步任务)       │
-          │                    │            └─────────────────┘
-          │                    │
-          │                    ▼
-          │            ┌─────────────────┐
-          │            │  LLM Provider   │
-          │            │  (OpenAI/Ollama)│
-          │            └─────────────────┘
-          │                    │
-          ▼                    ▼
-┌─────────────────────────────────────────────────────────────┐
-│                     AI 能力层                                │
-│  ┌───────────┐ ┌───────────┐ ┌───────────┐ ┌───────────┐  │
-│  │  LLM      │ │  Image    │ │  Video    │ │  Audio    │  │
-│  │  生成     │ │  生成      │ │  生成      │ │  处理     │  │
-│  └───────────┘ └───────────┘ └───────────┘ └───────────┘  │
-│  ┌───────────┐ ┌───────────┐ ┌───────────┐ ┌───────────┐  │
-│  │  RAG      │ │  知识库   │ │ 代码执行   │ │  工作流   │  │
-│  │  检索     │ │  管理     │ │ (沙箱)     │ │  执行器   │  │
-│  └───────────┘ └───────────┘ └───────────┘ └───────────┘  │
-└─────────────────────────────────────────────────────────────┘
+│                            API 网关层                                        │
+│              Django REST Framework + ASGI (Daphne)                           │
+│  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐  │
+│  │Workflow │ │  Agent  │ │ NL→WF   │ │  RAG    │ │ Gateway │ │  Admin  │  │
+│  │  APIs   │ │  APIs   │ │  APIs   │ │  APIs   │ │  APIs   │ │  APIs   │  │
+│  └─────────┘ └─────────┘ └─────────┘ └─────────┘ └─────────┘ └─────────┘  │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                   │
+          ┌────────────────────────┼────────────────────────┐
+          │                        │                        │
+          ▼                        ▼                        ▼
+   ┌─────────────┐        ┌─────────────┐         ┌─────────────┐
+   │    MySQL    │        │ PostgreSQL  │         │    Redis    │
+   │  (主数据库)  │        │ (pgvector,  │         │ (缓存/队列)  │
+   │             │        │  可选向量)   │         │             │
+   └─────────────┘        └─────────────┘         └──────┬──────┘
+          │                      │                       │
+          │                      │                       ▼
+          │                      │               ┌─────────────┐
+          │                      │               │ Celery      │
+          │                      │               │  Worker     │
+          │                      │               └─────────────┘
+          │                      │
+          └──────────┬───────────┘
+                     │
+                     ▼
+            ┌─────────────┐
+            │ AI Provider │
+            │ (OpenAI /   │
+            │  Claude /   │
+            │  Ollama)    │
+            └─────────────┘
 ```
 
 ---
 
 ## 技术栈
 
-### 后端
+### 后端技术
 
 | 类别 | 技术 | 说明 |
 |------|------|------|
-| 框架 | Django 5.x + Django REST Framework | Web 框架 |
-| 异步 | Channels + Daphne | WebSocket 支持 |
+| Web 框架 | Django 5.x + Django REST Framework | 高性能 REST API |
+| 管理后台 | Jazzmin + 自定义 FlowlyAdminSite | 美化 Django Admin |
+| 异步通信 | Channels + Daphne | WebSocket + ASGI 支持 |
 | 任务队列 | Celery + Redis | 异步任务处理 |
-| AI | LangChain + LangGraph | LLM 编排 |
-| 向量存储 | pgvector (PostgreSQL) | 向量检索 |
-| 主数据库 | MySQL 8.0 | 业务数据 |
-| 缓存 | Redis 7 | 会话/缓存 |
+| AI 编排 | LangChain + LangGraph | LLM 编排与 Agent 构建 |
+| 主数据库 | MySQL 8.0 | 业务数据持久化 |
+| 向量存储 | PostgreSQL + pgvector / Qdrant | 可选向量检索 |
+| 缓存层 | Redis 7 | 会话缓存 + 消息队列 |
+| API 文档 | drf-spectacular | OpenAPI 3.0 自动生成 |
 
-### 前端
+### 前端技术
 
 | 类别 | 技术 | 说明 |
 |------|------|------|
-| 框架 | Vue 3 + Composition API | UI 框架 |
-| 路由 | Vue Router 4 | 页面路由 |
-| 状态管理 | Pinia | 状态管理 |
-| UI 组件 | Element Plus | UI 组件库 |
-| 工作流 | Vue Flow | 可视化编辑器 |
-| 图表 | ECharts | 数据可视化 |
-| 构建 | Vite 5 | 开发/构建 |
+| UI 框架 | Vue 3 + Composition API | 现代化响应式框架 |
+| 路由管理 | Vue Router 4 | SPA 路由控制 |
+| 状态管理 | Pinia | 轻量级状态管理 |
+| UI 组件库 | Element Plus | 企业级组件库 |
+| 工作流编辑器 | Vue Flow | 拖拽式 DAG 编辑器 |
+| 数据可视化 | ECharts | 图表与监控面板 |
+| 构建工具 | Vite 5 | 开发端口 **5200**（`strictPort: true`） |
+| HTTP 客户端 | Axios | 请求拦截与统一封装 |
 
 ### 基础设施
 
 | 类别 | 技术 | 说明 |
 |------|------|------|
-| 容器化 | Docker + Docker Compose | 容器编排 |
-| 反向代理 | Nginx | 负载均衡 |
-| API 文档 | drf-spectacular | OpenAPI 文档 |
+| 桌面端 | Electron | 本地 GPU 训练 Agent |
+| 容器化 | Docker（可选） | 当前仓库提供 Qdrant 开发 compose |
+| 反向代理 | Nginx | 生产部署参考（见 `docker/`） |
+| 追踪监控 | LangSmith | LLM 调用追踪（可选） |
 
 ---
 
-## 核心功能
+## 管理后台
 
-### 1. 工作流管理
-
-- 可视化拖拽式工作流编辑器
-- 支持 20+ 种节点类型
-- 版本控制与历史记录
-- 工作流对比与差异分析
-- 触发器配置（定时、Webhook、API）
-
-### 2. 自然语言生成 (NL to Workflow)
+Flowly 提供**三层管理能力**，覆盖平台运营、系统配置与运维监控：
 
 ```
-用户输入 ──► LLM 解析 ──► 工作流生成 ──► 可视化预览 ──► 编辑确认
-              │                          │
-              ▼                          ▼
-         意图分析                   JSON 结构
-         节点建议                   错误修复
+┌─────────────────────────────────────────────────────────────────┐
+│                     管理后台三层架构                              │
+├─────────────────────────────────────────────────────────────────┤
+│  ① Django Admin (Jazzmin)     http://localhost:8000/admin/      │
+│     完整平台管理 · 模型 CRUD · 仪表盘 · 配置中心 · 功能开关      │
+├─────────────────────────────────────────────────────────────────┤
+│  ② Admin REST API             http://localhost:8000/api/v1/admin/ │
+│     超级用户 Token 认证 · 程序化运维 · 前端管理页数据源          │
+├─────────────────────────────────────────────────────────────────┤
+│  ③ Vue 管理页（实验性）        http://localhost:5200/admin        │
+│     部分功能已对接 API · 告警规则等为占位实现                     │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-### 3. Agent 管理
+### ① Django Admin（推荐，功能最全）
 
-- 多模型支持（OpenAI、Ollama、本地模型）
-- Prompt 模板管理
-- Agent 调试器
-- 工具绑定与配置
+基于 **Jazzmin** 美化主题 + 自定义 `FlowlyAdminSite`，是日常平台管理的主入口。
 
-### 4. RAG 知识库
+| 访问地址 | 说明 |
+|----------|------|
+| `http://localhost:8000/admin/` | 管理后台首页（欢迎页） |
+| `/admin/flowly/` | 运营仪表盘（用户/工作流/执行统计） |
+| `/admin/flowly/settings/` | 平台配置中心（9 大模块） |
+| `/admin/flowly/features/` | 动态功能开关面板 |
+| `/admin/flowly/ai-models/` | AI 模型与 Provider 管理 |
+| `/admin/flowly/audit/` | 审计日志面板 |
+| `/admin/flowly/system/` | 系统健康状态面板 |
 
-- 多集合管理
-- 向量存储配置
-- 文档上传与处理
-- 语义检索
+**Django Admin 可管理的业务模型包括：**
 
-### 5. 数据集管理
+- 用户与权限（`users`）
+- 租户与成员（`tenants`）
+- 工作流 / 节点 / 执行记录（`workflows`）
+- Agent 与对话（`agents`）
+- AI 网关与 API Key（`gateway`）
+- RAG 知识库（`rag`）
+- 模板与市场（`templates` / `marketplace`）
+- 平台配置模型（`admin` 应用）
 
-- 数据集上传与管理
-- 数据标注工作台
-- 数据增强任务
-- 数据集推荐
+**平台配置模型（`Backend/admin/models.py`）：**
 
-### 6. 模型训练
+| 模型 | 说明 |
+|------|------|
+| `SystemSetting` | 键值型全局系统设置 |
+| `LegalDocument` | 服务条款 / 隐私政策 / 登录协议（版本化） |
+| `UserTermsAcceptance` | 用户条款同意记录 |
+| `FeatureVisibilityRule` | 按全局/角色/用户组的功能可见性规则 |
+| `GatewayRouteRule` | API 网关路由与限流规则 |
+| `PaymentProviderConfig` | Stripe / 支付宝 / 微信 / PayPal 配置 |
+| `EmailSendLog` | 邮件发送审计日志 |
+| `BackupRecord` | 数据备份记录 |
 
-- 训练任务管理
-- 训练进度监控
-- 模型权重管理
-- 训练环境配置
+**9 大配置模块**（`admin/constants.py`）：
 
-### 7. 团队与权限
+`general` · `terms` · `features` · `security` · `user_defaults` · `gateway` · `payment` · `email` · `backup`
 
-- 多租户支持
-- 角色权限管理
-- API Key 管理
-- 团队协作
+### ② Admin REST API
+
+前缀：`/api/v1/admin/`，**需要超级用户权限**（`is_superuser`）。
+
+**认证方式：** `Authorization: Token <token>`
+
+| 分类 | 端点 | 能力 |
+|------|------|------|
+| 用户管理 | `GET/POST/PATCH/DELETE /users/` | 用户 CRUD |
+| | `POST /users/{id}/reset-password/` | 重置密码 |
+| 租户管理 | `CRUD /tenants/` | 租户全生命周期 |
+| 资源只读 | `GET /workflows/`、`GET /agents/` | 工作流与 Agent 列表 |
+| API Key | `GET /api-keys/`、`POST /api-keys/{id}/revoke/` | 网关 Key 管理 |
+| 法律文档 | `CRUD /legal-documents/` | 条款版本管理 |
+| 条款记录 | `GET /terms-acceptances/` | 用户同意记录 |
+| 功能可见性 | `CRUD /feature-visibility/` | 功能开关规则 |
+| 网关路由 | `CRUD /gateway-routes/` | 路由与限流 |
+| 支付配置 | `CRUD /payment-providers/` | 支付渠道 |
+| 邮件 | `GET /email-logs/`、`POST /email/test/` | 邮件日志与测试 |
+| 备份 | `GET/POST /backup/`、`GET /backup-records/{id}/download/` | 创建/下载/删除备份 |
+| 系统 | `GET /usage/`、`GET /health/` | 用量与健康检查 |
+| 设置 | `GET/PATCH /settings/` | 扁平系统设置 |
+| | `GET/PATCH /settings/modules/{module}/` | 按模块读写配置 |
+| 运维 | `GET /logs/`、`POST /cache/clear/` | 审计日志、清缓存 |
+
+**公开配置接口**（无需管理员权限，供前端运行时读取）：
+
+| 端点 | 说明 |
+|------|------|
+| `GET /api/v1/public/site-config/` | 站点信息、认证开关、条款版本、功能可见性、支付配置 |
+| `POST /api/v1/public/auth-assistant/chat/` | 登录页 AI 助手对话 |
+
+### ③ Vue 管理页（实验性）
+
+路由：`http://localhost:5200/admin`
+
+| Tab | 状态 |
+|-----|------|
+| 系统概览 | 已对接（健康检查、用量统计、清缓存、备份） |
+| 用户管理 | 部分对接（列表/删除；创建/编辑待完善） |
+| 租户管理 | 部分对接 |
+| 系统配置 | 部分对接（通用/API/邮件子集） |
+| 告警规则 | 占位数据，未接后端 |
+| 操作日志 | 已对接审计日志 API |
+
+> **权限说明：** Vue 管理页要求 `is_staff || is_superuser`；Admin REST API 要求 `is_superuser`。Staff 用户可进入 Vue 页面，但部分 API 调用会返回 403。
+
+### 管理后台初始化
+
+```bash
+cd Backend
+
+# 1. 数据库迁移
+python manage.py migrate
+
+# 2. 创建超级用户（Django Admin 登录账号）
+python manage.py createsuperuser
+
+# 3. 种子数据：默认法律文档（服务条款、隐私政策、登录协议）
+python manage.py seed_platform_config
+
+# 4. 可选：演示数据与冒烟测试账号
+python scripts/ensure_smoke_test_user.py
+python manage.py seed_demo_data --email=nlwftest@flowly.test
+
+# 5. 启动后端（WebSocket 场景用 Daphne）
+python manage.py runserver 127.0.0.1:8000
+# 或
+daphne -b 127.0.0.1 -p 8000 config.asgi:application
+```
+
+默认冒烟测试账号：`nlwftest@flowly.test` / `Test123456!`
+
+### 管理后台相关代码
+
+| 路径 | 说明 |
+|------|------|
+| `Backend/admin/` | Admin 应用（模型、REST API、配置服务） |
+| `Backend/config/admin_site.py` | 自定义 FlowlyAdminSite 与面板路由 |
+| `Backend/config/settings.py` | Jazzmin 主题与 Admin 配置 |
+| `Backend/templates/admin/` | Admin 自定义模板 |
+| `Backend/admin_static/` | Admin 自定义 CSS/JS |
+| `Frontend/src/views/admin/Index.vue` | Vue 管理页 |
+| `Frontend/src/api/admin.js` | Admin API 客户端 |
+| `Docs/admin-ui-optimization/` | Admin UI 优化专项文档 |
+
+---
+
+## NL to Workflow 工作原理
+
+NL to Workflow 是 e-Flowly 的核心能力，将自然语言描述转换为可执行的工作流定义。流程分为以下阶段：
+
+### 第一阶段：意图识别与分类
+
+系统分析用户输入，识别操作意图（创建/修改/删除）和工作流类型。系统支持 7 种工作流域分类：问答机器人、数据处理、翻译、内容生成、工作流编排、自动化流程和 Agent。
+
+### 第二阶段：Prompt 组装
+
+根据识别出的域类型，选择对应的专业 Prompt 模板，注入 Few-shot 示例和格式说明，构建完整的 LLM 上下文。
+
+### 第三阶段：LLM 调用
+
+通过 ProviderRegistry 统一路由到配置的 AI 模型（OpenAI GPT-4、Claude、Ollama 等），支持 SSE 流式输出，实时返回生成进度。
+
+### 第四阶段：双模解析
+
+采用双重解析策略保证鲁棒性：
+
+- **主模式**：PydanticOutputParser 结构化解析，直接映射到工作流 Schema
+- **降级模式**：正则表达式兜底提取，在 LLM 输出格式偏离时启用
+
+解析后进行字段归一化，自动填充默认节点参数。
+
+### 第五阶段：DAG 验证
+
+生成的工作流 JSON 必须通过严格的 DAG 校验：
+
+- **循环检测**：深度优先搜索确保无环
+- **连通性检查**：所有节点可达
+- **多起点检测**：工作流必须恰好有一个 Start 节点
+- **成本估算**：评估执行所需 Token 和费用
+
+```
+用户输入（自然语言）
+        │
+        ▼
+┌───────────────────┐
+│  意图识别与分类    │  ──►  域类型判定（7 种工作流域）
+└─────────┬─────────┘
+          │
+          ▼
+┌───────────────────┐
+│  Prompt 组装      │  ──►  领域模板 + Few-shot + 格式说明
+└─────────┬─────────┘
+          │
+          ▼
+┌───────────────────┐
+│  LLM 调用         │  ──►  ProviderRegistry 路由 → SSE 流式输出
+└─────────┬─────────┘
+          │
+          ▼
+┌───────────────────┐
+│  双模解析         │  ──►  Pydantic 解析 + Regex 降级
+└─────────┬─────────┘
+          │
+          ▼
+┌───────────────────┐
+│  DAG 验证         │  ──►  循环检测 + 连通性 + 成本估算
+└─────────┬─────────┘
+          │
+          ▼
+   工作流 JSON 输出
+```
+
+---
+
+## 多 Agent 协作系统
+
+e-Flowly 实现了基于 ReAct（Reasoning + Acting）模式的多 Agent 协作框架。各 Agent 角色定义清晰，通过消息队列实现异步通信：
+
+| Agent 角色 | 职责 | 核心能力 |
+|-----------|------|---------|
+| **Planner** | 任务分解与规划 | 意图分解、执行计划编排 |
+| **Executor** | 任务执行与工具调用 | 工具绑定、ReAct 循环 |
+| **Critic** | 输出评审与反馈 | 结果校验、质量评估 |
+| **Reporter** | 结果综合与报告生成 | 数据汇总、格式输出 |
+| **Coordinator** | 全局协调与调度 | Agent 编排、状态同步 |
+
+Agent 执行引擎支持：
+
+- 单步调试（Step-through debugger）
+- 中断与恢复执行
+- 执行路径可视化
+- 工具调用日志追踪
 
 ---
 
 ## 项目结构
 
 ```
-e-Flowly-now/
-├── Backend/                          # Django 后端
-│   ├── config/                       # 项目配置
-│   │   ├── settings.py              # Django 设置
-│   │   ├── urls.py                  # 根路由
-│   │   ├── asgi.py                  # ASGI 配置
-│   │   ├── wsgi.py                 # WSGI 配置
-│   │   └── constants.py             # 常量定义
+Flowly-now/
+├── Backend/                              # Django 后端
+│   ├── config/                           # 项目配置
+│   │   ├── settings.py                  # Django 设置（含 Jazzmin）
+│   │   ├── urls.py                      # 根路由
+│   │   ├── admin_site.py                # 自定义 FlowlyAdminSite
+│   │   ├── asgi.py / wsgi.py            # ASGI / WSGI
+│   │   └── constants.py                 # 全局常量
 │   │
-│   ├── core/                        # 核心模块
-│   │   ├── models.py               # 通用模型
-│   │   ├── views/                  # 通用视图
-│   │   └── serializers/            # 序列化器
+│   ├── admin/                            # ★ 平台管理后台模块
+│   │   ├── models.py                    # 系统设置、法律文档、备份等
+│   │   ├── views.py                     # Admin REST API
+│   │   ├── module_views.py              # 模块化配置 + 公开站点配置
+│   │   ├── services/config_service.py   # 配置校验与缓存
+│   │   └── management/commands/
+│   │       └── seed_platform_config.py  # 法律文档种子数据
 │   │
-│   ├── users/                       # 用户认证
-│   │   ├── models.py               # 用户模型
-│   │   ├── views.py               # 认证视图
-│   │   └── urls.py                # 路由
-│   │
-│   ├── workflows/                  # 工作流模块
-│   │   ├── models.py              # 工作流/节点/边模型
-│   │   ├── views.py              # API 视图
-│   │   ├── services/             # 业务逻辑
-│   │   │   ├── langgraph_executor.py   # LangGraph 执行器
-│   │   │   └── langchain_service.py    # LangChain 服务
-│   │   └── urls.py
-│   │
-│   ├── nl_to_workflow/            # 自然语言生成工作流
-│   │   ├── services.py           # NL 处理服务
-│   │   ├── output_parser.py     # 输出解析
-│   │   ├── recommender.py        # 模板推荐
-│   │   ├── vector_store.py       # 向量存储
-│   │   ├── memory.py             # 会话记忆
-│   │   ├── prompts.py            # Prompt 模板
-│   │   ├── constants.py          # 常量配置
-│   │   └── urls.py
-│   │
-│   ├── agents/                     # Agent 管理
-│   ├── datasets/                   # 数据集管理
-│   ├── rag/                       # RAG 知识库
-│   ├── gateway/                   # AI 网关（多模型）
-│   │   └── providers/            # 模型提供者
-│   ├── training/                  # 模型训练
-│   ├── evaluation/                # 评估模块
-│   ├── augmentation/             # 数据增强
-│   ├── annotations/               # 标注工具
-│   ├── prompts/                   # Prompt 模板
-│   ├── templates/                 # 工作流模板
-│   ├── marketplace/               # 模板市场
-│   ├── tenants/                   # 多租户
-│   ├── billing/                   # 计费管理
-│   ├── integrations/              # 第三方集成
-│   ├── branding/                  # 品牌定制
-│   ├── monitoring/                # 监控中心
-│   ├── features/                  # 特性开关
-│   ├── reports/                   # 报表
-│   ├── website_generator/         # 网站生成器
-│   ├── dataset_recommend/         # 数据集推荐
-│   ├── admin/                     # 自定义 Admin
-│   ├── utils/                     # 工具函数
-│   ├── prompts/                   # Prompt 库
-│   ├── scripts/                   # 脚本
-│   ├── logs/                      # 日志
-│   └── requirements.txt           # Python 依赖
+│   ├── users/                            # 用户认证（注册/登录/Token）
+│   ├── workflows/                        # 工作流引擎与节点执行
+│   ├── nl_to_workflow/                   # 自然语言生成工作流
+│   ├── agents/                           # Agent 管理与多 Agent 协作
+│   ├── gateway/                          # AI 模型网关
+│   ├── rag/                              # RAG 知识库
+│   ├── tenants/                          # 多租户
+│   ├── marketplace/                      # 模板市场
+│   ├── templates/                        # 工作流模板
+│   ├── monitoring/                       # 监控与告警
+│   ├── training/                         # 模型训练（YOLO 等）
+│   ├── website_generator/                # ML 站点工厂
+│   ├── datasets/                         # 数据集管理
+│   ├── annotations/                      # 数据标注
+│   ├── augmentation/                     # 数据增强
+│   ├── billing/                          # 计费
+│   ├── branding/                         # 品牌定制
+│   ├── features/                         # 动态功能开关
+│   ├── core/                             # 通知、审计、登录历史
+│   ├── scripts/                          # E2E 测试与管理脚本
+│   ├── templates/admin/                  # Admin 自定义模板
+│   ├── admin_static/                     # Admin 静态资源
+│   └── requirements.txt
 │
-├── Frontend/                       # Vue 3 前端
+├── Frontend/                             # Vue 3 前端（端口 5200）
 │   ├── src/
-│   │   ├── api/                  # API 封装
-│   │   ├── assets/               # 静态资源
-│   │   ├── components/           # 公共组件
-│   │   │   ├── common/           # 通用组件
-│   │   │   ├── workflow/        # 工作流组件
-│   │   │   ├── editor/          # 编辑器组件
-│   │   │   └── layout/          # 布局组件
-│   │   ├── composables/          # 组合式函数
-│   │   ├── config/               # 配置
-│   │   ├── layouts/              # 页面布局
-│   │   ├── router/               # 路由配置
-│   │   │   ├── index.js         # 路由实例
-│   │   │   └── routes.js        # 路由定义
-│   │   ├── stores/               # Pinia 状态
-│   │   │   ├── auth.js          # 认证状态
-│   │   │   ├── workflow.js      # 工作流状态
-│   │   │   └── nlWorkflow.js    # NL 生成状态
-│   │   ├── types/                # TypeScript 类型
-│   │   ├── utils/                # 工具函数
-│   │   └── views/                # 页面视图
-│   │       ├── auth/             # 认证页面
-│   │       ├── dashboard/        # 仪表盘
-│   │       ├── workflow/         # 工作流
-│   │       ├── nl-workflow/      # NL 生成
-│   │       ├── agent/            # Agent
-│   │       ├── dataset/          # 数据集
-│   │       ├── knowledge/        # 知识库
-│   │       ├── prompt/           # Prompt
-│   │       ├── model/            # 模型
-│   │       ├── vector-store/     # 向量存储
-│   │       ├── training/         # 训练
-│   │       ├── execution/        # 执行历史
-│   │       ├── marketplace/      # 市场
-│   │       ├── monitoring/       # 监控
-│   │       ├── analytics/       # 分析
-│   │       ├── admin/           # 管理
-│   │       ├── team/            # 团队
-│   │       ├── settings/         # 设置
-│   │       └── api-explorer/    # API 测试
-│   ├── public/                   # 公共资源
-│   ├── tests/                    # 测试
-│   ├── package.json              # Node 依赖
-│   └── vite.config.js           # Vite 配置
+│   │   ├── api/                         # API 封装（含 admin.js）
+│   │   ├── components/                  # 组件（workflow、auth 等）
+│   │   ├── composables/                 # 组合式函数
+│   │   ├── router/                      # 路由配置
+│   │   ├── stores/                      # Pinia 状态
+│   │   └── views/                       # 页面视图
+│   │       ├── admin/                   # Vue 管理页
+│   │       ├── workflow/                # 工作流
+│   │       ├── agent/                   # Agent
+│   │       └── ...
+│   └── vite.config.js                   # 开发端口 5200
 │
-├── docker/                        # Docker 配置
-│   ├── Dockerfile.backend
-│   ├── Dockerfile.frontend
-│   ├── Dockerfile.nginx
-│   └── nginx/
-│       └── conf.d/
+├── Desktop/                              # Electron 桌面客户端
+│   ├── main.js                          # 主进程
+│   ├── preload.js                       # 预加载脚本
+│   ├── renderer/                        # 打包后的 Frontend SPA
+│   └── training-scripts/                # 本地 GPU 训练脚本
 │
-├── tests/                        # 测试
-│   ├── backend/
-│   ├── frontend/
-│   ├── e2e/
-│   └── nl_workflow/
-│
-├── Scripts/                      # 工具脚本
-├── Docs/                        # 文档
-├── .env.example                 # 环境变量示例
-├── docker-compose.yml           # Docker Compose
-├── requirements.txt            # Python 依赖
-└── README.md                   # 本文件
+├── docker/                               # Dockerfile 与 Nginx 配置
+├── docker-compose.dev.yml                # 开发基础设施（Qdrant）
+├── tests/                                # 测试套件
+├── Docs/                                 # 项目文档中心
+├── Scripts/                              # 工具脚本
+├── .env.example                          # 环境变量模板
+└── README.md                             # 本文件
 ```
 
 ---
@@ -328,75 +484,39 @@ e-Flowly-now/
 
 ### 前置要求
 
-- Python 3.12+
-- Node.js 18+
-- MySQL 8.0
-- PostgreSQL 16 + pgvector
-- Redis 7
-- Docker & Docker Compose（可选）
+| 依赖 | 版本要求 | 说明 |
+|------|---------|------|
+| Python | 3.12+ | 后端运行环境 |
+| Node.js | 20+ | 前端构建工具 |
+| MySQL | 8.0+ | 主业务数据库 |
+| Redis | 7+ | 缓存与消息队列（Celery / WebSocket） |
+| PostgreSQL | 16+ | 可选，pgvector 向量存储 |
+| Docker | Latest | 可选，启动 Qdrant 等基础设施 |
 
-### 1. 克隆项目
+### 方式一：本地开发（推荐）
+
+#### 1. 克隆与环境配置
 
 ```bash
 git clone <repository-url>
-cd e-Flowly-now
-```
+cd Flowly-now
 
-### 2. 配置环境变量
-
-```bash
+# 复制环境变量（根目录或 Backend 目录均可）
 cp .env.example .env
-# 编辑 .env 文件，填入必要的配置
+# 编辑 .env，至少配置：DJANGO_SECRET_KEY、DB_PASSWORD
 ```
 
-关键配置项：
-```bash
-# 数据库
-DB_NAME=flowly
-DB_USER=flowly
-DB_PASSWORD=your_password
-DB_HOST=localhost
-DB_PORT=3306
-
-# 向量数据库
-PG_NAME=flowly_vector
-PG_USER=flowly
-PG_PASSWORD=your_password
-PG_HOST=localhost
-PG_PORT=5432
-
-# Redis
-REDIS_HOST=localhost
-REDIS_PORT=6379
-
-# OpenAI
-OPENAI_API_KEY=sk-xxx
-```
-
-### 3. 使用 Docker 启动（推荐）
-
-```bash
-# 启动所有服务
-docker-compose up -d
-
-# 查看日志
-docker-compose logs -f
-
-# 停止服务
-docker-compose down
-```
-
-### 4. 本地开发启动
-
-#### 后端
+#### 2. 后端
 
 ```bash
 cd Backend
 
 # 创建虚拟环境
 python -m venv .venv
-source .venv/bin/activate  # Linux/Mac
-# 或 .venv\Scripts\activate  # Windows
+# Windows
+.venv\Scripts\activate
+# Linux/macOS
+source .venv/bin/activate
 
 # 安装依赖
 pip install -r requirements.txt
@@ -404,97 +524,171 @@ pip install -r requirements.txt
 # 数据库迁移
 python manage.py migrate
 
-# 创建超级用户
+# 创建超级用户 + 平台种子数据
 python manage.py createsuperuser
+python manage.py seed_platform_config
 
 # 启动开发服务器
-python manage.py runserver
+python manage.py runserver 127.0.0.1:8000
+
+# 需要 WebSocket（训练进度、工作流实时推送）时使用 Daphne：
+# daphne -b 127.0.0.1 -p 8000 config.asgi:application
 ```
 
-#### 前端
+#### 3. 前端
 
 ```bash
 cd Frontend
-
-# 安装依赖
 npm install
-
-# 启动开发服务器
 npm run dev
+# → http://localhost:5200
 ```
 
-### 5. 访问应用
+#### 4. Celery Worker（异步任务，可选）
 
-| 服务 | 地址 |
-|------|------|
-| 前端 | http://localhost:5173 |
-| 后端 API | http://localhost:8000 |
-| Admin 后台 | http://localhost:8000/admin/ |
-| API 文档 | http://localhost:8000/api/docs/ |
+```bash
+cd Backend
+# Redis 需已启动
+celery -A config worker -l INFO -P solo   # Windows 建议 -P solo
+celery -A config beat -l INFO             # 定时任务
+```
+
+#### 5. 可选基础设施
+
+```bash
+# Qdrant 向量库（本地开发）
+docker compose -f docker-compose.dev.yml up -d qdrant
+# → http://localhost:6333
+
+# Redis（Windows 可用 Docker）
+docker run -d -p 6379:6379 redis:7
+```
+
+### 方式二：Docker 部署
+
+> 仓库根目录**暂无**完整的 `docker-compose.yml` 全栈编排文件。`docker/` 目录提供 Dockerfile 与 Nginx 配置参考；`docker-compose.dev.yml` 仅包含 Qdrant 服务。完整 Docker 部署步骤见 [`Docs/guides/deployment/docker.md`](Docs/guides/deployment/docker.md)。
+
+### 访问地址
+
+| 服务 | 地址 | 说明 |
+|------|------|------|
+| 用户前端 | http://localhost:5200 | Vite 开发服务器 |
+| 后端 API | http://localhost:8000 | Django / Daphne |
+| Django Admin | http://localhost:8000/admin/ | **主管理后台**（Jazzmin） |
+| Vue 管理页 | http://localhost:5200/admin | 实验性管理界面 |
+| API 文档 | http://localhost:8000/api/docs/ | Swagger UI |
+| Admin API | http://localhost:8000/api/v1/admin/ | 超级用户 REST API |
+
+---
+
+## 核心模块详解
+
+### 工作流执行引擎
+
+工作流以 DAG（有向无环图）形式存储，通过拓扑排序实现可靠执行：
+
+- **节点并发**：具有独立依赖的节点可并行执行
+- **状态追踪**：每个节点记录 pending / running / success / failed 状态
+- **重试机制**：支持节点级别的重试配置和超时控制
+- **执行日志**：完整的输入输出记录，支持执行回放
+
+### AI 模型网关
+
+采用注册中心模式，通过 `ProviderRegistry` 统一管理 AI 模型提供者：
+
+```python
+from gateway.providers.registry import get_registry, register_default_providers
+
+register_default_providers()
+registry = get_registry()
+response = registry.get("openai").generate(
+    messages=messages,
+    model=config.model,
+    stream=True,
+)
+```
+
+支持 OpenAI GPT 系列、Anthropic Claude 系列、Ollama 本地模型、DashScope 等。
+
+### Agent 执行引擎
+
+基于 ReAct 模式的 Agent 引擎，支持工具定义与动态绑定、多轮推理循环、工具调用错误处理与恢复、执行路径可视化追踪。
+
+### RAG 检索服务
+
+| 向量库 | 类型 | 说明 |
+|--------|------|------|
+| Qdrant | 云/自托管 | 高性能向量检索（`docker-compose.dev.yml`） |
+| pgvector | PostgreSQL 扩展 | 轻量级向量存储 |
+| Milvus | 云/自托管 | 分布式向量引擎 |
+| Chroma | 本地 | 轻量级嵌入式向量库 |
+| Pinecone | 云服务 | 全托管向量数据库 |
+
+### 平台配置服务
+
+`admin/services/config_service.py` 统一管理：
+
+- 系统设置读写与校验
+- 公开站点配置缓存（`GET /api/v1/public/site-config/`）
+- 功能可见性规则合并
+- SMTP 参数提取与邮件发送
 
 ---
 
 ## API 接口
 
-### 基础信息
+### 认证方式
 
-- **Base URL**: `/api/v1/`
-- **认证方式**: Token 认证 (`Authorization: Token <token>`)
-- **响应格式**: JSON
+- **Token 认证**：`Authorization: Token <token>`
+- **Session 认证**：Cookie 会话（Django Admin 使用）
+- **WebSocket 鉴权**：`?token=<JWT>`（浏览器握手无法带 Authorization 头）
 
-### 主要模块接口
+### 主要接口
 
 | 模块 | 路径 | 说明 |
 |------|------|------|
-| 认证 | `/api/v1/auth/` | 登录、注册、密码重置 |
-| 工作流 | `/api/v1/` | CRUD、执行、版本控制 |
+| 认证 | `/api/v1/auth/` | 登录、注册、Token 刷新、密码重置 |
+| 工作流 | `/api/v1/workflows/` | CRUD、执行、版本控制 |
 | NL 生成 | `/api/v1/nl-workflow/` | 自然语言生成工作流 |
-| Agent | `/api/v1/agents/` | Agent 管理 |
-| 知识库 | `/api/v1/rag/` | RAG 集合管理 |
-| 数据集 | `/api/v1/datasets/` | 数据集管理 |
-| 网关 | `/api/v1/gateway/` | AI 模型网关 |
+| Agent | `/api/v1/agents/` | Agent 创建、调试、执行 |
+| RAG | `/api/v1/rag/` | 知识库集合管理 |
+| 数据集 | `/api/v1/datasets/` | 数据集上传与管理 |
+| AI 网关 | `/api/v1/gateway/` | 模型配置与用量统计 |
 | 模板 | `/api/v1/templates/` | 工作流模板 |
-| 市场 | `/api/v1/marketplace/` | 模板市场 |
-| 团队 | `/api/v1/tenants/` | 租户/团队管理 |
-| 监控 | `/api/v1/monitoring/` | 系统监控 |
-| 账单 | `/api/v1/billing/` | 计费管理 |
+| 市场 | `/api/v1/marketplace/` | 模板发布与发现 |
+| 团队 | `/api/v1/tenants/` | 多租户管理 |
+| 监控 | `/api/v1/monitoring/` | 系统运行监控 |
+| 训练 | `/api/v1/training/` | YOLO 等训练任务 |
+| 建站 | `/api/v1/website-generator/` | ML 站点工厂 |
+| **管理后台** | `/api/v1/admin/` | 平台管理 REST API（超级用户） |
+| **公开配置** | `/api/v1/public/site-config/` | 前端运行时配置 |
+| **登录助手** | `/api/v1/public/auth-assistant/chat/` | 登录页 AI 助手 |
 
-### NL to Workflow 接口详情
+### 认证接口
 
-```
-POST /api/v1/nl-workflow/sessions/
-    创建新会话
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/api/v1/auth/register/` | 用户注册 |
+| POST | `/api/v1/auth/login/` | 用户登录 |
+| POST | `/api/v1/auth/logout/` | 退出登录 |
+| POST | `/api/v1/auth/refresh/` | Token 刷新 |
+| GET/PATCH | `/api/v1/auth/user/` | 用户资料 |
+| POST | `/api/v1/auth/change-password/` | 修改密码 |
+| POST | `/api/v1/auth/password-reset/` | 请求密码重置 |
+| POST | `/api/v1/auth/password-reset/confirm/` | 确认密码重置 |
 
-GET /api/v1/nl-workflow/sessions/
-    获取会话列表
+### NL to Workflow 核心接口
 
-GET /api/v1/nl-workflow/sessions/{session_id}/
-    获取会话详情
-
-POST /api/v1/nl-workflow/sessions/{session_id}/message/
-    发送消息（同步）
-
-POST /api/v1/nl-workflow/sessions/{session_id}/message/stream/
-    发送消息（流式）
-
-POST /api/v1/nl-workflow/sessions/{session_id}/confirm/
-    确认生成工作流
-
-POST /api/v1/nl-workflow/preview/
-    预览生成的工作流 JSON
-
-POST /api/v1/nl-workflow/stream/
-    流式生成工作流
-
-POST /api/v1/nl-workflow/analyze-intent/
-    分析用户意图
-
-POST /api/v1/nl-workflow/suggest/
-    获取修改建议
-
-GET /api/v1/nl-workflow/models/
-    获取可用模型列表
-```
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/api/v1/nl-workflow/sessions/` | 创建新会话 |
+| GET | `/api/v1/nl-workflow/sessions/` | 获取会话列表 |
+| POST | `/api/v1/nl-workflow/sessions/{id}/message/` | 发送消息（同步） |
+| POST | `/api/v1/nl-workflow/sessions/{id}/message/stream/` | 发送消息（SSE 流式） |
+| POST | `/api/v1/nl-workflow/sessions/{id}/confirm/` | 确认生成工作流 |
+| POST | `/api/v1/nl-workflow/preview/` | 预览生成的工作流 JSON |
+| POST | `/api/v1/nl-workflow/analyze-intent/` | 分析用户意图 |
+| GET | `/api/v1/nl-workflow/models/` | 获取可用模型列表 |
 
 ---
 
@@ -504,289 +698,283 @@ GET /api/v1/nl-workflow/models/
 
 | 路径 | 页面 | 说明 |
 |------|------|------|
-| `/` | Landing | 首页/落地页 |
-| `/login` | Login | 登录 |
-| `/register` | Register | 注册 |
+| `/` | Landing | 首页落地页 |
+| `/login` | Login | 登录页 |
+| `/register` | Register | 注册页 |
 | `/forgot-password` | ForgotPassword | 忘记密码 |
 | `/reset-password` | ResetPassword | 重置密码 |
 
-### 需要认证
+### 工作流相关
 
 | 路径 | 页面 | 说明 |
 |------|------|------|
-| `/home` | Dashboard | 仪表盘 |
 | `/workflows` | WorkflowList | 工作流列表 |
 | `/workflows/new` | WorkflowCreate | 创建工作流 |
 | `/workflows/:id/edit` | WorkflowEdit | 编辑工作流 |
 | `/workflows/:id` | WorkflowDetail | 工作流详情 |
 | `/workflows/:id/execute` | WorkflowExecute | 执行工作流 |
 | `/workflows/diff` | WorkflowDiff | 工作流对比 |
+| `/nl-create` | NLCreator | 自然语言创建工作流 |
+
+### Agent 与知识库
+
+| 路径 | 页面 | 说明 |
+|------|------|------|
 | `/agents` | AgentList | Agent 列表 |
 | `/agents/new` | AgentCreate | 创建 Agent |
 | `/agents/:id/edit` | AgentEdit | 编辑 Agent |
-| `/agents/:id/debug` | AgentDebugger | Agent 调试 |
-| `/nl-create` | NLCreator | 自然语言创建 |
-| `/knowledge` | KnowledgeBase | 知识库 |
-| `/knowledge/:id` | CollectionDetail | 集合详情 |
+| `/agents/:id/debug` | AgentDebugger | Agent 调试器 |
+| `/knowledge` | KnowledgeBase | 知识库首页 |
+| `/knowledge/:id` | CollectionDetail | 集合详情页 |
+| `/vector-stores` | VectorStoreList | 向量存储列表 |
+
+### 数据与训练
+
+| 路径 | 页面 | 说明 |
+|------|------|------|
 | `/datasets` | DatasetList | 数据集列表 |
 | `/datasets/:id` | DatasetDetail | 数据集详情 |
 | `/dataset-recommend` | DatasetRecommend | 数据集推荐 |
-| `/augmentations` | AugmentationStatus | 数据增强 |
+| `/augmentations` | AugmentationStatus | 数据增强状态 |
 | `/annotations/:id` | AnnotationWorkspace | 标注工作台 |
-| `/training` | TrainingProgress | 训练进度 |
-| `/prompts` | PromptList | Prompt 列表 |
-| `/models` | ModelList | 模型管理 |
-| `/vector-stores` | VectorStoreList | 向量存储 |
-| `/vector-stores/:id` | VectorStoreDetail | 向量存储详情 |
-| `/executions` | ExecutionHistory | 执行历史 |
-| `/marketplace` | Marketplace | 模板市场 |
-| `/marketplace/:id` | TemplateDetail | 模板详情 |
-| `/my-templates` | MyTemplates | 我的模板 |
+| `/training` | TrainingRedirect | 训练已迁移至工作流 |
+| `/projects/:id` | GeneratedSiteDetail | ML 站点工厂输出 |
+
+### 设置与管理
+
+| 路径 | 页面 | 说明 |
+|------|------|------|
+| `/settings` | Settings | 设置（容器） |
+| `/settings/profile` | Profile | 个人资料 |
+| `/settings/api-keys` | ApiKeys | API Key 管理 |
+| `/settings/billing` | Billing | 账单管理 |
 | `/team` | Team | 团队管理 |
-| `/integrations` | Integrations | 集成 |
-| `/monitoring` | Monitoring | 监控中心 |
-| `/analytics` | Analytics | 数据分析 |
-| `/api-explorer` | ApiExplorer | API 测试 |
-| `/admin` | Admin | 系统管理 |
-
-### 设置页面 (子路由)
-
-| 路径 | 页面 |
-|------|------|
-| `/settings` | Settings (容器) |
-| `/settings/profile` | Profile |
-| `/settings/preferences` | Preferences |
-| `/settings/api-keys` | ApiKeys |
-| `/settings/credentials` | Credentials |
-| `/settings/billing` | Billing |
-| `/settings/integrations` | Integrations |
-| `/settings/branding` | Branding |
-| `/settings/data-export` | DataExport |
+| `/monitoring` | Monitoring | 系统监控 |
+| `/admin` | Admin | Vue 管理页（需 staff/superuser） |
 
 ---
 
 ## 数据库模型
 
-### 核心模型
+项目使用 **Django ORM + Migration** 管理数据库，无独立 `.sql` 初始化文件。登录/注册相关表通过迁移自动创建。
 
-#### Workflow
-```python
-class Workflow(models.Model):
-    id: UUID              # 主键
-    tenant: Tenant        # 所属租户
-    owner: User           # 所有者
-    name: str             # 工作流名称
-    description: str      # 描述
-    version: int          # 版本号
-    status: str           # draft/published/archived
-    category: str         # 分类
-    tags: JSON            # 标签
-    config: JSON          # 配置
-    # 统计
-    total_executions: int
-    successful_executions: int
-    avg_execution_time_ms: int
-    # 权限
-    is_public: bool
-    share_token: str
+> **完整表名清单（120 张表，按模块分类）：** [`Docs/reference/database-tables.md`](Docs/reference/database-tables.md)
+
+### 认证与用户
+
+| 表名 | 来源 | 说明 |
+|------|------|------|
+| `users` | `users/models.py` | 自定义 User 模型（扩展角色、执行限额等） |
+| `login_history` | `core/models/audit.py` | 登录历史审计 |
+| `authtoken_token` | DRF authtoken | API Token 认证 |
+| `auth_*` | Django 内置 | 权限、组等 |
+
+查看迁移对应 SQL：
+
+```bash
+cd Backend
+python manage.py sqlmigrate users 0001
+python manage.py sqlmigrate core 0001
 ```
 
-#### Node
-```python
-class Node(models.Model):
-    workflow: Workflow
-    type: str             # start/end/llm/condition/tool/code/input/output...
-    name: str
-    position: JSON        # {"x": 100, "y": 200}
-    config: JSON          # 节点配置
-    inputs: JSON          # 输入定义
-    outputs: JSON         # 输出定义
-    # 执行
-    retry_config: JSON
-    timeout_seconds: int
+### 核心模型关系
+
+```
+Tenant
+    │
+    ├── TenantMembership
+    │
+    ├── Workflow
+    │     ├── Node
+    │     │     └── NodeExecution
+    │     ├── Edge
+    │     └── WorkflowExecution
+    │
+    ├── Agent
+    │     └── AgentExecution
+    │
+    ├── NLSession
+    │
+    ├── VectorStore
+    │     └── Collection
+    │
+    └── Dataset
+          └── DatasetRecord
 ```
 
-#### Edge
-```python
-class Edge(models.Model):
-    workflow: Workflow
-    source: Node
-    target: Node
-    label: str            # 连线标签
-    config: JSON
+### 平台管理模型
+
 ```
-
-### 执行相关
-
-#### WorkflowExecution
-```python
-class WorkflowExecution(models.Model):
-    workflow: Workflow
-    trigger_type: str     # manual/api/schedule/webhook
-    status: str            # pending/running/success/failed
-    input_data: JSON
-    output_data: JSON
-    error: Text
-    started_at: DateTime
-    completed_at: DateTime
-    execution_time_ms: int
-```
-
-#### NLSession
-```python
-class NLSession(models.Model):
-    user: User
-    model: str            # 使用的模型
-    messages: JSON         # 对话历史
-    context: JSON          # 上下文
-    generated_workflow: JSON
-    status: str
-```
-
-### RAG 相关
-
-#### Collection
-```python
-class Collection(models.Model):
-    user: User
-    name: str
-    description: str
-    embedding_model: str
-    vector_store_config: JSON
-    document_count: int
+SystemSetting          # 全局键值配置
+LegalDocument          # 法律文档（版本化）
+UserTermsAcceptance    # 条款同意记录
+FeatureVisibilityRule  # 功能可见性
+GatewayRouteRule       # 网关路由
+PaymentProviderConfig  # 支付配置
+EmailSendLog           # 邮件日志
+BackupRecord           # 备份记录
 ```
 
 ---
 
 ## 环境变量
 
-### 必需变量
+### 必需配置
 
 ```bash
 # 应用
 APP_NAME=Flowly
 DEBUG=true
-SECRET_KEY=your-secret-key
+DJANGO_SECRET_KEY=your-secret-key-here   # python -c "import secrets; print(secrets.token_urlsafe(50))"
 
-# 主数据库
-DB_NAME=flowly
+# 主数据库（MySQL）
+DB_NAME=flowly_db
 DB_USER=root
-DB_PASSWORD=xxx
+DB_PASSWORD=your_password
 DB_HOST=localhost
-DB_PORT=3306
-
-# 向量数据库
-PG_NAME=flowly_vector
-PG_USER=flowly
-PG_PASSWORD=xxx
-PG_HOST=localhost
-PG_PORT=5432
+DB_PORT=3306          # 根目录 .env.example 默认为 3307，按实际环境调整
 
 # Redis
 REDIS_HOST=localhost
 REDIS_PORT=6379
+CELERY_BROKER_URL=redis://localhost:6379/0
 
-# AI
-OPENAI_API_KEY=sk-xxx
+# 前端
+FRONTEND_URL=http://localhost:5200
+CORS_ALLOWED_ORIGINS=http://localhost:5200,http://127.0.0.1:5200
+VITE_API_URL=http://localhost:8000
+VITE_WS_URL=ws://localhost:8000
 ```
 
-### 可选变量
+### 可选配置
 
 ```bash
+# 向量数据库（PostgreSQL + pgvector，可选）
+PG_NAME=flowly_vector
+PG_USER=flowly
+PG_PASSWORD=your_password
+PG_HOST=localhost
+PG_PORT=5432
+
+# AI 模型
+OPENAI_API_KEY=sk-xxx
+OPENAI_BASE_URL=https://api.openai.com/v1
+ANTHROPIC_API_KEY=sk-ant-xxx
+OLLAMA_BASE_URL=http://localhost:11434
+
 # LangSmith 追踪
 LANGSMITH_API_KEY=xxx
 LANGSMITH_TRACING=true
 
-# Docker 沙箱
+# Docker 沙箱（代码执行）
 DOCKER_ENABLED=auto
 DOCKER_MEMORY_LIMIT=256
 DOCKER_TIMEOUT=60
+
+# 备份目录
+BACKUP_DIR=Backend/backups
 ```
+
+环境变量模板：
+
+| 文件 | 说明 |
+|------|------|
+| `.env.example` | 根目录 monorepo 模板 |
+| `Backend/.env.example` | 后端专用（含 `FRONTEND_URL`） |
+| `Frontend/.env.example` | 前端 Vite 变量 |
+| `docker/.env.example` | Docker 部署变量 |
 
 ---
 
-## 部署架构
+## 部署与基础设施
 
-### Docker Compose 服务
+### 当前仓库提供的 Docker 资源
 
-| 服务 | 镜像 | 端口 | 说明 |
-|------|------|------|------|
-| `nginx` | 自定义 | 80, 443 | 反向代理 |
-| `backend` | 自定义 | 8000 | Django 应用 |
-| `frontend` | 自定义 | 5173 | Vue 前端 |
-| `celery` | 自定义 | - | Celery Worker |
-| `celery-beat` | 自定义 | - | 定时任务 |
-| `db` | mysql:8.0 | 3306 | MySQL |
-| `pgvector` | pgvector/pgvector:pg16 | 5432 | PostgreSQL + pgvector |
-| `redis` | redis:7-alpine | 6379 | Redis |
+| 资源 | 说明 |
+|------|------|
+| `docker-compose.dev.yml` | 仅 Qdrant（端口 6333/6334） |
+| `docker/Dockerfile.backend` | 后端镜像 |
+| `docker/Dockerfile.frontend` | 前端镜像 |
+| `docker/Dockerfile.nginx` | Nginx 镜像 |
+| `docker/nginx/` | Nginx 配置 |
 
 ### 生产部署建议
 
-1. **数据库**: 使用托管数据库服务 (RDS, Cloud SQL)
-2. **缓存**: 使用 ElastiCache 或 Memorystore
-3. **存储**: 使用 S3/GCS 存储静态文件和媒体
-4. **负载均衡**: 使用云负载均衡器
-5. **SSL**: 使用 Let's Encrypt 或云证书
-6. **监控**: 集成 Prometheus + Grafana
-7. **日志**: 集成 ELK Stack
+1. **数据库**：使用托管 MySQL，启用自动备份
+2. **缓存**：Redis 主从或集群
+3. **对象存储**：S3 / GCS 存储媒体文件
+4. **负载均衡**：多实例 + 云负载均衡器
+5. **SSL**：Let's Encrypt 或云证书
+6. **监控**：Prometheus + Grafana
+7. **管理后台**：限制 `/admin/` 访问 IP，启用 `require_2fa_for_admin`
+
+详细部署文档：[`Docs/guides/deployment/docker.md`](Docs/guides/deployment/docker.md)
 
 ---
 
-## 开发指南
+## 测试体系
 
-### 添加新模块
+### 测试覆盖范围
 
-1. 创建 Django app: `python manage.py startapp new_module`
-2. 在 `settings.py` 的 `INSTALLED_APPS` 添加
-3. 创建 models、views、serializers
-4. 在 `urls.py` 注册路由
-5. 前端创建对应页面和 API 封装
+| 测试类型 | 工具 | 覆盖范围 |
+|---------|------|---------|
+| 后端单元测试 | pytest + Django TestCase | 模型、视图、序列化器、业务逻辑 |
+| NL 模块专项测试 | pytest | 意图识别、双模解析、DAG 验证 |
+| E2E 端到端测试 | Playwright | 用户注册、NL 生成、工作流执行 |
+| 前端单元测试 | Vitest | 组件、Composables、工具函数 |
+| 冒烟测试 | `Backend/scripts/` | API + WebSocket 全链路验证 |
 
-### 添加新节点类型
-
-1. 在 `workflows/models.py` 的 `Node.NODE_TYPE_CHOICES` 添加
-2. 在前端 `components/workflow/nodes/` 创建渲染组件
-3. 实现节点配置面板
-4. 在执行器中添加处理逻辑
-
-### API 开发
+### 运行测试
 
 ```bash
-# 生成 API 文档
-python manage.py spectacular --file ./schema.yml
-
-# 验证 schema
-python manage.py spectacular --validate
-```
-
----
-
-## 测试
-
-### 后端测试
-
-```bash
+# 后端测试
 cd Backend
-pytest --cov=. --cov-report=html
-```
+pytest --cov=. --cov-report=html --cov-report=term
 
-### 前端测试
+# NL 模块专项测试
+pytest tests/nl_workflow/ -v
 
-```bash
-cd Frontend
-
-# 单元测试
-npm run test
+# API 冒烟测试（需 Daphne 运行中）
+python scripts/frontend_user_api_smoke_test.py
 
 # E2E 测试
+cd Frontend
 npm run test:e2e
 
-# 覆盖率
-npm run test:coverage
+# 前端单元测试
+npm run test
 ```
+
+---
+
+## 文档索引
+
+| 场景 | 文档 |
+|------|------|
+| 本地开发 | [`Docs/guides/deployment/local-dev.md`](Docs/guides/deployment/local-dev.md) |
+| Docker 部署 | [`Docs/guides/deployment/docker.md`](Docs/guides/deployment/docker.md) |
+| 项目结构参考 | [`Docs/reference/PROJECT-STRUCTURE.md`](Docs/reference/PROJECT-STRUCTURE.md) |
+| **数据库表名参考** | [`Docs/reference/database-tables.md`](Docs/reference/database-tables.md) |
+| 搭建手册 | [`Docs/reference/setup-guide.md`](Docs/reference/setup-guide.md) |
+| Admin UI 优化 | [`Docs/admin-ui-optimization/README.md`](Docs/admin-ui-optimization/README.md) |
+| 桌面端 ML 站点工厂 | [`Docs/desktop-ml-site-factory/README.md`](Docs/desktop-ml-site-factory/README.md) |
+| 桌面客户端 | [`Desktop/README.md`](Desktop/README.md) |
+| 文档中心总览 | [`Docs/README.md`](Docs/README.md) |
+
+---
+
+## 贡献指南
+
+欢迎提交 Pull Request 和 Issue。在提交前，请确保：
+
+- 代码符合项目的命名规范和编码风格
+- 新功能包含对应的测试用例
+- 所有测试通过
+- 文档已更新（如有必要）
+- 管理后台相关变更需同步更新 Admin 文档或 `Docs/admin-ui-optimization/`
 
 ---
 
 ## License
 
-MIT License
+本项目基于 [MIT License](https://opensource.org/licenses/MIT) 开源。

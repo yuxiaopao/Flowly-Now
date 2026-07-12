@@ -360,7 +360,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['update:modelValue', 'retry', 'cancel', 'pause', 'resume'])
+const emit = defineEmits(['update:modelValue', 'retry', 'cancel', 'pause', 'resume', 'close'])
 
 // 对话框可见性
 const dialogVisible = computed({

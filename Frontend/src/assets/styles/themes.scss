@@ -12,6 +12,28 @@
   --text-primary-secondary: var(--text-secondary);
   --text-primary-tertiary: var(--text-tertiary);
   --border-primary-hover: var(--border-hover);
+
+  // 统一别名 — 兼容组件中使用的等价变量名，保证全部跟随主题
+  --border-color: var(--border-primary);
+  --bg-card: var(--card-bg);
+  --color-bg-primary: var(--bg-primary);
+  --color-bg-secondary: var(--bg-secondary);
+  --color-bg-tertiary: var(--bg-tertiary);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --primary-color: var(--color-primary);
+
+  // 工作流节点主题变量（pure-bw / high-contrast 等主题下的兜底）
+  --node-bg: var(--bg-elevated);
+  --node-text: var(--text-primary);
+  --node-header-bg: var(--bg-tertiary);
+
+  // 代码 / 终端面板主题变量
+  --code-bg: var(--bg-tertiary);
+  --code-surface: var(--bg-elevated);
+  --code-border: var(--border-primary);
+  --code-text: var(--text-primary);
+  --code-muted: var(--text-tertiary);
 }
 
 // ============================================
@@ -50,6 +72,21 @@
   --toast-progress-track: rgba(255, 255, 255, 0.08);
   --notification-unread: rgba(255, 255, 255, 0.05);
   --notification-chip-text: #0a0a0b;
+
+  --radius-card: 12px;
+  --app-bg-gradient: var(--bg-primary);
+  --app-noise-opacity: 0.035;
+  --glass-bg: rgba(20, 20, 24, 0.78);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-blur: 16px;
+  --glass-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
+  --sidebar-edge-glow: transparent;
+  --topbar-edge-glow: rgba(0, 0, 0, 0.25);
+  --card-inner-highlight: linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, transparent 40%);
+  --shadow-glow-primary: none;
+  --text-gradient-brand: linear-gradient(135deg, #fafafa 0%, #a1a1aa 100%);
+  --button-primary-hover-bg: #e4e4e7;
+  --button-primary-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 
   --success:    #22c55e;
   --success-bg: rgba(34, 197, 94, 0.12);
@@ -101,30 +138,141 @@
   --accent-primary-30: rgba(250, 250, 250, 0.30);
   --accent-primary-50: rgba(250, 250, 250, 0.50);
 
-  // 青色强调色（替换紫色）
-  --color-primary: #06b6d4;
-  --color-primary-hover: #0891b2;
-  --color-primary-active: #0e7490;
-  --color-primary-light: #22d3ee;
-  --color-primary-lighter: #67e8f9;
-  --color-primary-pale: #cffafe;
-  --color-primary-shadow: rgba(6, 182, 212, 0.4);
-  --color-primary-03: rgba(6, 182, 212, 0.03);
-  --color-primary-05: rgba(6, 182, 212, 0.05);
-  --color-primary-08: rgba(6, 182, 212, 0.08);
-  --color-primary-10: rgba(6, 182, 212, 0.10);
-  --color-primary-20: rgba(6, 182, 212, 0.20);
-  --color-primary-30: rgba(6, 182, 212, 0.30);
-  --color-primary-50: rgba(6, 182, 212, 0.50);
+  // 装饰/边框/图标用强调色（不用于按钮填充）
+  --color-primary: #3b82f6;
+  --color-primary-hover: #2563eb;
+  --color-primary-active: #1d4ed8;
+  --color-primary-light: #60a5fa;
+  --color-primary-lighter: #93c5fd;
+  --color-primary-pale: #dbeafe;
+  --color-primary-shadow: rgba(59, 130, 246, 0.4);
+  --color-primary-03: rgba(59, 130, 246, 0.03);
+  --color-primary-05: rgba(59, 130, 246, 0.05);
+  --color-primary-08: rgba(59, 130, 246, 0.08);
+  --color-primary-10: rgba(59, 130, 246, 0.10);
+  --color-primary-12: rgba(59, 130, 246, 0.12);
+  --color-primary-20: rgba(59, 130, 246, 0.20);
+  --color-primary-30: rgba(59, 130, 246, 0.30);
+  --color-primary-50: rgba(59, 130, 246, 0.50);
 }
 
 // ============================================
-// 1. 深色模式 (Dark) — 黑底白字
+// Element Plus 表单控件主题适配
 // ============================================
+
+:root {
+  --el-fill-color-blank: var(--bg-secondary);
+  --el-bg-color: var(--bg-secondary);
+  --el-bg-color-page: var(--bg-primary);
+  --el-bg-color-overlay: var(--bg-elevated);
+  --el-fill-color-light: var(--bg-tertiary);
+  --el-fill-color-lighter: var(--bg-tertiary);
+  --el-fill-color-dark: var(--bg-hover);
+  --el-border-color: var(--border-primary);
+  --el-border-color-light: var(--border-primary);
+  --el-border-color-lighter: var(--border-secondary);
+  --el-border-color-hover: var(--border-hover);
+  --el-text-color-primary: var(--text-primary);
+  --el-text-color-regular: var(--text-secondary);
+  --el-text-color-secondary: var(--text-tertiary);
+  --el-text-color-placeholder: var(--text-tertiary);
+  --el-disabled-bg-color: var(--bg-tertiary);
+  --el-disabled-text-color: var(--text-disabled);
+  --el-disabled-border-color: var(--border-primary);
+  --el-mask-color: var(--bg-overlay);
+}
+
+:root .el-input__wrapper,
+:root .el-textarea__inner,
+:root .el-select__wrapper,
+:root .el-input-number,
+:root .el-input-number .el-input__wrapper {
+  background-color: var(--bg-secondary);
+  box-shadow: 0 0 0 1px var(--border-primary) inset;
+  color: var(--text-primary);
+}
+
+:root .el-input__inner,
+:root .el-textarea__inner,
+:root .el-select__selected-item,
+:root .el-input-number .el-input__inner {
+  color: var(--text-primary);
+}
+
+:root .el-input__inner::placeholder,
+:root .el-textarea__inner::placeholder {
+  color: var(--text-tertiary);
+}
+
+:root .el-input__wrapper:hover,
+:root .el-textarea__inner:hover,
+:root .el-select__wrapper:hover,
+:root .el-input-number:hover,
+:root .el-input-number:hover .el-input__wrapper {
+  box-shadow: 0 0 0 1px var(--border-hover) inset;
+}
+
+:root .el-input__wrapper.is-focus,
+:root .el-textarea__inner:focus,
+:root .el-select__wrapper.is-focused,
+:root .el-input-number.is-controls-right .el-input__wrapper.is-focus,
+:root .el-input-number .el-input__wrapper.is-focus {
+  box-shadow: 0 0 0 1px var(--input-focus-border) inset;
+}
+
+:root .el-input.is-disabled .el-input__wrapper,
+:root .el-textarea.is-disabled .el-textarea__inner,
+:root .el-select .el-select__wrapper.is-disabled,
+:root .el-input-number.is-disabled,
+:root .el-input-number.is-disabled .el-input__wrapper {
+  background-color: var(--bg-tertiary);
+  box-shadow: 0 0 0 1px var(--border-primary) inset;
+  color: var(--text-disabled);
+}
+
+:root .el-input__prefix,
+:root .el-input__suffix,
+:root .el-select__caret,
+:root .el-input-number__increase,
+:root .el-input-number__decrease {
+  color: var(--text-tertiary);
+}
+
+:root .el-select-dropdown,
+:root .el-picker-panel,
+:root .el-dropdown-menu,
+:root .el-autocomplete-suggestion,
+:root .el-select-dropdown__item,
+:root .el-cascader__dropdown {
+  background-color: var(--bg-elevated);
+  border-color: var(--border-primary);
+  color: var(--text-primary);
+}
 
 [data-theme="dark"],
 .dark {
   color-scheme: dark;
+
+  // Element Plus — 必须在基础变量之后，覆盖 el-input/select 背景色
+  --el-fill-color-blank: var(--bg-secondary);
+  --el-bg-color: var(--bg-secondary);
+  --el-bg-color-page: var(--bg-primary);
+  --el-bg-color-overlay: var(--bg-elevated);
+  --el-fill-color-light: var(--bg-tertiary);
+  --el-fill-color-lighter: var(--bg-tertiary);
+  --el-fill-color-dark: var(--bg-hover);
+  --el-border-color: var(--border-primary);
+  --el-border-color-light: var(--border-primary);
+  --el-border-color-lighter: var(--border-secondary);
+  --el-border-color-hover: var(--border-hover);
+  --el-text-color-primary: var(--text-primary);
+  --el-text-color-regular: var(--text-secondary);
+  --el-text-color-secondary: var(--text-tertiary);
+  --el-text-color-placeholder: var(--text-tertiary);
+  --el-disabled-bg-color: var(--bg-tertiary);
+  --el-disabled-text-color: var(--text-disabled);
+  --el-disabled-border-color: var(--border-primary);
+  --el-mask-color: var(--bg-overlay);
 
   --bg-primary:   #0a0a0b;
   --bg-secondary: #141418;
@@ -156,6 +304,21 @@
   --toast-progress-track: rgba(255, 255, 255, 0.08);
   --notification-unread: rgba(255, 255, 255, 0.05);
   --notification-chip-text: #0a0a0b;
+
+  --radius-card: 12px;
+  --app-bg-gradient: var(--bg-primary);
+  --app-noise-opacity: 0.035;
+  --glass-bg: rgba(20, 20, 24, 0.78);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-blur: 16px;
+  --glass-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
+  --sidebar-edge-glow: transparent;
+  --topbar-edge-glow: rgba(0, 0, 0, 0.25);
+  --card-inner-highlight: linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, transparent 40%);
+  --shadow-glow-primary: none;
+  --text-gradient-brand: linear-gradient(135deg, #fafafa 0%, #a1a1aa 100%);
+  --button-primary-hover-bg: #e4e4e7;
+  --button-primary-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 
   --success:    #22c55e;
   --success-bg: rgba(34, 197, 94, 0.12);
@@ -200,21 +363,22 @@
   --agent-icon-to:   #fb923c;
   --agent-icon-shadow: rgba(249, 115, 22, 0.45);
 
-  // 青色强调色（替换紫色）
-  --color-primary: #06b6d4;
-  --color-primary-hover: #0891b2;
-  --color-primary-active: #0e7490;
-  --color-primary-light: #22d3ee;
-  --color-primary-lighter: #67e8f9;
-  --color-primary-pale: #cffafe;
-  --color-primary-shadow: rgba(6, 182, 212, 0.4);
-  --color-primary-03: rgba(6, 182, 212, 0.03);
-  --color-primary-05: rgba(6, 182, 212, 0.05);
-  --color-primary-08: rgba(6, 182, 212, 0.08);
-  --color-primary-10: rgba(6, 182, 212, 0.10);
-  --color-primary-20: rgba(6, 182, 212, 0.20);
-  --color-primary-30: rgba(6, 182, 212, 0.30);
-  --color-primary-50: rgba(6, 182, 212, 0.50);
+  // 装饰/边框/图标用强调色（不用于按钮填充）
+  --color-primary: #3b82f6;
+  --color-primary-hover: #2563eb;
+  --color-primary-active: #1d4ed8;
+  --color-primary-light: #60a5fa;
+  --color-primary-lighter: #93c5fd;
+  --color-primary-pale: #dbeafe;
+  --color-primary-shadow: rgba(59, 130, 246, 0.4);
+  --color-primary-03: rgba(59, 130, 246, 0.03);
+  --color-primary-05: rgba(59, 130, 246, 0.05);
+  --color-primary-08: rgba(59, 130, 246, 0.08);
+  --color-primary-10: rgba(59, 130, 246, 0.10);
+  --color-primary-12: rgba(59, 130, 246, 0.12);
+  --color-primary-20: rgba(59, 130, 246, 0.20);
+  --color-primary-30: rgba(59, 130, 246, 0.30);
+  --color-primary-50: rgba(59, 130, 246, 0.50);
 }
 
 // ============================================
@@ -224,6 +388,27 @@
 [data-theme="light"],
 .light {
   color-scheme: light;
+
+  // Element Plus — 必须在基础变量之后，覆盖 el-input/select 背景色
+  --el-fill-color-blank: var(--bg-secondary);
+  --el-bg-color: var(--bg-secondary);
+  --el-bg-color-page: var(--bg-primary);
+  --el-bg-color-overlay: var(--bg-elevated);
+  --el-fill-color-light: var(--bg-tertiary);
+  --el-fill-color-lighter: var(--bg-tertiary);
+  --el-fill-color-dark: var(--bg-hover);
+  --el-border-color: var(--border-primary);
+  --el-border-color-light: var(--border-primary);
+  --el-border-color-lighter: var(--border-secondary);
+  --el-border-color-hover: var(--border-hover);
+  --el-text-color-primary: var(--text-primary);
+  --el-text-color-regular: var(--text-secondary);
+  --el-text-color-secondary: var(--text-tertiary);
+  --el-text-color-placeholder: var(--text-tertiary);
+  --el-disabled-bg-color: var(--bg-tertiary);
+  --el-disabled-text-color: var(--text-disabled);
+  --el-disabled-border-color: var(--border-primary);
+  --el-mask-color: var(--bg-overlay);
 
   --bg-primary:   #ffffff;
   --bg-secondary: #fafafa;
@@ -256,6 +441,21 @@
   --toast-progress-track: rgba(15, 15, 15, 0.08);
   --notification-unread: rgba(15, 15, 15, 0.04);
   --notification-chip-text: #ffffff;
+
+  --radius-card: 12px;
+  --app-bg-gradient: var(--bg-primary);
+  --app-noise-opacity: 0.02;
+  --glass-bg: rgba(255, 255, 255, 0.82);
+  --glass-border: rgba(15, 15, 15, 0.08);
+  --glass-blur: 20px;
+  --glass-shadow: 0 4px 24px rgba(15, 15, 15, 0.06);
+  --sidebar-edge-glow: transparent;
+  --topbar-edge-glow: rgba(15, 15, 15, 0.04);
+  --card-inner-highlight: linear-gradient(180deg, rgba(255, 255, 255, 0.9) 0%, transparent 50%);
+  --shadow-glow-primary: none;
+  --text-gradient-brand: linear-gradient(135deg, #0f0f0f 0%, #71717a 100%);
+  --button-primary-hover-bg: #27272a;
+  --button-primary-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
 
   --success:    #15803d;
   --success-bg: rgba(21, 128, 61, 0.1);
@@ -316,6 +516,27 @@
 .pure-bw {
   color-scheme: dark;
 
+  // Element Plus
+  --el-fill-color-blank: var(--bg-secondary);
+  --el-bg-color: var(--bg-secondary);
+  --el-bg-color-page: var(--bg-primary);
+  --el-bg-color-overlay: var(--bg-elevated);
+  --el-fill-color-light: var(--bg-tertiary);
+  --el-fill-color-lighter: var(--bg-tertiary);
+  --el-fill-color-dark: var(--bg-hover);
+  --el-border-color: var(--border-primary);
+  --el-border-color-light: var(--border-primary);
+  --el-border-color-lighter: var(--border-secondary);
+  --el-border-color-hover: var(--border-hover);
+  --el-text-color-primary: var(--text-primary);
+  --el-text-color-regular: var(--text-secondary);
+  --el-text-color-secondary: var(--text-tertiary);
+  --el-text-color-placeholder: var(--text-tertiary);
+  --el-disabled-bg-color: var(--bg-tertiary);
+  --el-disabled-text-color: var(--text-disabled);
+  --el-disabled-border-color: var(--border-primary);
+  --el-mask-color: var(--bg-overlay);
+
   --bg-primary:   #000000;
   --bg-secondary: #0a0a0a;
   --bg-tertiary:  #141414;
@@ -347,6 +568,21 @@
   --toast-progress-track: rgba(255, 255, 255, 0.08);
   --notification-unread: rgba(255, 255, 255, 0.04);
   --notification-chip-text: #000000;
+
+  --radius-card: 12px;
+  --app-bg-gradient: var(--bg-primary);
+  --app-noise-opacity: 0;
+  --glass-bg: var(--bg-secondary);
+  --glass-border: var(--border-primary);
+  --glass-blur: 0px;
+  --glass-shadow: none;
+  --sidebar-edge-glow: transparent;
+  --topbar-edge-glow: transparent;
+  --card-inner-highlight: none;
+  --shadow-glow-primary: none;
+  --text-gradient-brand: linear-gradient(135deg, #ffffff 0%, #b8b8b8 100%);
+  --button-primary-hover-bg: #e8e8e8;
+  --button-primary-shadow: none;
 
   --success:    #d4d4d4;
   --success-bg: rgba(255, 255, 255, 0.08);
@@ -398,21 +634,22 @@
   --accent-primary-30: rgba(255, 255, 255, 0.30);
   --accent-primary-50: rgba(255, 255, 255, 0.50);
 
-  // 青色强调色（替换紫色）
-  --color-primary: #06b6d4;
-  --color-primary-hover: #0891b2;
-  --color-primary-active: #0e7490;
-  --color-primary-light: #22d3ee;
-  --color-primary-lighter: #67e8f9;
-  --color-primary-pale: #cffafe;
-  --color-primary-shadow: rgba(6, 182, 212, 0.4);
-  --color-primary-03: rgba(6, 182, 212, 0.03);
-  --color-primary-05: rgba(6, 182, 212, 0.05);
-  --color-primary-08: rgba(6, 182, 212, 0.08);
-  --color-primary-10: rgba(6, 182, 212, 0.10);
-  --color-primary-20: rgba(6, 182, 212, 0.20);
-  --color-primary-30: rgba(6, 182, 212, 0.30);
-  --color-primary-50: rgba(6, 182, 212, 0.50);
+  // 装饰/边框/图标用强调色（不用于按钮填充）
+  --color-primary: #3b82f6;
+  --color-primary-hover: #2563eb;
+  --color-primary-active: #1d4ed8;
+  --color-primary-light: #60a5fa;
+  --color-primary-lighter: #93c5fd;
+  --color-primary-pale: #dbeafe;
+  --color-primary-shadow: rgba(59, 130, 246, 0.4);
+  --color-primary-03: rgba(59, 130, 246, 0.03);
+  --color-primary-05: rgba(59, 130, 246, 0.05);
+  --color-primary-08: rgba(59, 130, 246, 0.08);
+  --color-primary-10: rgba(59, 130, 246, 0.10);
+  --color-primary-12: rgba(59, 130, 246, 0.12);
+  --color-primary-20: rgba(59, 130, 246, 0.20);
+  --color-primary-30: rgba(59, 130, 246, 0.30);
+  --color-primary-50: rgba(59, 130, 246, 0.50);
 }
 
 // ============================================
@@ -422,6 +659,27 @@
 [data-theme="high-contrast"],
 .high-contrast {
   color-scheme: dark;
+
+  // Element Plus
+  --el-fill-color-blank: var(--bg-secondary);
+  --el-bg-color: var(--bg-secondary);
+  --el-bg-color-page: var(--bg-primary);
+  --el-bg-color-overlay: var(--bg-elevated);
+  --el-fill-color-light: var(--bg-tertiary);
+  --el-fill-color-lighter: var(--bg-tertiary);
+  --el-fill-color-dark: var(--bg-hover);
+  --el-border-color: var(--border-primary);
+  --el-border-color-light: var(--border-primary);
+  --el-border-color-lighter: var(--border-secondary);
+  --el-border-color-hover: var(--border-hover);
+  --el-text-color-primary: var(--text-primary);
+  --el-text-color-regular: var(--text-secondary);
+  --el-text-color-secondary: var(--text-tertiary);
+  --el-text-color-placeholder: var(--text-tertiary);
+  --el-disabled-bg-color: var(--bg-tertiary);
+  --el-disabled-text-color: var(--text-disabled);
+  --el-disabled-border-color: var(--border-primary);
+  --el-mask-color: var(--bg-overlay);
 
   --bg-primary:   #000000;
   --bg-secondary: #000000;
@@ -454,6 +712,21 @@
   --toast-progress-track: rgba(255, 255, 255, 0.12);
   --notification-unread: rgba(255, 255, 255, 0.09);
   --notification-chip-text: #000000;
+
+  --radius-card: 12px;
+  --app-bg-gradient: var(--bg-primary);
+  --app-noise-opacity: 0;
+  --glass-bg: var(--bg-secondary);
+  --glass-border: var(--border-primary);
+  --glass-blur: 0px;
+  --glass-shadow: none;
+  --sidebar-edge-glow: transparent;
+  --topbar-edge-glow: transparent;
+  --card-inner-highlight: none;
+  --shadow-glow-primary: none;
+  --text-gradient-brand: linear-gradient(135deg, #ffffff 0%, #ffd600 100%);
+  --button-primary-hover-bg: #e8e8e8;
+  --button-primary-shadow: none;
 
   --success:    #00e676;
   --success-bg: rgba(0, 230, 118, 0.18);
@@ -505,21 +778,22 @@
   --accent-primary-30: rgba(255, 255, 255, 0.30);
   --accent-primary-50: rgba(255, 255, 255, 0.50);
 
-  // 青色强调色（替换紫色）
-  --color-primary: #06b6d4;
-  --color-primary-hover: #0891b2;
-  --color-primary-active: #0e7490;
-  --color-primary-light: #22d3ee;
-  --color-primary-lighter: #67e8f9;
-  --color-primary-pale: #cffafe;
-  --color-primary-shadow: rgba(6, 182, 212, 0.4);
-  --color-primary-03: rgba(6, 182, 212, 0.03);
-  --color-primary-05: rgba(6, 182, 212, 0.05);
-  --color-primary-08: rgba(6, 182, 212, 0.08);
-  --color-primary-10: rgba(6, 182, 212, 0.10);
-  --color-primary-20: rgba(6, 182, 212, 0.20);
-  --color-primary-30: rgba(6, 182, 212, 0.30);
-  --color-primary-50: rgba(6, 182, 212, 0.50);
+  // 装饰/边框/图标用强调色（不用于按钮填充）
+  --color-primary: #3b82f6;
+  --color-primary-hover: #2563eb;
+  --color-primary-active: #1d4ed8;
+  --color-primary-light: #60a5fa;
+  --color-primary-lighter: #93c5fd;
+  --color-primary-pale: #dbeafe;
+  --color-primary-shadow: rgba(59, 130, 246, 0.4);
+  --color-primary-03: rgba(59, 130, 246, 0.03);
+  --color-primary-05: rgba(59, 130, 246, 0.05);
+  --color-primary-08: rgba(59, 130, 246, 0.08);
+  --color-primary-10: rgba(59, 130, 246, 0.10);
+  --color-primary-12: rgba(59, 130, 246, 0.12);
+  --color-primary-20: rgba(59, 130, 246, 0.20);
+  --color-primary-30: rgba(59, 130, 246, 0.30);
+  --color-primary-50: rgba(59, 130, 246, 0.50);
 }
 
 // ============================================
@@ -916,4 +1190,128 @@ p, span, label, li, td, th,
   --canvas-bg: #000000;
   --canvas-pattern: rgba(255, 255, 255, 0.05);
   --canvas-minimap-bg: #0a0a0a;
+}
+
+// ============================================
+// 8. 多彩强调色板（边框修饰 / 渐变装饰用）
+// 每个主题独立定义，跟随主题切换
+// ============================================
+
+:root,
+[data-theme="dark"],
+.dark {
+  --accent-cyan:    #22d3ee;
+  --accent-violet:  #a78bfa;
+  --accent-amber:   #fbbf24;
+  --accent-emerald: #34d399;
+  --accent-rose:    #fb7185;
+  --accent-blue:    #60a5fa;
+
+  --accent-cyan-soft:    rgba(34, 211, 238, 0.42);
+  --accent-violet-soft:  rgba(167, 139, 250, 0.38);
+  --accent-amber-soft:   rgba(251, 191, 36, 0.38);
+  --accent-emerald-soft: rgba(52, 211, 153, 0.38);
+  --accent-rose-soft:    rgba(251, 113, 133, 0.38);
+  --accent-blue-soft:    rgba(96, 165, 250, 0.38);
+
+  --accent-cyan-bg:    rgba(34, 211, 238, 0.14);
+  --accent-violet-bg:  rgba(167, 139, 250, 0.14);
+  --accent-amber-bg:   rgba(251, 191, 36, 0.14);
+  --accent-emerald-bg: rgba(52, 211, 153, 0.14);
+  --accent-rose-bg:    rgba(251, 113, 133, 0.14);
+  --accent-blue-bg:    rgba(96, 165, 250, 0.14);
+
+  // 渐变描边（卡片 / 区块装饰）
+  --border-gradient-brand: linear-gradient(135deg, var(--accent-blue), var(--accent-emerald));
+  --border-gradient-warm:  linear-gradient(135deg, var(--accent-amber), var(--accent-rose));
+  --border-gradient-cool:  linear-gradient(135deg, var(--accent-blue), var(--accent-emerald));
+  --border-gradient-rainbow: linear-gradient(120deg, var(--accent-blue), var(--accent-emerald), var(--accent-amber), var(--accent-rose));
+}
+
+[data-theme="light"],
+.light {
+  --accent-cyan:    #0891b2;
+  --accent-violet:  #7c3aed;
+  --accent-amber:   #d97706;
+  --accent-emerald: #059669;
+  --accent-rose:    #e11d48;
+  --accent-blue:    #2563eb;
+
+  --accent-cyan-soft:    rgba(8, 145, 178, 0.35);
+  --accent-violet-soft:  rgba(124, 58, 237, 0.32);
+  --accent-amber-soft:   rgba(217, 119, 6, 0.32);
+  --accent-emerald-soft: rgba(5, 150, 105, 0.32);
+  --accent-rose-soft:    rgba(225, 29, 72, 0.32);
+  --accent-blue-soft:    rgba(37, 99, 235, 0.32);
+
+  --accent-cyan-bg:    rgba(8, 145, 178, 0.1);
+  --accent-violet-bg:  rgba(124, 58, 237, 0.09);
+  --accent-amber-bg:   rgba(217, 119, 6, 0.09);
+  --accent-emerald-bg: rgba(5, 150, 105, 0.09);
+  --accent-rose-bg:    rgba(225, 29, 72, 0.09);
+  --accent-blue-bg:    rgba(37, 99, 235, 0.09);
+
+  --border-gradient-brand: linear-gradient(135deg, var(--accent-blue), var(--accent-emerald));
+  --border-gradient-warm:  linear-gradient(135deg, var(--accent-amber), var(--accent-rose));
+  --border-gradient-cool:  linear-gradient(135deg, var(--accent-blue), var(--accent-emerald));
+  --border-gradient-rainbow: linear-gradient(120deg, var(--accent-blue), var(--accent-emerald), var(--accent-amber), var(--accent-rose));
+}
+
+// 纯黑白主题：保持灰阶，不破坏黑白设计语言
+[data-theme="pure-bw"],
+.pure-bw {
+  --accent-cyan:    #e8e8e8;
+  --accent-violet:  #cfcfcf;
+  --accent-amber:   #b8b8b8;
+  --accent-emerald: #dcdcdc;
+  --accent-rose:    #c4c4c4;
+  --accent-blue:    #d8d8d8;
+
+  --accent-cyan-soft:    rgba(255, 255, 255, 0.28);
+  --accent-violet-soft:  rgba(255, 255, 255, 0.22);
+  --accent-amber-soft:   rgba(255, 255, 255, 0.18);
+  --accent-emerald-soft: rgba(255, 255, 255, 0.24);
+  --accent-rose-soft:    rgba(255, 255, 255, 0.2);
+  --accent-blue-soft:    rgba(255, 255, 255, 0.26);
+
+  --accent-cyan-bg:    rgba(255, 255, 255, 0.06);
+  --accent-violet-bg:  rgba(255, 255, 255, 0.05);
+  --accent-amber-bg:   rgba(255, 255, 255, 0.05);
+  --accent-emerald-bg: rgba(255, 255, 255, 0.05);
+  --accent-rose-bg:    rgba(255, 255, 255, 0.05);
+  --accent-blue-bg:    rgba(255, 255, 255, 0.05);
+
+  --border-gradient-brand: linear-gradient(135deg, #ffffff, #8a8a8a);
+  --border-gradient-warm:  linear-gradient(135deg, #e0e0e0, #707070);
+  --border-gradient-cool:  linear-gradient(135deg, #f0f0f0, #606060);
+  --border-gradient-rainbow: linear-gradient(120deg, #ffffff, #aaaaaa, #ffffff, #888888, #dddddd);
+}
+
+[data-theme="high-contrast"],
+.high-contrast {
+  --accent-cyan:    #00e5ff;
+  --accent-violet:  #d500f9;
+  --accent-amber:   #ffd600;
+  --accent-emerald: #00e676;
+  --accent-rose:    #ff1744;
+  --accent-blue:    #2979ff;
+
+  --accent-cyan-soft:    rgba(0, 229, 255, 0.5);
+  --accent-violet-soft:  rgba(213, 0, 249, 0.5);
+  --accent-amber-soft:   rgba(255, 214, 0, 0.5);
+  --accent-emerald-soft: rgba(0, 230, 118, 0.5);
+  --accent-rose-soft:    rgba(255, 23, 68, 0.5);
+  --accent-blue-soft:    rgba(41, 121, 255, 0.5);
+
+  --accent-cyan-bg:    rgba(0, 229, 255, 0.15);
+  --accent-violet-bg:  rgba(213, 0, 249, 0.15);
+  --accent-amber-bg:   rgba(255, 214, 0, 0.15);
+  --accent-emerald-bg: rgba(0, 230, 118, 0.15);
+  --accent-rose-bg:    rgba(255, 23, 68, 0.15);
+  --accent-blue-bg:    rgba(41, 121, 255, 0.15);
+
+  --border-gradient-brand: linear-gradient(135deg, var(--accent-blue), var(--accent-emerald));
+  --border-gradient-warm:  linear-gradient(135deg, var(--accent-amber), var(--accent-rose));
+  --border-gradient-cool:  linear-gradient(135deg, var(--accent-blue), var(--accent-emerald));
+  --border-gradient-rainbow: linear-gradient(120deg, var(--accent-blue), var(--accent-emerald), var(--accent-amber), var(--accent-rose));
 }

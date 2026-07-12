@@ -11,10 +11,36 @@ from .views import (
     APICredentialViewSet, AuditLogViewSet,
     TemplateCategoryViewSet,
     ExecutionCacheViewSet, ExecutionCacheConfigViewSet,
-    CheckEnvView
+    CheckEnvView, WorkflowOptimizeView, EmailSmtpDefaultsView, MediaUploadView
 )
+from .trigger_views import WorkflowTriggerViewSet, WorkflowTriggerCreateView, CronPreviewView
 
 urlpatterns = [
+    # === 媒体上传（视频翻译等） ===
+    path('media/upload/', MediaUploadView.as_view(), name='media-upload'),
+
+    # === 触发器路由 ===
+    path('workflows/triggers/cron-preview/', CronPreviewView.as_view(), name='trigger-cron-preview'),
+    path('workflows/triggers/', WorkflowTriggerViewSet.as_view({
+        'get': 'list',
+    }), name='trigger-list'),
+    path('workflows/triggers/<int:pk>/', WorkflowTriggerViewSet.as_view({
+        'get': 'retrieve',
+        'put': 'update',
+        'patch': 'partial_update',
+        'delete': 'destroy',
+    }), name='trigger-detail'),
+    path('workflows/triggers/<int:pk>/executions/', WorkflowTriggerViewSet.as_view({
+        'get': 'executions',
+    }), name='trigger-executions'),
+    path('workflows/triggers/<int:pk>/test/', WorkflowTriggerViewSet.as_view({
+        'post': 'test_trigger',
+    }), name='trigger-test'),
+    path('workflows/triggers/<int:pk>/webhook/', WorkflowTriggerViewSet.as_view({
+        'post': 'webhook',
+    }), name='trigger-webhook'),
+    path('workflows/<uuid:workflow_pk>/triggers/', WorkflowTriggerCreateView.as_view(), name='workflow-trigger-create'),
+
     # === 必须在 workflows/ 之前定义的路由 ===
     
     # 节点路由
@@ -73,18 +99,24 @@ urlpatterns = [
     path('workflows/executions/<uuid:pk>/resume/', WorkflowExecutionViewSet.as_view({
         'post': 'resume'
     }), name='execution-resume'),
-    path('workflows/executions/<uuid:pk>/logs/', WorkflowExecutionViewSet.as_view({
-        'get': 'logs'
-    }), name='execution-logs'),
-    path('workflows/executions/<uuid:pk>/output/', WorkflowExecutionViewSet.as_view({
-        'get': 'output'
-    }), name='execution-output'),
+    path('workflows/executions/<uuid:pk>/timeline/', WorkflowExecutionViewSet.as_view({
+        'get': 'timeline'
+    }), name='execution-timeline'),
     path('workflows/executions/<uuid:pk>/status/', WorkflowExecutionViewSet.as_view({
         'get': 'status'
     }), name='execution-status'),
+    path('workflows/executions/<uuid:pk>/output/', WorkflowExecutionViewSet.as_view({
+        'get': 'output'
+    }), name='execution-output'),
+    path('workflows/executions/<uuid:pk>/logs/', WorkflowExecutionViewSet.as_view({
+        'get': 'logs'
+    }), name='execution-logs'),
     path('workflows/executions/statistics/', WorkflowExecutionViewSet.as_view({
         'get': 'statistics'
     }), name='execution-statistics'),
+    path('workflows/executions/analytics/', WorkflowExecutionViewSet.as_view({
+        'get': 'analytics'
+    }), name='execution-analytics'),
 
     # 模板路由 (legacy — public workflows as templates)
     path('workflows/templates/', PublicWorkflowTemplateViewSet.as_view({
@@ -115,7 +147,7 @@ urlpatterns = [
         'get': 'list',
         'post': 'create'
     }), name='variable-list'),
-    path('variables/<int:pk>/', VariableViewSet.as_view({
+    path('variables/<uuid:pk>/', VariableViewSet.as_view({
         'get': 'retrieve',
         'put': 'update',
         'patch': 'partial_update',
@@ -224,7 +256,8 @@ urlpatterns = [
 
     # 工作流模板路由
     path('templates/', WorkflowTemplateViewSet.as_view({
-        'get': 'list'
+        'get': 'list',
+        'post': 'create'
     }), name='workflow-template-list'),
     path('templates/featured/', WorkflowTemplateViewSet.as_view({
         'get': 'featured'
@@ -232,14 +265,39 @@ urlpatterns = [
     path('templates/by_category/', WorkflowTemplateViewSet.as_view({
         'get': 'by_category'
     }), name='workflow-template-by-category'),
+    path('templates/mine/', WorkflowTemplateViewSet.as_view({
+        'get': 'mine'
+    }), name='workflow-template-mine'),
+    path('templates/installed/', WorkflowTemplateViewSet.as_view({
+        'get': 'installed'
+    }), name='workflow-template-installed'),
     path('templates/<uuid:pk>/', WorkflowTemplateViewSet.as_view({
-        'get': 'retrieve'
+        'get': 'retrieve',
+        'patch': 'partial_update',
+        'delete': 'destroy'
     }), name='workflow-template-detail'),
     path('templates/<uuid:pk>/create_from_template/', WorkflowTemplateViewSet.as_view({
         'post': 'create_from_template'
     }), name='workflow-template-create-from'),
-    
-    # 工作流主路由 (必须放在最后)
+    path('templates/<uuid:pk>/install/', WorkflowTemplateViewSet.as_view({
+        'post': 'install'
+    }), name='workflow-template-install'),
+    path('templates/<uuid:pk>/rate/', WorkflowTemplateViewSet.as_view({
+        'post': 'rate'
+    }), name='workflow-template-rate'),
+    path('templates/<uuid:pk>/stats/', WorkflowTemplateViewSet.as_view({
+        'get': 'stats'
+    }), name='workflow-template-stats'),
+    path('templates/<uuid:pk>/publish/', WorkflowTemplateViewSet.as_view({
+        'patch': 'publish'
+    }), name='workflow-template-publish'),
+    path('templates/<uuid:pk>/unpublish/', WorkflowTemplateViewSet.as_view({
+        'patch': 'unpublish'
+    }), name='workflow-template-unpublish'),
+    path('templates/<uuid:pk>/report/', WorkflowTemplateViewSet.as_view({
+        'post': 'report'
+    }), name='workflow-template-report'),
+
     
     # 工作流导入（列表级别，无需 ID）
     path('workflows/import/', WorkflowImportView.as_view(), name='workflow-import'),
@@ -250,6 +308,8 @@ urlpatterns = [
         'post': 'create'
     }), name='workflow-list'),
     path('workflows/check-env/', CheckEnvView.as_view(), name='workflow-check-env'),
+    path('workflows/email-smtp-defaults/', EmailSmtpDefaultsView.as_view(), name='workflow-email-smtp-defaults'),
+    path('workflows/optimize/', WorkflowOptimizeView.as_view(), name='workflow-optimize'),
     path('workflows/<uuid:pk>/', WorkflowViewSet.as_view({
         'get': 'retrieve',
         'put': 'update',

@@ -5,6 +5,12 @@ export { default as ImageGenerationConfig } from './ImageGenerationConfig.vue'
 export { default as VideoGenerationConfig } from './VideoGenerationConfig.vue'
 export { default as AudioGenerationConfig } from './AudioGenerationConfig.vue'
 export { default as SubtitleGenerationConfig } from './SubtitleGenerationConfig.vue'
+export { default as VideoTranslationConfig } from './VideoTranslationConfig.vue'
+export { default as VideoUploadConfig } from './VideoUploadConfig.vue'
+export { default as SubtitleTranslateConfig } from './SubtitleTranslateConfig.vue'
+export { default as SegmentDubbingConfig } from './SegmentDubbingConfig.vue'
+export { default as LipSyncConfig } from './LipSyncConfig.vue'
+export { default as SubtitleBurnConfig } from './SubtitleBurnConfig.vue'
 export { default as ImageEditingConfig } from './ImageEditingConfig.vue'
 
 export { default as DatasetUploadConfig } from './DatasetUploadConfig.vue'
@@ -34,6 +40,12 @@ export { default as CsvTransformConfig } from './CsvTransformConfig.vue'
 export { default as JsonTransformConfig } from './JsonTransformConfig.vue'
 
 export { default as WebsiteGeneratorConfig } from './WebsiteGeneratorConfig.vue'
+export { default as YoloTrainingConfig } from './YoloTrainingConfig.vue'
+export { default as ClipClassificationConfig } from './ClipClassificationConfig.vue'
+export { default as ClipRetrievalConfig } from './ClipRetrievalConfig.vue'
+export { default as ProjectProfilerConfig } from './ProjectProfilerConfig.vue'
+export { default as SiteFactoryNodeConfig } from './SiteFactoryNodeConfig.vue'
+export { default as TrainingStrategyWizard } from './TrainingStrategyWizard.vue'
 
 // Config component mapping by node type
 export const configComponentMap = {
@@ -41,6 +53,12 @@ export const configComponentMap = {
   'video_generation': 'VideoGenerationConfig',
   'audio_generation': 'AudioGenerationConfig',
   'subtitle_generation': 'SubtitleGenerationConfig',
+  'video_upload': 'VideoUploadConfig',
+  'subtitle_translate': 'SubtitleTranslateConfig',
+  'segment_dubbing': 'SegmentDubbingConfig',
+  'lip_sync': 'LipSyncConfig',
+  'subtitle_burn': 'SubtitleBurnConfig',
+  'video_translation': 'VideoTranslationConfig',
   'image_editing': 'ImageEditingConfig',
   
   'dataset_upload': 'DatasetUploadConfig',
@@ -69,4 +87,17 @@ export const configComponentMap = {
   'csv_transform': 'CsvTransformConfig',
   'json_transform': 'JsonTransformConfig',
   'website_generator': 'WebsiteGeneratorConfig',
+
+  'yolo_training': 'YoloTrainingConfig',
+  'clip_classification': 'ClipClassificationConfig',
+  'clip_retrieval': 'ClipRetrievalConfig',
+  'project_profiler': 'ProjectProfilerConfig',
+  'environment_provision': 'SiteFactoryNodeConfig',
+  'site_preview': 'SiteFactoryNodeConfig',
+  'site_qa': 'SiteFactoryNodeConfig',
+  'project_agent': 'SiteFactoryNodeConfig',
+  'backend_setup': 'SiteFactoryNodeConfig',
+  'frontend_setup': 'SiteFactoryNodeConfig',
+  'ui_beautify': 'SiteFactoryNodeConfig',
+  'site_code_review': 'SiteFactoryNodeConfig',
 }

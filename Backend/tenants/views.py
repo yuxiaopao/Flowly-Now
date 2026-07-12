@@ -2,8 +2,11 @@
 Views for tenants app.
 """
 
+import logging
 import secrets
 from datetime import timedelta
+from django.conf import settings
+from core.email_delivery import send_email_with_fallback
 from django.utils import timezone
 from django.db.models import Q
 from django.contrib.auth import get_user_model
@@ -11,52 +14,66 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.pagination import PageNumberPagination
 
 from .models import Tenant, TenantMembership, TenantInvitation, TenantUsage, TeamSkill, SkillAssignment, TeamTask, TaskAssignee, TeamActivity
 from .serializers import (
     TenantListSerializer, TenantDetailSerializer, TenantCreateSerializer,
     TenantUpdateSerializer, TenantMembershipSerializer,
-    TenantMembershipCreateSerializer, TenantInvitationSerializer,
+    TenantMembershipCreateSerializer, TenantInviteSerializer, TenantInvitationSerializer,
     TenantUsageSerializer, JoinTenantSerializer,
     TeamSkillListSerializer, TeamSkillDetailSerializer, TeamSkillCreateSerializer,
     TeamTaskListSerializer, TeamTaskDetailSerializer, TeamTaskCreateSerializer, TeamTaskUpdateSerializer,
-    SkillAssignmentSerializer, TeamActivitySerializer
+    SkillAssignmentSerializer, TaskAssigneeSerializer, TeamActivitySerializer
 )
+from .access import is_tenant_member, is_tenant_admin
 
 User = get_user_model()
+logger = logging.getLogger(__name__)
+
+
+def _send_invitation_email(invitation, tenant, role_display):
+    """Send the invitation email with a join link. Never raises — logs on failure."""
+    join_url = f"{settings.FRONTEND_URL}/team/join?token={invitation.token}"
+    subject = f"[Flowly] 您已被邀请加入团队「{tenant.name}」"
+    message = f"""您好，
+
+{invitation.invited_by.get_full_name() or invitation.invited_by.username} 邀请您以「{role_display}」身份加入 Flowly 团队「{tenant.name}」。
+
+请点击以下链接接受邀请（7 天内有效）：
+{join_url}
+
+如果您还没有 Flowly 账号，请先使用邮箱 {invitation.email} 注册后再点击链接加入。
+
+谢谢，
+Flowly 团队
+"""
+    return send_email_with_fallback(
+        subject=subject,
+        message=message,
+        recipient_list=[invitation.email],
+        from_email=settings.DEFAULT_FROM_EMAIL,
+    )
+
+
+class TeamActivityPagination(PageNumberPagination):
+    page_size = 50
+    page_size_query_param = 'page_size'
+    max_page_size = 200
 
 
 class TenantPermission:
-    """Permission checks for tenants."""
+    """Permission checks for tenants — delegates to tenants.access for consistency."""
 
     @staticmethod
     def is_member(user, tenant):
         """Check if user is a member of tenant."""
-        return TenantMembership.objects.filter(
-            user=user,
-            tenant=tenant,
-            is_active=True
-        ).exists()
+        return is_tenant_member(user, tenant.id)
 
     @staticmethod
     def is_admin(user, tenant):
         """Check if user is admin or owner of tenant."""
-        return TenantMembership.objects.filter(
-            user=user,
-            tenant=tenant,
-            is_active=True,
-            role__in=['owner', 'admin']
-        ).exists()
-
-    @staticmethod
-    def can_edit(user, tenant):
-        """Check if user can edit tenant resources."""
-        return TenantMembership.objects.filter(
-            user=user,
-            tenant=tenant,
-            is_active=True,
-            role__in=['owner', 'admin', 'member']
-        ).exists()
+        return is_tenant_admin(user, tenant.id)
 
 
 class TenantViewSet(viewsets.ModelViewSet):
@@ -155,7 +172,7 @@ class TenantViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_403_FORBIDDEN
             )
 
-        serializer = TenantMembershipCreateSerializer(data=request.data)
+        serializer = TenantInviteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
         email = serializer.validated_data['email']
@@ -197,8 +214,12 @@ class TenantViewSet(viewsets.ModelViewSet):
             invitation.expires_at = timezone.now() + timedelta(days=7)
             invitation.save()
 
+        role_display = dict(TenantMembership.ROLE_CHOICES).get(role, role)
+        email_sent = _send_invitation_email(invitation, tenant, role_display)
+
         return Response({
-            'message': '邀请已发送',
+            'message': '邀请已发送' if email_sent else '邀请已创建，但邮件发送失败，请手动分享邀请链接',
+            'email_sent': email_sent,
             'invitation': TenantInvitationSerializer(invitation).data
         })
 
@@ -229,6 +250,13 @@ class TenantViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
+        TeamActivity.objects.create(
+            tenant=tenant,
+            user=request.user,
+            action='member_left',
+            description=f'移除成员: {membership.user.username}',
+            metadata={'member_id': membership.id, 'user_id': membership.user.id, 'username': membership.user.username}
+        )
         membership.delete()
         return Response({'message': '成员已移除'})
 
@@ -246,11 +274,55 @@ class TenantMembershipViewSet(viewsets.ModelViewSet):
             is_active=True
         ).select_related('tenant', 'user')
 
-    @action(detail=False, methods=['get'])
-    def my_memberships(self, request):
-        """Get all memberships for current user."""
-        memberships = self.get_queryset()
-        serializer = TenantMembershipSerializer(memberships, many=True)
+    def get_object_for_update(self):
+        """Get any membership object with permission checks (bypasses user filter)."""
+        membership_id = self.kwargs.get('pk')
+        try:
+            membership = TenantMembership.objects.select_related('tenant', 'user').get(id=membership_id)
+        except TenantMembership.DoesNotExist:
+            return None, Response({'error': '成员不存在'}, status=status.HTTP_404_NOT_FOUND)
+
+        if not TenantPermission.is_admin(self.request.user, membership.tenant):
+            return None, Response({'error': '只有管理员可以修改成员角色'}, status=status.HTTP_403_FORBIDDEN)
+
+        if membership.role == 'owner':
+            return None, Response({'error': '不能修改所有者角色'}, status=status.HTTP_400_BAD_REQUEST)
+
+        return membership, None
+
+    @action(detail=True, methods=['patch'])
+    def update_role(self, request, pk=None):
+        """Update a member's role. Requires admin permission."""
+        membership, error_response = self.get_object_for_update()
+        if error_response:
+            return error_response
+
+        new_role = request.data.get('role')
+        if not new_role or new_role not in dict(TenantMembership.ROLE_CHOICES):
+            return Response({'error': '无效的角色值'}, status=status.HTTP_400_BAD_REQUEST)
+
+        old_role = membership.role
+        membership.role = new_role
+        membership.save(update_fields=['role'])
+
+        TeamActivity.objects.create(
+            tenant=membership.tenant,
+            user=request.user,
+            action='role_changed',
+            description=f'将成员 {membership.user.username} 的角色从 {old_role} 变更为 {new_role}',
+            metadata={'member_id': membership.id, 'user_id': membership.user.id, 'old_role': old_role, 'new_role': new_role}
+        )
+
+        return Response(TenantMembershipSerializer(membership).data)
+
+    def partial_update(self, request, *args, **kwargs):
+        """Allow PATCH on membership with admin permission (for role changes)."""
+        membership, error_response = self.get_object_for_update()
+        if error_response:
+            return error_response
+        serializer = self.get_serializer(membership, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
         return Response(serializer.data)
 
 
@@ -321,11 +393,18 @@ class TenantInvitationViewSet(viewsets.ModelViewSet):
             )
 
         # Create membership
-        TenantMembership.objects.create(
+        membership = TenantMembership.objects.create(
             tenant=invitation.tenant,
             user=request.user,
             role=invitation.role,
             invited_by=invitation.invited_by
+        )
+        TeamActivity.objects.create(
+            tenant=invitation.tenant,
+            user=request.user,
+            action='member_joined',
+            description=f'成员 {request.user.username} 通过邀请链接加入了团队',
+            metadata={'member_id': membership.id, 'user_id': request.user.id}
         )
 
         # Update invitation status
@@ -356,11 +435,18 @@ class TenantInvitationViewSet(viewsets.ModelViewSet):
             )
 
         # Create membership
-        TenantMembership.objects.create(
+        membership = TenantMembership.objects.create(
             tenant=invitation.tenant,
             user=request.user,
             role=invitation.role,
             invited_by=invitation.invited_by
+        )
+        TeamActivity.objects.create(
+            tenant=invitation.tenant,
+            user=request.user,
+            action='member_joined',
+            description=f'成员 {request.user.username} 接受了邀请加入团队',
+            metadata={'member_id': membership.id, 'user_id': request.user.id}
         )
 
         invitation.status = 'accepted'
@@ -426,15 +512,15 @@ class TenantUsageViewSet(viewsets.ReadOnlyModelViewSet):
         usage, _ = TenantUsage.objects.get_or_create(tenant=tenant)
 
         usage.current_month_workflows = Workflow.objects.filter(
-            owner__in=tenant.memberships.values_list('user', flat=True)
+            tenant=tenant
         ).count()
 
         usage.current_month_users = tenant.memberships.filter(is_active=True).count()
 
-        # Count executions this month
+        # Count executions this month — use workflow.tenant for correctness
         month_start = timezone.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         usage.current_month_executions = WorkflowExecution.objects.filter(
-            workflow__owner__in=tenant.memberships.values_list('user', flat=True),
+            workflow__tenant=tenant,
             started_at__gte=month_start
         ).count()
 
@@ -447,20 +533,15 @@ class TenantUsageViewSet(viewsets.ReadOnlyModelViewSet):
 # ============ Team Skill / Task Assignment Viewsets ============
 
 class TeamSkillPermission:
-    """Permission checks for team skills."""
+    """Permission checks for team skills — delegates to access.py for consistency."""
 
     @staticmethod
     def is_member(user, tenant):
-        return TenantMembership.objects.filter(
-            user=user, tenant=tenant, is_active=True
-        ).exists()
+        return is_tenant_member(user, tenant.id)
 
     @staticmethod
     def is_admin(user, tenant):
-        return TenantMembership.objects.filter(
-            user=user, tenant=tenant, is_active=True,
-            role__in=['owner', 'admin']
-        ).exists()
+        return is_tenant_admin(user, tenant.id)
 
 
 class TeamSkillViewSet(viewsets.ModelViewSet):
@@ -476,14 +557,15 @@ class TeamSkillViewSet(viewsets.ModelViewSet):
         return TeamSkillDetailSerializer
 
     def get_queryset(self):
+        qs = TeamSkill.objects.filter(
+            tenant__memberships__user=self.request.user,
+            tenant__memberships__is_active=True,
+        ).select_related('tenant', 'created_by').prefetch_related('assignments')
+
         tenant_id = self.request.query_params.get('tenant_id')
         if tenant_id:
-            return TeamSkill.objects.filter(
-                tenant_id=tenant_id,
-                tenant__memberships__user=self.request.user,
-                tenant__memberships__is_active=True
-            ).select_related('tenant', 'created_by').prefetch_related('assignments')
-        return TeamSkill.objects.none()
+            qs = qs.filter(tenant_id=tenant_id)
+        return qs.distinct()
 
     def create(self, request, *args, **kwargs):
         tenant_id = request.data.get('tenant') or request.query_params.get('tenant_id')
@@ -590,21 +672,23 @@ class TeamTaskViewSet(viewsets.ModelViewSet):
         return TeamTaskDetailSerializer
 
     def get_queryset(self):
+        qs = TeamTask.objects.filter(
+            tenant__memberships__user=self.request.user,
+            tenant__memberships__is_active=True,
+        ).select_related('tenant', 'owner', 'created_by', 'linked_skill').prefetch_related(
+            'task_assignees__user'
+        )
+
         tenant_id = self.request.query_params.get('tenant_id')
         if tenant_id:
-            qs = TeamTask.objects.filter(
-                tenant_id=tenant_id,
-                tenant__memberships__user=self.request.user,
-                tenant__memberships__is_active=True
-            ).select_related('tenant', 'owner', 'created_by', 'linked_skill').prefetch_related('task_assignees__user')
-            if self.request.query_params.get('status'):
-                qs = qs.filter(status=self.request.query_params.get('status'))
-            if self.request.query_params.get('priority'):
-                qs = qs.filter(priority=self.request.query_params.get('priority'))
-            if self.request.query_params.get('assignee_id'):
-                qs = qs.filter(task_assignees__user_id=self.request.query_params.get('assignee_id'))
-            return qs.distinct()
-        return TeamTask.objects.none()
+            qs = qs.filter(tenant_id=tenant_id)
+        if self.request.query_params.get('status'):
+            qs = qs.filter(status=self.request.query_params.get('status'))
+        if self.request.query_params.get('priority'):
+            qs = qs.filter(priority=self.request.query_params.get('priority'))
+        if self.request.query_params.get('assignee_id'):
+            qs = qs.filter(task_assignees__user_id=self.request.query_params.get('assignee_id'))
+        return qs.distinct()
 
     def create(self, request, *args, **kwargs):
         tenant_id = request.data.get('tenant') or request.query_params.get('tenant_id')
@@ -716,6 +800,7 @@ class TeamActivityViewSet(viewsets.ReadOnlyModelViewSet):
 
     serializer_class = TeamActivitySerializer
     permission_classes = [IsAuthenticated]
+    pagination_class = TeamActivityPagination
 
     def get_queryset(self):
         tenant_id = self.request.query_params.get('tenant_id')
@@ -727,5 +812,5 @@ class TeamActivityViewSet(viewsets.ReadOnlyModelViewSet):
             ).select_related('tenant', 'user')
             if self.request.query_params.get('action'):
                 qs = qs.filter(action=self.request.query_params.get('action'))
-            return qs[:100]
+            return qs
         return TeamActivity.objects.none()

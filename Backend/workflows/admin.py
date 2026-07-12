@@ -105,12 +105,17 @@ class APICredentialAdmin(admin.ModelAdmin):
     """Admin for APICredential model."""
 
     list_display = [
-        'name', 'credential_type', 'service_type', 'owner', 'is_active', 'last_used_at'
+        'name', 'credential_type', 'service_type', 'scope',
+        'owner', 'tenant', 'is_active', 'is_encrypted', 'last_used_at'
     ]
-    list_filter = ['credential_type', 'service_type', 'is_active']
-    search_fields = ['name', 'description']
+    list_filter = ['credential_type', 'service_type', 'scope', 'is_active', 'is_encrypted']
+    search_fields = ['name', 'description', 'owner__username']
     raw_id_fields = ['owner', 'tenant']
-    readonly_fields = ['created_at', 'updated_at', 'last_used_at', 'usage_count']
+    readonly_fields = [
+        'created_at', 'updated_at', 'last_used_at',
+        'usage_count', 'credential_data', 'credential_data_hash'
+    ]
+    ordering = ['-created_at']
 
 
 @admin.register(AuditLog)

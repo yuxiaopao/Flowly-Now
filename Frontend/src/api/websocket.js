@@ -4,6 +4,7 @@
 
 import Cookies from 'js-cookie'
 import { useAppStore } from '@/stores/app'
+import { getWebSocketUrl } from '@/config'
 
 // WebSocket 事件类型
 export const WebSocketEvents = {
@@ -104,10 +105,7 @@ class WebSocketService {
    * 构建 WebSocket URL
    */
   _buildUrl(url, params, token) {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const wsHost = import.meta.env.VITE_WS_URL || window.location.host
-    
-    let wsUrl = `${protocol}//${wsHost}${url}`
+    let wsUrl = getWebSocketUrl(url)
     
     // 添加查询参数
     const queryParams = new URLSearchParams()

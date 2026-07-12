@@ -10,6 +10,7 @@ from .views import (
     NLSessionConfirmView,
     NLWorkflowPreviewView,
     NLWorkflowStreamView,
+    NLEditorApplyView,
     NLWorkflowAnalyzeIntentView,
     NLWorkflowSuggestView,
 )
@@ -22,6 +23,7 @@ urlpatterns = [
     path('sessions/<uuid:session_id>/message/stream/', NLSessionMessageStreamView.as_view(), name='nl-session-message-stream'),
     path('sessions/<uuid:session_id>/confirm/', NLSessionConfirmView.as_view(), name='nl-session-confirm'),
     path('preview/', NLWorkflowPreviewView.as_view(), name='nl-workflow-preview'),
+    path('editor/apply/', NLEditorApplyView.as_view(), name='nl-editor-apply'),
     path('stream/', NLWorkflowStreamView.as_view(), name='nl-workflow-stream'),
     path('analyze-intent/', NLWorkflowAnalyzeIntentView.as_view(), name='nl-workflow-analyze-intent'),
     path('suggest/', NLWorkflowSuggestView.as_view(), name='nl-workflow-suggest'),

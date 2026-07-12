@@ -1,13 +1,10 @@
-﻿<template>
-  <div class="workflow-list">
-    <div class="list-header">
-      <div class="header-left">
-        <h1 class="page-title">
-          工作流
-        </h1>
-        <span class="workflow-count">{{ totalCount }} 个工作流</span>
-      </div>
-      <div class="header-actions">
+<template>
+  <PageShell width="wide">
+    <PageHeader
+      title="工作流"
+      :meta="`${totalCount} 个工作流`"
+    >
+      <template #actions>
         <el-input
           v-model="searchQuery"
           placeholder="搜索工作流..."
@@ -20,6 +17,7 @@
           v-model="statusFilter"
           placeholder="状态"
           clearable
+          class="status-select"
           @change="fetchWorkflows"
         >
           <el-option
@@ -47,8 +45,8 @@
             新建工作流
           </AppButton>
         </router-link>
-      </div>
-    </div>
+      </template>
+    </PageHeader>
 
     <div
       v-if="isLoading"
@@ -60,19 +58,20 @@
       />
     </div>
 
-    <div
+    <PageEmptyState
       v-else-if="workflows.length === 0"
-      class="empty-state"
+      :icon="GitBranch"
+      title="暂无工作流"
+      description="创建您的第一个 AI 工作流，开始编排自动化任务。"
     >
-      <GitBranch class="empty-icon" />
-      <h3>暂无工作流</h3>
-      <p>创建您的第一个 AI 工作流</p>
-      <router-link to="/workflows/new">
-        <AppButton variant="primary">
-          创建工作流
-        </AppButton>
-      </router-link>
-    </div>
+      <template #actions>
+        <router-link to="/workflows/new">
+          <AppButton variant="primary">
+            创建工作流
+          </AppButton>
+        </router-link>
+      </template>
+    </PageEmptyState>
 
     <div
       v-else
@@ -82,20 +81,23 @@
         v-for="workflow in workflows"
         :key="workflow.id"
         class="workflow-card"
-        @click="goToEditor(workflow.id)"
+        @click="goToDetail(workflow.id)"
       >
-        <div class="card-header">
-          <MiniWorkflowPreview
-            :nodes="workflow.nodesPreview"
-            class="card-preview"
+        <div class="card-preview-wrap">
+          <WorkflowCardPreview
+            :canvas-preview="resolveCanvasPreview(workflow)"
+            :nodes="resolvePreviewNodes(workflow)"
+            :edges="resolvePreviewEdges(workflow)"
           />
           <el-dropdown
             trigger="click"
+            class="card-menu"
             @command="(cmd) => handleCommand(cmd, workflow)"
           >
             <el-button
               text
               circle
+              class="card-menu-btn"
               @click.stop
             >
               <MoreVertical />
@@ -123,7 +125,13 @@
         </div>
 
         <div class="card-body">
-          <h3 class="workflow-name">
+          <h3
+            class="workflow-name"
+            role="link"
+            tabindex="0"
+            @click.stop="goToDetail(workflow.id)"
+            @keydown.enter.stop="goToDetail(workflow.id)"
+          >
             {{ workflow.name }}
           </h3>
           <p class="workflow-desc">
@@ -135,11 +143,11 @@
           <div class="card-stats">
             <span class="stat">
               <Layers class="stat-icon" />
-              {{ workflow.node_count || 0 }}
+              {{ workflow.nodeCount || workflow.node_count || 0 }}
             </span>
             <span class="stat">
               <Play class="stat-icon" />
-              {{ workflow.execution_count || 0 }}
+              {{ workflow.executionCount || workflow.execution_count || 0 }}
             </span>
           </div>
           <el-tag
@@ -151,7 +159,7 @@
         </div>
 
         <div class="card-meta">
-          <span class="meta-time">{{ formatDate(workflow.updated_at) }}</span>
+          <span class="meta-time">{{ formatDate(workflow.updatedAt || workflow.updated_at) }}</span>
         </div>
       </div>
     </div>
@@ -168,7 +176,7 @@
         @current-change="handlePageChange"
       />
     </div>
-  </div>
+  </PageShell>
 </template>
 
 <script setup>
@@ -176,10 +184,18 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useWorkflowStore } from '@/stores/workflow'
 import { useAppStore } from '@/stores/app'
-import { ElMessageBox, ElMessage } from 'element-plus'
+import { ElMessageBox } from 'element-plus'
 import { Search, Plus, GitBranch, MoreVertical, Layers, Play } from 'lucide-vue-next'
 import AppButton from '@/components/common/AppButton.vue'
-import MiniWorkflowPreview from '@/components/workflow/MiniWorkflowPreview.vue'
+import PageShell from '@/components/layout/PageShell.vue'
+import PageHeader from '@/components/layout/PageHeader.vue'
+import PageEmptyState from '@/components/layout/PageEmptyState.vue'
+import WorkflowCardPreview from '@/components/workflow/WorkflowCardPreview.vue'
+import {
+  resolveWorkflowCanvasPreview,
+  resolveWorkflowPreviewNodes,
+  resolveWorkflowPreviewEdges,
+} from '@/utils/workflowPreview'
 
 const router = useRouter()
 const workflowStore = useWorkflowStore()
@@ -220,6 +236,22 @@ function handleSearch() {
 function handlePageChange(page) {
   currentPage.value = page
   fetchWorkflows()
+}
+
+function resolveCanvasPreview(workflow) {
+  return resolveWorkflowCanvasPreview(workflow)
+}
+
+function resolvePreviewNodes(workflow) {
+  return resolveWorkflowPreviewNodes(workflow)
+}
+
+function resolvePreviewEdges(workflow) {
+  return resolveWorkflowPreviewEdges(workflow)
+}
+
+function goToDetail(id) {
+  router.push(`/workflows/${id}`)
 }
 
 function goToEditor(id) {
@@ -306,81 +338,19 @@ function formatDate(date) {
 @use '@/assets/styles/variables.scss' as *;
 
 .workflow-list {
-  max-width: 1400px;
-  margin: 0 auto;
-}
-
-.list-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: $spacing-6;
-  flex-wrap: wrap;
-  gap: $spacing-4;
-}
-
-.header-left {
-  display: flex;
-  align-items: baseline;
-  gap: $spacing-3;
-}
-
-.page-title {
-  font-size: $font-size-2xl;
-  font-weight: $font-weight-bold;
-  color: var(--text-primary);
-  margin: 0;
-}
-
-.workflow-count {
-  font-size: $font-size-sm;
-  color: var(--text-tertiary);
-}
-
-.header-actions {
-  display: flex;
-  align-items: center;
-  gap: $spacing-3;
+  width: 100%;
 }
 
 .search-input {
-  width: 280px;
+  width: 220px;
 }
 
-.btn-icon {
-  width: 18px;
-  height: 18px;
+.status-select {
+  width: 120px;
 }
 
 .loading-container {
   padding: $spacing-6;
-}
-
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: $spacing-16;
-  text-align: center;
-
-  .empty-icon {
-    width: 64px;
-    height: 64px;
-    color: var(--text-tertiary);
-    margin-bottom: $spacing-4;
-  }
-
-  h3 {
-    font-size: $font-size-xl;
-    color: var(--text-primary);
-    margin: 0 0 $spacing-2;
-  }
-
-  p {
-    color: var(--text-secondary);
-    margin: 0 0 $spacing-6;
-  }
 }
 
 .workflow-grid {
@@ -390,35 +360,59 @@ function formatDate(date) {
 }
 
 .workflow-card {
+  position: relative;
   background-color: var(--bg-secondary);
   border: 1px solid var(--border-primary);
   border-radius: $radius-xl;
   padding: $spacing-4;
   cursor: pointer;
-  transition: all $transition-fast;
+  transition: border-color 0.25s ease, box-shadow 0.25s ease, transform 0.25s cubic-bezier(0.22, 1, 0.36, 1);
   display: flex;
   flex-direction: column;
   gap: $spacing-3;
   min-height: 180px;
+  overflow: hidden;
+
+  // 顶部全宽渐变描边，hover 时显现
+  &::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: var(--border-gradient-brand);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
 
   &:hover {
-    border-color: var(--border-hover);
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-md);
+    border-color: var(--accent-cyan-soft);
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-lg);
+
+    &::after {
+      opacity: 1;
+    }
   }
 }
 
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: $spacing-3;
+.card-preview-wrap {
+  position: relative;
+  width: 100%;
 }
 
-.card-preview {
-  width: 220px;
-  height: 100px;
-  flex-shrink: 0;
+.card-menu {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 2;
+}
+
+.card-menu-btn {
+  background: color-mix(in srgb, var(--bg-secondary) 82%, transparent);
+  backdrop-filter: blur(6px);
+  border: 1px solid var(--border-primary);
 }
 
 .card-body {
@@ -433,6 +427,12 @@ function formatDate(date) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  cursor: pointer;
+
+  &:hover {
+    color: var(--el-color-primary);
+    text-decoration: underline;
+  }
 }
 
 .workflow-desc {

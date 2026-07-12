@@ -4,6 +4,7 @@ Serializers for RAG app.
 
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
+from tenants.models import Tenant
 from .models import VectorStore, DocumentCollection, Document, Chunk, RAGPipeline
 
 User = get_user_model()
@@ -13,13 +14,14 @@ class VectorStoreSerializer(serializers.ModelSerializer):
     """Serializer for VectorStore."""
 
     store_type_display = serializers.CharField(source='get_store_type_display', read_only=True)
+    tenant_name = serializers.CharField(source='tenant.name', read_only=True, default=None)
 
     class Meta:
         model = VectorStore
         fields = [
             'id', 'name', 'store_type', 'store_type_display',
             'host', 'port', 'collection', 'dimension', 'metric',
-            'is_default', 'created_at', 'updated_at'
+            'is_default', 'tenant', 'tenant_name', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
 
@@ -31,7 +33,7 @@ class VectorStoreCreateSerializer(serializers.ModelSerializer):
         model = VectorStore
         fields = [
             'name', 'store_type', 'host', 'port', 'collection',
-            'api_key', 'path', 'dimension', 'metric', 'is_default'
+            'api_key', 'path', 'dimension', 'metric', 'is_default', 'tenant'
         ]
 
 
@@ -94,6 +96,7 @@ class DocumentCollectionSerializer(serializers.ModelSerializer):
 
     documents = DocumentListSerializer(many=True, read_only=True)
     vector_store_name = serializers.CharField(source='vector_store.name', read_only=True)
+    tenant_name = serializers.CharField(source='tenant.name', read_only=True, default=None)
 
     class Meta:
         model = DocumentCollection
@@ -102,16 +105,20 @@ class DocumentCollectionSerializer(serializers.ModelSerializer):
             'vector_store', 'vector_store_name',
             'embedding_model', 'chunk_size', 'chunk_overlap',
             'document_count', 'chunk_count',
+            'tenant', 'tenant_name', 'owner',
             'created_at', 'updated_at',
             'documents'
         ]
-        read_only_fields = ['id', 'document_count', 'chunk_count', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'owner', 'document_count', 'chunk_count', 'created_at', 'updated_at']
 
 
 class DocumentCollectionListSerializer(serializers.ModelSerializer):
     """Serializer for DocumentCollection list view."""
 
     vector_store_name = serializers.CharField(source='vector_store.name', read_only=True)
+    tenant_name = serializers.CharField(source='tenant.name', read_only=True, default=None)
+    document_count = serializers.SerializerMethodField()
+    chunk_count = serializers.SerializerMethodField()
 
     class Meta:
         model = DocumentCollection
@@ -119,25 +126,53 @@ class DocumentCollectionListSerializer(serializers.ModelSerializer):
             'id', 'name', 'description',
             'vector_store', 'vector_store_name',
             'document_count', 'chunk_count',
+            'tenant', 'tenant_name', 'owner',
             'created_at'
         ]
+
+    def get_document_count(self, obj):
+        live = getattr(obj, 'documents_total', None)
+        if live is not None:
+            return live
+        return obj.document_count or 0
+
+    def get_chunk_count(self, obj):
+        live = getattr(obj, 'chunks_total', None)
+        if live is not None:
+            return live
+        return obj.chunk_count or 0
 
 
 class DocumentCollectionCreateSerializer(serializers.ModelSerializer):
     """Serializer for creating DocumentCollection."""
 
+    # Make vector_store optional since it will be auto-assigned
+    vector_store = serializers.PrimaryKeyRelatedField(
+        queryset=VectorStore.objects.all(),
+        required=False,
+        allow_null=True
+    )
+    tenant = serializers.PrimaryKeyRelatedField(
+        queryset=Tenant.objects.all(),
+        required=False,
+        allow_null=True
+    )
+
     class Meta:
         model = DocumentCollection
         fields = [
-            'name', 'description', 'vector_store',
+            'id', 'name', 'description', 'vector_store', 'tenant',
             'embedding_model', 'chunk_size', 'chunk_overlap'
         ]
+        read_only_fields = ['id']
 
 
 class RAGPipelineSerializer(serializers.ModelSerializer):
     """Serializer for RAGPipeline."""
 
     collection_name = serializers.CharField(source='collection.name', read_only=True)
+    tenant = serializers.PrimaryKeyRelatedField(source='collection.tenant', read_only=True)
+    tenant_name = serializers.CharField(source='collection.tenant.name', read_only=True, default=None)
 
     class Meta:
         model = RAGPipeline
@@ -146,7 +181,7 @@ class RAGPipelineSerializer(serializers.ModelSerializer):
             'collection', 'collection_name',
             'top_k', 'min_similarity',
             'system_prompt', 'include_sources',
-            'usage_count',
+            'usage_count', 'tenant', 'tenant_name',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'usage_count', 'created_at', 'updated_at']
@@ -155,10 +190,12 @@ class RAGPipelineSerializer(serializers.ModelSerializer):
 class RAGPipelineCreateSerializer(serializers.ModelSerializer):
     """Serializer for creating RAGPipeline."""
 
+    id = serializers.UUIDField(read_only=True)
+
     class Meta:
         model = RAGPipeline
         fields = [
-            'name', 'description', 'collection',
+            'id', 'name', 'description', 'collection',
             'top_k', 'min_similarity',
             'system_prompt', 'include_sources'
         ]

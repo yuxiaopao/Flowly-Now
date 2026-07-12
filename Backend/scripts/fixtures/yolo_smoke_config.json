@@ -1,0 +1,16 @@
+{
+  "framework": "ultralytics",
+  "training_kind": "yolo",
+  "yolo_version": "v8",
+  "model_variant": "n",
+  "name": "smoke_test",
+  "dataset_yaml_path": "E:/Flowly-now/Backend/scripts/fixtures/t2_mini_yolo/dataset.yaml",
+  "output_dir": "E:/Flowly-now/Backend/media/training/smoke_test",
+  "device": "cpu",
+  "config": {
+    "epochs": 1,
+    "batch_size": 2,
+    "image_size": 320
+  },
+  "streaming": false
+}

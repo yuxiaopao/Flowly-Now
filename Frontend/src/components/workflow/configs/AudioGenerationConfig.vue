@@ -52,6 +52,10 @@
               label="Azure Speech"
               value="azure"
             />
+            <el-option
+              label="阿里云百炼 (CosyVoice)"
+              value="dashscope"
+            />
           </el-select>
         </el-form-item>
 
@@ -62,7 +66,7 @@
             @change="handleChange"
           />
           <div class="field-hint">
-            例如: tts-1, tts-1-hd, eleven_multilingual_v2
+            例如: tts-1, tts-1-hd, eleven_multilingual_v2, cosyvoice-v3-flash
           </div>
         </el-form-item>
       </div>
@@ -118,12 +122,36 @@
               value="shimmer"
             />
           </el-select>
+          <el-select
+            v-else-if="localData.provider === 'dashscope'"
+            v-model="localData.voice"
+            @change="handleChange"
+          >
+            <el-option
+              label="龙安燕 (女声/晓晓风格)"
+              value="longanyang"
+            />
+            <el-option
+              label="龙小淳 (女声/温柔)"
+              value="longxiaochun"
+            />
+            <el-option
+              label="龙老铁 (男声/东北)"
+              value="longlaotie"
+            />
+          </el-select>
           <el-input 
             v-else 
             v-model="localData.voice" 
             placeholder="输入声音ID或名称"
             @change="handleChange"
           />
+          <div
+            v-if="localData.provider === 'dashscope'"
+            class="field-hint"
+          >
+            CosyVoice 音色，也可手动输入其他官方音色 ID
+          </div>
         </el-form-item>
 
         <el-form-item label="语速">
@@ -196,7 +224,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, watch } from 'vue'
+import { reactive, watch } from 'vue'
 
 const props = defineProps({
   modelValue: {
@@ -224,18 +252,24 @@ watch(() => props.modelValue, (newVal) => {
       label: newVal.label || '',
       description: newVal.description || '',
       provider: newVal.provider || 'openai',
-      model: newVal.model || (newVal.provider === 'openai' ? 'tts-1' : ''),
+      model: newVal.model || (newVal.provider === 'dashscope' ? 'cosyvoice-v3-flash' : 'tts-1'),
       text: newVal.text || '',
-      voice: newVal.voice || 'alloy',
+      voice: newVal.voice || (newVal.provider === 'dashscope' ? 'longanyang' : 'alloy'),
       speed: newVal.speed ?? 1.0,
       format: newVal.format || 'mp3'
     })
   }
 }, { immediate: true, deep: true })
 
+const defaultVoices = { openai: 'alloy', dashscope: 'longanyang' }
+const defaultModels = { openai: 'tts-1', dashscope: 'cosyvoice-v3-flash' }
+
 const handleProviderChange = () => {
-  if (localData.provider === 'openai' && !localData.model) {
-    localData.model = 'tts-1'
+  if (!localData.model || Object.values(defaultModels).includes(localData.model)) {
+    localData.model = defaultModels[localData.provider] || ''
+  }
+  if (!localData.voice || Object.values(defaultVoices).includes(localData.voice)) {
+    localData.voice = defaultVoices[localData.provider] || ''
   }
   handleChange()
 }

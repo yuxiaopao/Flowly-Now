@@ -6,6 +6,12 @@ from django.db import models
 from django.contrib.auth import get_user_model
 from django.core.validators import MinValueValidator, MaxValueValidator
 
+from config.constants import (
+    TENANT_DEFAULT_MAX_USERS,
+    TENANT_DEFAULT_MAX_WORKFLOWS,
+    TENANT_DEFAULT_MAX_EXECUTIONS_PER_MONTH,
+)
+
 User = get_user_model()
 
 
@@ -60,7 +66,7 @@ class Tenant(models.Model):
 
     # Usage limits
     max_users = models.IntegerField(
-        default=1,
+        default=TENANT_DEFAULT_MAX_USERS,
         validators=[MinValueValidator(1)],
         verbose_name='最大用户数'
     )

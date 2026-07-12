@@ -27,8 +27,13 @@ class Command(BaseCommand):
 
         # Create templates
         self._create_multimodal_templates(categories)
+        self._create_video_translation_template(categories)
         self._create_rag_templates(categories)
         self._create_ml_templates(categories)
+        self._create_yolo_detection_template(categories)
+        self._create_yolo_detection_v2_template(categories)
+        self._create_clip_retrieval_template(categories)
+        self._create_transformer_classification_template(categories)
         self._create_agent_templates(categories)
         self._create_utility_templates(categories)
         self._create_hybrid_templates(categories)
@@ -156,7 +161,7 @@ class Command(BaseCommand):
                         "label": "Subtitle Generation",
                         "inputs": {
                             "inputType": {"type": "string", "value": "video"},
-                            "inputPath": {"type": "expression", "value": "{{ video_gen_1.output }}"},
+                            "inputPath": {"type": "expression", "value": "{{ video_gen_1.output.video_url }}"},
                             "language": {"type": "string", "value": "en"},
                             "format": {"type": "string", "value": "srt"}
                         }
@@ -252,6 +257,102 @@ class Command(BaseCommand):
                 "is_featured": True,
                 "is_verified": True,
             }
+        )
+        if created:
+            self.stdout.write(self.style.SUCCESS(f"Created template: {template.name}"))
+        else:
+            self.stdout.write(f"Template already exists: {template.name}")
+
+    def _create_video_translation_template(self, categories):
+        """Template: Video multilingual translation with lip sync and subtitles."""
+        category = categories.get("multimodal") or categories.get("content")
+
+        workflow_data = {
+            "nodes": [
+                {
+                    "id": "trigger_1",
+                    "type": "trigger",
+                    "position": {"x": 100, "y": 200},
+                    "data": {
+                        "name": "trigger",
+                        "label": "Video Input",
+                        "inputs": {
+                            "video_url": {"type": "expression", "value": "{{ video_url }}"},
+                        },
+                    },
+                },
+                {
+                    "id": "video_translation_1",
+                    "type": "video_translation",
+                    "position": {"x": 400, "y": 200},
+                    "data": {
+                        "name": "video_translation",
+                        "label": "Video Translation",
+                        "inputs": {
+                            "video_input": {"type": "expression", "value": "{{ trigger_1.output.video_url }}"},
+                            "source_language": {"type": "static", "value": "zh"},
+                            "target_languages": {"type": "static", "value": ["en"]},
+                            "voice": {"type": "static", "value": "longanyang"},
+                            "subtitle_format": {"type": "static", "value": "srt"},
+                            "burn_subtitles": {"type": "static", "value": True},
+                            "lip_sync": {"type": "static", "value": True},
+                            "provider": {"type": "static", "value": "dashscope"},
+                        },
+                    },
+                },
+                {
+                    "id": "output_1",
+                    "type": "output",
+                    "position": {"x": 700, "y": 200},
+                    "data": {
+                        "name": "output",
+                        "label": "Output",
+                        "message": "Translated video with subtitles",
+                    },
+                },
+            ],
+            "edges": [
+                {"id": "e1", "source": "trigger_1", "target": "video_translation_1", "sourceHandle": "output", "targetHandle": "input"},
+                {"id": "e2", "source": "video_translation_1", "target": "output_1", "sourceHandle": "output", "targetHandle": "input"},
+            ],
+        }
+
+        variables_schema = [
+            {
+                "name": "video_url",
+                "type": "string",
+                "label": "Video URL",
+                "description": "Public URL of the source video to translate",
+                "required": True,
+            },
+            {
+                "name": "target_language",
+                "type": "string",
+                "label": "Target Language",
+                "description": "Target language code (e.g. en, ja, ko)",
+                "required": False,
+                "default": "en",
+            },
+        ]
+
+        template, created = WorkflowTemplate.objects.get_or_create(
+            slug="video-multilingual-translation",
+            defaults={
+                "category": category,
+                "name": "视频多语言翻译",
+                "description": "Translate video speech with AI dubbing, lip sync, and burned-in subtitles",
+                "difficulty": "advanced",
+                "tags": ["video", "translation", "lip-sync", "subtitles", "multilingual"],
+                "workflow_data": workflow_data,
+                "variables_schema": variables_schema,
+                "estimated_duration": "15 min",
+                "required_apis": ["dashscope"],
+                "use_count": 0,
+                "rating": 4.7,
+                "rating_count": 0,
+                "is_featured": True,
+                "is_verified": True,
+            },
         )
         if created:
             self.stdout.write(self.style.SUCCESS(f"Created template: {template.name}"))
@@ -575,6 +676,496 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS(f"Created template: {template.name}"))
         else:
             self.stdout.write(f"Template already exists: {template.name}")
+
+    def _create_yolo_detection_template(self, categories):
+        """YOLO detection project: dataset → train → website generator."""
+        category = categories["mlops"]
+        workflow_data = {
+            "nodes": [
+                {
+                    "id": "dataset_upload_1",
+                    "type": "dataset_upload",
+                    "position": {"x": 100, "y": 200},
+                    "data": {
+                        "label": "上传标注数据集",
+                        "config": {"format": "yolo", "sourceType": "upload"},
+                    },
+                },
+                {
+                    "id": "yolo_training_1",
+                    "type": "yolo_training",
+                    "position": {"x": 400, "y": 200},
+                    "data": {
+                        "label": "YOLO 训练",
+                        "config": {
+                            "trainingMode": "local",
+                            "yoloVersion": "v8",
+                            "modelVariant": "n",
+                            "epochs": 50,
+                            "batchSize": 16,
+                            "imageSize": 640,
+                        },
+                    },
+                },
+                {
+                    "id": "project_profiler_1",
+                    "type": "project_profiler",
+                    "position": {"x": 550, "y": 200},
+                    "data": {
+                        "label": "场景分析",
+                        "config": {"websiteType": "detection", "useLlmEnrich": False},
+                    },
+                },
+                {
+                    "id": "website_generator_1",
+                    "type": "website_generator",
+                    "position": {"x": 750, "y": 200},
+                    "data": {
+                        "label": "生成识别网站",
+                        "config": {
+                            "websiteType": "detection",
+                            "qaProfile": "default",
+                            "wizard": {
+                                "siteName": "YOLO 识别系统",
+                                "usageDescription": "上传现场图片进行目标检测",
+                                "wizardCompleted": True,
+                            },
+                        },
+                    },
+                },
+                {
+                    "id": "environment_provision_1",
+                    "type": "environment_provision",
+                    "position": {"x": 950, "y": 200},
+                    "data": {
+                        "label": "环境配置",
+                        "config": {"runtimeMode": "desktop"},
+                    },
+                },
+                {
+                    "id": "site_qa_1",
+                    "type": "site_qa",
+                    "position": {"x": 1300, "y": 200},
+                    "data": {
+                        "label": "站点自查",
+                        "config": {
+                            "websiteType": "detection",
+                            "qaProfile": "default",
+                            "skipPlaywright": False,
+                        },
+                    },
+                },
+                {
+                    "id": "site_preview_1",
+                    "type": "site_preview",
+                    "position": {"x": 1600, "y": 200},
+                    "data": {
+                        "label": "站点预览",
+                        "config": {"qaProfile": "default"},
+                    },
+                },
+                {
+                    "id": "project_agent_1",
+                    "type": "project_agent",
+                    "position": {"x": 1900, "y": 200},
+                    "data": {
+                        "label": "项目 Agent",
+                        "config": {
+                            "qaProfile": "default",
+                            "autoQaAfterEdit": True,
+                            "message": "",
+                        },
+                    },
+                },
+            ],
+            "edges": [
+                {"id": "e1", "source": "dataset_upload_1", "target": "yolo_training_1"},
+                {"id": "e2", "source": "yolo_training_1", "target": "project_profiler_1"},
+                {"id": "e3", "source": "project_profiler_1", "target": "website_generator_1"},
+                {"id": "e4", "source": "website_generator_1", "target": "environment_provision_1"},
+                {"id": "e5", "source": "environment_provision_1", "target": "site_qa_1"},
+                {"id": "e6", "source": "site_qa_1", "target": "site_preview_1"},
+                {"id": "e7", "source": "site_preview_1", "target": "project_agent_1"},
+            ],
+        }
+        template, created = WorkflowTemplate.objects.get_or_create(
+            slug="yolo-detection-project",
+            defaults={
+                "category": category,
+                "name": "YOLO 识别项目",
+                "description": "上传已标注数据集 → YOLO 训练 → 场景分析 → 建站向导 → 环境 → QA → 预览 → Agent",
+                "difficulty": "intermediate",
+                "tags": ["YOLO", "detection", "MLOps", "website"],
+                "workflow_data": workflow_data,
+                "variables_schema": [],
+                "estimated_duration": "2-4 hours",
+                "required_apis": [],
+                "use_count": 0,
+                "rating": 4.8,
+                "rating_count": 0,
+                "is_featured": True,
+                "is_verified": True,
+            },
+        )
+        if created:
+            self.stdout.write(self.style.SUCCESS(f"Created template: {template.name}"))
+        else:
+            template.workflow_data = workflow_data
+            template.description = "上传已标注数据集 → YOLO 训练 → 场景分析 → 建站向导 → 环境 → QA → 预览 → Agent"
+            template.save(update_fields=["workflow_data", "description"])
+            self.stdout.write(f"Updated template: {template.name}")
+
+    def _create_yolo_detection_v2_template(self, categories):
+        """YOLO detection v2: scaffold + AI role agents + QA + preview + agent."""
+        category = categories["mlops"]
+        workflow_data = {
+            "nodes": [
+                {
+                    "id": "dataset_upload_1",
+                    "type": "dataset_upload",
+                    "position": {"x": 80, "y": 200},
+                    "data": {
+                        "label": "上传标注数据集",
+                        "config": {"format": "yolo", "sourceType": "upload"},
+                    },
+                },
+                {
+                    "id": "yolo_training_1",
+                    "type": "yolo_training",
+                    "position": {"x": 280, "y": 200},
+                    "data": {
+                        "label": "YOLO 训练",
+                        "config": {
+                            "trainingMode": "local",
+                            "yoloVersion": "v8",
+                            "modelVariant": "n",
+                            "epochs": 50,
+                            "batchSize": 16,
+                            "imageSize": 640,
+                        },
+                    },
+                },
+                {
+                    "id": "project_profiler_1",
+                    "type": "project_profiler",
+                    "position": {"x": 480, "y": 200},
+                    "data": {
+                        "label": "场景分析",
+                        "config": {"websiteType": "detection", "useLlmEnrich": False},
+                    },
+                },
+                {
+                    "id": "website_generator_1",
+                    "type": "website_generator",
+                    "position": {"x": 680, "y": 200},
+                    "data": {
+                        "label": "网站脚手架",
+                        "config": {
+                            "websiteType": "detection",
+                            "waitForCompletion": True,
+                            "wizard": {
+                                "siteName": "YOLO 识别系统",
+                                "usageDescription": "上传现场图片进行目标检测",
+                                "wizardCompleted": True,
+                            },
+                        },
+                    },
+                },
+                {
+                    "id": "backend_setup_1",
+                    "type": "backend_setup",
+                    "position": {"x": 880, "y": 200},
+                    "data": {
+                        "label": "后端搭建",
+                        "config": {"agentMode": "auto", "allowCoreEdit": True},
+                    },
+                },
+                {
+                    "id": "frontend_setup_1",
+                    "type": "frontend_setup",
+                    "position": {"x": 1080, "y": 200},
+                    "data": {
+                        "label": "前端搭建",
+                        "config": {"agentMode": "auto"},
+                    },
+                },
+                {
+                    "id": "ui_beautify_1",
+                    "type": "ui_beautify",
+                    "position": {"x": 1280, "y": 200},
+                    "data": {
+                        "label": "UI 美化",
+                        "config": {"agentMode": "auto"},
+                    },
+                },
+                {
+                    "id": "environment_provision_1",
+                    "type": "environment_provision",
+                    "position": {"x": 1480, "y": 200},
+                    "data": {
+                        "label": "环境配置",
+                        "config": {"runtimeMode": "desktop"},
+                    },
+                },
+                {
+                    "id": "site_qa_1",
+                    "type": "site_qa",
+                    "position": {"x": 1680, "y": 200},
+                    "data": {
+                        "label": "站点自查",
+                        "config": {
+                            "websiteType": "detection",
+                            "qaProfile": "default",
+                            "skipPlaywright": False,
+                        },
+                    },
+                },
+                {
+                    "id": "site_code_review_1",
+                    "type": "site_code_review",
+                    "position": {"x": 1880, "y": 200},
+                    "data": {
+                        "label": "代码复查",
+                        "config": {"agentMode": "auto", "maxRounds": 2},
+                    },
+                },
+                {
+                    "id": "site_preview_1",
+                    "type": "site_preview",
+                    "position": {"x": 2080, "y": 200},
+                    "data": {
+                        "label": "站点预览",
+                        "config": {"qaProfile": "default"},
+                    },
+                },
+                {
+                    "id": "project_agent_1",
+                    "type": "project_agent",
+                    "position": {"x": 2280, "y": 200},
+                    "data": {
+                        "label": "项目 Agent",
+                        "config": {
+                            "qaProfile": "default",
+                            "autoQaAfterEdit": True,
+                            "message": "",
+                        },
+                    },
+                },
+            ],
+            "edges": [
+                {"id": "e1", "source": "dataset_upload_1", "target": "yolo_training_1"},
+                {"id": "e2", "source": "yolo_training_1", "target": "project_profiler_1"},
+                {"id": "e3", "source": "project_profiler_1", "target": "website_generator_1"},
+                {"id": "e4", "source": "website_generator_1", "target": "backend_setup_1"},
+                {"id": "e5", "source": "backend_setup_1", "target": "frontend_setup_1"},
+                {"id": "e6", "source": "frontend_setup_1", "target": "ui_beautify_1"},
+                {"id": "e7", "source": "ui_beautify_1", "target": "environment_provision_1"},
+                {"id": "e8", "source": "environment_provision_1", "target": "site_qa_1"},
+                {"id": "e9", "source": "site_qa_1", "target": "site_code_review_1"},
+                {"id": "e10", "source": "site_code_review_1", "target": "site_preview_1"},
+                {"id": "e11", "source": "site_preview_1", "target": "project_agent_1"},
+            ],
+        }
+        template, created = WorkflowTemplate.objects.get_or_create(
+            name="YOLO 识别项目 v2（AI 分工）",
+            defaults={
+                "category": category,
+                "name": "YOLO 识别项目 v2（AI 分工）",
+                "description": "训练 → 脚手架 → 后端/前端/UI Agent → 环境 → QA → 复查 → 预览 → Agent",
+                "difficulty": "intermediate",
+                "tags": ["YOLO", "detection", "MLOps", "website", "ai-agents"],
+                "workflow_data": workflow_data,
+                "variables_schema": [],
+                "estimated_duration": "2-4 hours",
+                "required_apis": [],
+                "use_count": 0,
+                "rating": 4.9,
+                "rating_count": 0,
+                "is_featured": True,
+                "is_verified": True,
+            },
+        )
+        if created:
+            self.stdout.write(self.style.SUCCESS(f"Created template: {template.name}"))
+        else:
+            template.workflow_data = workflow_data
+            template.save(update_fields=["workflow_data"])
+            self.stdout.write(f"Updated template: {template.name}")
+
+    def _create_clip_retrieval_template(self, categories):
+        """CLIP retrieval project workflow template (M4)."""
+        category = categories.get("ml") or categories.get("computer_vision") or list(categories.values())[0]
+
+        workflow_data = {
+            "nodes": [
+                {
+                    "id": "dataset_upload_1",
+                    "type": "dataset_upload",
+                    "position": {"x": 80, "y": 200},
+                    "data": {
+                        "label": "上传图文数据集",
+                        "config": {"format": "image_text_pairs", "source": "upload"},
+                    },
+                },
+                {
+                    "id": "clip_retrieval_1",
+                    "type": "clip_retrieval",
+                    "position": {"x": 280, "y": 200},
+                    "data": {
+                        "label": "CLIP 检索索引",
+                        "config": {"indexType": "flat", "baseModel": "simple-bow"},
+                    },
+                },
+                {
+                    "id": "project_profiler_1",
+                    "type": "project_profiler",
+                    "position": {"x": 480, "y": 200},
+                    "data": {
+                        "label": "场景分析",
+                        "config": {"websiteType": "clip_retrieval", "useLlmEnrich": False},
+                    },
+                },
+                {
+                    "id": "website_generator_1",
+                    "type": "website_generator",
+                    "position": {"x": 680, "y": 200},
+                    "data": {
+                        "label": "生成检索网站",
+                        "config": {
+                            "websiteType": "clip_retrieval",
+                            "qaProfile": "default",
+                            "wizard": {
+                                "siteName": "CLIP 图文检索",
+                                "usageDescription": "输入文字描述，搜索相似图片",
+                                "primaryColor": "#06b6d4",
+                                "wizardCompleted": True,
+                            },
+                        },
+                    },
+                },
+                {
+                    "id": "environment_provision_1",
+                    "type": "environment_provision",
+                    "position": {"x": 880, "y": 200},
+                    "data": {"label": "环境配置", "config": {"runtimeMode": "desktop"}},
+                },
+                {
+                    "id": "site_qa_1",
+                    "type": "site_qa",
+                    "position": {"x": 1080, "y": 200},
+                    "data": {
+                        "label": "站点自查",
+                        "config": {"websiteType": "clip_retrieval", "qaProfile": "default", "skipPlaywright": True},
+                    },
+                },
+                {
+                    "id": "site_preview_1",
+                    "type": "site_preview",
+                    "position": {"x": 1280, "y": 200},
+                    "data": {"label": "站点预览", "config": {"qaProfile": "default"}},
+                },
+                {
+                    "id": "project_agent_1",
+                    "type": "project_agent",
+                    "position": {"x": 1480, "y": 200},
+                    "data": {"label": "项目 Agent", "config": {"autoQaAfterEdit": True}},
+                },
+            ],
+            "edges": [
+                {"id": "e1", "source": "dataset_upload_1", "target": "clip_retrieval_1"},
+                {"id": "e2", "source": "clip_retrieval_1", "target": "project_profiler_1"},
+                {"id": "e3", "source": "project_profiler_1", "target": "website_generator_1"},
+                {"id": "e4", "source": "website_generator_1", "target": "environment_provision_1"},
+                {"id": "e5", "source": "environment_provision_1", "target": "site_qa_1"},
+                {"id": "e6", "source": "site_qa_1", "target": "site_preview_1"},
+                {"id": "e7", "source": "site_preview_1", "target": "project_agent_1"},
+            ],
+        }
+        template, created = WorkflowTemplate.objects.get_or_create(
+            slug="clip-retrieval-project",
+            defaults={
+                "category": category,
+                "name": "CLIP 检索项目",
+                "description": "图文数据集 → CLIP 索引 → 检索站 → QA → 预览 → Agent",
+                "difficulty": "intermediate",
+                "tags": ["CLIP", "retrieval", "MLOps", "website"],
+                "workflow_data": workflow_data,
+                "variables_schema": [],
+                "estimated_duration": "1-2 hours",
+                "required_apis": [],
+                "use_count": 0,
+                "rating": 4.7,
+                "rating_count": 0,
+                "is_featured": True,
+                "is_verified": True,
+            },
+        )
+        if created:
+            self.stdout.write(self.style.SUCCESS(f"Created template: {template.name}"))
+        else:
+            template.workflow_data = workflow_data
+            template.save(update_fields=["workflow_data", "description"])
+            self.stdout.write(f"Updated template: {template.name}")
+
+    def _create_transformer_classification_template(self, categories):
+        """Transformer fine-tune → classification site factory chain."""
+        category = categories.get("ml") or categories.get("computer_vision") or list(categories.values())[0]
+        workflow_data = {
+            "nodes": [
+                {"id": "dataset_upload_1", "type": "dataset_upload", "position": {"x": 80, "y": 200},
+                 "data": {"label": "上传数据集", "config": {"format": "image_folder", "sourceType": "upload"}}},
+                {"id": "model_training_1", "type": "model_training", "position": {"x": 280, "y": 200},
+                 "data": {"label": "Transformer 微调", "config": {
+                     "framework": "transformers", "trainingKind": "transformer",
+                     "baseWeightUri": "bert-base-uncased", "epochs": 10}}},
+                {"id": "project_profiler_1", "type": "project_profiler", "position": {"x": 480, "y": 200},
+                 "data": {"label": "场景分析", "config": {"websiteType": "classification", "useLlmEnrich": True}}},
+                {"id": "website_generator_1", "type": "website_generator", "position": {"x": 680, "y": 200},
+                 "data": {"label": "生成分类网站", "config": {"websiteType": "classification", "backendFramework": "flask"}}},
+                {"id": "environment_provision_1", "type": "environment_provision", "position": {"x": 880, "y": 200},
+                 "data": {"label": "环境配置", "config": {"runtimeMode": "desktop"}}},
+                {"id": "site_qa_1", "type": "site_qa", "position": {"x": 1080, "y": 200},
+                 "data": {"label": "站点自查", "config": {"websiteType": "classification"}}},
+                {"id": "site_preview_1", "type": "site_preview", "position": {"x": 1280, "y": 200},
+                 "data": {"label": "站点预览", "config": {}}},
+                {"id": "project_agent_1", "type": "project_agent", "position": {"x": 1480, "y": 200},
+                 "data": {"label": "项目 Agent", "config": {"agentMode": "auto"}}},
+            ],
+            "edges": [
+                {"id": "e1", "source": "dataset_upload_1", "target": "model_training_1"},
+                {"id": "e2", "source": "model_training_1", "target": "project_profiler_1"},
+                {"id": "e3", "source": "project_profiler_1", "target": "website_generator_1"},
+                {"id": "e4", "source": "website_generator_1", "target": "environment_provision_1"},
+                {"id": "e5", "source": "environment_provision_1", "target": "site_qa_1"},
+                {"id": "e6", "source": "site_qa_1", "target": "site_preview_1"},
+                {"id": "e7", "source": "site_preview_1", "target": "project_agent_1"},
+            ],
+        }
+        template, created = WorkflowTemplate.objects.get_or_create(
+            slug="transformer-classification-project",
+            defaults={
+                "category": category,
+                "name": "Transformer 微调项目",
+                "description": "数据集 → Transformer 微调 → 分类站 → QA → 预览 → Agent",
+                "difficulty": "intermediate",
+                "tags": ["Transformers", "classification", "MLOps", "website"],
+                "workflow_data": workflow_data,
+                "variables_schema": [],
+                "estimated_duration": "2-4 hours",
+                "required_apis": [],
+                "use_count": 0,
+                "rating": 4.6,
+                "rating_count": 0,
+                "is_featured": True,
+                "is_verified": True,
+            },
+        )
+        if created:
+            self.stdout.write(self.style.SUCCESS(f"Created template: {template.name}"))
+        else:
+            template.workflow_data = workflow_data
+            template.save(update_fields=["workflow_data", "description"])
+            self.stdout.write(f"Updated template: {template.name}")
 
     def _create_agent_templates(self, categories):
         """Template 4: Multi-Agent Research Assistant."""

@@ -89,7 +89,7 @@
           <div class="execution-meta">
             <span class="meta-item">
               <Clock class="meta-icon" />
-              {{ formatDateTime(execution.started_at) }}
+              {{ formatDateTime(execution.startedAt || execution.started_at) }}
             </span>
             <span
               v-if="execution.duration"
@@ -99,11 +99,11 @@
               {{ formatDuration(execution.duration) }}
             </span>
             <span
-              v-if="execution.triggered_by_name"
+              v-if="execution.triggeredByName || execution.triggered_by_name"
               class="meta-item"
             >
               <User class="meta-icon" />
-              {{ execution.triggered_by_name }}
+              {{ execution.triggeredByName || execution.triggered_by_name }}
             </span>
           </div>
         </div>
@@ -202,7 +202,6 @@ const appStore = useAppStore()
   const currentPage = ref(1)
   const pageSize = ref(20)
   const statusFilter = ref('')
-  const statusFilterLabel = ref('全部')
 
 const isLoading = computed(() => workflowStore.isLoading)
 

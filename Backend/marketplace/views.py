@@ -82,9 +82,10 @@ class WorkflowTemplateViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def by_category(self, request):
         """Get published templates grouped by category."""
-        template_queryset = WorkflowTemplate.objects.filter(
-            is_published=True
-        ).select_related('category', 'created_by').order_by('-install_count', '-created_at')
+        template_queryset = WorkflowTemplate.objects.filter(is_published=True).select_related('category', 'created_by').order_by(
+            '-install_count',
+            '-created_at',
+        )
 
         categories = TemplateCategory.objects.prefetch_related(
             Prefetch('templates', queryset=template_queryset, to_attr='published_templates')
@@ -150,16 +151,16 @@ class WorkflowTemplateViewSet(viewsets.ModelViewSet):
         )
 
         # Recalculate average rating
-        avg_rating = TemplateRating.objects.filter(
+        average_rating = TemplateRating.objects.filter(
             template=template
         ).aggregate(Avg('rating'))['rating__avg']
 
-        template.avg_rating = avg_rating or 0
+        template.avg_rating = average_rating or 0
         template.save(update_fields=['avg_rating', 'updated_at'])
 
         return Response({
             'user_rating': rating.rating,
-            'rating': float(avg_rating or 0),
+            'rating': float(average_rating or 0),
             'rating_count': template.ratings.count()
         })
 
@@ -169,9 +170,8 @@ class WorkflowTemplateViewSet(viewsets.ModelViewSet):
         template = self.get_object()
 
         return Response({
-            'use_count': template.install_count,
-            'installs': template.install_count,
-            'rating': template.avg_rating,
+            'install_count': template.install_count,
+            'avg_rating': template.avg_rating,
             'rating_count': template.ratings.count(),
             'views': template.view_count
         })
@@ -202,7 +202,7 @@ class TemplateCategoryViewSet(viewsets.ReadOnlyModelViewSet):
         category = self.get_object()
         templates = WorkflowTemplate.objects.filter(
             category=category,
-            is_published=True
+            is_published=True,
         ).order_by('-install_count')
 
         page = self.paginate_queryset(templates)

@@ -41,12 +41,13 @@ class AlertRuleSerializer(serializers.ModelSerializer):
 class AlertRuleCreateSerializer(serializers.ModelSerializer):
     """Serializer for creating/updating AlertRule."""
 
+    id = serializers.UUIDField(read_only=True)
     enabled = serializers.BooleanField(source='is_active', required=False, default=True)
 
     class Meta:
         model = AlertRule
         fields = [
-            'name', 'description', 'condition', 'severity',
+            'id', 'name', 'description', 'condition', 'severity',
             'threshold', 'time_window_minutes',
             'notify_email', 'notify_webhook', 'webhook_url',
             'enabled'

@@ -34,14 +34,14 @@
 import { useCodeGraphStore } from '@/stores/codeGraph'
 import { Flame } from 'lucide-vue-next'
 
-const props = defineProps({
+defineProps({
   hotspots: {
     type: Array,
     default: () => []
   }
 })
 
-const emit = defineEmits(['select'])
+defineEmits(['select'])
 
 const store = useCodeGraphStore()
 

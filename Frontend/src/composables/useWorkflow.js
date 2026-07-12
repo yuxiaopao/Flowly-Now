@@ -7,12 +7,10 @@ import { ref, computed, watch } from 'vue'
 import { useWorkflowStore } from '@/stores/workflow'
 import { useAppStore } from '@/stores/app'
 import {
-  backendWorkflowToFrontend,
-  frontendWorkflowToBackend,
   createEdgeFromConnection
 } from '@/utils/workflowTransform'
 
-export function useWorkflow(options = {}) {
+export function useWorkflow(_options = {}) {
   const workflowStore = useWorkflowStore()
   const appStore = useAppStore()
 
@@ -57,7 +55,7 @@ export function useWorkflow(options = {}) {
       redoStack.value.push(currentState)
       const previousState = undoStack.value.pop()
       workflowStore.setNodesAndEdges(previousState.nodes, previousState.edges)
-      isDirty.value = true
+      workflowStore.isDirty = true
     } finally {
       isUndoRedoAction = false
     }
@@ -71,7 +69,7 @@ export function useWorkflow(options = {}) {
       undoStack.value.push(currentState)
       const nextState = redoStack.value.pop()
       workflowStore.setNodesAndEdges(nextState.nodes, nextState.edges)
-      isDirty.value = true
+      workflowStore.isDirty = true
     } finally {
       isUndoRedoAction = false
     }

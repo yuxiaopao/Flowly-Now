@@ -121,11 +121,13 @@ class WorkflowOutputParser:
         try:
             parser = cls.get_modification_parser()
             parsed = parser.parse(response)
-            modifications = parsed.model_dump(exclude_none=True)
+            modifications = parsed.model_dump(exclude_unset=True)
 
-            # Merge modifications into current workflow
+            # Merge only fields that LLM actually returned — preserve existing values for unset fields
             updated = current_workflow.copy()
-            updated.update(modifications)
+            for key, value in modifications.items():
+                if value is not None:
+                    updated[key] = value
 
             # Normalize if nodes/edges changed
             if 'nodes' in modifications or 'edges' in modifications:

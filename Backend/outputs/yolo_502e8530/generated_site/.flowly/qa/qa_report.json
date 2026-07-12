@@ -1,0 +1,23 @@
+{
+  "gate": "yellow",
+  "profile": "default",
+  "website_type": "detection",
+  "generated_site_id": "c5244800-ee0f-403c-b322-450a90fdd799",
+  "metrics": {},
+  "layers": {
+    "l1": "pass",
+    "l2": "pass",
+    "l3": "skip",
+    "l4": "pass"
+  },
+  "layer_errors": [],
+  "recommendations": [
+    "在训练节点或评估节点输出 metrics"
+  ],
+  "summary_zh": "未提供 mAP50 指标，已完成结构与服务检查，建议补充验证集评估。",
+  "assigned_port": 49152,
+  "screenshots": [],
+  "thresholds_used": {
+    "source": "qa-threshold-matrix.md"
+  }
+}

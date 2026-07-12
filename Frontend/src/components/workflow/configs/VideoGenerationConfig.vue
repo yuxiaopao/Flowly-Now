@@ -38,7 +38,7 @@
           <el-select
             v-model="localData.provider"
             placeholder="选择提供商"
-            @change="handleChange"
+            @change="handleProviderChange"
           >
             <el-option
               label="Replicate"
@@ -52,6 +52,14 @@
               label="Pika"
               value="pika"
             />
+            <el-option
+              label="Agnes AI (agnes-video-v2.0)"
+              value="agnes"
+            />
+            <el-option
+              label="阿里云百炼 (通义万相 Wanx)"
+              value="dashscope"
+            />
           </el-select>
         </el-form-item>
 
@@ -62,7 +70,7 @@
             @change="handleChange"
           />
           <div class="field-hint">
-            例如: models/video-generation
+            例如: models/video-generation, wanx2.1-t2v-turbo
           </div>
         </el-form-item>
       </div>
@@ -97,6 +105,12 @@
             style="width: 100%"
             @change="handleChange"
           />
+          <div
+            v-if="localData.provider === 'dashscope'"
+            class="field-hint"
+          >
+            wanx2.1-t2v-turbo/plus 固定输出 5 秒视频，此设置将被忽略
+          </div>
         </el-form-item>
 
         <el-form-item label="帧率 (FPS)">
@@ -131,14 +145,14 @@
           </el-select>
         </el-form-item>
 
-        <el-form-item label="输入图像 (可选)">
+        <el-form-item label="输入图像 (图生视频)">
           <el-input
             v-model="localData.inputImage"
-            placeholder="图像URL或base64编码"
+            placeholder="{images.0.url} 或粘贴图片 URL"
             @change="handleChange"
           />
           <div class="field-hint">
-            用于图像到视频的转换
+            连接文生图节点后使用 <code>{images.0.url}</code> 自动引用上游生成图；留空时后端也会自动取上游 images
           </div>
         </el-form-item>
       </div>
@@ -172,7 +186,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, watch } from 'vue'
+import { reactive, watch } from 'vue'
 
 const props = defineProps({
   modelValue: {
@@ -192,7 +206,7 @@ const localData = reactive({
   duration: 4,
   fps: 24,
   resolution: '720p',
-  inputImage: ''
+  inputImage: '{images.0.url}'
 })
 
 watch(() => props.modelValue, (newVal) => {
@@ -206,10 +220,22 @@ watch(() => props.modelValue, (newVal) => {
       duration: newVal.duration ?? 4,
       fps: newVal.fps ?? 24,
       resolution: newVal.resolution || '720p',
-      inputImage: newVal.inputImage || ''
+      inputImage: newVal.inputImage || '{images.0.url}'
     })
   }
 }, { immediate: true, deep: true })
+
+const defaultModels = {
+  dashscope: 'wanx2.1-t2v-turbo',
+  agnes: 'agnes-video-v2.0'
+}
+
+const handleProviderChange = () => {
+  if (!localData.model || Object.values(defaultModels).includes(localData.model)) {
+    localData.model = defaultModels[localData.provider] || ''
+  }
+  handleChange()
+}
 
 const handleChange = () => {
   emit('update:modelValue', { ...localData })

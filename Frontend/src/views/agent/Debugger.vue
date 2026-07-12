@@ -169,9 +169,40 @@
                   :key="i"
                   class="tool-call"
                 >
-                  <Hammer class="tool-icon" />
-                  <span class="tool-name">{{ call.tool }}</span>
-                  <span class="tool-result">{{ call.result }}</span>
+                  <template v-if="call.name === 'knowledge_base'">
+                    <div class="kb-call">
+                      <div class="kb-call-header">
+                        <BookOpen class="tool-icon" />
+                        <span class="tool-name">知识库检索</span>
+                        <span
+                          v-if="call.result?.success"
+                          class="kb-count"
+                        >命中 {{ call.result.count || 0 }} 条</span>
+                        <span
+                          v-else
+                          class="kb-count kb-error"
+                        >{{ call.result?.error || '检索失败' }}</span>
+                      </div>
+                      <div
+                        v-if="call.result?.results?.length"
+                        class="kb-sources"
+                      >
+                        <div
+                          v-for="(src, si) in call.result.results"
+                          :key="si"
+                          class="kb-source"
+                        >
+                          <span class="kb-source-collection">{{ src.collection }}</span>
+                          <span class="kb-source-content">{{ src.content }}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </template>
+                  <template v-else>
+                    <Hammer class="tool-icon" />
+                    <span class="tool-name">{{ getToolLabel(call.name) }}</span>
+                    <span class="tool-result">{{ formatToolResult(call.result) }}</span>
+                  </template>
                 </div>
               </div>
             </div>
@@ -367,15 +398,14 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, nextTick, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAgentStore } from '@/stores/agent'
 import { useAppStore } from '@/stores/app'
-import { APP_CONFIG } from '@/config'
-import { TOOL_LABELS, getToolLabel } from '@/config/toolConfig'
+import { getToolLabel } from '@/config/toolConfig'
 import {
   Bot, User, X, Edit, RefreshCw, Send, History,
-  ArrowRight, Hammer, Trash2
+  ArrowRight, Hammer, Trash2, BookOpen
 } from 'lucide-vue-next'
 import AppButton from '@/components/common/AppButton.vue'
 
@@ -500,7 +530,7 @@ function loadSession(session) {
     .then(() => {
       appStore.success('会话已加载')
     })
-    .catch((err) => {
+    .catch((_err) => {
       appStore.error('加载会话失败')
     })
 }
@@ -537,6 +567,16 @@ function formatTime(timestamp) {
     hour: '2-digit',
     minute: '2-digit'
   })
+}
+
+function formatToolResult(result) {
+  if (result == null) return ''
+  if (typeof result === 'string') return result
+  try {
+    return JSON.stringify(result)
+  } catch {
+    return String(result)
+  }
 }
 
 function formatDate(date) {
@@ -869,6 +909,7 @@ function formatDate(date) {
     width: 14px;
     height: 14px;
     color: $color-primary;
+    flex-shrink: 0;
   }
 
   .tool-name {
@@ -878,7 +919,60 @@ function formatDate(date) {
 
   .tool-result {
     color: var(--text-secondary);
+    overflow-wrap: anywhere;
   }
+}
+
+.kb-call {
+  width: 100%;
+}
+
+.kb-call-header {
+  display: flex;
+  align-items: center;
+  gap: $spacing-2;
+}
+
+.kb-count {
+  font-size: $font-size-xs;
+  color: var(--text-tertiary);
+  margin-left: auto;
+
+  &.kb-error {
+    color: $color-error;
+  }
+}
+
+.kb-sources {
+  margin-top: $spacing-2;
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-2;
+}
+
+.kb-source {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: $spacing-2;
+  background-color: var(--bg-primary);
+  border-radius: $radius-sm;
+  border-left: 2px solid $color-primary;
+}
+
+.kb-source-collection {
+  font-size: $font-size-xs;
+  font-weight: $font-weight-medium;
+  color: $color-primary;
+}
+
+.kb-source-content {
+  font-size: $font-size-xs;
+  color: var(--text-secondary);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .typing-indicator {

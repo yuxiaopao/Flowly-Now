@@ -9,10 +9,7 @@
       :position="Position.Left"
     />
     <div class="node-header">
-      <div class="node-type-badge">
-        <Code class="badge-icon" />
-        <span>代码</span>
-      </div>
+      <NodeTypeBadge :node-type="NODE_TYPE" />
       <button
         class="action-btn"
         @click.stop="toggleExpand"
@@ -26,12 +23,14 @@
 
     <div class="node-name-section">
       <input
+        :id="id ? `node-label-${id}` : undefined"
+        name="node-label"
         v-model="localName"
         class="node-name-input"
         placeholder="代码节点..."
         @blur="handleChange"
         @keydown.enter="handleChange"
-        @click.stop
+        @click.stop="handleSelect"
       >
     </div>
 
@@ -138,12 +137,18 @@ import { ref, computed, watch } from 'vue'
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
 import { Code, ChevronDown, Terminal, CheckCircle, XCircle, Loader, Copy, Check } from 'lucide-vue-next'
 import { useExecutionStore } from '@/stores/execution'
+import NodeTypeBadge from '@/components/workflow/nodes/NodeTypeBadge.vue'
+import { useNodePresentation } from '@/composables/useNodePresentation'
+
 
 const props = defineProps({
   id: { type: String, default: '' },
   data: { type: Object, default: () => ({}) },
   selected: { type: Boolean, default: false }
 })
+
+const NODE_TYPE = 'code'
+const { nodeIcon, nodeColor, nodeLabel } = useNodePresentation(NODE_TYPE)
 
 const emit = defineEmits(['select'])
 const { updateNodeData } = useVueFlow()
@@ -200,7 +205,10 @@ watch(() => props.data, (d) => {
   }
 }, { deep: true })
 
-function toggleExpand() { isExpanded.value = !isExpanded.value }
+function toggleExpand() {
+  handleSelect()
+  isExpanded.value = !isExpanded.value
+}
 
 function handleChange() {
   if (props.id) updateNodeData(props.id, { label: localName.value, config: { ...localConfig.value } })

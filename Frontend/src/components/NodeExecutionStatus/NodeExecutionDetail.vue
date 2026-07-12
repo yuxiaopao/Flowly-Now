@@ -22,11 +22,11 @@
             {{ statusLabel }}
           </span>
           <span
-            v-if="node.duration_ms || node.duration"
+            v-if="nodeDurationMs(node)"
             class="duration"
           >
             <Clock class="duration-icon" />
-            {{ formatDuration(node.duration_ms || node.duration) }}
+            {{ formatDuration(nodeDurationMs(node)) }}
           </span>
         </div>
       </div>
@@ -44,15 +44,15 @@
 
       <div class="metrics-grid">
         <div class="metric-card">
-          <span class="metric-value">{{ node.prompt_tokens || 0 }}</span>
+          <span class="metric-value">{{ node.promptTokens ?? node.prompt_tokens ?? 0 }}</span>
           <span class="metric-label">Prompt Tokens</span>
         </div>
         <div class="metric-card">
-          <span class="metric-value">{{ node.completion_tokens || 0 }}</span>
+          <span class="metric-value">{{ node.completionTokens ?? node.completion_tokens ?? 0 }}</span>
           <span class="metric-label">Completion Tokens</span>
         </div>
         <div class="metric-card">
-          <span class="metric-value">{{ (node.prompt_tokens || 0) + (node.completion_tokens || 0) }}</span>
+          <span class="metric-value">{{ (node.promptTokens ?? node.prompt_tokens ?? 0) + (node.completionTokens ?? node.completion_tokens ?? 0) }}</span>
           <span class="metric-label">Total Tokens</span>
         </div>
         <div
@@ -149,7 +149,7 @@
 
       <!-- HTTP Node Specific -->
       <div
-        v-if="node.type === 'http' && node.status_code"
+        v-if="node.type === 'http' && (node.statusCode || node.status_code)"
         class="detail-block"
       >
         <div class="block-header">
@@ -161,22 +161,22 @@
         <div class="http-info">
           <span
             class="http-status"
-            :class="getHttpStatusClass(node.status_code)"
+            :class="getHttpStatusClass(node.statusCode || node.status_code)"
           >
-            {{ node.status_code }} {{ getHttpStatusText(node.status_code) }}
+            {{ node.statusCode || node.status_code }} {{ getHttpStatusText(node.statusCode || node.status_code) }}
           </span>
           <span
-            v-if="node.response_time"
+            v-if="node.responseTime ?? node.response_time"
             class="response-time"
           >
-            响应时间: {{ node.response_time }}ms
+            响应时间: {{ node.responseTime ?? node.response_time }}ms
           </span>
         </div>
       </div>
 
       <!-- Tool Node Specific -->
       <div
-        v-if="node.type === 'tool' && node.tool_name"
+        v-if="node.type === 'tool' && (node.toolName || node.tool_name)"
         class="detail-block"
       >
         <div class="block-header">
@@ -186,12 +186,12 @@
           </h4>
         </div>
         <div class="tool-info">
-          <span class="tool-name">{{ node.tool_name }}</span>
+          <span class="tool-name">{{ node.toolName || node.tool_name }}</span>
           <span
-            v-if="node.tool_call_id"
+            v-if="node.toolCallId || node.tool_call_id"
             class="tool-call-id"
           >
-            ID: {{ node.tool_call_id }}
+            ID: {{ node.toolCallId || node.tool_call_id }}
           </span>
         </div>
       </div>
@@ -236,25 +236,25 @@
           <span class="metadata-value">{{ node.id }}</span>
         </div>
         <div
-          v-if="node.started_at"
+          v-if="node.startedAt || node.started_at"
           class="metadata-item"
         >
           <span class="metadata-label">开始时间</span>
-          <span class="metadata-value">{{ formatDateTime(node.started_at) }}</span>
+          <span class="metadata-value">{{ formatDateTime(node.startedAt || node.started_at) }}</span>
         </div>
         <div
-          v-if="node.completed_at"
+          v-if="node.completedAt || node.completed_at"
           class="metadata-item"
         >
           <span class="metadata-label">完成时间</span>
-          <span class="metadata-value">{{ formatDateTime(node.completed_at) }}</span>
+          <span class="metadata-value">{{ formatDateTime(node.completedAt || node.completed_at) }}</span>
         </div>
         <div
-          v-if="node.retry_count"
+          v-if="node.retryCount ?? node.retry_count"
           class="metadata-item"
         >
           <span class="metadata-label">重试次数</span>
-          <span class="metadata-value">{{ node.retry_count }}</span>
+          <span class="metadata-value">{{ node.retryCount ?? node.retry_count }}</span>
         </div>
       </div>
     </div>
@@ -315,8 +315,18 @@ const hasOutput = computed(() => {
 })
 
 const hasMetadata = computed(() => {
-  return props.node.id || props.node.started_at || props.node.completed_at || props.node.retry_count
+  const n = props.node
+  return n.id || n.startedAt || n.started_at || n.completedAt || n.completed_at || (n.retryCount ?? n.retry_count)
 })
+
+function nodeDurationMs(node) {
+  if (!node) return null
+  if (node.durationMs != null) return node.durationMs
+  if (node.duration_ms != null) return node.duration_ms
+  if (node.duration != null) return Math.round(Number(node.duration) * 1000)
+  if (node.durationSeconds != null) return Math.round(Number(node.durationSeconds) * 1000)
+  return null
+}
 
 function formatDuration(ms) {
   if (!ms && ms !== 0) return '-'
@@ -388,7 +398,7 @@ function copyContent(content) {
 
 <style lang="scss" scoped>
 .node-execution-detail {
-  background: var(--el-fill-color-light);
+  background: var(--bg-tertiary);
   border-radius: 8px;
   padding: 16px;
 }
@@ -396,7 +406,7 @@ function copyContent(content) {
 .detail-header {
   margin-bottom: 20px;
   padding-bottom: 16px;
-  border-bottom: 1px solid var(--el-border-color-lighter);
+  border-bottom: 1px solid var(--border-primary);
 
   .node-info {
     display: flex;
@@ -412,15 +422,15 @@ function copyContent(content) {
     .node-name {
       font-size: 18px;
       font-weight: 600;
-      color: var(--el-text-color-primary);
+      color: var(--text-primary);
     }
 
     .node-type-badge {
       padding: 4px 10px;
-      background: var(--el-fill-color);
+      background: var(--bg-elevated);
       border-radius: 12px;
       font-size: 12px;
-      color: var(--el-text-color-secondary);
+      color: var(--text-secondary);
       text-transform: capitalize;
     }
   }
@@ -438,6 +448,7 @@ function copyContent(content) {
       border-radius: 16px;
       font-size: 13px;
       font-weight: 500;
+      transition: background-color 0.2s ease, color 0.2s ease;
 
       .status-icon {
         width: 14px;
@@ -445,13 +456,13 @@ function copyContent(content) {
       }
 
       &.pending {
-        background: rgba(107, 114, 128, 0.1);
-        color: #6b7280;
+        background: var(--surface-muted);
+        color: var(--text-tertiary);
       }
 
       &.running {
-        background: rgba(59, 130, 246, 0.1);
-        color: #3b82f6;
+        background: var(--info-bg);
+        color: var(--info);
 
         .status-icon {
           animation: spin 1s linear infinite;
@@ -459,18 +470,18 @@ function copyContent(content) {
       }
 
       &.completed {
-        background: rgba(16, 185, 129, 0.1);
-        color: #10b981;
+        background: var(--success-bg);
+        color: var(--success);
       }
 
       &.failed {
-        background: rgba(239, 68, 68, 0.1);
-        color: #ef4444;
+        background: var(--error-bg);
+        color: var(--error);
       }
 
       &.skipped {
-        background: rgba(156, 163, 175, 0.1);
-        color: #9ca3af;
+        background: var(--surface-muted);
+        color: var(--text-tertiary);
       }
     }
 
@@ -480,7 +491,7 @@ function copyContent(content) {
       gap: 6px;
       font-size: 13px;
       font-family: 'JetBrains Mono', monospace;
-      color: var(--el-text-color-secondary);
+      color: var(--text-secondary);
 
       .duration-icon {
         width: 14px;
@@ -498,12 +509,12 @@ function copyContent(content) {
     margin: 0 0 16px;
     font-size: 16px;
     font-weight: 600;
-    color: var(--el-text-color-primary);
+    color: var(--text-primary);
 
     .section-icon {
       width: 18px;
       height: 18px;
-      color: #8b5cf6;
+      color: var(--accent-violet);
     }
   }
 }
@@ -519,27 +530,32 @@ function copyContent(content) {
     flex-direction: column;
     align-items: center;
     padding: 16px;
-    background: var(--el-bg-color);
-    border: 1px solid var(--el-border-color-lighter);
+    background: var(--card-bg);
+    border: 1px solid var(--border-primary);
     border-radius: 8px;
+    transition: background-color 0.2s ease, border-color 0.2s ease;
+
+    &:hover {
+      border-color: var(--border-hover);
+    }
 
     .metric-value {
       font-size: 24px;
       font-weight: 700;
-      color: var(--el-text-color-primary);
+      color: var(--text-primary);
       font-family: 'JetBrains Mono', monospace;
 
       &.model {
         font-size: 14px;
         font-weight: 600;
-        color: #8b5cf6;
+        color: var(--accent-violet);
       }
     }
 
     .metric-label {
       margin-top: 4px;
       font-size: 12px;
-      color: var(--el-text-color-secondary);
+      color: var(--text-secondary);
     }
   }
 }
@@ -560,12 +576,12 @@ function copyContent(content) {
       margin: 0;
       font-size: 14px;
       font-weight: 600;
-      color: var(--el-text-color-primary);
+      color: var(--text-primary);
 
       .block-icon {
         width: 16px;
         height: 16px;
-        color: var(--el-text-color-secondary);
+        color: var(--text-secondary);
       }
     }
   }
@@ -573,18 +589,20 @@ function copyContent(content) {
   .block-content {
     padding: 16px;
     margin: 0;
-    background: #1e1e2e;
+    background: var(--code-bg);
+    border: 1px solid var(--code-border);
     border-radius: 8px;
     font-family: 'JetBrains Mono', monospace;
     font-size: 13px;
-    color: #e5e7eb;
+    color: var(--code-text);
     white-space: pre-wrap;
     word-break: break-all;
     max-height: 300px;
     overflow: auto;
+    transition: border-color 0.2s ease;
 
     &.output {
-      border-left: 3px solid #10b981;
+      border-left: 3px solid var(--success);
     }
   }
 }
@@ -594,7 +612,7 @@ function copyContent(content) {
   align-items: center;
   gap: 16px;
   padding: 12px 16px;
-  background: var(--el-bg-color);
+  background: var(--card-bg);
   border-radius: 8px;
 
   .http-status {
@@ -604,29 +622,29 @@ function copyContent(content) {
     font-weight: 600;
 
     &.success {
-      background: rgba(16, 185, 129, 0.1);
-      color: #10b981;
+      background: var(--success-bg);
+      color: var(--success);
     }
 
     &.redirect {
-      background: rgba(59, 130, 246, 0.1);
-      color: #3b82f6;
+      background: var(--info-bg);
+      color: var(--info);
     }
 
     &.client-error {
-      background: rgba(245, 158, 11, 0.1);
-      color: #f59e0b;
+      background: var(--warning-bg);
+      color: var(--warning);
     }
 
     &.server-error {
-      background: rgba(239, 68, 68, 0.1);
-      color: #ef4444;
+      background: var(--error-bg);
+      color: var(--error);
     }
   }
 
   .response-time {
     font-size: 13px;
-    color: var(--el-text-color-secondary);
+    color: var(--text-secondary);
   }
 }
 
@@ -635,19 +653,19 @@ function copyContent(content) {
   flex-direction: column;
   gap: 8px;
   padding: 12px 16px;
-  background: var(--el-bg-color);
+  background: var(--card-bg);
   border-radius: 8px;
 
   .tool-name {
     font-size: 14px;
     font-weight: 600;
-    color: var(--el-text-color-primary);
+    color: var(--text-primary);
   }
 
   .tool-call-id {
     font-size: 12px;
     font-family: 'JetBrains Mono', monospace;
-    color: var(--el-text-color-secondary);
+    color: var(--text-secondary);
   }
 }
 
@@ -656,10 +674,10 @@ function copyContent(content) {
 
   .error-header {
     h4 {
-      color: #ef4444;
+      color: var(--error);
 
       .error-icon {
-        color: #ef4444;
+        color: var(--error);
       }
     }
   }
@@ -667,12 +685,12 @@ function copyContent(content) {
   .error-content {
     padding: 16px;
     margin: 0;
-    background: rgba(239, 68, 68, 0.05);
-    border: 1px solid rgba(239, 68, 68, 0.2);
+    background: var(--error-bg);
+    border: 1px solid var(--error);
     border-radius: 8px;
     font-family: 'JetBrains Mono', monospace;
     font-size: 13px;
-    color: #ef4444;
+    color: var(--error);
     white-space: pre-wrap;
     word-break: break-all;
     max-height: 300px;
@@ -682,13 +700,13 @@ function copyContent(content) {
 
 .metadata-block {
   padding-top: 16px;
-  border-top: 1px solid var(--el-border-color-lighter);
+  border-top: 1px solid var(--border-primary);
 
   .metadata-title {
     margin: 0 0 12px;
     font-size: 14px;
     font-weight: 600;
-    color: var(--el-text-color-primary);
+    color: var(--text-primary);
   }
 
   .metadata-grid {
@@ -703,13 +721,13 @@ function copyContent(content) {
 
       .metadata-label {
         font-size: 12px;
-        color: var(--el-text-color-secondary);
+        color: var(--text-secondary);
       }
 
       .metadata-value {
         font-size: 13px;
         font-family: 'JetBrains Mono', monospace;
-        color: var(--el-text-color-primary);
+        color: var(--text-primary);
       }
     }
   }

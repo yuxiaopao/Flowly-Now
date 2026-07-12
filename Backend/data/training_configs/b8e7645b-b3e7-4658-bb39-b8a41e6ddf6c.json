@@ -1,0 +1,28 @@
+{
+  "job_id": "b8e7645b-b3e7-4658-bb39-b8a41e6ddf6c",
+  "training_kind": "yolo",
+  "framework": "ultralytics",
+  "model_type": "detection",
+  "dataset_id": "3f8c8906-681b-4ed4-b5ae-186d779f22a3",
+  "dataset_path": "E:\\Flowly-now\\Backend\\scripts\\fixtures\\t2_mini_yolo",
+  "dataset_yaml_path": "E:\\Flowly-now\\Backend\\scripts\\fixtures\\t2_mini_yolo\\dataset.yaml",
+  "annotation_project_id": "",
+  "class_names": [
+    "helmet",
+    "vest"
+  ],
+  "yolo_version": "v8",
+  "model_variant": "n",
+  "epochs": 1,
+  "batch_size": 16,
+  "image_size": 640,
+  "learning_rate": 0.01,
+  "output_dir": "E:\\Flowly-now\\Backend\\outputs\\yolo_3515e52a",
+  "device": "cpu",
+  "config": {
+    "output_dir": "E:\\Flowly-now\\Backend\\outputs\\yolo_3515e52a",
+    "batch_size": 16,
+    "image_size": 640,
+    "learning_rate": 0.01
+  }
+}

@@ -1,5 +1,7 @@
 <template>
   <div
+    ref="rootEl"
+    :style="{ '--node-accent': nodeColor, ...resize.sizeStyle.value }"
     class="domain-node image-gen-node"
     :class="{ selected, expanded: isExpanded, 'is-running': showRunning, 'is-completed': isCompleted, 'is-failed': isFailed }"
     @click.stop="handleSelect"
@@ -10,16 +12,7 @@
     />
 
     <div class="node-header">
-      <div
-        class="node-type-badge"
-        :style="{ backgroundColor: nodeColor + '22', borderColor: nodeColor }"
-      >
-        <Sparkles
-          class="badge-icon"
-          :style="{ color: nodeColor }"
-        />
-        <span :style="{ color: nodeColor }">图像生成</span>
-      </div>
+      <NodeTypeBadge :node-type="NODE_TYPE" />
       <button
         class="action-btn"
         @click.stop="toggleExpand"
@@ -33,12 +26,14 @@
 
     <div class="node-name-section">
       <input
+        :id="id ? `node-label-${id}` : undefined"
         v-model="localName"
+        name="node-label"
         class="node-name-input"
         placeholder="节点名称..."
         @blur="handleChange"
         @keydown.enter="handleChange"
-        @click.stop
+        @click.stop="handleSelect"
       >
     </div>
 
@@ -54,7 +49,14 @@
         v-if="localConfig.prompt || localConfig.text"
         class="preview-row"
       >
-        <span class="preview-text">{{ truncate(localConfig.prompt || localConfig.text, 35) }}</span>
+        <span class="preview-text">{{ truncate(resolvedPrompt, 35) }}</span>
+      </div>
+      <div
+        v-if="localConfig.prompt && localConfig.prompt.includes('{') && upstreamPrompt"
+        class="chain-hint"
+      >
+        <span>上游提示词</span>
+        <code>{{ truncate(upstreamPrompt, 40) }}</code>
       </div>
       <div
         class="status-bar"
@@ -88,7 +90,6 @@
       v-if="showPreview || showRunning"
       class="preview-zone"
       :class="{ 'has-image': showPreview }"
-      :style="previewAspectRatio ? { aspectRatio: previewAspectRatio } : {}"
     >
       <div
         v-if="showRunning"
@@ -103,14 +104,16 @@
         </div>
         <span class="gen-hint">AI 创作中...</span>
       </div>
-      <img
+      <NodeMediaPreview
         v-else-if="showPreview"
+        kind="image"
         :src="previewImage"
-        class="preview-img"
-        :style="previewAspectRatio ? { height: 'auto', aspectRatio: previewAspectRatio } : {}"
+        :aspect-ratio="previewAspectRatio"
+        :max-height="previewMaxHeight"
         alt="Generated image"
+        @error="handleImageError"
         @click="handleImageClick"
-      >
+      />
       <div
         v-if="showPreview"
         class="preview-overlay"
@@ -237,14 +240,27 @@
       type="source"
       :position="Position.Right"
     />
+
+    <div
+      class="resize-handle"
+      title="拖动调整节点大小"
+      @pointerdown.stop="(e) => resize.startResize(e, rootEl?.offsetWidth, rootEl?.offsetHeight)"
+    />
   </div>
 </template>
 
 <script setup>
 import { ref, watch, computed } from 'vue'
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
-import { Sparkles, ChevronDown, Download, ZoomIn, Loader } from 'lucide-vue-next'
-import { useExecutionStore } from '@/stores/execution'
+import { ChevronDown, Download, ZoomIn, Loader } from 'lucide-vue-next'
+import NodeTypeBadge from '@/components/workflow/nodes/NodeTypeBadge.vue'
+import NodeMediaPreview from '@/components/workflow/nodes/NodeMediaPreview.vue'
+import { useNodePresentation } from '@/composables/useNodePresentation'
+import { useNodeResize } from '@/composables/useNodeResize'
+import { useUpstreamNodeOutputs } from '@/composables/useUpstreamNodeOutputs'
+import { usePersistedMultimodalResult } from '@/composables/usePersistedMultimodalResult'
+import { extractImageUrl, resolveMediaAspectRatio } from '@/utils/nodeMediaOutput'
+
 
 const props = defineProps({
   id: { type: String, default: '' },
@@ -252,12 +268,37 @@ const props = defineProps({
   selected: { type: Boolean, default: false }
 })
 
+const NODE_TYPE = 'image_generation'
+const { nodeColor } = useNodePresentation(NODE_TYPE)
+
 const emit = defineEmits(['select'])
 const { updateNodeData } = useVueFlow()
-const executionStore = useExecutionStore()
+const { upstreamPrompt } = useUpstreamNodeOutputs(computed(() => props.id), {
+  sourceTypes: ['input'],
+})
+
+const {
+  nodeOutput,
+  isRunning,
+  isCompleted,
+  isFailed,
+} = usePersistedMultimodalResult(
+  computed(() => props.id),
+  computed(() => props.data),
+)
+
+const rootEl = ref(null)
+const resize = useNodeResize({
+  id: props.id,
+  initialWidth: props.data.uiSize?.width,
+  initialHeight: props.data.uiSize?.height,
+  minWidth: 240,
+  minHeight: 180,
+  maxWidth: 720,
+  maxHeight: 960,
+})
 
 const isExpanded = ref(false)
-const nodeColor = '#ec4899'
 
 const localName = ref(props.data.label || '图像生成')
 const localConfig = ref({
@@ -270,35 +311,33 @@ const localConfig = ref({
   style: props.data.config?.style || 'vivid'
 })
 
-const nodeStatus = computed(() => executionStore.nodeStatusMap[props.id])
-const nodeOutput = computed(() => executionStore.nodeOutputs[props.id])
-const isRunning = computed(() => nodeStatus.value === 'running')
-const isCompleted = computed(() => nodeStatus.value === 'completed')
-const isFailed = computed(() => nodeStatus.value === 'failed')
+const previewImage = computed(() => extractImageUrl(nodeOutput.value))
 
-const previewImage = computed(() => {
-  if (!nodeOutput.value) return null
-  if (typeof nodeOutput.value === 'string') return nodeOutput.value
-  if (nodeOutput.value.url) return nodeOutput.value.url
-  if (nodeOutput.value.image) return nodeOutput.value.image
-  if (nodeOutput.value.data) return nodeOutput.value.data
-  return null
+const previewAspectRatio = computed(() =>
+  resolveMediaAspectRatio(nodeOutput.value, localConfig.value.size || '1024x1024'),
+)
+
+const previewMaxHeight = computed(() => {
+  const h = resize.height.value
+  if (!h) return 320
+  // 为标题/配置区预留空间，避免展开后把预览挤成细条
+  return Math.max(160, Math.min(480, h - (isExpanded.value ? 280 : 140)))
 })
 
-const previewAspectRatio = computed(() => {
-  if (!nodeOutput.value) return null
-  const w = nodeOutput.value.width || nodeOutput.value.w
-  const h = nodeOutput.value.height || nodeOutput.value.h
-  if (w && h) return w / h
-  // 尝试从 size 配置推导比例
-  const size = localConfig.value.size || '1024x1024'
-  const [sw, sh] = size.split('x').map(Number)
-  if (sw && sh) return sw / sh
-  return null
-})
+const imageLoadFailed = ref(false)
 
-const showPreview = computed(() => isCompleted.value && previewImage.value)
+function handleImageError() {
+  imageLoadFailed.value = true
+}
+
+const showPreview = computed(() => Boolean(previewImage.value) && !isRunning.value && !imageLoadFailed.value)
 const showRunning = computed(() => isRunning.value)
+
+const resolvedPrompt = computed(() => {
+  const template = localConfig.value.prompt || localConfig.value.text || ''
+  if (template.includes('{') && upstreamPrompt.value) return upstreamPrompt.value
+  return template
+})
 
 function truncate(str, len) {
   if (!str) return ''
@@ -333,7 +372,20 @@ watch(() => props.data, (d) => {
   }
 }, { deep: true })
 
-function toggleExpand() { isExpanded.value = !isExpanded.value }
+watch(isCompleted, (done) => {
+  if (done && previewImage.value) {
+    imageLoadFailed.value = false
+  }
+})
+
+watch(previewImage, (url) => {
+  if (url) imageLoadFailed.value = false
+})
+
+function toggleExpand() {
+  handleSelect()
+  isExpanded.value = !isExpanded.value
+}
 
 function handleChange() {
   if (props.id) {
@@ -343,12 +395,15 @@ function handleChange() {
 
 function handleSelect() {
   emit('select')
-  if (!isExpanded.value) isExpanded.value = true
 }
 </script>
 
 <style lang="scss" scoped>
 .image-gen-node {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+
   &.is-running {
     animation: gen-pulse 1.8s ease-in-out infinite;
   }
@@ -367,6 +422,26 @@ function handleSelect() {
   50% { box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3), 0 0 0 6px rgba(236, 72, 153, 0); }
 }
 
+.chain-hint {
+  margin: 0 12px 6px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.65);
+  background: rgba(236, 72, 153, 0.08);
+  border: 1px dashed rgba(236, 72, 153, 0.25);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+
+  code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: #f9a8d4;
+    word-break: break-all;
+  }
+}
+
 .preview-zone {
   position: relative;
   margin: 0 12px 8px;
@@ -375,17 +450,37 @@ function handleSelect() {
   border: 2px dashed rgba(236, 72, 153, 0.25);
   background: rgba(0, 0, 0, 0.2);
   transition: all 0.3s ease;
+  flex: 0 0 auto;
+  flex-shrink: 0;
+  min-height: 160px;
+  display: flex;
+  flex-direction: column;
 
   &.has-image {
     border-style: solid;
   }
 }
 
+.resize-handle {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 14px;
+  height: 14px;
+  border-right: 2px solid rgba(236, 72, 153, 0.55);
+  border-bottom: 2px solid rgba(236, 72, 153, 0.55);
+  cursor: nwse-resize;
+  opacity: 0.55;
+  z-index: 3;
+
+  &:hover { opacity: 1; }
+}
+
 .preview-img {
   width: 100%;
   height: auto;
-  max-height: 200px;
-  object-fit: cover;
+  max-height: none;
+  object-fit: contain;
   display: block;
   cursor: pointer;
   transition: transform 0.2s ease;
@@ -403,11 +498,16 @@ function handleSelect() {
   background: rgba(0, 0, 0, 0.5);
   opacity: 0;
   transition: opacity 0.2s ease;
+  pointer-events: none;
 
-  .preview-zone:hover & { opacity: 1; }
+  .preview-zone:hover & {
+    opacity: 1;
+    pointer-events: auto;
+  }
 }
 
 .preview-btn {
+  pointer-events: auto;
   width: 32px;
   height: 32px;
   display: flex;
@@ -556,8 +656,8 @@ function handleSelect() {
   background: var(--node-bg, rgba(20, 20, 30, 0.95));
   border: 2px solid var(--node-border, v-bind(nodeColor));
   border-radius: 12px;
-  min-width: 160px;
-  max-width: 280px;
+  min-width: 180px;
+  max-width: 320px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
   transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
   cursor: pointer;

@@ -2,8 +2,29 @@
 RAG (Retrieval-Augmented Generation) service for vector storage and retrieval.
 """
 
+import logging
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from typing import List, Dict, Any, Optional
 from abc import ABC, abstractmethod
+
+from config.constants import OLLAMA_MODEL_PREFIXES
+from core.runtime_config import resolve_default_embedding_model
+
+logger = logging.getLogger(__name__)
+
+EMBEDDING_TIMEOUT_SECONDS = 45
+VECTOR_UPSERT_TIMEOUT_SECONDS = 30
+
+# Known embedding output dimensions, used to size the random-vector fallback
+# consistently with whichever real embedding model was configured for a collection
+# (mixing dimensions within a collection silently breaks similarity search).
+EMBEDDING_MODEL_DIMENSIONS = {
+    'text-embedding-ada-002': 1536,
+    'text-embedding-3-small': 1536,
+    'text-embedding-3-large': 3072,
+    'nomic-embed-text': 768,
+}
+DEFAULT_FALLBACK_DIMENSION = 1536
 
 
 class VectorStoreClient(ABC):
@@ -132,7 +153,8 @@ def get_vector_store_client(vector_store) -> Optional[VectorStoreClient]:
             import chromadb
             client = chromadb.Client()
             return ChromaAdapter(client, vector_store)
-        except ImportError:
+        except Exception as exc:
+            logger.warning("Chroma unavailable (%s), using in-memory store", exc)
             return InMemoryVectorStore()
     elif store_type == 'milvus':
         try:
@@ -249,7 +271,11 @@ class ChromaAdapter(VectorStoreClient):
         return True
 
     def upsert(self, collection: str, vectors: List[Dict[str, Any]]) -> bool:
-        coll = self.client.get_collection(name=collection)
+        try:
+            coll = self.client.get_collection(name=collection)
+        except Exception:
+            self.client.create_collection(name=collection)
+            coll = self.client.get_collection(name=collection)
         coll.add(
             ids=[v.get('id') for v in vectors],
             embeddings=[v.get('vector') for v in vectors],
@@ -538,45 +564,112 @@ class WeaviateAdapter(VectorStoreClient):
 
 
 class EmbeddingService:
-    """Service for generating embeddings."""
+    """Service for generating embeddings.
+
+    Provider priority: OpenAI-compatible API (if OPENAI_API_KEY configured and the
+    model doesn't look like a local Ollama model) -> local Ollama embeddings (if
+    reachable) -> random vector fallback (degraded mode, logged as an error since
+    it silently produces meaningless similarity scores).
+    """
 
     def __init__(self, model: str = 'text-embedding-ada-002'):
         self.model = model
         self._client = None
+        self._provider = None
+
+    def _is_ollama_model(self) -> bool:
+        model_lower = (self.model or '').lower()
+        return any(prefix in model_lower for prefix in OLLAMA_MODEL_PREFIXES)
 
     def _get_client(self):
-        if self._client is None:
-            try:
-                from langchain_openai import OpenAIEmbeddings
-                from django.conf import settings
-                api_key = getattr(settings, 'OPENAI_API_KEY', None)
-                base_url = getattr(settings, 'OPENAI_BASE_URL', None)
-                self._client = OpenAIEmbeddings(
-                    model=self.model,
-                    api_key=api_key,
-                    base_url=base_url if base_url else None
-                )
-            except ImportError:
-                return None
-        return self._client
+        if self._client is not None:
+            return self._client
+
+        from django.conf import settings
+
+        prefer_ollama = self._is_ollama_model()
+
+        if not prefer_ollama:
+            api_key = getattr(settings, 'OPENAI_API_KEY', None)
+            if api_key and str(api_key).strip():
+                try:
+                    from langchain_openai import OpenAIEmbeddings
+                    base_url = getattr(settings, 'OPENAI_BASE_URL', None)
+                    self._client = OpenAIEmbeddings(
+                        model=self.model,
+                        api_key=api_key,
+                        base_url=base_url if base_url else None
+                    )
+                    self._provider = 'openai'
+                    return self._client
+                except ImportError:
+                    logger.warning("langchain_openai not installed, cannot use OpenAI embeddings")
+
+        try:
+            from langchain_ollama import OllamaEmbeddings
+            ollama_model = self.model if prefer_ollama else getattr(
+                settings, 'OLLAMA_EMBEDDING_MODEL', 'nomic-embed-text'
+            )
+            base_url = getattr(settings, 'OLLAMA_BASE_URL', 'http://localhost:11434')
+            self._client = OllamaEmbeddings(
+                model=ollama_model,
+                base_url=base_url,
+                client_kwargs={'trust_env': False},
+            )
+            self._provider = 'ollama'
+            return self._client
+        except ImportError:
+            logger.error("langchain_ollama not installed, cannot use Ollama embeddings")
+        except Exception as exc:
+            logger.error("Failed to initialize Ollama embeddings client: %s", exc)
+
+        return None
+
+    def _fallback_dimension(self) -> int:
+        return EMBEDDING_MODEL_DIMENSIONS.get(self.model, DEFAULT_FALLBACK_DIMENSION)
+
+    def _log_fallback_degraded_mode(self) -> None:
+        logger.error(
+            "No embedding provider available (model=%s); falling back to random "
+            "vector(s). Retrieval quality will be meaningless until OPENAI_API_KEY "
+            "or a reachable local Ollama embedding model is configured.",
+            self.model,
+        )
+
+    def _random_vector(self, dimension: Optional[int] = None) -> List[float]:
+        import random
+        return [random.random() for _ in range(dimension or self._fallback_dimension())]
 
     def embed_text(self, text: str) -> List[float]:
         """Generate embedding for a single text."""
         client = self._get_client()
         if client:
-            return client.embed_query(text)
-        # Fallback: return random vector
-        import random
-        return [random.random() for _ in range(1536)]
+            try:
+                return client.embed_query(text)
+            except Exception as exc:
+                logger.error("Embedding provider (%s) failed, using fallback: %s", self._provider, exc)
+        self._log_fallback_degraded_mode()
+        return self._random_vector()
 
     def embed_texts(self, texts: List[str]) -> List[List[float]]:
         """Generate embeddings for multiple texts."""
         client = self._get_client()
         if client:
-            return client.embed_documents(texts)
-        # Fallback: return random vectors
-        import random
-        return [[random.random() for _ in range(1536)] for _ in texts]
+            try:
+                with ThreadPoolExecutor(max_workers=1) as pool:
+                    return pool.submit(client.embed_documents, texts).result(
+                        timeout=EMBEDDING_TIMEOUT_SECONDS
+                    )
+            except FuturesTimeoutError:
+                logger.error(
+                    "Embedding provider (%s) timed out after %ss, using fallback",
+                    self._provider, EMBEDDING_TIMEOUT_SECONDS,
+                )
+            except Exception as exc:
+                logger.error("Embedding provider (%s) failed, using fallback: %s", self._provider, exc)
+        self._log_fallback_degraded_mode()
+        dimension = self._fallback_dimension()
+        return [self._random_vector(dimension) for _ in texts]
 
 
 class RAGService:
@@ -586,18 +679,34 @@ class RAGService:
         self.collection = collection
         self.top_k = top_k
         self.min_similarity = min_similarity
-        self.embedding_service = EmbeddingService(model=getattr(collection, 'embedding_model', 'text-embedding-ada-002'))
+        self.embedding_service = EmbeddingService(
+            model=getattr(collection, 'embedding_model', None) or resolve_default_embedding_model()
+        )
         self.vector_client = None
+        self._using_memory_fallback = False
+
+    def _use_in_memory_fallback(self, reason: str) -> None:
+        logger.warning("Using in-memory vector store fallback: %s", reason)
+        self.vector_client = InMemoryVectorStore()
+        self.vector_client.connect()
+        self._using_memory_fallback = True
 
     def initialize(self) -> bool:
         """Initialize the vector store client."""
-        from .models import VectorStore
         vector_store = getattr(self.collection, 'vector_store', None)
         if vector_store:
-            self.vector_client = get_vector_store_client(vector_store)
-            if self.vector_client:
-                return self.vector_client.connect()
-        return False
+            client = get_vector_store_client(vector_store)
+            if client:
+                try:
+                    if client.connect():
+                        self.vector_client = client
+                        self._using_memory_fallback = isinstance(client, InMemoryVectorStore)
+                        return True
+                except Exception as exc:
+                    self._use_in_memory_fallback(str(exc))
+                    return True
+        self._use_in_memory_fallback('no vector store configured')
+        return True
 
     def process_document(self, content: str, metadata: Dict[str, Any] = None) -> List[Dict[str, Any]]:
         """Process document into chunks and generate embeddings."""
@@ -615,15 +724,49 @@ class RAGService:
 
         return vectors
 
+    def _get_collection_name(self) -> str:
+        vector_store = getattr(self.collection, 'vector_store', None)
+        if vector_store:
+            return getattr(vector_store, 'collection', 'default')
+        return 'default'
+
     def index_document(self, document, vectors: List[Dict[str, Any]]) -> bool:
         """Index document vectors."""
         if not self.vector_client:
             self.initialize()
 
-        if self.vector_client:
-            collection_name = getattr(self.collection, 'collection', 'default')
-            self.vector_client.upsert(collection=collection_name, vectors=vectors)
-            return True
+        collection_name = self._get_collection_name()
+
+        def _do_index(client: VectorStoreClient) -> bool:
+            if hasattr(client, 'create_collection') and vectors:
+                dimension = len(vectors[0].get('vector') or [])
+                try:
+                    client.create_collection(collection_name, dimension)
+                except Exception:
+                    pass
+
+            def _upsert():
+                client.upsert(collection=collection_name, vectors=vectors)
+                return True
+
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                return pool.submit(_upsert).result(timeout=VECTOR_UPSERT_TIMEOUT_SECONDS)
+
+        for attempt in range(2):
+            try:
+                if not self.vector_client:
+                    self.initialize()
+                return _do_index(self.vector_client)
+            except FuturesTimeoutError:
+                logger.warning("Vector upsert timed out for document %s", getattr(document, 'id', ''))
+            except Exception as exc:
+                logger.warning("Vector indexing failed: %s", exc)
+
+            if attempt == 0 and not isinstance(self.vector_client, InMemoryVectorStore):
+                self._use_in_memory_fallback('primary vector store failed during upsert')
+                continue
+            break
+
         return False
 
     def retrieve(self, query: str, filters: Dict[str, Any] = None) -> List[Dict[str, Any]]:
@@ -635,7 +778,7 @@ class RAGService:
             return []
 
         query_embedding = self.embedding_service.embed_text(query)
-        collection_name = getattr(self.collection, 'collection', 'default')
+        collection_name = self._get_collection_name()
 
         results = self.vector_client.search(
             collection=collection_name,
@@ -652,8 +795,6 @@ class RAGService:
         system_prompt: str = None
     ) -> Dict[str, Any]:
         """Generate response using retrieved context."""
-        from django.conf import settings
-
         context_str = '\n\n'.join([
             f"[Source {i+1}]: {r['payload'].get('content', '')}"
             for i, r in enumerate(context or [])
@@ -673,26 +814,16 @@ class RAGService:
 
         # Call LLM
         try:
-            from langchain_openai import ChatOpenAI
-            api_key = getattr(settings, 'OPENAI_API_KEY', None)
-            base_url = getattr(settings, 'OPENAI_BASE_URL', None)
+            from core.llm_factory import invoke_chat_messages
+            from core.runtime_config import resolve_default_chat_model
 
-            llm = ChatOpenAI(
-                model='gpt-3.5-turbo',
-                api_key=api_key,
-                base_url=base_url if base_url else None
+            response_text = invoke_chat_messages(
+                messages,
+                model=resolve_default_chat_model(),
             )
 
-            from langchain_core.messages import HumanMessage, SystemMessage
-            langchain_messages = [
-                SystemMessage(content=system) if i == 0 else HumanMessage(content=msg['content'])
-                for i, msg in enumerate(messages)
-            ]
-
-            response = llm.invoke(langchain_messages)
-
             return {
-                'response': response.content,
+                'response': response_text,
                 'sources': context if context else []
             }
         except Exception as e:

@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="vector-store-page">
     <div class="page-header">
       <div class="header-left">
@@ -45,6 +45,27 @@
         <el-option
           label="Weaviate"
           value="weaviate"
+        />
+      </el-select>
+      <el-select
+        v-model="teamFilter"
+        placeholder="按团队筛选"
+        clearable
+        style="width: 200px"
+      >
+        <el-option
+          label="全部（含个人）"
+          value=""
+        />
+        <el-option
+          label="仅我个人"
+          value="mine"
+        />
+        <el-option
+          v-for="t in tenantStore.tenants"
+          :key="t.id"
+          :label="t.name"
+          :value="String(t.id)"
         />
       </el-select>
     </div>
@@ -168,6 +189,13 @@
           >
             <Star class="badge-icon" />
             默认
+          </span>
+          <span
+            v-if="store.tenant_name"
+            class="meta-badge team"
+          >
+            <Users class="badge-icon" />
+            {{ store.tenant_name }}
           </span>
           <span class="meta-badge">
             <Layers class="badge-icon" />
@@ -375,6 +403,25 @@
         <el-form-item label="设为默认">
           <el-switch v-model="form.is_default" />
         </el-form-item>
+
+        <el-form-item label="所属团队">
+          <el-select
+            v-model="form.tenant"
+            placeholder="仅个人可见（不选择团队）"
+            style="width: 100%"
+            clearable
+          >
+            <el-option
+              v-for="t in tenantStore.tenants"
+              :key="t.id"
+              :label="t.name"
+              :value="t.id"
+            />
+          </el-select>
+          <div class="form-item-tip">
+            选择团队后，该团队所有成员均可使用此向量存储创建知识库
+          </div>
+        </el-form-item>
       </el-form>
 
       <template #footer>
@@ -455,10 +502,11 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useRAGStore } from '@/stores/rag'
 import { useAppStore } from '@/stores/app'
+import { useTenantStore } from '@/stores/tenant'
 import {
   Plus, Database, Box, Layers, Globe, MoreVertical,
   Edit, Trash2, Star, StarOff, Wifi, FolderPlus,
-  Scale, TreePine
+  Scale, TreePine, Users
 } from 'lucide-vue-next'
 import { ElMessageBox } from 'element-plus'
 import { APP_CONFIG } from '@/config'
@@ -466,6 +514,7 @@ import { APP_CONFIG } from '@/config'
 const router = useRouter()
 const ragStore = useRAGStore()
 const appStore = useAppStore()
+const tenantStore = useTenantStore()
 
 const showCreateDialog = ref(false)
 const showCollectionDialog = ref(false)
@@ -474,6 +523,7 @@ const selectedStore = ref(null)
 const saving = ref(false)
 const creatingCollection = ref(false)
 const filterType = ref('')
+const teamFilter = ref('')
 const formRef = ref(null)
 const collectionFormRef = ref(null)
 
@@ -488,7 +538,8 @@ const form = reactive({
   path: '',
   dimension: 1536,
   metric: 'cosine',
-  is_default: false
+  is_default: false,
+  tenant: null
 })
 
 const collectionForm = reactive({
@@ -509,8 +560,16 @@ const vectorStores = computed(() => ragStore.vectorStores)
 const isLoading = computed(() => ragStore.isLoading)
 
 const filteredStores = computed(() => {
-  if (!filterType.value) return vectorStores.value
-  return vectorStores.value.filter(s => s.store_type === filterType.value)
+  let list = vectorStores.value
+  if (filterType.value) {
+    list = list.filter(s => s.store_type === filterType.value)
+  }
+  if (teamFilter.value === 'mine') {
+    list = list.filter(s => !s.tenant)
+  } else if (teamFilter.value) {
+    list = list.filter(s => String(s.tenant || '') === teamFilter.value)
+  }
+  return list
 })
 
 function getStoreTypeLabel(type) {
@@ -544,7 +603,8 @@ function editStore(store) {
     path: store.path || '',
     dimension: store.dimension,
     metric: store.metric,
-    is_default: store.is_default
+    is_default: store.is_default,
+    tenant: store.tenant || null
   })
   showCreateDialog.value = true
 }
@@ -589,7 +649,7 @@ async function handleDelete(store) {
 
 async function handleTestConnection(store) {
   try {
-    const result = await ragStore.testConnection(store.id)
+    await ragStore.testConnection(store.id)
     storeConnections.value[store.id] = true
     appStore.success('连接成功')
   } catch (err) {
@@ -651,7 +711,7 @@ async function handleCreateCollection() {
 }
 
 function goToCollections(store) {
-  router.push(`/vector-store/${store.id}`)
+  router.push(`/vector-stores/${store.id}`)
 }
 
 function resetForm() {
@@ -664,13 +724,17 @@ function resetForm() {
     path: '',
     dimension: 1536,
     metric: 'cosine',
-    is_default: false
+    is_default: false,
+    tenant: null
   })
   editingStore.value = null
 }
 
 onMounted(async () => {
-  await ragStore.fetchVectorStores()
+  await Promise.all([
+    ragStore.fetchVectorStores(),
+    tenantStore.fetchTenants()
+  ])
 })
 </script>
 
@@ -695,7 +759,7 @@ onMounted(async () => {
 
   .subtitle {
     font-size: $font-size-sm;
-    color: var(--text-primary)-secondary;
+    color: var(--text-secondary);
     margin: $spacing-1 0 0;
   }
 }
@@ -716,7 +780,7 @@ onMounted(async () => {
   .empty-icon {
     width: 64px;
     height: 64px;
-    color: var(--text-primary)-tertiary;
+    color: var(--text-tertiary);
     margin-bottom: $spacing-4;
   }
 
@@ -726,7 +790,7 @@ onMounted(async () => {
   }
 
   p {
-    color: var(--text-primary)-secondary;
+    color: var(--text-secondary);
     margin: 0 0 $spacing-4;
   }
 }
@@ -738,7 +802,7 @@ onMounted(async () => {
 }
 
 .store-card {
-  background: var(--bg-primary)-secondary;
+  background: var(--bg-secondary);
   border: 1px solid var(--border-primary);
   border-radius: $radius-xl;
   padding: $spacing-4;
@@ -804,7 +868,7 @@ onMounted(async () => {
 
 .store-type {
   font-size: $font-size-sm;
-  color: var(--text-primary)-secondary;
+  color: var(--text-secondary);
   margin: 0 0 $spacing-3;
 }
 
@@ -819,14 +883,19 @@ onMounted(async () => {
     align-items: center;
     gap: $spacing-1;
     padding: 2px 8px;
-    background: var(--bg-primary)-tertiary;
+    background: var(--bg-tertiary);
     border-radius: $radius-md;
     font-size: $font-size-xs;
-    color: var(--text-primary)-tertiary;
+    color: var(--text-tertiary);
 
     &.default {
       background: rgba($color-warning, 0.15);
       color: $color-warning;
+    }
+
+    &.team {
+      background: rgba($color-success, 0.15);
+      color: $color-success;
     }
   }
 
@@ -841,7 +910,7 @@ onMounted(async () => {
   justify-content: space-between;
   align-items: center;
   padding: $spacing-3;
-  background: var(--bg-primary)-tertiary;
+  background: var(--bg-tertiary);
   border-radius: $radius-md;
   margin-bottom: $spacing-3;
 
@@ -853,7 +922,7 @@ onMounted(async () => {
 
   .connection-label {
     font-size: $font-size-xs;
-    color: var(--text-primary)-tertiary;
+    color: var(--text-tertiary);
   }
 
   .connection-value {
@@ -887,6 +956,12 @@ onMounted(async () => {
 
 .danger {
   color: $color-error;
+}
+
+.form-item-tip {
+  font-size: $font-size-xs;
+  color: var(--text-tertiary);
+  margin-top: $spacing-1;
 }
 </style>
 

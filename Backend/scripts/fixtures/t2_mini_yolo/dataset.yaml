@@ -1,0 +1,6 @@
+path: E:/Flowly-now/Backend/scripts/fixtures/t2_mini_yolo
+train: images/train
+val: images/train
+names:
+  0: helmet
+  1: vest

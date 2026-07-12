@@ -132,7 +132,6 @@ const emit = defineEmits([
 const progressBar = ref(null)
 let autoCloseTimer = null
 let progressRaf = null
-let isHovering = false
 
 function handleOpen() {
   emit('open')
@@ -165,20 +164,6 @@ function stopProgress() {
   if (progressRaf) {
     cancelAnimationFrame(progressRaf)
     progressRaf = null
-  }
-}
-
-function pauseProgress() {
-  isHovering = true
-  if (progressBar.value) {
-    progressBar.value.style.animationPlayState = 'paused'
-  }
-}
-
-function resumeProgress() {
-  isHovering = false
-  if (progressBar.value) {
-    progressBar.value.style.animationPlayState = 'running'
   }
 }
 

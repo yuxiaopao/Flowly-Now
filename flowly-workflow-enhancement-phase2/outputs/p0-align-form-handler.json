@@ -1,9 +1,0 @@
-{
-  "task_id": "p0-align-form-handler",
-  "status": "done",
-  "result": "前后端 25 个节点类型字段完全匹配，无需修改。抽样验证 image_generation/video_generation/model_training/agent/retriever 全部对齐。",
-  "files_changed": [],
-  "files_added": [],
-  "summary": "前后端 25 个节点类型字段完全匹配，无需修改。抽样验证 image_generation/video_generation/model_training/agent/retriever 全部对齐。",
-  "completed_at": "2026-05-17T17:11:57.282515+00:00"
-}

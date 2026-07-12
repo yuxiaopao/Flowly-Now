@@ -5,12 +5,10 @@ Provides persistent, resumable conversation context using LangChain's
 memory components with Django model storage.
 """
 
-import json
 import logging
-from typing import Dict, Any, Optional, List, Optional
-from dataclasses import dataclass, field
+from typing import Dict, Any, List
+from dataclasses import dataclass
 from datetime import datetime
-from django.conf import settings
 
 from langchain.memory import ConversationBufferMemory, ConversationSummaryMemory
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage
@@ -70,15 +68,11 @@ class DjangoChatMessageHistory(BaseChatMessageHistory):
 
         try:
             session = NLSession.objects.get(id=self.session_id)
+            # JSONField returns a Python list directly — do NOT json.loads
             if session.messages:
-                messages_data = json.loads(session.messages)
-                self._messages = [
-                    MessageRecord.from_dict(m) for m in messages_data
-                ]
+                for m in session.messages:
+                    self._messages.append(MessageRecord.from_dict(m))
         except NLSession.DoesNotExist:
-            self._messages = []
-        except json.JSONDecodeError:
-            logger.warning(f"Failed to parse messages for session {self.session_id}")
             self._messages = []
 
         self._loaded = True
@@ -122,7 +116,8 @@ class DjangoChatMessageHistory(BaseChatMessageHistory):
         """Persist messages to database."""
         try:
             session = NLSession.objects.get(id=self.session_id)
-            session.messages = json.dumps([m.to_dict() for m in self._messages])
+            # JSONField stores Python objects directly — do NOT json.dumps
+            session.messages = [m.to_dict() for m in self._messages]
             session.save(update_fields=['messages'])
         except NLSession.DoesNotExist:
             logger.warning(f"Session {self.session_id} not found for saving")
@@ -347,10 +342,11 @@ def format_chat_history_for_prompt(
     """
     try:
         session = NLSession.objects.get(id=session_id)
+        # JSONField returns a Python list directly — do NOT json.loads
         if not session.messages:
             return ""
-
-        messages = json.loads(session.messages)
+        # session.messages is already a Python list
+        messages = session.messages
         recent = messages[-max_messages:] if len(messages) > max_messages else messages
 
         lines = []
@@ -360,7 +356,7 @@ def format_chat_history_for_prompt(
 
         return "\n".join(lines)
 
-    except (NLSession.DoesNotExist, json.JSONDecodeError):
+    except NLSession.DoesNotExist:
         return ""
 
 

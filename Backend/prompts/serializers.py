@@ -33,7 +33,7 @@ class PromptTemplateListSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'description', 'prompt_type', 'category',
             'category_name', 'tags', 'use_count', 'avg_rating',
-            'rating_count', 'is_featured', 'creator_name', 'created_at'
+            'rating_count', 'is_public', 'is_featured', 'creator_name', 'created_at'
         ]
 
 

@@ -157,7 +157,7 @@
                       class="card-logo"
                       :style="{ backgroundColor: getSiteColor(site.name) }"
                     >
-                      {{ site.name.charAt(0) }}
+                      {{ site.name?.charAt(0) ?? '?' }}
                     </div>
                     <div class="card-title">
                       <h4>{{ site.name }}</h4>
@@ -265,7 +265,7 @@
                 size="small"
                 @click="clearSelectedAnnotation"
               >
-                <el-icon><Close /></el-icon>
+                <el-icon><X /></el-icon>
               </el-button>
             </div>
           </div>
@@ -441,7 +441,7 @@
             @change="handleChange"
           />
           <div class="field-hint">
-            <el-icon><Warning /></el-icon>
+            <el-icon><AlertTriangle /></el-icon>
             必须是空目录，训练模型将保存在此目录
           </div>
         </el-form-item>
@@ -629,7 +629,7 @@
 import { ref, reactive, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Tag, Close, Search, RefreshCw, Loader, Check, Upload, Database, ExternalLink, Monitor, Warning } from 'lucide-vue-next'
+import { Tag, X, Search, Loader, Check, Upload, Database, ExternalLink, Monitor, AlertTriangle } from 'lucide-vue-next'
 import { annotationApi } from '@/api/annotation'
 import trainingApi from '@/api/training'
 import datasetApi from '@/api/dataset'
@@ -657,7 +657,6 @@ const selectedAnnotationId = ref(null)
 
 // Dataset tabs state
 const datasetTabActive = ref('mine')
-const showRecommendedDatasets = ref(false)
 const datasetSearchQuery = ref('')
 const myDatasets = ref([])
 const loadingDatasets = ref(false)
@@ -699,7 +698,6 @@ const recommendedDatasets = ref([
 // GPU detection state
 const gpuInfo = ref(null)
 const gpuDetecting = ref(false)
-const outputDir = ref('')
 
 const localData = reactive({
   label: '',
@@ -925,14 +923,13 @@ async function detectGPU() {
     ElMessage.success('GPU检测成功')
   } catch (error) {
     console.error('GPU detection failed:', error)
-    // Mock GPU info for demo
     gpuInfo.value = {
-      available: true,
-      name: 'NVIDIA GeForce RTX 3080',
-      memory: '10GB',
-      recommendedBatchSize: 64
+      available: false,
+      name: '未检测到 GPU',
+      memory: '',
+      recommendedBatchSize: 16,
     }
-    ElMessage.info('使用模拟GPU信息')
+    ElMessage.warning(error?.message || 'GPU 检测失败，请确认训练环境已安装 PyTorch')
   } finally {
     gpuDetecting.value = false
   }

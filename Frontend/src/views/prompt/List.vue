@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="prompt-list">
     <div class="page-header">
       <div class="header-left">
@@ -97,9 +97,9 @@
           <div class="card-meta">
             <span class="usage">
               <TrendingUp class="meta-icon" />
-              {{ template.usage_count }} 使用
+              {{ template.useCount ?? template.use_count ?? template.usage_count ?? 0 }} 使用
             </span>
-            <span class="category">{{ getCategoryLabel(template.category) }}</span>
+            <span class="category">{{ promptStore.getCategoryLabelForTemplate(template) }}</span>
           </div>
         </div>
       </div>
@@ -151,7 +151,7 @@
               class="card-icon"
               :style="{ background: getCategoryColor(template.category) }"
             >
-              {{ template.name.charAt(0).toUpperCase() }}
+              {{ template.name?.charAt(0)?.toUpperCase() ?? '?' }}
             </div>
             <el-dropdown
               trigger="click"
@@ -171,7 +171,7 @@
                     复制
                   </el-dropdown-item>
                   <el-dropdown-item
-                    v-if="template.is_public"
+                    v-if="template.isPublic ?? template.is_public"
                     @click.stop="handleUnshare(template)"
                   >
                     <Lock class="menu-icon" />
@@ -208,7 +208,7 @@
           <div class="card-meta">
             <span class="usage">
               <TrendingUp class="meta-icon" />
-              {{ template.usage_count }}
+              {{ template.useCount ?? template.use_count ?? template.usage_count ?? 0 }}
             </span>
             <span
               v-if="template.owner"
@@ -351,7 +351,7 @@
               </el-tag>
               <span class="usage-count">
                 <TrendingUp class="meta-icon" />
-                {{ selectedTemplate.usage_count }} 次使用
+                {{ selectedTemplate.useCount ?? selectedTemplate.use_count ?? selectedTemplate.usage_count ?? 0 }} 次使用
               </span>
               <span
                 v-if="selectedTemplate.owner"
@@ -453,7 +453,7 @@
 </template>
 
 <script setup>
-import { ref, computed, reactive, watch, onMounted } from 'vue'
+import { ref, computed, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { usePromptStore } from '@/stores/prompt'
 import { useAppStore } from '@/stores/app'
@@ -461,7 +461,7 @@ import {
   Plus, Search, Star, TrendingUp, User, FileText,
   MoreVertical, Copy, Trash2, Lock, Globe, Play
 } from 'lucide-vue-next'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessageBox } from 'element-plus'
 
 const router = useRouter()
 const promptStore = usePromptStore()
@@ -515,11 +515,13 @@ const filteredTemplates = computed(() => {
   }
 
   if (selectedCategory.value) {
-    templates = templates.filter(t => t.category === selectedCategory.value)
+    templates = templates.filter(
+      t => promptStore.resolveCategoryId(t.category) === selectedCategory.value
+    )
   }
 
   if (viewFilter.value === 'public') {
-    templates = templates.filter(t => t.is_public)
+    templates = templates.filter(t => t.isPublic ?? t.is_public)
   } else if (viewFilter.value === 'me') {
     templates = templates.filter(t => t.owner?.id === appStore.user?.id)
   }
@@ -613,6 +615,7 @@ async function handleDuplicate(template) {
 async function handleShare(template) {
   try {
     await promptStore.shareTemplate(template.id)
+    template.isPublic = true
     template.is_public = true
     appStore.success('模板已设为公开')
   } catch (err) {
@@ -623,6 +626,7 @@ async function handleShare(template) {
 async function handleUnshare(template) {
   try {
     await promptStore.unshareTemplate(template.id)
+    template.isPublic = false
     template.is_public = false
     appStore.success('模板已设为私有')
   } catch (err) {
@@ -677,7 +681,10 @@ function handleCopyTemplate(template) {
 }
 
 onMounted(async () => {
-  await promptStore.fetchTemplates()
+  await Promise.all([
+    promptStore.fetchCategories().catch(() => null),
+    promptStore.fetchTemplates(),
+  ])
 })
 </script>
 
@@ -703,7 +710,7 @@ onMounted(async () => {
 
   .subtitle {
     font-size: $font-size-sm;
-    color: var(--text-primary)-secondary;
+    color: var(--text-secondary);
     margin: $spacing-1 0 0;
   }
 }
@@ -718,7 +725,7 @@ onMounted(async () => {
   gap: $spacing-4;
   margin-bottom: $spacing-6;
   padding: $spacing-4;
-  background-color: var(--bg-primary)-secondary;
+  background-color: var(--bg-secondary);
   border-radius: $radius-lg;
 
   .search-box {
@@ -738,7 +745,7 @@ onMounted(async () => {
 
   .count {
     font-weight: $font-weight-normal;
-    color: var(--text-primary)-tertiary;
+    color: var(--text-tertiary);
     font-size: $font-size-sm;
   }
 }
@@ -751,7 +758,7 @@ onMounted(async () => {
 }
 
 .template-card {
-  background-color: var(--bg-primary)-secondary;
+  background-color: var(--bg-secondary);
   border: 1px solid var(--border-primary);
   border-radius: $radius-xl;
   padding: $spacing-4;
@@ -802,7 +809,7 @@ onMounted(async () => {
 
 .card-desc {
   font-size: $font-size-sm;
-  color: var(--text-primary)-secondary;
+  color: var(--text-secondary);
   margin: 0 0 $spacing-3;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -811,7 +818,7 @@ onMounted(async () => {
 }
 
 .card-preview {
-  background-color: var(--bg-primary)-tertiary;
+  background-color: var(--bg-tertiary);
   border-radius: $radius-md;
   padding: $spacing-3;
   margin-bottom: $spacing-3;
@@ -822,7 +829,7 @@ onMounted(async () => {
     margin: 0;
     font-size: $font-size-xs;
     font-family: 'Fira Code', monospace;
-    color: var(--text-primary)-secondary;
+    color: var(--text-secondary);
     white-space: pre-wrap;
   }
 }
@@ -831,7 +838,7 @@ onMounted(async () => {
   display: flex;
   gap: $spacing-4;
   font-size: $font-size-xs;
-  color: var(--text-primary)-tertiary;
+  color: var(--text-tertiary);
 
   .meta-icon {
     width: 14px;
@@ -847,12 +854,12 @@ onMounted(async () => {
   .empty-icon {
     width: 64px;
     height: 64px;
-    color: var(--text-primary)-tertiary;
+    color: var(--text-tertiary);
     margin-bottom: $spacing-4;
   }
 
   p {
-    color: var(--text-primary)-secondary;
+    color: var(--text-secondary);
     margin-bottom: $spacing-4;
   }
 }
@@ -881,10 +888,10 @@ onMounted(async () => {
 .form-hint {
   margin: $spacing-2 0 0;
   font-size: $font-size-xs;
-  color: var(--text-primary)-tertiary;
+  color: var(--text-tertiary);
 
   code {
-    background-color: var(--bg-primary)-tertiary;
+    background-color: var(--bg-tertiary);
     padding: 2px 6px;
     border-radius: 4px;
     font-family: 'Fira Code', monospace;
@@ -899,7 +906,7 @@ onMounted(async () => {
   }
 
   .detail-desc {
-    color: var(--text-primary)-secondary;
+    color: var(--text-secondary);
     margin: 0 0 $spacing-3;
   }
 
@@ -907,7 +914,7 @@ onMounted(async () => {
     display: flex;
     gap: $spacing-4;
     font-size: $font-size-sm;
-    color: var(--text-primary)-tertiary;
+    color: var(--text-tertiary);
 
     .meta-icon {
       width: 14px;
@@ -923,7 +930,7 @@ onMounted(async () => {
 }
 
 .template-content {
-  background-color: var(--bg-primary)-tertiary;
+  background-color: var(--bg-tertiary);
   border-radius: $radius-md;
   padding: $spacing-4;
 
@@ -947,7 +954,7 @@ onMounted(async () => {
   align-items: center;
   gap: $spacing-3;
   padding: $spacing-3;
-  background-color: var(--bg-primary)-tertiary;
+  background-color: var(--bg-tertiary);
   border-radius: $radius-md;
 
   .var-name {
@@ -958,7 +965,7 @@ onMounted(async () => {
 
   .var-default {
     font-size: $font-size-xs;
-    color: var(--text-primary)-tertiary;
+    color: var(--text-tertiary);
     margin-left: auto;
   }
 }

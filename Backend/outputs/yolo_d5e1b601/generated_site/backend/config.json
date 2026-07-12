@@ -1,0 +1,10 @@
+{
+  "model_path": "best.pt",
+  "labels": [
+    "helmet",
+    "vest"
+  ],
+  "framework": "ultralytics",
+  "website_type": "detection",
+  "port": 49152
+}

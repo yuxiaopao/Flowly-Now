@@ -50,8 +50,14 @@
 
 <script setup>
 defineProps({
-  title: String,
-  icon: [String, Object],
+  title: {
+    type: String,
+    default: ''
+  },
+  icon: {
+    type: [String, Object, Function],
+    default: null
+  },
   variant: {
     type: String,
     default: 'default',
@@ -81,40 +87,55 @@ function handleClick(e) {
 @use '@/assets/styles/variables.scss' as *;
 
 .app-card {
-  background-color: var(--bg-secondary);
-  border-radius: $radius-xl;
+  position: relative;
+  background-color: var(--card-bg);
+  border-radius: var(--radius-card, $radius-xl);
   overflow: hidden;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+  transition: border-color 0.25s cubic-bezier(0.22, 1, 0.36, 1),
+              box-shadow 0.25s cubic-bezier(0.22, 1, 0.36, 1),
+              transform 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: var(--card-inner-highlight);
+    border-radius: inherit;
+  }
 
   &--default {
-    border: 1px solid var(--border-primary);
+    border: 1px solid var(--card-border);
+    box-shadow: var(--shadow-sm);
   }
 
   &--bordered {
-    border: 1px solid var(--border-primary);
+    border: 1px solid var(--card-border);
+    box-shadow: var(--shadow-sm);
   }
 
   &--elevated {
-    border: none;
+    border: 1px solid var(--card-border);
     box-shadow: var(--shadow-md);
   }
 
   &--outlined {
-    border: none;
+    border: 1px solid var(--border-primary);
     background-color: transparent;
+    box-shadow: none;
   }
 
   &--clickable {
     cursor: pointer;
 
     &:hover {
-      border-color: var(--border-hover);
-      transform: translateY(-2px);
-      box-shadow: var(--shadow-md);
+      border-color: var(--accent-blue-soft);
+      transform: translateY(-3px);
+      box-shadow: var(--shadow-lg);
     }
 
     &:active {
-      transform: translateY(0);
+      transform: translateY(-1px);
     }
   }
 
@@ -166,6 +187,8 @@ function handleClick(e) {
   align-items: center;
   justify-content: space-between;
   border-bottom: 1px solid var(--border-primary);
+  position: relative;
+  z-index: 1;
 }
 
 .app-card__header-content {
@@ -177,7 +200,7 @@ function handleClick(e) {
 .app-card__icon {
   width: 20px;
   height: 20px;
-  color: $color-primary;
+  color: var(--accent-blue);
 }
 
 .app-card__title {
@@ -194,6 +217,9 @@ function handleClick(e) {
 }
 
 .app-card__body {
+  position: relative;
+  z-index: 1;
+
   &--no-padding {
     padding: 0;
   }
@@ -202,5 +228,7 @@ function handleClick(e) {
 .app-card__footer {
   border-top: 1px solid var(--border-primary);
   background-color: var(--bg-tertiary);
+  position: relative;
+  z-index: 1;
 }
 </style>

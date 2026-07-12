@@ -56,6 +56,18 @@
               label="Replicate"
               value="replicate"
             />
+            <el-option
+              label="Agnes AI (agnes-image-2.1-flash)"
+              value="agnes"
+            />
+            <el-option
+              label="阿里云百炼 (通义万相 Wanx)"
+              value="dashscope"
+            />
+            <el-option
+              label="本地 Z-Image-Turbo (CUDA)"
+              value="zimage_local"
+            />
           </el-select>
         </el-form-item>
 
@@ -66,7 +78,7 @@
             @change="handleChange"
           />
           <div class="field-hint">
-            例如: dall-e-3, stable-diffusion-xl, flux-pro
+            例如: dall-e-3, stable-diffusion-xl, flux-pro, wanx2.1-t2i-turbo
           </div>
         </el-form-item>
       </div>
@@ -100,18 +112,39 @@
               label="1024 x 1024 (1:1)"
               value="1024x1024"
             />
-            <el-option
-              label="1792 x 1024 (16:9)"
-              value="1792x1024"
-            />
-            <el-option
-              label="1024 x 1792 (9:16)"
-              value="1024x1792"
-            />
+            <template v-if="localData.provider === 'dashscope'">
+              <el-option
+                label="1280 x 720 (16:9)"
+                value="1280x720"
+              />
+              <el-option
+                label="720 x 1280 (9:16)"
+                value="720x1280"
+              />
+            </template>
+            <template v-else>
+              <el-option
+                label="1792 x 1024 (16:9)"
+                value="1792x1024"
+              />
+              <el-option
+                label="1024 x 1792 (9:16)"
+                value="1024x1792"
+              />
+            </template>
           </el-select>
+          <div
+            v-if="localData.provider === 'dashscope'"
+            class="field-hint"
+          >
+            阿里云百炼 Wanx 支持: 1024x1024, 1280x720, 720x1280
+          </div>
         </el-form-item>
 
-        <el-form-item label="图像质量">
+        <el-form-item
+          v-if="localData.provider !== 'dashscope'"
+          label="图像质量"
+        >
           <el-select
             v-model="localData.quality"
             @change="handleChange"
@@ -127,7 +160,10 @@
           </el-select>
         </el-form-item>
 
-        <el-form-item label="风格">
+        <el-form-item
+          v-if="localData.provider !== 'dashscope'"
+          label="风格"
+        >
           <el-select
             v-model="localData.style"
             @change="handleChange"
@@ -189,7 +225,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, watch } from 'vue'
+import { reactive, watch } from 'vue'
 
 const props = defineProps({
   modelValue: {
@@ -216,7 +252,10 @@ const defaultModels = {
   openai: 'dall-e-3',
   stability: 'stable-diffusion-xl-1024-genai',
   flux: 'flux-pro',
-  replicate: 'sdxl'
+  replicate: 'sdxl',
+  dashscope: 'wanx2.1-t2i-turbo',
+  agnes: 'agnes-image-2.1-flash',
+  zimage_local: 'Tongyi-MAI/Z-Image-Turbo'
 }
 
 watch(() => props.modelValue, (newVal) => {

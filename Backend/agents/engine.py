@@ -2,10 +2,11 @@
 Agent Engine for executing AI Agent tasks.
 """
 
+import ast
 import logging
 import math
 from datetime import datetime, timedelta
-from typing import Dict, Any, Optional, List, Callable, Union
+from typing import Dict, Any, Optional, List, Callable
 
 import httpx
 from langchain_openai import ChatOpenAI, AzureChatOpenAI
@@ -14,7 +15,7 @@ from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 from django.conf import settings
 from utils.helpers import safe_json_loads, safe_json_dumps, dict_get, format_datetime
 from config.constants import (
-    TOOL_TIMEOUT_DEFAULT, HTTP_TOOL_TIMEOUT, OLLAMA_CHAT_TIMEOUT,
+    TOOL_TIMEOUT_DEFAULT, HTTP_TOOL_TIMEOUT, OLLAMA_CHAT_TIMEOUT, OLLAMA_NUM_CTX,
     OPENWEATHER_API_URL, WTIRR_API_URL, OLLAMA_MODEL_PREFIXES,
     DEFAULT_OLLAMA_MODEL as DEFAULT_MODEL,
     DEFAULT_TEMPERATURE,
@@ -24,17 +25,12 @@ from config.constants import (
 
 logger = logging.getLogger(__name__)
 
-# Magic numbers as named constants
 DEFAULT_NUM_RESULTS = 5
 DEFAULT_MAX_LENGTH = 2000
 MAX_TOOL_ITERATIONS = 5
 
-DEFAULT_MAX_LENGTH = 2000
-DEFAULT_NUM_RESULTS = 5
-MAX_TOOL_ITERATIONS = 5
 
-
-class AgentTool:
+class BaseTool:
     """Base class for Agent tools."""
 
     name: str = ""
@@ -60,7 +56,7 @@ class AgentTool:
         }
 
 
-class CalculatorTool(AgentTool):
+class CalculatorTool(BaseTool):
     """Calculator tool for mathematical operations."""
 
     name = "calculator"
@@ -153,7 +149,7 @@ class CalculatorTool(AgentTool):
             }
 
 
-class SearchTool(AgentTool):
+class SearchTool(BaseTool):
     """Web search tool using DuckDuckGo."""
 
     name = "search"
@@ -209,7 +205,7 @@ class SearchTool(AgentTool):
             }
 
 
-class WeatherTool(AgentTool):
+class WeatherTool(BaseTool):
     """Weather information tool using OpenWeatherMap API."""
 
     name = "weather"
@@ -338,7 +334,7 @@ class WeatherTool(AgentTool):
             }
 
 
-class WebScraperTool(AgentTool):
+class WebScraperTool(BaseTool):
     """Web page content scraper."""
 
     name = "web_scraper"
@@ -396,7 +392,7 @@ class WebScraperTool(AgentTool):
             }
 
 
-class TextTemplateTool(AgentTool):
+class TextTemplateTool(BaseTool):
     """Text template processing tool."""
 
     name = "text_template"
@@ -432,7 +428,7 @@ class TextTemplateTool(AgentTool):
             }
 
 
-class JsonParserTool(AgentTool):
+class JsonParserTool(BaseTool):
     """JSON parsing and manipulation tool."""
 
     name = "json_parser"
@@ -481,7 +477,7 @@ class JsonParserTool(AgentTool):
         return {"success": False, "error": f"未知操作: {operation}"}
 
 
-class DateTimeTool(AgentTool):
+class DateTimeTool(BaseTool):
     """Date and time utility tool."""
 
     name = "datetime"
@@ -523,6 +519,85 @@ class DateTimeTool(AgentTool):
         return {"success": False, "error": f"未知操作: {operation}"}
 
 
+class KnowledgeBaseTool(BaseTool):
+    """Retrieve relevant context from the agent's bound knowledge base collections.
+
+    Requires `collection_ids` (rag.DocumentCollection UUIDs) to be supplied at
+    construction time via AgentEngine — a plain `KnowledgeBaseTool()` with no
+    collections configured will report that no knowledge base is bound.
+    """
+
+    name = "knowledge_base"
+    description = "检索知识库中的相关内容，用于回答需要引用团队文档、资料的问题。"
+    parameters = {
+        "type": "object",
+        "properties": {
+            "query": {
+                "type": "string",
+                "description": "检索关键词或问题"
+            },
+            "top_k": {
+                "type": "integer",
+                "description": "返回结果数量",
+                "default": DEFAULT_NUM_RESULTS
+            }
+        },
+        "required": ["query"]
+    }
+
+    def __init__(self, config: Optional[Dict[str, Any]] = None, collection_ids: Optional[List[str]] = None):
+        super().__init__(config)
+        self.collection_ids = collection_ids or []
+
+    def run(self, query: str, top_k: int = DEFAULT_NUM_RESULTS) -> Dict[str, Any]:
+        if not self.collection_ids:
+            return {
+                "success": False,
+                "error": "该 Agent 未关联任何知识库集合，请先在 Agent 设置中关联知识库。"
+            }
+
+        try:
+            from rag.models import DocumentCollection
+            from rag.services import RAGService
+        except Exception as e:
+            logger.error(f"KnowledgeBaseTool: rag module unavailable: {e}")
+            return {"success": False, "error": f"知识库模块不可用: {e}"}
+
+        all_results = []
+        for collection_id in self.collection_ids:
+            try:
+                collection = DocumentCollection.objects.get(id=collection_id)
+            except DocumentCollection.DoesNotExist:
+                logger.warning(f"KnowledgeBaseTool: collection {collection_id} not found")
+                continue
+            except Exception as e:
+                logger.warning(f"KnowledgeBaseTool: failed to load collection {collection_id}: {e}")
+                continue
+
+            try:
+                rag_service = RAGService(collection=collection, top_k=top_k, min_similarity=0.0)
+                rag_service.initialize()
+                for r in rag_service.retrieve(query):
+                    all_results.append({
+                        "collection": collection.name,
+                        "content": r.get("payload", {}).get("content", ""),
+                        "score": r.get("score", 0),
+                    })
+            except Exception as e:
+                logger.warning(f"KnowledgeBaseTool: retrieval failed for collection {collection_id}: {e}")
+                continue
+
+        all_results.sort(key=lambda x: x.get("score", 0), reverse=True)
+        top_results = all_results[:top_k]
+
+        return {
+            "success": True,
+            "query": query,
+            "results": top_results,
+            "count": len(top_results),
+        }
+
+
 class AgentEngine:
     """Engine for running AI Agents with tools."""
 
@@ -535,6 +610,7 @@ class AgentEngine:
         "text_template": TextTemplateTool,
         "json_parser": JsonParserTool,
         "datetime": DateTimeTool,
+        "knowledge_base": KnowledgeBaseTool,
     }
 
     def __init__(
@@ -547,9 +623,18 @@ class AgentEngine:
         base_url: Optional[str] = None,
         tools: Optional[List[str]] = None,
         memory_enabled: bool = True,
-        context_window: int = DEFAULT_CONTEXT_WINDOW
+        context_window: int = DEFAULT_CONTEXT_WINDOW,
+        knowledge_collection_ids: Optional[List[str]] = None
     ):
-        """Initialize the Agent Engine."""
+        """Initialize the Agent Engine.
+
+        Args:
+            context_window: Maximum number of conversation turns (user+assistant pairs)
+                           to retain in history. Not a token limit — actual token count
+                           depends on message length. Default 10 pairs.
+            knowledge_collection_ids: rag.DocumentCollection UUIDs this agent may search
+                           via the 'knowledge_base' tool (only used if that tool is enabled).
+        """
         self.system_prompt = system_prompt
         self.model = model
         self.temperature = temperature
@@ -559,6 +644,7 @@ class AgentEngine:
         self.tools = tools or []
         self.memory_enabled = memory_enabled
         self.context_window = context_window
+        self.knowledge_collection_ids = knowledge_collection_ids or []
 
         self._llm = None
         self._tool_instances = {}
@@ -566,9 +652,22 @@ class AgentEngine:
 
         logger.debug(f"AgentEngine initialized with model={model}, tools={self.tools}")
 
+    def _is_ollama_model(self) -> bool:
+        model_lower = self.model.lower()
+        return any(prefix in model_lower for prefix in OLLAMA_MODEL_PREFIXES)
+
+    def _is_ollama_endpoint(self) -> bool:
+        if not self.base_url:
+            return False
+        url = self.base_url.rstrip("/").lower()
+        if "ollama" in url or ":11434" in url:
+            return True
+        default_url = getattr(settings, "OLLAMA_BASE_URL", "http://localhost:11434")
+        return url == default_url.rstrip("/").lower()
+
     def _get_provider(self) -> str:
         """Determine provider from model name or base_url."""
-        if self.base_url and "ollama" in self.base_url.lower():
+        if self._is_ollama_endpoint() or self._is_ollama_model():
             return "ollama"
         if self.base_url and "azure" in self.base_url.lower():
             return "azure"
@@ -587,13 +686,23 @@ class AgentEngine:
             provider = self._get_provider()
 
             if provider == "ollama":
+                # self.base_url defaults to OPENAI_BASE_URL (an OpenAI-compatible endpoint),
+                # which must NOT leak into Ollama requests. Only reuse it if it's genuinely
+                # an Ollama endpoint; otherwise fall back to the configured OLLAMA_BASE_URL.
+                ollama_url = (
+                    self.base_url if self._is_ollama_endpoint()
+                    else getattr(settings, "OLLAMA_BASE_URL", "http://localhost:11434")
+                )
                 model_kwargs = {
                     "model": self.model,
                     "temperature": self.temperature,
                     "timeout": OLLAMA_CHAT_TIMEOUT,
+                    "base_url": ollama_url.rstrip("/"),
+                    "num_ctx": getattr(settings, "OLLAMA_NUM_CTX", OLLAMA_NUM_CTX),
+                    # Local Ollama calls must bypass any system-wide HTTP proxy (common on
+                    # dev machines running VPN/proxy tools) or the request 502s at the proxy.
+                    "client_kwargs": {"trust_env": False},
                 }
-                if self.base_url:
-                    model_kwargs["base_url"] = self.base_url.rstrip("/")
                 self._llm = ChatOllama(**model_kwargs)
 
             elif provider == "azure":
@@ -623,14 +732,19 @@ class AgentEngine:
 
         return self._llm
 
-    def get_tool(self, tool_name: str) -> Optional[AgentTool]:
+    def get_tool(self, tool_name: str) -> Optional[BaseTool]:
         """Get or create tool instance."""
         if tool_name not in self._tool_instances:
-            tool_class = self.TOOLS_REGISTRY.get(tool_name)
-            if tool_class:
-                self._tool_instances[tool_name] = tool_class()
+            if tool_name == "knowledge_base":
+                self._tool_instances[tool_name] = KnowledgeBaseTool(
+                    collection_ids=self.knowledge_collection_ids
+                )
             else:
-                return None
+                tool_class = self.TOOLS_REGISTRY.get(tool_name)
+                if tool_class:
+                    self._tool_instances[tool_name] = tool_class()
+                else:
+                    return None
         return self._tool_instances[tool_name]
 
     def get_tools_schemas(self) -> List[Dict[str, Any]]:
@@ -641,6 +755,137 @@ class AgentEngine:
             if tool:
                 schemas.append(tool.get_schema())
         return schemas
+
+    def _react_chat(
+        self,
+        message: str,
+        stream: bool = False,
+        callbacks: Optional[List[Callable]] = None
+    ) -> Dict[str, Any]:
+        """ReAct tool-calling loop: think → act → observe, up to MAX_TOOL_ITERATIONS."""
+        callbacks = callbacks or []
+        tools_schemas = self.get_tools_schemas()
+        if not tools_schemas:
+            return self._simple_chat(message, stream, callbacks)
+
+        messages = self.build_messages(message)
+
+        iteration = 0
+        full_response = ""
+        tool_calls_made = []
+
+        while iteration < MAX_TOOL_ITERATIONS:
+            iteration += 1
+
+            # bind(tools) may not be supported (e.g. Ollama); fall back to plain chat
+            try:
+                if iteration == 1:
+                    llm = self.llm.bind(tools=tools_schemas)
+                else:
+                    llm = self.llm
+            except (AttributeError, TypeError):
+                return self._simple_chat(message, stream, callbacks)
+
+            response = llm.invoke(messages)
+
+            response_content = getattr(response, 'content', '') or ''
+            response_text = response_content if isinstance(response_content, str) else str(response_content)
+
+            if stream and response_text:
+                for ch in response_text:
+                    for callback in callbacks:
+                        callback(ch)
+
+            full_response += response_text
+            messages.append(AIMessage(content=response_text))
+
+            tool_calls = getattr(response, 'tool_calls', None)
+            if not tool_calls:
+                break
+
+            for tc in tool_calls:
+                tool_name = tc.get('name', '')
+                raw_args = tc.get('args', {})
+                args = raw_args if isinstance(raw_args, dict) else {}
+                result = self.execute_tool(tool_name, args)
+                tool_calls_made.append({
+                    'name': tool_name,
+                    'args': args,
+                    'result': result
+                })
+                tool_content = (
+                    safe_json_dumps(result)
+                    if not isinstance(result, str)
+                    else result
+                )
+                tool_msg = {
+                    "role": "tool",
+                    "tool_call_id": tc.get('id', tc.get('name', '')),
+                    "name": tool_name,
+                    "content": tool_content,
+                }
+                messages.append(tool_msg)
+
+        if self.memory_enabled:
+            self._history.append({"input": message, "output": full_response})
+
+        return {
+            "success": True,
+            "response": full_response,
+            "tool_calls": tool_calls_made if tool_calls_made else None
+        }
+
+    def _simple_chat(
+        self,
+        message: str,
+        stream: bool = False,
+        callbacks: Optional[List[Callable]] = None
+    ) -> Dict[str, Any]:
+        """Plain chat without tool calling."""
+        callbacks = callbacks or []
+        messages = self.build_messages(message)
+
+        if stream:
+            response = self.llm.stream(messages)
+            full_response_parts = []
+            for chunk in response:
+                content = chunk.content if isinstance(chunk.content, str) else str(chunk.content)
+                full_response_parts.append(content)
+                for callback in callbacks:
+                    callback(content)
+            response_content = "".join(full_response_parts)
+        else:
+            response = self.llm.invoke(messages)
+            response_content = response.content if isinstance(response.content, str) else str(response.content)
+
+        if self.memory_enabled:
+            self._history.append({"input": message, "output": response_content})
+
+        return {
+            "success": True,
+            "response": response_content,
+            "tool_calls": None
+        }
+
+    def chat(
+        self,
+        message: str,
+        stream: bool = False,
+        callbacks: Optional[List[Callable]] = None
+    ) -> Dict[str, Any]:
+        """Chat with the agent, using ReAct tool loop when tools are configured."""
+        try:
+            if self.tools:
+                return self._react_chat(message, stream, callbacks)
+            return self._simple_chat(message, stream, callbacks)
+        except Exception as e:
+            logger.error(f"AgentEngine.chat() error: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "response": None,
+                "tool_calls": None
+            }
 
     def execute_tool(self, tool_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
         """Execute a tool with given arguments."""
@@ -668,7 +913,9 @@ class AgentEngine:
         if include_system and self.system_prompt:
             messages.append(SystemMessage(content=self.system_prompt))
 
-        # Add history context if enabled
+        # Add history context if enabled.
+        # context_window is a turn-count limit (each turn = user + assistant message),
+        # not a token count. A turn may consume far fewer tokens than the model's limit.
         if self.memory_enabled:
             for entry in self._history[-self.context_window:]:
                 messages.append(HumanMessage(content=entry.get("input", "")))
@@ -680,75 +927,47 @@ class AgentEngine:
 
         return messages
 
-    def chat(
-        self,
-        message: str,
-        stream: bool = False,
-        callbacks: Optional[List[Callable]] = None
-    ) -> Dict[str, Any]:
-        """Chat with the agent."""
-        callbacks = callbacks or []
-
-        try:
-            messages = self.build_messages(message)
-
-            if stream:
-                response = self.llm.stream(messages)
-                full_response_parts = []
-                for chunk in response:
-                    content = chunk.content if isinstance(chunk.content, str) else str(chunk.content)
-                    full_response_parts.append(content)
-                    for callback in callbacks:
-                        callback(content)
-                response_content = "".join(full_response_parts)
-            else:
-                response = self.llm.invoke(messages)
-                response_content = response.content if isinstance(response.content, str) else str(response.content)
-
-            if self.memory_enabled:
-                self._history.append({
-                    "input": message,
-                    "output": response_content
-                })
-
-            return {
-                "success": True,
-                "response": response_content,
-                "tool_calls": None
-            }
-
-        except Exception as e:
-            logger.error(f"AgentEngine.chat() error: {e}")
-            return {
-                "success": False,
-                "error": str(e),
-                "response": None,
-                "tool_calls": None
-            }
-
     def stream_chat(self, message: str):
-        """Stream chat response as a generator."""
+        """Stream chat response as a generator. Uses ReAct loop when tools are configured."""
+        if not self.tools:
+            yield from self._stream_simple(message)
+            return
+
+        # With tools: run ReAct loop, then stream the final answer
+        result = self._react_chat(message, stream=False, callbacks=None)
+        full_response = result.get('response', '')
+        tool_calls = result.get('tool_calls')
+
+        # Stream the final text response char by char
+        for ch in full_response:
+            yield {"type": "content", "content": ch}
+
+        yield {"type": "done", "content": full_response, "tool_calls": tool_calls}
+
+    def _stream_simple(self, message: str):
+        """Streaming path without tool calling."""
+        full_response_parts = []
         try:
             messages = self.build_messages(message)
             response = self.llm.stream(messages)
 
             for chunk in response:
                 content = chunk.content if isinstance(chunk.content, str) else str(chunk.content)
-                yield {
-                    "type": "content",
-                    "content": content
-                }
+                full_response_parts.append(content)
+                yield {"type": "content", "content": content}
 
-            yield {
-                "type": "done",
-                "content": ""
-            }
+            full_response = "".join(full_response_parts)
+
+            if self.memory_enabled:
+                self._history.append({"input": message, "output": full_response})
+
+            yield {"type": "done", "content": full_response}
 
         except Exception as e:
-            yield {
-                "type": "error",
-                "error": str(e)
-            }
+            if self.memory_enabled and full_response_parts:
+                partial = "".join(full_response_parts)
+                self._history.append({"input": message, "output": partial})
+            yield {"type": "error", "error": str(e)}
 
     def reset_memory(self):
         """Clear conversation memory."""
@@ -756,19 +975,27 @@ class AgentEngine:
 
 
 # Factory function to create agent engine from database model
-def create_agent_engine(agent_model) -> AgentEngine:
-    """Create AgentEngine from Agent model instance."""
+def create_agent_engine(agent_model, conversation=None) -> AgentEngine:
+    """Create AgentEngine from Agent model instance.
+
+    Args:
+        agent_model: Agent database model instance.
+        conversation: Optional AgentConversation instance. If provided, the engine's
+            _history will be pre-populated from the conversation's message history,
+            enabling multi-turn context across HTTP requests.
+    """
     from django.conf import settings as django_settings
 
     api_key = None
-    if agent_model.owner:
-        api_key = getattr(agent_model.owner, 'openai_api_key', None)
+    model_settings = agent_model.settings
+    if isinstance(model_settings, dict):
+        api_key = model_settings.get('api_key')
     if not api_key:
-        model_settings = agent_model.settings
-        if isinstance(model_settings, dict):
-            api_key = model_settings.get('api_key')
-    base_url = (agent_model.settings.get('base_url')
-                if isinstance(agent_model.settings, dict) else None)
+        api_key = getattr(django_settings, 'OPENAI_API_KEY', None)
+
+    base_url = None
+    if isinstance(model_settings, dict):
+        base_url = model_settings.get('base_url')
 
     # Auto-detect Ollama: local models like qwen, llama, smollm, etc.
     model_lower = agent_model.model.lower()
@@ -776,7 +1003,7 @@ def create_agent_engine(agent_model) -> AgentEngine:
     if is_ollama_model and not base_url:
         base_url = getattr(django_settings, 'OLLAMA_BASE_URL', None)
 
-    return AgentEngine(
+    engine = AgentEngine(
         system_prompt=agent_model.system_prompt,
         model=agent_model.model,
         temperature=agent_model.temperature,
@@ -785,5 +1012,28 @@ def create_agent_engine(agent_model) -> AgentEngine:
         base_url=base_url,
         tools=agent_model.tools or [],
         memory_enabled=agent_model.memory_enabled,
-        context_window=agent_model.context_window
+        context_window=agent_model.context_window,
+        knowledge_collection_ids=getattr(agent_model, 'knowledge_collections', None) or []
     )
+
+    if conversation and agent_model.memory_enabled:
+        messages = conversation.messages or []
+        history = []
+        # messages is a list of {'role': 'user'/'assistant', 'content': ...}
+        for msg in messages:
+            role = msg.get('role')
+            content = msg.get('content', '')
+            if role == 'user':
+                # Start a new turn; this will be paired with the next assistant msg
+                if history and 'output' not in history[-1]:
+                    history[-1]['input'] = content
+                else:
+                    history.append({'input': content})
+            elif role == 'assistant':
+                if history and 'input' in history[-1] and 'output' not in history[-1]:
+                    history[-1]['output'] = content
+                else:
+                    history.append({'output': content})
+        engine._history = history[-agent_model.context_window:] if agent_model.context_window else history
+
+    return engine

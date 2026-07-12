@@ -5,7 +5,8 @@ import Components from 'unplugin-vue-components/vite'
 import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
 import path from 'path'
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
+  base: mode === 'electron' ? './' : '/',
   plugins: [
     vue(),
     AutoImport({
@@ -44,9 +45,14 @@ export default defineConfig({
         manualChunks: {
           'element-plus': ['element-plus'],
           'vue-flow': ['@vue-flow/core', '@vue-flow/background', '@vue-flow/controls', '@vue-flow/minimap'],
-          'echarts': ['echarts']
+          'echarts': ['echarts'],
+          'spline': ['@splinetool/runtime'],
         }
       }
     }
-  }
-})
+  },
+  optimizeDeps: {
+    include: ['@splinetool/runtime'],
+  },
+  assetsInclude: ['**/*.wasm'],
+}))

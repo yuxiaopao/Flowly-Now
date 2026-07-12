@@ -1,0 +1,311 @@
+{% extends "admin/flowly_base.html" %}
+{% load static %}
+
+{% block flowly_content %}
+<div class="f-panel welcome-panel">
+
+    <div class="welcome-hero">
+        <div class="welcome-hero-bg"></div>
+        <div class="welcome-hero-inner">
+            <div class="welcome-brand">
+                <img src="{% static 'admin/img/logow.png' %}" alt="{{ site_name }}" class="welcome-logo">
+                <div class="welcome-brand-text">
+                    <h1><span id="welcomeGreeting">{{ greeting }}</span>，{{ display_name }}</h1>
+                    <p>{{ site_tagline|default:"AI Agent 工作流编排平台" }} · {{ platform_admin_title|default:site_name }}</p>
+                </div>
+            </div>
+            <div class="welcome-meta">
+                <span id="welcomeClock" class="welcome-clock"></span>
+                {% if last_login %}
+                <span class="welcome-last-login">上次登录：{{ last_login|date:"Y-m-d H:i" }}</span>
+                {% endif %}
+            </div>
+            <div class="welcome-actions">
+                <a href="/admin/flowly/" class="f-btn f-btn-primary welcome-cta">
+                    <i class="fas fa-chart-line"></i> 打开控制台
+                </a>
+                <a href="/admin/flowly/settings/" class="f-btn f-btn-outline welcome-cta-outline">
+                    <i class="fas fa-cogs"></i> 配置中心
+                </a>
+                <a href="{{ frontend_url }}/" target="_blank" rel="noopener noreferrer" class="f-btn f-btn-ghost welcome-cta-ghost">
+                    <i class="fas fa-external-link-alt"></i> 用户端
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="welcome-stats">
+        <div class="f-stat primary">
+            <div class="f-stat-value">{{ workflows_count }}</div>
+            <div class="f-stat-label">工作流总数</div>
+        </div>
+        <div class="f-stat info">
+            <div class="f-stat-value">{{ executions_today }}</div>
+            <div class="f-stat-label">今日执行</div>
+        </div>
+        <div class="f-stat success">
+            <div class="f-stat-value">{{ users_count }}</div>
+            <div class="f-stat-label">系统用户</div>
+        </div>
+        <div class="f-stat warning">
+            <div class="f-stat-value">{{ agents_count }}</div>
+            <div class="f-stat-label">活跃 Agent</div>
+        </div>
+        <div class="f-stat danger">
+            <div class="f-stat-value">{{ tenants_count }}</div>
+            <div class="f-stat-label">租户数量</div>
+        </div>
+    </div>
+
+    <div class="welcome-section">
+        <div class="f-card-title"><i class="fas fa-th-large"></i> 更多入口</div>
+        <p class="welcome-section-desc">顶部 Tab 可切换控制台、配置、审计等模块。以下为 Django 原生管理与外部链接。</p>
+        <div class="welcome-bento">
+            <a href="/admin/workflows/workflow/" class="welcome-card welcome-card-lg">
+                <div class="welcome-card-icon wc-cyan"><i class="fas fa-project-diagram"></i></div>
+                <div class="welcome-card-body">
+                    <div class="welcome-card-title">工作流管理</div>
+                    <div class="welcome-card-desc">创建、编辑与发布自动化工作流</div>
+                </div>
+                <i class="fas fa-chevron-right welcome-card-arrow"></i>
+            </a>
+            <a href="/admin/auth/user/" class="welcome-card">
+                <div class="welcome-card-icon wc-navy"><i class="fas fa-users"></i></div>
+                <div class="welcome-card-body">
+                    <div class="welcome-card-title">用户管理</div>
+                    <div class="welcome-card-desc">账号与权限</div>
+                </div>
+                <i class="fas fa-chevron-right welcome-card-arrow"></i>
+            </a>
+            <a href="/admin/workflows/workflow/add/" class="welcome-card">
+                <div class="welcome-card-icon wc-blue"><i class="fas fa-plus"></i></div>
+                <div class="welcome-card-body">
+                    <div class="welcome-card-title">新建工作流</div>
+                    <div class="welcome-card-desc">快速创建草稿</div>
+                </div>
+                <i class="fas fa-chevron-right welcome-card-arrow"></i>
+            </a>
+            <a href="/api/docs/" target="_blank" rel="noopener noreferrer" class="welcome-card">
+                <div class="welcome-card-icon wc-teal"><i class="fas fa-book"></i></div>
+                <div class="welcome-card-body">
+                    <div class="welcome-card-title">API 文档</div>
+                    <div class="welcome-card-desc">OpenAPI 接口参考</div>
+                </div>
+                <i class="fas fa-chevron-right welcome-card-arrow"></i>
+            </a>
+        </div>
+    </div>
+
+    <div class="welcome-footer">
+        <div class="f-card welcome-tip">
+            <div class="welcome-tip-icon"><i class="fas fa-lightbulb"></i></div>
+            <div>
+                <strong>提示</strong>
+                <p>使用顶部 Tab 栏在欢迎、控制台、配置中心等模块间切换。左右方向键可聚焦 Tab，Enter 进入对应页面。</p>
+            </div>
+        </div>
+        <div class="welcome-version">
+            {{ site_name }} v{{ flowly_version|default:"2.0.0" }} · Build {{ flowly_build|default:"" }}
+            {% if is_superuser %} · 超级管理员{% endif %}
+        </div>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<style>
+.welcome-panel { max-width: 1200px; }
+
+.welcome-hero {
+    position: relative;
+    border-radius: var(--radius-xl);
+    overflow: hidden;
+    margin-bottom: 24px;
+    background: linear-gradient(135deg, #0a1628 0%, #0f2847 50%, #1e3a5f 100%);
+    color: #fff;
+    box-shadow: var(--shadow-xl);
+}
+.welcome-hero-bg {
+    position: absolute; inset: 0;
+    background:
+        radial-gradient(ellipse 70% 60% at 10% 20%, rgba(29,78,216,0.3), transparent),
+        radial-gradient(ellipse 50% 50% at 90% 80%, rgba(37,99,235,0.15), transparent);
+    pointer-events: none;
+}
+.welcome-hero-inner {
+    position: relative; z-index: 1;
+    padding: 40px 36px;
+}
+.welcome-brand {
+    display: flex; align-items: center; gap: 24px; flex-wrap: wrap;
+}
+.welcome-logo {
+    width: 88px; height: auto; max-height: 88px;
+    object-fit: contain;
+    filter: drop-shadow(0 8px 24px rgba(29,78,216,0.4));
+}
+.welcome-brand-text h1 {
+    font-size: 1.75rem; font-weight: 800; margin: 0 0 6px;
+    letter-spacing: -0.02em;
+}
+.welcome-brand-text p {
+    margin: 0; opacity: 0.8; font-size: 0.95rem;
+}
+.welcome-meta {
+    display: flex; flex-wrap: wrap; gap: 16px; align-items: center;
+    margin-top: 20px; font-size: 0.85rem; opacity: 0.75;
+}
+.welcome-clock {
+    font-family: 'JetBrains Mono', monospace;
+    background: rgba(255,255,255,0.08);
+    padding: 6px 14px; border-radius: 50px;
+    border: 1px solid rgba(255,255,255,0.12);
+}
+.welcome-actions {
+    display: flex; gap: 12px; flex-wrap: wrap; margin-top: 28px;
+}
+.welcome-cta {
+    padding: 12px 22px !important; font-size: 0.9rem !important;
+}
+.welcome-cta-outline {
+    background: transparent !important;
+    padding: 12px 22px !important;
+}
+.welcome-cta-ghost {
+    background: rgba(255,255,255,0.08) !important;
+    color: #f8fafc !important;
+    border: 1.5px solid rgba(255,255,255,0.2) !important;
+    padding: 12px 22px !important;
+}
+.welcome-cta-ghost:hover {
+    background: rgba(255,255,255,0.14) !important;
+    color: #fff !important;
+}
+
+.welcome-stats {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 16px;
+    margin-bottom: 28px;
+}
+
+.welcome-section {
+    background: #fefefe;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xl);
+    padding: 28px;
+    box-shadow: var(--shadow-sm);
+    margin-bottom: 24px;
+}
+.welcome-section-desc {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    margin: 8px 0 0;
+    max-width: 65ch;
+}
+.welcome-bento {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px;
+    margin-top: 16px;
+}
+.welcome-card-lg { grid-column: 1 / -1; }
+.welcome-card {
+    display: flex; align-items: center; gap: 14px;
+    min-height: 44px;
+    padding: 18px 16px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    text-decoration: none !important;
+    color: inherit;
+    transition: border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+                box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    cursor: pointer;
+}
+.welcome-card:hover {
+    border-color: rgba(29,78,216,0.28);
+    box-shadow: var(--shadow-md);
+}
+.welcome-card:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+.welcome-card-icon {
+    width: 44px; height: 44px; border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.1rem; flex-shrink: 0;
+}
+.wc-blue { background: rgba(29,78,216,0.12); color: #1d4ed8; }
+.wc-cyan { background: rgba(6,182,212,0.12); color: #0891b2; }
+.wc-navy { background: rgba(15,40,71,0.12); color: #0f2847; }
+.wc-teal { background: rgba(20,184,166,0.12); color: #0d9488; }
+.welcome-card-body { flex: 1; min-width: 0; }
+.welcome-card-title { font-weight: 700; font-size: 0.9rem; color: var(--text-primary); }
+.welcome-card-desc { font-size: 0.78rem; color: var(--text-muted); margin-top: 2px; }
+.welcome-card-arrow { color: var(--text-muted); font-size: 0.75rem; opacity: 0.5; transition: transform 0.2s; }
+.welcome-card:hover .welcome-card-arrow { transform: translateX(4px); opacity: 1; color: var(--accent); }
+
+.welcome-footer { display: flex; flex-direction: column; gap: 12px; }
+.welcome-tip {
+    display: flex; gap: 16px; align-items: flex-start;
+    padding: 20px !important;
+    background: linear-gradient(135deg, rgba(29,78,216,0.06), rgba(37,99,235,0.04)) !important;
+}
+.welcome-tip-icon {
+    width: 40px; height: 40px; border-radius: 10px;
+    background: rgba(29,78,216,0.12); color: var(--accent);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.1rem; flex-shrink: 0;
+}
+.welcome-tip strong { display: block; margin-bottom: 4px; font-size: 0.9rem; }
+.welcome-tip p { margin: 0; font-size: 0.85rem; color: var(--text-secondary); }
+.welcome-version {
+    text-align: center; font-size: 0.78rem; color: var(--text-muted);
+    padding-bottom: 8px;
+}
+
+@media (max-width: 992px) {
+    .welcome-stats { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 640px) {
+    .welcome-hero-inner { padding: 28px 20px; }
+    .welcome-brand { flex-direction: column; text-align: center; }
+    .welcome-stats { grid-template-columns: 1fr 1fr; }
+    .welcome-meta { justify-content: center; }
+    .welcome-actions { justify-content: center; }
+    .welcome-bento { grid-template-columns: 1fr; }
+    .welcome-card-lg { grid-column: auto; }
+}
+</style>
+<script>
+(function() {
+    'use strict';
+
+    function getGreeting(date) {
+        var hour = date.getHours();
+        if (hour >= 5 && hour < 12) return '早上好';
+        if (hour >= 12 && hour < 18) return '下午好';
+        return '晚上好';
+    }
+
+    function updateGreeting() {
+        var el = document.getElementById('welcomeGreeting');
+        if (el) el.textContent = getGreeting(new Date());
+    }
+
+    function tick() {
+        var el = document.getElementById('welcomeClock');
+        if (el) el.textContent = new Date().toLocaleString('zh-CN', {
+            year: 'numeric', month: 'long', day: 'numeric',
+            weekday: 'long', hour: '2-digit', minute: '2-digit', second: '2-digit'
+        });
+        updateGreeting();
+    }
+
+    tick();
+    setInterval(tick, 1000);
+})();
+</script>
+{% endblock %}

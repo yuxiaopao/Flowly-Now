@@ -1,0 +1,314 @@
+/**
+ * Flowly Admin Shell — 浏览器 Tab + 页头 + 无障碍
+ * Product register: restrained navy/white, 150–250ms motion
+ */
+
+/* ─── Jazzmin 与 Flowly Shell 协同 ─── */
+body:has(.flowly-shell) .content-header,
+body.flowly-panel-page .content-header {
+    display: none !important;
+}
+body:has(.flowly-shell) .content-wrapper > .content,
+body.flowly-panel-page .content-wrapper > .content {
+    padding-top: 8px !important;
+}
+
+.flowly-skip-link {
+    position: absolute;
+    left: -9999px;
+    top: 0;
+    z-index: 100001;
+    padding: 10px 16px;
+    background: var(--accent, #1d4ed8);
+    color: #fefefe;
+    font-weight: 600;
+    font-size: 0.875rem;
+    border-radius: 0 0 8px 8px;
+    text-decoration: none;
+}
+.flowly-skip-link:focus {
+    left: 12px;
+    outline: 2px solid #fefefe;
+    outline-offset: 2px;
+}
+
+/* ─── Chrome 式 Tab 栏 ─── */
+.flowly-shell {
+    width: 100%;
+    max-width: none;
+    margin: 0;
+}
+
+.flowly-tab-bar {
+    position: sticky;
+    top: 0;
+    z-index: 900;
+    margin: -24px -24px 20px;
+    background: #e8eef5;
+    border: 1px solid rgba(15, 40, 71, 0.1);
+    border-radius: 12px 12px 0 0;
+    box-shadow: 0 1px 3px rgba(10, 22, 40, 0.06);
+    overflow: hidden;
+}
+
+.flowly-tab-chrome {
+    height: 3px;
+    background: linear-gradient(90deg, #0a1628, #1d4ed8 50%, #2563eb);
+}
+
+.flowly-tab-row {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 0 8px;
+    min-height: 44px;
+}
+
+.flowly-tab-strip {
+    display: flex;
+    align-items: flex-end;
+    gap: 2px;
+    overflow-x: auto;
+    padding: 8px 4px 0;
+    flex: 1;
+    min-width: 0;
+}
+
+.flowly-tab-strip::-webkit-scrollbar { height: 4px; }
+.flowly-tab-strip::-webkit-scrollbar-thumb {
+    background: rgba(15, 40, 71, 0.18);
+    border-radius: 4px;
+}
+
+@supports (scrollbar-width: thin) {
+    .flowly-tab-strip {
+        scrollbar-width: thin;
+        scrollbar-color: rgba(15, 40, 71, 0.18) transparent;
+    }
+}
+
+.flowly-tab-strip .f-tab {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 44px;
+    padding: 10px 16px 11px;
+    border-radius: 10px 10px 0 0;
+    border: 1px solid transparent;
+    border-bottom: none;
+    margin-bottom: -1px;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: #475569;
+    background: rgba(255, 255, 255, 0.45);
+    flex-shrink: 0;
+    cursor: pointer;
+    text-decoration: none;
+    white-space: nowrap;
+    transition: color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+                background 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+                box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    touch-action: manipulation;
+}
+
+.flowly-tab-strip .f-tab i {
+    font-size: 0.78rem;
+    opacity: 0.7;
+    transition: opacity 0.2s ease;
+}
+
+.flowly-tab-strip .f-tab:hover {
+    color: #1d4ed8;
+    background: rgba(255, 255, 255, 0.85);
+}
+
+.flowly-tab-strip .f-tab:focus-visible {
+    outline: 2px solid #1d4ed8;
+    outline-offset: 2px;
+    z-index: 2;
+}
+
+.flowly-tab-strip .f-tab.active {
+    background: #fefefe;
+    color: #1d4ed8;
+    border-color: rgba(15, 40, 71, 0.1);
+    box-shadow: 0 -1px 0 #fefefe, 0 -4px 12px rgba(10, 22, 40, 0.05);
+    font-weight: 700;
+    z-index: 1;
+}
+
+.flowly-tab-strip .f-tab.active i {
+    opacity: 1;
+    color: #1d4ed8;
+}
+
+.flowly-tab-strip .f-tab.active::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 12px;
+    right: 12px;
+    height: 2px;
+    background: #1d4ed8;
+    border-radius: 2px 2px 0 0;
+}
+
+.flowly-tab-tools {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 4px 10px;
+    flex-shrink: 0;
+}
+
+.flowly-tab-tool {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: 36px;
+    min-width: 36px;
+    padding: 0 12px;
+    border-radius: 8px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #475569;
+    background: rgba(255, 255, 255, 0.55);
+    border: 1px solid rgba(15, 40, 71, 0.08);
+    text-decoration: none;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.flowly-tab-tool:hover {
+    color: #1d4ed8;
+    background: #fefefe;
+    border-color: rgba(29, 78, 216, 0.25);
+}
+
+.flowly-tab-tool:focus-visible {
+    outline: 2px solid #1d4ed8;
+    outline-offset: 2px;
+}
+
+.flowly-tab-tool span { display: none; }
+
+.flowly-content-inner {
+    animation: flowly-page-in 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes flowly-page-in {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .flowly-content-inner { animation: none; }
+    .flowly-tab-strip .f-tab { transition: none; }
+}
+
+/* ─── 紧凑页头 ─── */
+.f-page-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 16px;
+    padding: 20px 24px;
+    margin-bottom: 20px;
+    background: #fefefe;
+    border: 1px solid rgba(15, 40, 71, 0.1);
+    border-radius: 12px;
+    box-shadow: 0 1px 2px rgba(10, 22, 40, 0.04);
+}
+
+.f-page-header-main { flex: 1; min-width: 200px; }
+
+.f-page-header h2 {
+    font-size: 1.25rem;
+    font-weight: 800;
+    color: #0f172a;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    letter-spacing: -0.02em;
+}
+
+.f-page-header h2 i { color: #1d4ed8; font-size: 1.05rem; }
+
+.f-page-header p {
+    color: #64748b;
+    font-size: 0.875rem;
+    margin-top: 4px;
+    max-width: 65ch;
+}
+
+.f-page-header-actions {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.f-page-header .f-input.f-select { width: auto; min-width: 140px; }
+
+.f-page-meta {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    color: #64748b;
+    margin-top: 6px;
+}
+
+/* ─── 统计数字：去除渐变文字反模式 ─── */
+.f-stat-value {
+    font-size: 2.2rem;
+    font-weight: 800;
+    color: #1d4ed8;
+    line-height: 1.1;
+    letter-spacing: -0.03em;
+}
+
+.f-stat.success .f-stat-value { color: #059669; }
+.f-stat.warning .f-stat-value { color: #d97706; }
+.f-stat.danger .f-stat-value { color: #dc2626; }
+.f-stat.info .f-stat-value { color: #0284c7; }
+
+/* ─── 分类头：去除侧条 accent ─── */
+.f-cat-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    margin: 20px 0 10px;
+    background: rgba(29, 78, 216, 0.06);
+    border-radius: 8px;
+    border: 1px solid rgba(29, 78, 216, 0.12);
+}
+
+/* ─── 全局 focus ─── */
+.f-btn:focus-visible,
+.f-input:focus-visible,
+.f-tab:focus-visible,
+.f-page-btn:focus-visible,
+.settings-nav-item:focus-visible {
+    outline: 2px solid #1d4ed8;
+    outline-offset: 2px;
+}
+
+@media (max-width: 1200px) {
+    .flowly-content-wrap { padding: 14px 16px 20px; }
+}
+
+@media (max-width: 768px) {
+    .flowly-tab-bar { margin: -12px -12px 14px; border-radius: 10px 10px 0 0; }
+    .flowly-content-wrap { padding: 10px 12px 16px; }
+    .f-page-header { padding: 16px; }
+    .flowly-tab-tool span { display: inline; }
+}
+
+@media (max-width: 640px) {
+    .flowly-tab-row { flex-wrap: wrap; }
+    .flowly-tab-tools { width: 100%; justify-content: flex-end; padding-top: 0; }
+}

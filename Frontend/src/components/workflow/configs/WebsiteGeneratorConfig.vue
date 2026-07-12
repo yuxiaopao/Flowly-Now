@@ -1,33 +1,20 @@
 <template>
   <div class="config-form website-generator-config-form">
+    <TrainingSiteWizard
+      v-model="wizardData"
+      :profile="upstreamProfile"
+      @change="onWizardChange"
+      @pick-training="selectFromTrainingNode"
+      @finished="onWizardFinished"
+    />
+
+    <el-divider>高级选项</el-divider>
+
     <el-form
       :model="localData"
       label-position="top"
       size="small"
     >
-      <!-- 基本信息 -->
-      <div class="form-section">
-        <h4 class="section-title">
-          基本信息
-        </h4>
-        <el-form-item label="节点名称">
-          <el-input
-            v-model="localData.label"
-            placeholder="输入节点名称"
-            @change="handleChange"
-          />
-        </el-form-item>
-        <el-form-item label="描述">
-          <el-input
-            v-model="localData.description"
-            type="textarea"
-            :rows="2"
-            placeholder="网站功能描述"
-            @change="handleChange"
-          />
-        </el-form-item>
-      </div>
-
       <!-- 模型选择 -->
       <div class="form-section">
         <h4 class="section-title">
@@ -51,10 +38,35 @@
               value="detection"
             />
             <el-option
+              label="CLIP 图文检索"
+              value="clip_retrieval"
+            />
+            <el-option
               label="文本分类"
               value="nlp_classification"
             />
           </el-select>
+        </el-form-item>
+        <el-form-item
+          v-if="localData.websiteType === 'clip_retrieval'"
+          label="检索索引目录"
+        >
+          <div class="model-path-input">
+            <el-input
+              v-model="localData.indexDir"
+              placeholder="clip_retrieval 节点输出的 index_dir"
+              @change="handleChange"
+            />
+            <el-button
+              type="primary"
+              plain
+              size="small"
+              @click="selectFromRetrievalNode"
+            >
+              <Search class="btn-icon" />
+              从检索节点选择
+            </el-button>
+          </div>
         </el-form-item>
         <el-form-item label="模型路径">
           <div class="model-path-input">
@@ -110,28 +122,11 @@
         </el-form-item>
       </div>
 
-      <!-- 输出设置 -->
+      <!-- 输出设置 — 向导 Step4 已覆盖，此处保留 framework 选项 -->
       <div class="form-section">
         <h4 class="section-title">
-          输出设置
+          技术栈
         </h4>
-        <el-form-item
-          label="输出目录"
-          required
-        >
-          <el-input
-            v-model="localData.outputDir"
-            placeholder="保存生成的网站代码"
-            @change="handleOutputDirChange"
-          />
-          <div
-            class="field-hint"
-            :class="{ 'hint-warning': outputDirWarning }"
-          >
-            <el-icon><Warning /></el-icon>
-            {{ outputDirWarning || '必须是空文件夹，请先创建目录' }}
-          </div>
-        </el-form-item>
         <el-form-item label="前端框架">
           <el-select
             v-model="localData.frontendFramework"
@@ -214,7 +209,7 @@
           v-if="availableNodes.length === 0"
           class="empty-state"
         >
-          <el-empty description="当前工作流中没有模型训练节点">
+          <el-empty description="当前工作流中没有训练节点">
             <el-button
               type="primary"
               @click="showNodeSelector = false"
@@ -287,10 +282,11 @@
 </template>
 
 <script setup>
-import { reactive, ref, computed, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { useWorkflowStore } from '@/stores/workflow'
 import { ElMessage } from 'element-plus'
-import { Cpu, Check, Warning } from 'lucide-vue-next'
+import { Cpu, Check, Search } from 'lucide-vue-next'
+import TrainingSiteWizard from './TrainingSiteWizard.vue'
 
 const props = defineProps({
   modelValue: { type: Object, default: () => ({}) }
@@ -301,14 +297,42 @@ const emit = defineEmits(['update:modelValue', 'change'])
 const workflowStore = useWorkflowStore()
 
 const showNodeSelector = ref(false)
+const nodeSelectorMode = ref('training')
 const availableNodes = ref([])
 const selectedNodeId = ref(null)
-const outputDirWarning = ref('')
+
+const wizardData = reactive({
+  domain: '',
+  scenario: '',
+  uiTone: 'neutral',
+  siteName: '',
+  logoUrl: '',
+  primaryColor: '#f59e0b',
+  contactEmail: '',
+  usageDescription: '',
+  disclaimer: '',
+  privacy: '',
+  outputDir: '',
+  port: 5000,
+  qaProfile: 'default',
+  modelPath: '',
+  labels: '',
+  websiteType: 'detection',
+  wizardStep: 0,
+  wizardCompleted: false,
+})
+
+const upstreamProfile = computed(() => {
+  const profiler = workflowStore.nodes.find((n) => n.type === 'project_profiler')
+  if (!profiler) return {}
+  const out = profiler.data?.output || profiler.data?.result || {}
+  return out.profile || profiler.data?.config?.profile || {}
+})
 
 const localData = reactive({
   label: '',
   description: '',
-  websiteType: 'classification',
+  websiteType: 'detection',
   modelPath: '',
   labels: '',
   framework: 'pytorch',
@@ -316,6 +340,11 @@ const localData = reactive({
   frontendFramework: 'vue',
   backendFramework: 'flask',
   port: 5000,
+  trainingRunId: '',
+  indexDir: '',
+  wizard: {},
+  profile: {},
+  qaProfile: 'default',
 })
 
 watch(() => props.modelValue, (newVal) => {
@@ -323,7 +352,7 @@ watch(() => props.modelValue, (newVal) => {
     Object.assign(localData, {
       label: newVal.label || '',
       description: newVal.description || '',
-      websiteType: newVal.websiteType || 'classification',
+      websiteType: newVal.websiteType || 'detection',
       modelPath: newVal.modelPath || '',
       labels: newVal.labels || '',
       framework: newVal.framework || 'pytorch',
@@ -331,40 +360,104 @@ watch(() => props.modelValue, (newVal) => {
       frontendFramework: newVal.frontendFramework || 'vue',
       backendFramework: newVal.backendFramework || 'flask',
       port: newVal.port || 5000,
+      trainingRunId: newVal.trainingRunId || '',
+      indexDir: newVal.indexDir || '',
+      qaProfile: newVal.qaProfile || 'default',
+      profile: newVal.profile || upstreamProfile.value || {},
+    })
+    const w = newVal.wizard || {}
+    Object.assign(wizardData, {
+      domain: w.domain || upstreamProfile.value?.domain || '',
+      scenario: w.scenario || upstreamProfile.value?.scenario || '',
+      uiTone: w.uiTone || upstreamProfile.value?.ui_tone || 'neutral',
+      siteName: w.siteName || newVal.siteName || '',
+      logoUrl: w.logoUrl || '',
+      primaryColor: w.primaryColor || '#f59e0b',
+      contactEmail: w.contactEmail || '',
+      usageDescription: w.usageDescription || '',
+      disclaimer: w.disclaimer || '',
+      privacy: w.privacy || '',
+      outputDir: w.outputDir || newVal.outputDir || '',
+      port: w.port || newVal.port || 5000,
+      qaProfile: w.qaProfile || newVal.qaProfile || 'default',
+      modelPath: w.modelPath || newVal.modelPath || '',
+      labels: w.labels || newVal.labels || '',
+      websiteType: w.websiteType || newVal.websiteType || 'detection',
+      wizardStep: w.wizardStep ?? 0,
+      wizardCompleted: w.wizardCompleted ?? false,
     })
   }
 }, { immediate: true, deep: true })
 
-const handleChange = () => {
-  emit('update:modelValue', { ...localData })
-  emit('change', { ...localData })
+watch(upstreamProfile, (p) => {
+  if (p && Object.keys(p).length && !wizardData.scenario) {
+    wizardData.domain = p.domain || wizardData.domain
+    wizardData.scenario = p.scenario || wizardData.scenario
+    wizardData.uiTone = p.ui_tone || wizardData.uiTone
+    wizardData.usageDescription = wizardData.usageDescription || p.scenario || ''
+    localData.profile = p
+    syncEmit()
+  }
+}, { deep: true })
+
+function buildPayload() {
+  const wizard = { ...wizardData }
+  return {
+    ...localData,
+    siteName: wizard.siteName,
+    outputDir: wizard.outputDir || localData.outputDir,
+    port: wizard.port || localData.port,
+    qaProfile: wizard.qaProfile || localData.qaProfile,
+    modelPath: wizard.modelPath || localData.modelPath,
+    labels: wizard.labels || localData.labels,
+    websiteType: wizard.websiteType || localData.websiteType,
+    indexDir: localData.indexDir,
+    description: wizard.usageDescription || localData.description,
+    wizard,
+    profile: localData.profile || upstreamProfile.value || {},
+  }
+}
+
+function syncEmit() {
+  const payload = buildPayload()
+  emit('update:modelValue', payload)
+  emit('change', payload)
+}
+
+const handleChange = () => syncEmit()
+
+const onWizardChange = (w) => {
+  Object.assign(wizardData, w)
+  localData.outputDir = w.outputDir || localData.outputDir
+  localData.port = w.port || localData.port
+  localData.qaProfile = w.qaProfile || localData.qaProfile
+  localData.modelPath = w.modelPath || localData.modelPath
+  localData.labels = w.labels || localData.labels
+  localData.websiteType = w.websiteType || localData.websiteType
+  syncEmit()
+}
+
+const onWizardFinished = () => {
+  ElMessage.success('建站向导已完成，可执行工作流')
+  syncEmit()
 }
 
 const handleModelPathChange = () => {
-  if (localData.modelPath && !localData.label) {
-    const name = localData.modelPath.split('/').pop().replace(/\.[^.]+$/, '')
-    if (name) {
-      localData.label = `${name}预测网站`
-    }
+  if (wizardData.modelPath && !wizardData.siteName) {
+    const name = wizardData.modelPath.split('/').pop().replace(/\.[^.]+$/, '')
+    if (name) wizardData.siteName = `${name}识别系统`
   }
-  handleChange()
-}
-
-const handleOutputDirChange = () => {
-  outputDirWarning.value = ''
-  if (localData.outputDir) {
-    outputDirWarning.value = '输出目录必须是空文件夹，请先创建目录'
-  }
-  handleChange()
+  syncEmit()
 }
 
 const selectFromTrainingNode = () => {
+  nodeSelectorMode.value = 'training'
   const trainingNodes = workflowStore.nodes.filter(n => {
     const type = n.type || n.data?.type
-    return type === 'model_training' || type === 'training'
+    return type === 'model_training' || type === 'yolo_training' || type === 'clip_classification' || type === 'training'
   })
   if (trainingNodes.length === 0) {
-    ElMessage.warning('当前工作流中没有模型训练节点')
+    ElMessage.warning('当前工作流中没有训练节点（模型训练 / YOLO / CLIP 分类）')
     return
   }
   availableNodes.value = trainingNodes
@@ -372,16 +465,54 @@ const selectFromTrainingNode = () => {
   showNodeSelector.value = true
 }
 
+const selectFromRetrievalNode = () => {
+  nodeSelectorMode.value = 'retrieval'
+  const retrievalNodes = workflowStore.nodes.filter((n) => (n.type || n.data?.type) === 'clip_retrieval')
+  if (retrievalNodes.length === 0) {
+    ElMessage.warning('当前工作流中没有 CLIP 检索节点')
+    return
+  }
+  availableNodes.value = retrievalNodes
+  selectedNodeId.value = null
+  showNodeSelector.value = true
+}
+
 const onNodeSelected = (node) => {
   const config = node.data?.config || {}
-  localData.modelPath = config.modelPath || config.outputDir || ''
-  localData.labels = config.labels || ''
-  localData.framework = config.framework || 'pytorch'
-  if (localData.modelPath) {
-    const name = localData.modelPath.split('/').pop().replace(/\.[^.]+$/, '')
-    localData.label = `${name}预测网站`
+  const output = node.data?.output || node.data?.result || {}
+  const nodeType = node.type || node.data?.type
+
+  if (nodeType === 'clip_retrieval') {
+    localData.indexDir = output.indexDir || output.index_dir || config.outputDir || ''
+    localData.websiteType = 'clip_retrieval'
+    wizardData.websiteType = 'clip_retrieval'
+    localData.trainingRunId = output.trainingRunId || output.training_run_id || ''
+    if (!wizardData.siteName) {
+      wizardData.siteName = 'CLIP 图文检索'
+    }
+    syncEmit()
+    return
   }
-  handleChange()
+
+  const isYolo = nodeType === 'yolo_training'
+  const isClipCls = nodeType === 'clip_classification'
+
+  localData.modelPath = output.bestWeightPath || output.best_weight_path || output.modelPath || output.model_path || config.modelPath || config.outputDir || ''
+  wizardData.modelPath = localData.modelPath
+  const labelStr = Array.isArray(output.classNames || output.class_names)
+    ? (output.classNames || output.class_names).join(', ')
+    : (config.labels || config.classNames || '')
+  localData.labels = labelStr
+  wizardData.labels = labelStr
+  localData.framework = isYolo ? 'ultralytics' : (isClipCls ? 'clip' : (config.framework || 'pytorch'))
+  localData.websiteType = isYolo ? 'detection' : (isClipCls ? 'classification' : (config.websiteType || 'classification'))
+  wizardData.websiteType = localData.websiteType
+  localData.trainingRunId = output.trainingRunId || output.training_run_id || ''
+  if (localData.modelPath && !wizardData.siteName) {
+    const name = localData.modelPath.split('/').pop().replace(/\.[^.]+$/, '')
+    wizardData.siteName = `${name}识别系统`
+  }
+  syncEmit()
 }
 
 const confirmNodeSelection = () => {

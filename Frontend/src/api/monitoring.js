@@ -86,7 +86,7 @@ export const monitoringApi = {
   },
 
   getExecutionLogsById(executionId) {
-    return request.get(`/executions/${executionId}/logs/`)
+    return request.get(`/workflows/executions/${executionId}/logs/`)
   },
 
   // Notification Channels

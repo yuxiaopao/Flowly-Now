@@ -14,6 +14,30 @@ from .serializers import (
     CustomDomainSerializer, CustomDomainCreateSerializer,
     ThemePresetSerializer, BrandingUpdateSerializer
 )
+from tenants.access import get_accessible_tenant_ids
+
+
+def _get_user_tenant(user):
+    """Return the user's primary active tenant, or None."""
+    if not user or not user.is_authenticated:
+        return None
+    ids = get_accessible_tenant_ids(user)
+    if not ids:
+        return None
+    from tenants.models import Tenant
+    return Tenant.objects.filter(id=ids[0]).first()
+
+
+def _default_branding_payload():
+    return {
+        'company_name': 'Flowly',
+        'primary_color': '#3b82f6',
+        'accent_color': '#8b5cf6',
+        'bg_color': '#ffffff',
+        'text_color_primary': '#1f2937',
+        'text_color_secondary': '#6b7280',
+        'border_color': '#e5e7eb',
+    }
 
 
 class BrandingViewSet(viewsets.ModelViewSet):
@@ -22,7 +46,7 @@ class BrandingViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return BrandingConfig.objects.filter(tenant=self.request.user.tenant)
+        return BrandingConfig.objects.filter(tenant=_get_user_tenant(self.request.user))
 
     def get_serializer_class(self):
         if self.action == 'preview':
@@ -33,24 +57,20 @@ class BrandingViewSet(viewsets.ModelViewSet):
     def current(self, request):
         """Get current tenant's branding."""
         try:
-            branding = self.get_queryset().first()
+            tenant = _get_user_tenant(request.user)
+            if not tenant:
+                return Response(_default_branding_payload())
+
+            branding = BrandingConfig.objects.filter(tenant=tenant).first()
             if not branding:
-                # Create default branding
                 branding = BrandingConfig.objects.create(
-                    tenant=request.user.tenant,
-                    company_name=request.user.tenant.name
+                    tenant=tenant,
+                    company_name=tenant.name
                 )
             serializer = self.get_serializer(branding)
             return Response(serializer.data)
         except Exception:
-            # Return public config if tenant doesn't exist
-            return Response({
-                'company_name': 'Flowly',
-                'primary_color': '#3b82f6',
-                'accent_color': '#8b5cf6',
-                'bg_color': '#ffffff',
-                'text_color_primary': '#1f2937'
-            })
+            return Response(_default_branding_payload())
 
     @action(detail=False, methods=['post'])
     def update_config(self, request):
@@ -58,9 +78,12 @@ class BrandingViewSet(viewsets.ModelViewSet):
         serializer = BrandingUpdateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
+        tenant = _get_user_tenant(request.user)
+        if not tenant:
+            return Response({'error': 'User has no tenant'}, status=status.HTTP_400_BAD_REQUEST)
         branding, created = BrandingConfig.objects.get_or_create(
-            tenant=request.user.tenant,
-            defaults={'company_name': request.user.tenant.name}
+            tenant=tenant,
+            defaults={'company_name': tenant.name}
         )
 
         for key, value in serializer.validated_data.items():
@@ -87,9 +110,12 @@ class BrandingViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_404_NOT_FOUND
             )
 
+        tenant = _get_user_tenant(request.user)
+        if not tenant:
+            return Response({'error': 'User has no tenant'}, status=status.HTTP_400_BAD_REQUEST)
         branding, created = BrandingConfig.objects.get_or_create(
-            tenant=request.user.tenant,
-            defaults={'company_name': request.user.tenant.name}
+            tenant=tenant,
+            defaults={'company_name': tenant.name}
         )
         preset.apply_to(branding)
 
@@ -115,7 +141,7 @@ class EmailTemplateViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return EmailTemplate.objects.filter(tenant=self.request.user.tenant)
+        return EmailTemplate.objects.filter(tenant=_get_user_tenant(self.request.user))
 
     def get_serializer_class(self):
         if self.action == 'create':
@@ -161,7 +187,7 @@ class CustomDomainViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return CustomDomain.objects.filter(tenant=self.request.user.tenant)
+        return CustomDomain.objects.filter(tenant=_get_user_tenant(self.request.user))
 
     def get_serializer_class(self):
         if self.action == 'create':
@@ -169,7 +195,10 @@ class CustomDomainViewSet(viewsets.ModelViewSet):
         return CustomDomainSerializer
 
     def perform_create(self, serializer):
-        serializer.save(tenant=self.request.user.tenant)
+        tenant = _get_user_tenant(self.request.user)
+        if not tenant:
+            raise PermissionError('User has no tenant')
+        serializer.save(tenant=tenant)
 
     @action(detail=True, methods=['post'])
     def verify(self, request, pk=None):

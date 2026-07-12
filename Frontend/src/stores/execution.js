@@ -7,6 +7,8 @@ import { ref, computed } from 'vue'
 import { workflowApi } from '@/api/workflow'
 import { ExecutionWebSocket } from '@/api/websocket'
 import { useAppStore } from '@/stores/app'
+import { unwrapNodeExecutionOutput } from '@/utils/workflowTransform'
+import { remapRecordByIdMap } from '@/utils/nodeRuntimePersistence'
 
 export const useExecutionStore = defineStore('execution', () => {
   // ==================== State ====================
@@ -48,6 +50,19 @@ export const useExecutionStore = defineStore('execution', () => {
   // 节点输出缓存
   const nodeOutputs = ref({}) // { nodeId: output }
   const nodeInputs = ref({}) // { nodeId: input }
+  /** 编辑器画布节点运行时快照（HTTP 轮询同步） */
+  const canvasNodeRuntime = ref({}) // { nodeId: { status, output, error } }
+
+  /** 编辑器 HTTP 轮询（跨页面持续，返回编辑器后自动恢复） */
+  const activeWorkflowId = ref(null)
+  const activeExecutionId = ref(null)
+  const ACTIVE_EXECUTIONS_KEY = 'flowly_active_executions'
+  const TERMINAL_EXECUTION_STATUSES = new Set(['completed', 'failed', 'cancelled'])
+  const RUNNING_EXECUTION_STATUSES = new Set(['running', 'pending', 'paused', 'queued'])
+  let editorPollTimeout = null
+  let editorPollSession = 0
+  /** @type {Map<string, (execution: object, nodeStateMap: object) => void>} */
+  const editorSnapshotListeners = new Map()
   
   // ==================== Getters ====================
   
@@ -82,7 +97,7 @@ export const useExecutionStore = defineStore('execution', () => {
       skipped: 0
     }
     Object.values(nodeStatusMap.value).forEach(s => {
-      if (status.hasOwnProperty(s)) {
+      if (Object.hasOwn(status, s)) {
         status[s]++
       }
     })
@@ -440,37 +455,26 @@ export const useExecutionStore = defineStore('execution', () => {
    * 刷新执行详情
    */
   async function fetchExecutionDetails(executionId) {
-    try {
-      const response = await workflowApi.getExecution(executionId)
-      currentExecution.value = response
-      updateFromExecution(response)
-      return response
-    } catch (error) {
-      throw error
-    }
+    const response = await workflowApi.getExecution(executionId)
+    currentExecution.value = response
+    updateFromExecution(response)
+    return response
   }
 
   /**
    * 获取执行状态
    */
   async function fetchExecutionStatus(executionId) {
-    try {
-      const response = await workflowApi.getExecutionStatus(executionId)
-      updateFromStatus(response)
-      return response
-    } catch (error) {
-      throw error
-    }
+    const response = await workflowApi.getExecutionStatus(executionId)
+    updateFromStatus(response)
+    return response
   }
 
   /**
    * 获取执行日志
    * @param {number|string} executionId - 执行ID
-   * @param {Object} [params] - 查询参数
-   * @param {string} [params.level] - 日志级别 (DEBUG, INFO, WARNING, ERROR)
-   * @param {string} [params.node_id] - 节点ID (UUID)
    */
-  async function fetchExecutionLogs(executionId, params = {}) {
+  async function fetchExecutionLogs(executionId) {
     try {
       const response = await workflowApi.getExecutionLogs(executionId)
       // Support both paginated (results) and direct array responses
@@ -501,13 +505,312 @@ export const useExecutionStore = defineStore('execution', () => {
       const response = await workflowApi.getExecutionHistory(workflowId, params)
       executionHistory.value = response.results || response
       return executionHistory.value
-    } catch (error) {
-      throw error
     } finally {
       historyLoading.value = false
     }
   }
   
+  function readActiveExecutionSessions() {
+    try {
+      return JSON.parse(sessionStorage.getItem(ACTIVE_EXECUTIONS_KEY) || '{}')
+    } catch {
+      return {}
+    }
+  }
+
+  function writeActiveExecutionSession(workflowId, executionId) {
+    if (!workflowId || !executionId) return
+    const map = readActiveExecutionSessions()
+    map[String(workflowId)] = {
+      executionId: String(executionId),
+      updatedAt: Date.now(),
+    }
+    sessionStorage.setItem(ACTIVE_EXECUTIONS_KEY, JSON.stringify(map))
+  }
+
+  function clearActiveExecutionSession(workflowId) {
+    if (!workflowId) return
+    const map = readActiveExecutionSessions()
+    delete map[String(workflowId)]
+    sessionStorage.setItem(ACTIVE_EXECUTIONS_KEY, JSON.stringify(map))
+  }
+
+  function buildNodeStateMapFromExecution(execution) {
+    const nodeStateMap = {}
+
+    const mergeNodeState = (nodeId, incoming) => {
+      if (!nodeId || !incoming) return
+      const normalized = normalizeSnapshotNodeState(incoming)
+      const existing = nodeStateMap[nodeId]
+      if (!existing) {
+        nodeStateMap[nodeId] = normalized
+        return
+      }
+      nodeStateMap[nodeId] = {
+        status: normalized.status !== 'pending' ? normalized.status : existing.status,
+        output: normalized.output != null ? normalized.output : existing.output,
+        error: normalized.error ?? existing.error,
+      }
+    }
+
+    const nodeExecutions = execution?.node_executions || execution?.nodeExecutions || []
+    nodeExecutions.forEach((nodeExecution) => {
+      const nodeId = nodeExecution.node_id || nodeExecution.nodeId || nodeExecution.node
+      mergeNodeState(nodeId, {
+        status: nodeExecution.status || 'pending',
+        output: nodeExecution.output_data ?? nodeExecution.outputData ?? nodeExecution.output ?? null,
+        error: nodeExecution.error_message ?? nodeExecution.errorMessage ?? null,
+      })
+    })
+
+    const rawNodeStatus = execution?.node_status || execution?.nodeStatus
+    if (rawNodeStatus && typeof rawNodeStatus === 'object') {
+      Object.entries(rawNodeStatus).forEach(([nodeId, nodeData]) => {
+        mergeNodeState(nodeId, nodeData)
+      })
+    }
+
+    return nodeStateMap
+  }
+
+  function notifyEditorSnapshot(workflowId, execution, nodeStateMap) {
+    const listener = editorSnapshotListeners.get(String(workflowId))
+    if (listener) listener(execution, nodeStateMap)
+  }
+
+  function registerEditorSnapshotListener(workflowId, listener) {
+    if (!workflowId || typeof listener !== 'function') return
+    editorSnapshotListeners.set(String(workflowId), listener)
+  }
+
+  function unregisterEditorSnapshotListener(workflowId) {
+    if (!workflowId) return
+    editorSnapshotListeners.delete(String(workflowId))
+  }
+
+  function stopEditorPolling(options = {}) {
+    if (editorPollTimeout) {
+      clearTimeout(editorPollTimeout)
+      editorPollTimeout = null
+    }
+    if (options.resetSession) {
+      editorPollSession += 1
+    }
+    if (options.clearActive && activeWorkflowId.value) {
+      clearActiveExecutionSession(activeWorkflowId.value)
+    }
+    if (options.clearActiveIds) {
+      activeWorkflowId.value = null
+      activeExecutionId.value = null
+    }
+  }
+
+  function scheduleEditorPoll(workflowId, execId, session, delayMs) {
+    if (session !== editorPollSession) return
+    if (editorPollTimeout) clearTimeout(editorPollTimeout)
+    editorPollTimeout = setTimeout(() => {
+      editorPollTimeout = null
+      runEditorPollLoop(workflowId, execId, session).catch(() => {})
+    }, delayMs)
+  }
+
+  async function applyEditorExecutionSnapshot(workflowId, execId) {
+    const exec = await workflowApi.getExecution(execId, { skipErrorToast: true })
+    const nodeStateMap = buildNodeStateMapFromExecution(exec)
+    syncFromEditorSnapshot(exec, nodeStateMap)
+    activeWorkflowId.value = String(workflowId)
+    activeExecutionId.value = String(execId)
+    notifyEditorSnapshot(workflowId, exec, nodeStateMap)
+    return exec
+  }
+
+  async function runEditorPollLoop(workflowId, execId, session) {
+    if (session !== editorPollSession) return
+
+    try {
+      const exec = await applyEditorExecutionSnapshot(workflowId, execId)
+      if (session !== editorPollSession) return
+
+      const status = exec?.status || executionStatus.value
+      if (TERMINAL_EXECUTION_STATUSES.has(status)) {
+        executionStatus.value = status
+        stopEditorPolling({ clearActive: true })
+        return
+      }
+
+      scheduleEditorPoll(workflowId, execId, session, 2000)
+    } catch (error) {
+      if (session !== editorPollSession) return
+      const httpStatus = error?.response?.status
+      if (httpStatus === 404) {
+        clearActiveExecutionSession(workflowId)
+        stopEditorPolling({ resetSession: true, clearActiveIds: true })
+        return
+      }
+      console.warn('[execution] editor poll failed, retrying:', error?.message || error)
+      scheduleEditorPoll(workflowId, execId, session, 3000)
+    }
+  }
+
+  async function startEditorPolling(workflowId, execId) {
+    if (!workflowId || !execId) return null
+
+    stopEditorPolling({ resetSession: true })
+    editorPollSession += 1
+    const session = editorPollSession
+
+    activeWorkflowId.value = String(workflowId)
+    activeExecutionId.value = String(execId)
+    writeActiveExecutionSession(workflowId, execId)
+    executionStatus.value = 'running'
+
+    await runEditorPollLoop(workflowId, execId, session)
+    return activeExecutionId.value
+  }
+
+  async function findActiveExecutionIdForWorkflow(workflowId) {
+    const wfId = String(workflowId)
+    const saved = readActiveExecutionSessions()[wfId]
+    if (saved?.executionId) {
+      try {
+        await workflowApi.getExecution(saved.executionId, { skipErrorToast: true })
+        return saved.executionId
+      } catch (error) {
+        if (error?.response?.status === 404) {
+          clearActiveExecutionSession(wfId)
+        }
+      }
+    }
+
+    try {
+      const history = await workflowApi.getExecutionHistory(wfId, { page_size: 10 })
+      const items = history?.results || history || []
+      const active = items.find((item) => RUNNING_EXECUTION_STATUSES.has(item.status))
+      if (active?.id || active?.execution_id) {
+        return active.id || active.execution_id
+      }
+      if (items.length > 0) {
+        return items[0].id || items[0].execution_id || null
+      }
+    } catch (error) {
+      console.warn('[execution] failed to load execution history:', error?.message || error)
+    }
+    return null
+  }
+
+  /**
+   * 返回编辑器时恢复：拉取最新快照并在未完成时继续轮询
+   */
+  async function resumeEditorExecution(workflowId) {
+    if (!workflowId) return null
+    const wfId = String(workflowId)
+
+    if (activeWorkflowId.value && activeWorkflowId.value !== wfId) {
+      stopEditorPolling({ resetSession: true })
+    }
+
+    let execId = activeWorkflowId.value === wfId ? activeExecutionId.value : null
+    if (!execId) {
+      execId = await findActiveExecutionIdForWorkflow(wfId)
+    }
+    if (!execId) return null
+
+    writeActiveExecutionSession(wfId, execId)
+
+    const exec = await applyEditorExecutionSnapshot(wfId, execId)
+    const status = exec?.status || 'idle'
+
+    if (RUNNING_EXECUTION_STATUSES.has(status)) {
+      if (!editorPollTimeout) {
+        editorPollSession += 1
+        const session = editorPollSession
+        scheduleEditorPoll(wfId, execId, session, 500)
+      }
+    } else if (TERMINAL_EXECUTION_STATUSES.has(status)) {
+      stopEditorPolling({ clearActive: true })
+    }
+
+    return { workflowId: wfId, executionId: String(execId), execution: exec, status }
+  }
+
+  function normalizeSnapshotNodeState(nodeData) {
+    if (typeof nodeData === 'string') {
+      return { status: nodeData, output: null, error: null }
+    }
+    if (!nodeData || typeof nodeData !== 'object') {
+      return { status: 'pending', output: null, error: null }
+    }
+    return {
+      status: nodeData.status || 'pending',
+      output: unwrapNodeExecutionOutput(
+        nodeData.output ?? nodeData.output_data ?? nodeData.outputData ?? null
+      ),
+      error: nodeData.error ?? nodeData.error_message ?? nodeData.errorMessage ?? null,
+    }
+  }
+
+  /**
+   * 编辑器 HTTP 轮询快照 → 同步到 store，驱动画布节点内联展示
+   */
+  function syncFromEditorSnapshot(execution, nodeStateMap = {}) {
+    if (!execution && !nodeStateMap) return
+
+    if (execution) {
+      currentExecution.value = execution
+      executionStatus.value = execution.status || executionStatus.value
+      executionProgress.value = execution.progress || executionProgress.value || 0
+      currentNodeId.value = execution.current_node_id || execution.currentNodeId || currentNodeId.value
+      outputData.value = execution.output_data ?? execution.outputData ?? outputData.value
+      errorMessage.value = execution.error_message ?? execution.errorMessage ?? errorMessage.value
+    }
+
+    const statusMap = { ...nodeStatusMap.value }
+    const outputsMap = { ...nodeOutputs.value }
+
+    const applyNodeState = (nodeId, state) => {
+      if (!nodeId || !state) return
+      statusMap[nodeId] = state.status || 'pending'
+      if (state.output != null) {
+        outputsMap[nodeId] = unwrapNodeExecutionOutput(state.output)
+      }
+    }
+
+    Object.entries(nodeStateMap || {}).forEach(([nodeId, state]) => {
+      applyNodeState(nodeId, state)
+    })
+
+    const rawNodeStatus = execution?.node_status || execution?.nodeStatus
+    if (rawNodeStatus && typeof rawNodeStatus === 'object') {
+      Object.entries(rawNodeStatus).forEach(([nodeId, nodeData]) => {
+        applyNodeState(nodeId, normalizeSnapshotNodeState(nodeData))
+      })
+    }
+
+    const nodeExecutions = execution?.node_executions || execution?.nodeExecutions || []
+    nodeExecutions.forEach((nodeExecution) => {
+      const nodeId = nodeExecution.node_id || nodeExecution.nodeId || nodeExecution.node
+      if (!nodeId) return
+      applyNodeState(nodeId, {
+        status: nodeExecution.status || 'pending',
+        output: nodeExecution.output_data ?? nodeExecution.outputData ?? nodeExecution.output ?? null,
+        error: nodeExecution.error_message ?? nodeExecution.errorMessage ?? null,
+      })
+    })
+
+    nodeStatusMap.value = statusMap
+    nodeOutputs.value = outputsMap
+
+    const runtimeMap = {}
+    Object.keys(statusMap).forEach((nodeId) => {
+      runtimeMap[nodeId] = {
+        status: statusMap[nodeId] || 'pending',
+        output: outputsMap[nodeId] ?? null,
+        error: nodeStateMap?.[nodeId]?.error ?? null,
+      }
+    })
+    canvasNodeRuntime.value = runtimeMap
+  }
+
   /**
    * 从执行对象更新状态
    */
@@ -517,8 +820,7 @@ export const useExecutionStore = defineStore('execution', () => {
     currentExecution.value = execution
     executionStatus.value = execution.status
     executionProgress.value = execution.progress || 0
-    currentNodeId.value = execution.currentNodeId
-    nodeStatusMap.value = execution.nodeStatus || {}
+    currentNodeId.value = execution.currentNodeId || execution.current_node_id
     outputData.value = execution.outputData || execution.output_data
     errorMessage.value = execution.errorMessage || execution.error_message
     traceback.value = execution.traceback
@@ -539,6 +841,24 @@ export const useExecutionStore = defineStore('execution', () => {
         nodeOutputs.value[nodeId] = result.output
         nodeInputs.value[nodeId] = result.input
       })
+    }
+
+    const statusMap = {}
+    const rawNodeStatus = execution.nodeStatus || execution.node_status
+    if (rawNodeStatus && typeof rawNodeStatus === 'object') {
+      Object.entries(rawNodeStatus).forEach(([nodeId, nodeData]) => {
+        const normalized = normalizeSnapshotNodeState(nodeData)
+        statusMap[nodeId] = normalized.status
+        if (normalized.output != null) {
+          nodeOutputs.value = {
+            ...nodeOutputs.value,
+            [nodeId]: unwrapNodeExecutionOutput(normalized.output),
+          }
+        }
+      })
+      nodeStatusMap.value = statusMap
+    } else {
+      nodeStatusMap.value = execution.nodeStatus || execution.node_status || {}
     }
     
     // 更新执行日志
@@ -588,6 +908,7 @@ export const useExecutionStore = defineStore('execution', () => {
    * 重置执行状态
    */
   function reset() {
+    stopEditorPolling({ resetSession: true, clearActive: true, clearActiveIds: true })
     disconnectWebSocket()
     
     currentExecution.value = null
@@ -605,6 +926,7 @@ export const useExecutionStore = defineStore('execution', () => {
     tokenStats.value = { prompt: 0, completion: 0, total: 0 }
     nodeOutputs.value = {}
     nodeInputs.value = {}
+    canvasNodeRuntime.value = {}
   }
 
   /**
@@ -626,6 +948,21 @@ export const useExecutionStore = defineStore('execution', () => {
    */
   function clearLogs() {
     executionLogs.value = []
+  }
+
+  /** 保存工作流后节点 ID 重建时，迁移内存中的执行态映射 */
+  function remapNodeIds(idMap = {}) {
+    if (!idMap || typeof idMap !== 'object') return
+
+    nodeStatusMap.value = remapRecordByIdMap(nodeStatusMap.value, idMap)
+    nodeOutputs.value = remapRecordByIdMap(nodeOutputs.value, idMap)
+    nodeInputs.value = remapRecordByIdMap(nodeInputs.value, idMap)
+    canvasNodeRuntime.value = remapRecordByIdMap(canvasNodeRuntime.value, idMap)
+
+    const currentId = currentNodeId.value
+    if (currentId && idMap[currentId]) {
+      currentNodeId.value = idMap[currentId]
+    }
   }
 
   // ==================== Return ====================
@@ -650,6 +987,9 @@ export const useExecutionStore = defineStore('execution', () => {
     tokenStats,
     nodeOutputs,
     nodeInputs,
+    canvasNodeRuntime,
+    activeWorkflowId,
+    activeExecutionId,
     
     // Getters
     isRunning,
@@ -679,9 +1019,17 @@ export const useExecutionStore = defineStore('execution', () => {
     fetchExecutionLogs,
     fetchHistory,
     updateFromExecution,
+    syncFromEditorSnapshot,
+    registerEditorSnapshotListener,
+    unregisterEditorSnapshotListener,
+    startEditorPolling,
+    stopEditorPolling,
+    resumeEditorExecution,
+    applyEditorExecutionSnapshot,
     updateFromStatus,
     updateOutputData,
     reset,
+    remapNodeIds,
     getNodeOutput,
     getNodeInput,
     clearLogs

@@ -4,23 +4,24 @@
 {% block flowly_content %}
 <div class="f-panel">
 
-    <div class="f-panel-header fp-header">
-        <div class="fp-header-row">
-            <div>
-                <h2><i class="fas fa-sliders-h"></i> 动态功能管理</h2>
-                <p>实时切换系统功能开关，配置即时生效</p>
-            </div>
-            <div class="fp-header-actions">
-                <button class="f-btn fp-btn" onclick="fp.exportConfig()">
-                    <i class="fas fa-download"></i> 导出
-                </button>
-                <button class="f-btn fp-btn" onclick="fp.showImport()">
-                    <i class="fas fa-upload"></i> 导入
-                </button>
-                <button class="f-btn fp-btn" onclick="fp.load()">
-                    <i class="fas fa-sync-alt"></i> 刷新
-                </button>
-            </div>
+    <div class="f-page-header">
+        <div class="f-page-header-main">
+            <h2><i class="fas fa-sliders-h"></i> 动态功能管理</h2>
+            <p>实时切换系统功能开关，配置即时生效</p>
+        </div>
+        <div class="f-page-header-actions">
+            <a href="/admin/flowly/settings/?module=features" class="f-btn f-btn-outline f-btn-sm">
+                <i class="fas fa-user-shield"></i> 可见性规则
+            </a>
+            <button class="f-btn f-btn-ghost f-btn-sm" onclick="fp.exportConfig()">
+                <i class="fas fa-download"></i> 导出
+            </button>
+            <button class="f-btn f-btn-ghost f-btn-sm" onclick="fp.showImport()">
+                <i class="fas fa-upload"></i> 导入
+            </button>
+            <button class="f-btn f-btn-ghost f-btn-sm" onclick="fp.load()">
+                <i class="fas fa-sync-alt"></i> 刷新
+            </button>
         </div>
     </div>
 
@@ -29,7 +30,7 @@
         <div class="fp-filters-row">
             <div class="f-search fp-search">
                 <i class="fas fa-search"></i>
-                <input type="text" id="searchInput" class="f-input" placeholder="搜索功能名称、标识或描述..." oninput="fp.filter()" aria-label="搜索功能">
+                <input type="text" id="searchInput" class="f-input" placeholder="搜索功能名称、标识或描述..." aria-label="搜索功能">
             </div>
             <select id="catFilter" class="f-input f-select fp-select" onchange="fp.filter()" aria-label="筛选分类">
                 <option value="">全部分类</option>
@@ -66,9 +67,10 @@
         </div>
         <p class="fp-modal-desc">粘贴之前导出的 JSON 配置内容：</p>
         <textarea id="importContent" class="f-input fp-textarea" rows="8" placeholder='{"key": "value", ...}' aria-label="JSON配置内容"></textarea>
+        <div id="importPreview" class="fp-import-preview" hidden></div>
         <div class="fp-modal-actions">
             <button class="f-btn f-btn-ghost" onclick="fp.closeImport()">取消</button>
-            <button class="f-btn f-btn-primary" onclick="fp.doImport()">确认导入</button>
+            <button class="f-btn f-btn-primary" id="importConfirmBtn" onclick="fp.doImport()">确认导入</button>
         </div>
     </div>
 </div>
@@ -90,21 +92,18 @@
 
 {% block extra_js %}
 <style>
-.fp-header-row { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 16px; }
-.fp-header-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-.fp-btn { background: rgba(255,255,255,0.15); color: #fff; border: 1.5px solid rgba(255,255,255,0.3); }
 .fp-filters-row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; align-items: center; }
 .fp-search { flex: 1; min-width: 200px; }
 .fp-select { width: 150px; }
 .fp-count-wrap { display: flex; align-items: center; gap: 8px; margin-left: auto; }
-.fp-count { font-size: 0.8rem; color: rgba(255,255,255,0.7); }
+.fp-count { font-size: 0.8rem; color: var(--text-muted); }
 .fp-list { min-height: 100px; }
 .fp-hidden { display: none !important; }
 .fp-modal-desc { font-size: 0.85rem; color: var(--text-muted); margin-bottom: 16px; }
 .fp-textarea { resize: vertical; min-height: 160px; }
 .fp-modal-actions { display: flex; gap: 10px; margin-top: 20px; justify-content: flex-end; }
 .fp-feature-row { display: flex; align-items: center; gap: 14px; padding: 16px 18px; background: #fff; border: 1px solid var(--border); border-radius: var(--radius-md); margin-bottom: 8px; transition: all 0.2s ease; }
-.fp-feature-row:hover { border-color: rgba(99,102,241,0.3); box-shadow: var(--shadow-md); transform: translateX(4px); }
+.fp-feature-row:hover { border-color: rgba(29,78,216,0.25); box-shadow: var(--shadow-md); transform: translateX(4px); }
 .fp-feature-row.fp-readonly { opacity: 0.6; }
 .fp-feature-info { flex: 1; min-width: 0; }
 .fp-feature-name { font-weight: 600; font-size: 0.9rem; color: var(--text-primary); }
@@ -113,7 +112,7 @@
 .fp-feature-badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 50px; font-size: 0.7rem; font-weight: 600; }
 .fp-badge-on { background: rgba(16,185,129,0.1); color: var(--success); }
 .fp-badge-off { background: rgba(239,68,68,0.1); color: var(--danger); }
-.fp-cat-header { display: flex; align-items: center; gap: 10px; padding: 12px 16px; margin: 20px 0 10px; background: var(--accent-soft); border-radius: var(--radius-sm); border-left: 3px solid var(--accent); }
+.fp-cat-header { display: flex; align-items: center; gap: 10px; padding: 12px 16px; margin: 20px 0 10px; background: var(--accent-soft); border-radius: var(--radius-sm); border: 1px solid rgba(29,78,216,0.12); }
 .fp-cat-header h4 { font-size: 0.95rem; font-weight: 700; color: var(--text-primary); flex: 1; }
 .fp-cat-count { background: var(--accent); color: #fff; font-size: 0.7rem; font-weight: 700; padding: 2px 8px; border-radius: 50px; }
 .fp-controls { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
@@ -124,10 +123,13 @@
 .fp-val-code { font-family: 'JetBrains Mono', monospace; }
 .fp-val-json { margin-top: 6px; font-size: 0.75rem; color: var(--accent); font-family: 'JetBrains Mono', monospace; }
 .fp-icon-accent { color: var(--accent); }
+.fp-import-preview { margin-top: 12px; padding: 12px 14px; background: var(--accent-soft); border: 1px solid rgba(29,78,216,0.15); border-radius: var(--radius-sm); font-size: 0.82rem; color: var(--text-secondary); }
+.fp-import-preview ul { margin: 8px 0 0; padding-left: 18px; max-height: 120px; overflow-y: auto; }
+.fp-import-preview code { font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; }
+.fp-import-error { color: var(--danger); font-weight: 600; margin: 0; }
 @media (max-width: 768px) {
     .fp-filters-row { flex-direction: column; }
     .fp-select { width: 100%; }
-    .fp-header-row { flex-direction: column; }
 }
 </style>
 <script>
@@ -140,6 +142,12 @@
         page: 1,
         pageSize: 15,
         editKey: null,
+        _filterTimer: null,
+
+        debouncedFilter: function() {
+            clearTimeout(this._filterTimer);
+            this._filterTimer = setTimeout(function() { fp.filter(); }, 300);
+        },
 
         load: async function() {
             var container = document.getElementById('featuresContainer');
@@ -154,7 +162,11 @@
                 document.getElementById('featureCount').textContent =
                     '共 ' + this.allData.reduce(function(s, c) { return s + (c.features || []).length; }, 0) + ' 项功能';
             } catch(e) {
-                container.innerHTML = '<div class="fp-empty"><i class="fas fa-exclamation-triangle"></i><h4>加载失败</h4><p>请检查网络连接</p></div>';
+                container.innerHTML = '<div class="fp-empty"><i class="fas fa-exclamation-triangle"></i><h4>加载失败</h4>' +
+                    '<p>请检查网络连接</p>' +
+                    '<button type="button" class="f-btn f-btn-primary f-btn-sm" style="margin-top:12px" onclick="fp.load()">' +
+                    '<i class="fas fa-redo"></i> 重试</button></div>';
+                document.getElementById('featureCount').textContent = '加载失败';
             }
         },
 
@@ -371,8 +383,12 @@
         },
 
         showImport: function() {
+            document.getElementById('importContent').value = '';
+            document.getElementById('importPreview').hidden = true;
+            document.getElementById('importConfirmBtn').disabled = true;
             document.getElementById('importModal').style.display = 'flex';
             document.getElementById('importModal').classList.remove('fp-hidden');
+            document.getElementById('importContent').focus();
         },
 
         closeImport: function() {
@@ -380,21 +396,64 @@
             document.getElementById('importModal').classList.add('fp-hidden');
         },
 
-        doImport: async function() {
+        updateImportPreview: function() {
             var content = (document.getElementById('importContent').value || '').trim();
-            if (!content) { showToast('请输入配置内容', 'warning'); return; }
+            var preview = document.getElementById('importPreview');
+            var btn = document.getElementById('importConfirmBtn');
+            if (!content) {
+                preview.hidden = true;
+                btn.disabled = true;
+                btn.textContent = '确认导入';
+                return null;
+            }
             try {
                 var data = JSON.parse(content);
+                if (typeof data !== 'object' || data === null || Array.isArray(data)) {
+                    throw new Error('invalid');
+                }
+                var keys = Object.keys(data);
+                preview.hidden = false;
+                preview.innerHTML = '<p>将导入 <strong>' + keys.length + '</strong> 项配置：</p><ul>' +
+                    keys.slice(0, 10).map(function(k) {
+                        return '<li><code>' + escHtml(k) + '</code></li>';
+                    }).join('') +
+                    (keys.length > 10 ? '<li>… 还有 ' + (keys.length - 10) + ' 项</li>' : '') +
+                    '</ul>';
+                btn.disabled = keys.length === 0;
+                btn.textContent = keys.length ? ('确认导入 ' + keys.length + ' 项') : '确认导入';
+                return data;
+            } catch(e) {
+                preview.hidden = false;
+                preview.innerHTML = '<p class="fp-import-error">JSON 格式无效，请检查后重试</p>';
+                btn.disabled = true;
+                btn.textContent = '确认导入';
+                return null;
+            }
+        },
+
+        doImport: async function() {
+            var data = this.updateImportPreview();
+            if (!data) {
+                showToast('请输入有效的 JSON 配置', 'warning');
+                return;
+            }
+            var keys = Object.keys(data);
+            if (!keys.length) { showToast('配置为空', 'warning'); return; }
+            if (!confirm('确认导入 ' + keys.length + ' 项配置？此操作将覆盖现有值。')) return;
+            try {
+                showLoading();
                 var resp = await apiCall('/admin/flowly/import/', 'POST', data);
+                hideLoading();
                 if (resp.updated && resp.updated.length > 0) {
-                    showToast('✅ 成功导入 ' + resp.updated.length + ' 项配置', 'success');
+                    showToast('成功导入 ' + resp.updated.length + ' 项配置', 'success');
                     this.closeImport();
                     this.load();
                 } else {
-                    showToast('⚠️ 导入完成，但 ' + (resp.skipped ? resp.skipped.length : 0) + ' 项被跳过', 'warning');
+                    showToast('导入完成，但 ' + (resp.skipped ? resp.skipped.length : 0) + ' 项被跳过', 'warning');
                 }
             } catch(e) {
-                showToast('❌ JSON 格式错误', 'error');
+                hideLoading();
+                showToast('导入失败', 'error');
             }
         }
     };
@@ -410,6 +469,14 @@
     }
 
     fp.load();
+
+    document.getElementById('searchInput').addEventListener('input', function() {
+        fp.debouncedFilter();
+    });
+
+    document.getElementById('importContent').addEventListener('input', function() {
+        fp.updateImportPreview();
+    });
 
     document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape') {

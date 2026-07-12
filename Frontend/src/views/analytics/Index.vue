@@ -1,13 +1,10 @@
-﻿<template>
-  <div class="analytics-dashboard">
-    <div class="page-header">
-      <div class="header-left">
-        <h1>数据分析</h1>
-        <p class="subtitle">
-          监控平台使用情况和性能指标
-        </p>
-      </div>
-      <div class="header-actions">
+<template>
+  <PageShell width="wide">
+    <PageHeader
+      title="数据分析"
+      subtitle="监控平台使用情况和性能指标"
+    >
+      <template #actions>
         <el-date-picker
           v-model="dateRange"
           type="daterange"
@@ -20,189 +17,150 @@
           <RefreshCw class="btn-icon" />
           刷新
         </el-button>
-      </div>
-    </div>
+      </template>
+    </PageHeader>
 
-    <!-- Overview Cards -->
-    <div class="overview-cards">
-      <div class="overview-card">
-        <div class="card-icon workflows">
-          <GitBranch />
-        </div>
-        <div class="card-content">
-          <div class="card-value">
-            {{ formatNumber(stats.total_workflows) }}
-          </div>
-          <div class="card-label">
-            工作流总数
-          </div>
-        </div>
-        <div
-          class="card-trend"
-          :class="stats.workflows_trend > 0 ? 'up' : 'down'"
+    <StatGrid
+      :columns="6"
+      class="overview-stat-grid"
+    >
+      <StatCard
+        label="工作流总数"
+        :value="formatNumber(stats.total_workflows)"
+        :icon="GitBranch"
+        tone="primary"
+      >
+        <template
+          v-if="stats.workflows_trend != null"
+          #extra
         >
-          <TrendingUp
-            v-if="stats.workflows_trend > 0"
-            class="trend-icon"
-          />
-          <TrendingDown
-            v-else
-            class="trend-icon"
-          />
-          {{ Math.abs(stats.workflows_trend) }}%
-        </div>
-      </div>
-
-      <div class="overview-card">
-        <div class="card-icon executions">
-          <Play />
-        </div>
-        <div class="card-content">
-          <div class="card-value">
-            {{ formatNumber(stats.total_executions) }}
-          </div>
-          <div class="card-label">
-            执行次数
-          </div>
-        </div>
-        <div
-          class="card-trend"
-          :class="stats.executions_trend > 0 ? 'up' : 'down'"
+          <span
+            class="stat-trend"
+            :class="stats.workflows_trend > 0 ? 'up' : 'down'"
+          >
+            <TrendingUp
+              v-if="stats.workflows_trend > 0"
+              class="trend-icon"
+            />
+            <TrendingDown
+              v-else
+              class="trend-icon"
+            />
+            {{ Math.abs(stats.workflows_trend) }}%
+          </span>
+        </template>
+      </StatCard>
+      <StatCard
+        label="执行次数"
+        :value="formatNumber(stats.total_executions)"
+        :icon="Play"
+        tone="success"
+      >
+        <template
+          v-if="stats.executions_trend != null"
+          #extra
         >
-          <TrendingUp
-            v-if="stats.executions_trend > 0"
-            class="trend-icon"
-          />
-          <TrendingDown
-            v-else
-            class="trend-icon"
-          />
-          {{ Math.abs(stats.executions_trend) }}%
-        </div>
-      </div>
-
-      <div class="overview-card">
-        <div class="card-icon tokens">
-          <Cpu />
-        </div>
-        <div class="card-content">
-          <div class="card-value">
-            {{ formatNumber(stats.total_tokens) }}
-          </div>
-          <div class="card-label">
-            Token 使用量
-          </div>
-        </div>
-      </div>
-
-      <div class="overview-card">
-        <div class="card-icon cost">
-          <DollarSign />
-        </div>
-        <div class="card-content">
-          <div class="card-value">
-            ${{ stats.total_cost?.toFixed(4) || '0.00' }}
-          </div>
-          <div class="card-label">
-            总费用
-          </div>
-        </div>
-      </div>
-
-      <div class="overview-card">
-        <div class="card-icon latency">
-          <Clock />
-        </div>
-        <div class="card-content">
-          <div class="card-value">
-            {{ stats.avg_latency?.toFixed(0) || 0 }}ms
-          </div>
-          <div class="card-label">
-            平均延迟
-          </div>
-        </div>
-      </div>
-
-      <div class="overview-card">
-        <div class="card-icon success">
-          <CheckCircle />
-        </div>
-        <div class="card-content">
-          <div class="card-value">
-            {{ stats.success_rate?.toFixed(1) || 0 }}%
-          </div>
-          <div class="card-label">
-            成功率
-          </div>
-        </div>
-      </div>
-    </div>
+          <span
+            class="stat-trend"
+            :class="stats.executions_trend > 0 ? 'up' : 'down'"
+          >
+            <TrendingUp
+              v-if="stats.executions_trend > 0"
+              class="trend-icon"
+            />
+            <TrendingDown
+              v-else
+              class="trend-icon"
+            />
+            {{ Math.abs(stats.executions_trend) }}%
+          </span>
+        </template>
+      </StatCard>
+      <StatCard
+        label="Token 使用量"
+        :value="formatNumber(stats.total_tokens)"
+        :icon="Cpu"
+        tone="info"
+      />
+      <StatCard
+        label="总费用"
+        :value="`¥${stats.total_cost?.toFixed(4) || '0.00'}`"
+        :icon="DollarSign"
+        tone="warning"
+      />
+      <StatCard
+        label="平均延迟"
+        :value="`${stats.avg_latency?.toFixed(0) || 0}ms`"
+        :icon="Clock"
+        tone="neutral"
+      />
+      <StatCard
+        label="成功率"
+        :value="`${stats.success_rate?.toFixed(1) || 0}%`"
+        :icon="CheckCircle"
+        tone="success"
+      />
+    </StatGrid>
 
     <!-- Charts Row -->
     <div class="charts-grid">
-      <!-- Execution Trend Chart -->
-      <div class="chart-card">
-        <div class="chart-header">
-          <h3>执行趋势</h3>
+      <SectionCard
+        title="执行趋势"
+        class="analytics-section"
+      >
+        <template #actions>
           <el-radio-group
             v-model="chartPeriod"
             size="small"
             @change="fetchExecutionTrend"
           >
-            <el-radio-button label="7d">
+            <el-radio-button value="7d">
               7天
             </el-radio-button>
-            <el-radio-button label="30d">
+            <el-radio-button value="30d">
               30天
             </el-radio-button>
           </el-radio-group>
-        </div>
+        </template>
         <div class="chart-container">
           <canvas ref="executionTrendChart" />
         </div>
-      </div>
+      </SectionCard>
 
-      <!-- Usage by Model Chart -->
-      <div class="chart-card">
-        <div class="chart-header">
-          <h3>模型使用分布</h3>
-        </div>
+      <SectionCard
+        title="模型使用分布"
+        class="analytics-section"
+      >
         <div class="chart-container">
           <canvas ref="modelUsageChart" />
         </div>
-      </div>
+      </SectionCard>
     </div>
 
     <!-- Second Charts Row -->
     <div class="charts-grid">
-      <!-- Provider Distribution -->
-      <div class="chart-card">
-        <div class="chart-header">
-          <h3>服务商使用分布</h3>
-        </div>
+      <SectionCard
+        title="服务商使用分布"
+        class="analytics-section"
+      >
         <div class="chart-container">
           <canvas ref="providerChart" />
         </div>
-      </div>
+      </SectionCard>
 
-      <!-- Cost Over Time -->
-      <div class="chart-card">
-        <div class="chart-header">
-          <h3>费用趋势</h3>
-        </div>
+      <SectionCard
+        title="费用趋势"
+        class="analytics-section"
+      >
         <div class="chart-container">
           <canvas ref="costChart" />
         </div>
-      </div>
+      </SectionCard>
     </div>
 
     <!-- Detailed Tables -->
     <div class="tables-grid">
-      <!-- Top Workflows -->
-      <div class="table-card">
-        <div class="table-header">
-          <h3>热门工作流</h3>
-        </div>
+      <SectionCard title="热门工作流">
         <el-table
           :data="topWorkflows"
           stripe
@@ -212,49 +170,45 @@
             label="名称"
           />
           <el-table-column
-            prop="execution_count"
+            prop="executionCount"
             label="执行次数"
             width="120"
           >
             <template #default="{ row }">
-              {{ row.execution_count?.toLocaleString() }}
+              {{ row.executionCount?.toLocaleString() }}
             </template>
           </el-table-column>
           <el-table-column
-            prop="success_rate"
+            prop="successRate"
             label="成功率"
             width="100"
           >
             <template #default="{ row }">
-              <span :class="row.success_rate >= 90 ? 'text-success' : row.success_rate >= 70 ? 'text-warning' : 'text-danger'">
-                {{ row.success_rate?.toFixed(1) }}%
+              <span :class="row.successRate >= 90 ? 'text-success' : row.successRate >= 70 ? 'text-warning' : 'text-danger'">
+                {{ row.successRate?.toFixed(1) }}%
               </span>
             </template>
           </el-table-column>
           <el-table-column
-            prop="avg_duration"
+            prop="avgDuration"
             label="平均耗时"
             width="100"
           >
             <template #default="{ row }">
-              {{ formatDuration(row.avg_duration) }}
+              {{ formatDuration(row.avgDuration) }}
             </template>
           </el-table-column>
         </el-table>
-      </div>
+      </SectionCard>
 
-      <!-- Recent Executions -->
-      <div class="table-card">
-        <div class="table-header">
-          <h3>最近执行记录</h3>
-        </div>
+      <SectionCard title="最近执行记录">
         <el-table
           :data="recentExecutions"
           stripe
         >
           <el-table-column
             label="工作流"
-            prop="workflow_name"
+            prop="workflowName"
           />
           <el-table-column
             prop="status"
@@ -280,24 +234,22 @@
             </template>
           </el-table-column>
           <el-table-column
-            prop="created_at"
+            prop="startedAt"
             label="时间"
             width="160"
           >
             <template #default="{ row }">
-              {{ formatDateTime(row.created_at) }}
+              {{ formatDateTime(row.startedAt) }}
             </template>
           </el-table-column>
         </el-table>
-      </div>
+      </SectionCard>
     </div>
 
-    <!-- API Usage Details -->
-    <div class="api-usage-section">
-      <div class="section-header">
-        <h2>API 使用详情</h2>
-      </div>
-
+    <SectionCard
+      title="API 使用详情"
+      class="analytics-section--full"
+    >
       <el-table
         :data="apiUsageDetails"
         stripe
@@ -316,39 +268,39 @@
           </template>
         </el-table-column>
         <el-table-column
-          prop="call_count"
+          prop="callCount"
           label="调用次数"
           width="120"
         >
           <template #default="{ row }">
-            {{ row.call_count?.toLocaleString() }}
+            {{ row.callCount?.toLocaleString() }}
           </template>
         </el-table-column>
         <el-table-column
-          prop="input_tokens"
+          prop="inputTokens"
           label="输入 Token"
           width="140"
         >
           <template #default="{ row }">
-            {{ formatNumber(row.input_tokens) }}
+            {{ formatNumber(row.inputTokens) }}
           </template>
         </el-table-column>
         <el-table-column
-          prop="output_tokens"
+          prop="outputTokens"
           label="输出 Token"
           width="140"
         >
           <template #default="{ row }">
-            {{ formatNumber(row.output_tokens) }}
+            {{ formatNumber(row.outputTokens) }}
           </template>
         </el-table-column>
         <el-table-column
-          prop="total_tokens"
+          prop="totalTokens"
           label="总 Token"
           width="120"
         >
           <template #default="{ row }">
-            {{ formatNumber(row.total_tokens) }}
+            {{ formatNumber(row.totalTokens) }}
           </template>
         </el-table-column>
         <el-table-column
@@ -357,22 +309,36 @@
           width="100"
         >
           <template #default="{ row }">
-            ${{ row.cost?.toFixed(4) }}
+            ¥{{ row.cost?.toFixed(4) }}
           </template>
         </el-table-column>
       </el-table>
-    </div>
-  </div>
+    </SectionCard>
+  </PageShell>
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import {
   GitBranch, Play, Cpu, DollarSign, Clock, CheckCircle,
   TrendingUp, TrendingDown, RefreshCw
 } from 'lucide-vue-next'
 import { Chart, registerables } from 'chart.js'
 import { useAnalyticsStore } from '@/stores/analytics'
+import PageShell from '@/components/layout/PageShell.vue'
+import PageHeader from '@/components/layout/PageHeader.vue'
+import StatGrid from '@/components/layout/StatGrid.vue'
+import StatCard from '@/components/layout/StatCard.vue'
+import SectionCard from '@/components/layout/SectionCard.vue'
+import {
+  getChartSeriesColors,
+  getChartPrimaryColor,
+  getChartPrimaryFill,
+  getChartSuccessColor,
+  getChartSuccessFill,
+  getCssColor,
+} from '@/utils/chartTheme'
+import { useThemeChartRefresh } from '@/composables/useThemeChartRefresh'
 
 Chart.register(...registerables)
 
@@ -385,14 +351,14 @@ const chartPeriod = ref('7d')
 const stats = computed(() => {
   const overview = analyticsStore.overview || {}
   return {
-    total_workflows: overview.total_workflows || 0,
-    workflows_trend: overview.workflows_trend || 0,
-    total_executions: overview.total_executions || 0,
-    executions_trend: overview.executions_trend || 0,
-    total_tokens: overview.total_tokens || 0,
-    total_cost: overview.total_cost || 0,
-    avg_latency: overview.avg_latency || 0,
-    success_rate: overview.success_rate || 0
+    total_workflows: overview.totalWorkflows || 0,
+    workflows_trend: overview.workflowsTrend || 0,
+    total_executions: overview.totalExecutions || 0,
+    executions_trend: overview.executionsTrend || 0,
+    total_tokens: overview.totalTokens || 0,
+    total_cost: overview.totalCost || 0,
+    avg_latency: overview.avgLatency || 0,
+    success_rate: overview.successRate || 0
   }
 })
 
@@ -498,34 +464,18 @@ async function fetchExecutionTrend() {
   }
 }
 
-function generateMockTrendData() {
-  const days = chartPeriod.value === '7d' ? 7 : 30
-  const data = []
-  const now = new Date()
-
-  for (let i = days - 1; i >= 0; i--) {
-    const date = new Date(now)
-    date.setDate(date.getDate() - i)
-    data.push({
-      date: date.toISOString().split('T')[0],
-      executions: Math.floor(Math.random() * 100) + 50,
-      success_rate: Math.random() * 10 + 85,
-      cost: Math.random() * 5 + 1
-    })
-  }
-
-  return data
-}
 
 function updateExecutionTrendChart() {
   if (charts.executionTrend) {
     charts.executionTrend.destroy()
+    charts.executionTrend = null
   }
 
   const ctx = executionTrendChart.value?.getContext('2d')
   if (!ctx) return
 
-  const trendData = executionTrendData.value.length > 0 ? executionTrendData.value : generateMockTrendData()
+  const trendData = executionTrendData.value
+  if (trendData.length === 0) return
 
   charts.executionTrend = new Chart(ctx, {
     type: 'line',
@@ -535,16 +485,16 @@ function updateExecutionTrendChart() {
         {
           label: '执行次数',
           data: trendData.map(d => d.executions),
-          borderColor: '#6366f1',
-          backgroundColor: 'rgba(99, 102, 241, 0.1)',
+          borderColor: getChartPrimaryColor(),
+          backgroundColor: getChartPrimaryFill(),
           fill: true,
           tension: 0.4
         },
         {
           label: '成功率',
-          data: trendData.map(d => d.success_rate),
-          borderColor: '#22c55e',
-          backgroundColor: 'rgba(34, 197, 94, 0.1)',
+          data: trendData.map(d => d.successRate),
+          borderColor: getChartSuccessColor(),
+          backgroundColor: getChartSuccessFill(),
           fill: true,
           tension: 0.4,
           yAxisID: 'y1'
@@ -589,7 +539,7 @@ function updateModelUsageChart() {
 
   const data = apiUsageDetails.value.map(d => ({
     model: d.model,
-    tokens: d.total_tokens
+    tokens: d.totalTokens
   }))
 
   if (data.length === 0) return
@@ -600,14 +550,7 @@ function updateModelUsageChart() {
       labels: data.map(d => d.model),
       datasets: [{
         data: data.map(d => d.tokens),
-        backgroundColor: [
-          '#6366f1',
-          '#22c55e',
-          '#f59e0b',
-          '#ef4444',
-          '#3b82f6',
-          '#06b6d4'
-        ]
+        backgroundColor: getChartSeriesColors(),
       }]
     },
     options: {
@@ -635,7 +578,7 @@ function updateProviderChart() {
     if (!providerTotals[d.provider]) {
       providerTotals[d.provider] = 0
     }
-    providerTotals[d.provider] += d.call_count
+    providerTotals[d.provider] += d.callCount
   })
 
   if (Object.keys(providerTotals).length === 0) return
@@ -646,12 +589,7 @@ function updateProviderChart() {
       labels: Object.keys(providerTotals).map(getProviderLabel),
       datasets: [{
         data: Object.values(providerTotals),
-        backgroundColor: [
-          '#6366f1',
-          '#22c55e',
-          '#f59e0b',
-          '#ef4444'
-        ]
+        backgroundColor: getChartSeriesColors().slice(0, 4),
       }]
     },
     options: {
@@ -669,22 +607,24 @@ function updateProviderChart() {
 function updateCostChart() {
   if (charts.cost) {
     charts.cost.destroy()
+    charts.cost = null
   }
 
   const ctx = costChart.value?.getContext('2d')
   if (!ctx) return
 
-  const trendData = executionTrendData.value.length > 0 ? executionTrendData.value : generateMockTrendData()
+  const trendData = executionTrendData.value
+  if (trendData.length === 0) return
 
   charts.cost = new Chart(ctx, {
     type: 'bar',
     data: {
       labels: trendData.map(d => d.date.slice(5)),
       datasets: [{
-        label: '费用 ($)',
+        label: '费用 (¥)',
         data: trendData.map(d => d.cost),
-        backgroundColor: 'rgba(99, 102, 241, 0.6)',
-        borderColor: '#6366f1',
+        backgroundColor: getCssColor('--color-primary-50', 'rgba(6, 182, 212, 0.5)'),
+        borderColor: getChartPrimaryColor(),
         borderWidth: 1
       }]
     },
@@ -694,11 +634,18 @@ function updateCostChart() {
       scales: {
         y: {
           beginAtZero: true,
-          title: { display: true, text: '费用 ($)' }
+          title: { display: true, text: '费用 (¥)' }
         }
       }
     }
   })
+}
+
+function refreshAllCharts() {
+  updateExecutionTrendChart()
+  updateModelUsageChart()
+  updateProviderChart()
+  updateCostChart()
 }
 
 onMounted(async () => {
@@ -706,10 +653,10 @@ onMounted(async () => {
   await fetchExecutionTrend()
   await nextTick()
 
-  updateModelUsageChart()
-  updateProviderChart()
-  updateCostChart()
+  refreshAllCharts()
 })
+
+useThemeChartRefresh(refreshAllCharts)
 
 onUnmounted(() => {
   Object.values(charts).forEach(chart => {
@@ -721,141 +668,34 @@ onUnmounted(() => {
 <style lang="scss" scoped>
 @use '@/assets/styles/variables.scss' as *;
 
-.analytics-dashboard {
-  padding: $spacing-6;
-}
-
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: $spacing-6;
-  flex-wrap: wrap;
-  gap: $spacing-4;
-
-  h1 {
-    font-size: $font-size-2xl;
-    font-weight: $font-weight-bold;
-    margin: 0;
-  }
-
-  .subtitle {
-    font-size: $font-size-sm;
-    color: var(--text-primary)-secondary;
-    margin: $spacing-1 0 0;
-  }
-}
-
-.header-actions {
-  display: flex;
-  gap: $spacing-3;
-  align-items: center;
-}
-
-.btn-icon {
-  width: 16px;
-  height: 16px;
-}
-
-.overview-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: $spacing-4;
+.overview-stat-grid {
   margin-bottom: $spacing-6;
 }
 
-.overview-card {
-  display: flex;
+.stat-trend {
+  display: inline-flex;
   align-items: center;
-  gap: $spacing-4;
-  background: var(--bg-primary)-secondary;
-  border: 1px solid var(--border-primary);
-  border-radius: $radius-xl;
-  padding: $spacing-4;
-  position: relative;
-}
-
-.card-icon {
-  width: 56px;
-  height: 56px;
-  border-radius: $radius-lg;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-
-  svg {
-    width: 28px;
-    height: 28px;
-  }
-
-  &.workflows {
-    background: rgba($color-primary, 0.15);
-    color: $color-primary;
-  }
-
-  &.executions {
-    background: rgba($color-success, 0.15);
-    color: $color-success;
-  }
-
-  &.tokens {
-    background: rgba($color-secondary, 0.15);
-    color: $color-secondary;
-  }
-
-  &.cost {
-    background: rgba($color-warning, 0.15);
-    color: $color-warning;
-  }
-
-  &.latency {
-    background: rgba(#ef4444, 0.15);
-    color: #ef4444;
-  }
-
-  &.success {
-    background: rgba(#22c55e, 0.15);
-    color: #22c55e;
-  }
-}
-
-.card-content {
-  flex: 1;
-}
-
-.card-value {
-  font-size: $font-size-2xl;
-  font-weight: $font-weight-bold;
-  color: var(--text-primary);
-}
-
-.card-label {
-  font-size: $font-size-sm;
-  color: var(--text-primary)-secondary;
-}
-
-.card-trend {
-  position: absolute;
-  top: $spacing-3;
-  right: $spacing-3;
-  display: flex;
-  align-items: center;
-  gap: $spacing-1;
+  gap: 2px;
   font-size: $font-size-xs;
   font-weight: $font-weight-medium;
+
+  &.up {
+    color: var(--color-success);
+  }
+
+  &.down {
+    color: var(--color-danger);
+  }
 
   .trend-icon {
     width: 14px;
     height: 14px;
   }
+}
 
-  &.up {
-    color: $color-success;
-  }
-
-  &.down {
-    color: $color-error;
-  }
+.btn-icon {
+  width: 16px;
+  height: 16px;
 }
 
 .charts-grid {
@@ -869,24 +709,8 @@ onUnmounted(() => {
   }
 }
 
-.chart-card {
-  background: var(--bg-primary)-secondary;
-  border: 1px solid var(--border-primary);
-  border-radius: $radius-xl;
-  padding: $spacing-4;
-}
-
-.chart-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: $spacing-4;
-
-  h3 {
-    font-size: $font-size-base;
-    font-weight: $font-weight-semibold;
-    margin: 0;
-  }
+.analytics-section--full {
+  margin-bottom: $spacing-6;
 }
 
 .chart-container {
@@ -905,50 +729,16 @@ onUnmounted(() => {
   }
 }
 
-.table-card {
-  background: var(--bg-primary)-secondary;
-  border: 1px solid var(--border-primary);
-  border-radius: $radius-xl;
-  padding: $spacing-4;
-}
-
-.table-header {
-  margin-bottom: $spacing-4;
-
-  h3 {
-    font-size: $font-size-base;
-    font-weight: $font-weight-semibold;
-    margin: 0;
-  }
-}
-
 .text-success {
-  color: $color-success;
+  color: var(--color-success);
 }
 
 .text-warning {
-  color: $color-warning;
+  color: var(--color-warning);
 }
 
 .text-danger {
-  color: $color-error;
-}
-
-.api-usage-section {
-  background: var(--bg-primary)-secondary;
-  border: 1px solid var(--border-primary);
-  border-radius: $radius-xl;
-  padding: $spacing-4;
-}
-
-.section-header {
-  margin-bottom: $spacing-4;
-
-  h2 {
-    font-size: $font-size-lg;
-    font-weight: $font-weight-semibold;
-    margin: 0;
-  }
+  color: var(--color-danger);
 }
 </style>
 

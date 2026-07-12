@@ -75,10 +75,23 @@ class TrainingJob(models.Model):
 
     STATUS_CHOICES = [
         ('queued', '排队中'),
+        ('provisioning', '资源分配中'),
+        ('preparing', '准备数据中'),
         ('running', '训练中'),
+        ('validating', '验证中'),
+        ('packaging', '打包中'),
         ('completed', '已完成'),
         ('failed', '失败'),
         ('cancelled', '已取消'),
+        ('timeout', '超时'),
+    ]
+
+    TRAINING_KIND_CHOICES = [
+        ('generic', '通用训练'),
+        ('yolo', 'YOLO训练'),
+        ('clip_cls', 'CLIP分类'),
+        ('clip_ret', 'CLIP检索'),
+        ('transformer', 'Transformer微调'),
     ]
 
     FRAMEWORK_CHOICES = [
@@ -86,13 +99,17 @@ class TrainingJob(models.Model):
         ('transformers', 'Transformers'),
         ('keras', 'Keras'),
         ('tensorflow', 'TensorFlow'),
+        ('ultralytics', 'Ultralytics'),
     ]
 
     MODEL_TYPE_CHOICES = [
         ('classifier', '分类器'),
+        ('classification', '分类'),
         ('regressor', '回归器'),
         ('generator', '生成器'),
         ('custom', '自定义'),
+        ('detection', '目标检测'),
+        ('retrieval', '检索'),
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -129,12 +146,28 @@ class TrainingJob(models.Model):
         verbose_name='状态',
         db_index=True
     )
+    training_kind = models.CharField(
+        max_length=20,
+        choices=TRAINING_KIND_CHOICES,
+        default='generic',
+        verbose_name='训练类型',
+        db_index=True
+    )
     config = models.JSONField(default=dict, verbose_name='节点配置快照')
     dataset_id = models.CharField(max_length=100, blank=True, verbose_name='数据集ID')
     dataset_path = models.CharField(max_length=500, blank=True, verbose_name='数据集路径')
+    dataset_yaml_path = models.CharField(max_length=500, blank=True, verbose_name='YOLO数据集配置路径')
+    dataset_source_mode = models.CharField(max_length=50, blank=True, verbose_name='数据集来源模式')
+    annotation_project_id = models.CharField(max_length=100, blank=True, verbose_name='标注项目ID')
+    class_names = models.JSONField(default=list, verbose_name='类别名称')
     model_path = models.CharField(max_length=500, blank=True, verbose_name='模型路径')
+    best_weight_path = models.CharField(max_length=500, blank=True, verbose_name='最佳权重路径')
+    last_weight_path = models.CharField(max_length=500, blank=True, verbose_name='最终权重路径')
+    exported_artifacts = models.JSONField(default=dict, verbose_name='导出产物')
     framework = models.CharField(max_length=50, choices=FRAMEWORK_CHOICES, verbose_name='框架')
     model_type = models.CharField(max_length=50, verbose_name='模型类型')
+    yolo_version = models.CharField(max_length=20, blank=True, verbose_name='YOLO版本')
+    model_variant = models.CharField(max_length=20, blank=True, verbose_name='YOLO模型规格')
     gpu_info = models.JSONField(
         default=dict,
         verbose_name='GPU信息',
@@ -151,11 +184,24 @@ class TrainingJob(models.Model):
         verbose_name='训练历史',
         help_text='List of metrics per epoch'
     )
+    loss_box_history = models.JSONField(default=list, verbose_name='YOLO Box Loss历史')
+    loss_cls_history = models.JSONField(default=list, verbose_name='YOLO Cls Loss历史')
+    loss_dfl_history = models.JSONField(default=list, verbose_name='YOLO DFL Loss历史')
+    precision_history = models.JSONField(default=list, verbose_name='YOLO Precision历史')
+    recall_history = models.JSONField(default=list, verbose_name='YOLO Recall历史')
+    map50_history = models.JSONField(default=list, verbose_name='YOLO mAP50历史')
+    map50_95_history = models.JSONField(default=list, verbose_name='YOLO mAP50-95历史')
     metrics = models.JSONField(
         default=dict,
         verbose_name='训练指标',
         help_text='{train_loss, train_acc, val_loss, val_acc} per epoch'
     )
+    learning_rate = models.FloatField(default=0.0, verbose_name='当前学习率')
+    best_epoch = models.IntegerField(default=0, verbose_name='最佳轮次')
+    best_fitness = models.FloatField(default=0.0, verbose_name='最佳适应度')
+    estimated_duration_seconds = models.IntegerField(default=0, verbose_name='预计总时长(秒)')
+    eta_seconds = models.IntegerField(default=0, verbose_name='预计剩余时长(秒)')
+    preview_samples = models.JSONField(default=list, verbose_name='验证样例预览')
     error_message = models.TextField(blank=True, verbose_name='错误信息')
     job_id = models.CharField(
         max_length=100,
@@ -166,6 +212,7 @@ class TrainingJob(models.Model):
     started_at = models.DateTimeField(null=True, blank=True, verbose_name='开始时间')
     completed_at = models.DateTimeField(null=True, blank=True, verbose_name='完成时间')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='创建时间')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='更新时间')
     created_by = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,
@@ -194,6 +241,7 @@ class TrainingJob(models.Model):
             models.Index(fields=['workflow']),
             models.Index(fields=['node']),
             models.Index(fields=['status']),
+            models.Index(fields=['training_kind']),
             models.Index(fields=['framework']),
             models.Index(fields=['-created_at']),
             models.Index(fields=['job_id']),

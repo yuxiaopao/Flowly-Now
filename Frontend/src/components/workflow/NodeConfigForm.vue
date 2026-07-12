@@ -380,8 +380,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, watch, computed } from 'vue'
-import { useAppStore } from '@/stores/app'
+import { reactive, watch, computed } from 'vue'
 
 // Import dedicated config forms
 import LLMConfigForm from './config-forms/LLMConfigForm.vue'
@@ -405,13 +404,13 @@ import AudioGenerationConfig from './configs/AudioGenerationConfig.vue'
 import SubtitleGenerationConfig from './configs/SubtitleGenerationConfig.vue'
 import ImageEditingConfig from './configs/ImageEditingConfig.vue'
 
-// Domain node config forms — Data
-import DatasetUploadConfig from './configs/DatasetUploadConfig.vue'
-import DataAnnotationConfig from './configs/DataAnnotationConfig.vue'
-import DataAugmentationConfig from './configs/DataAugmentationConfig.vue'
-
-// Domain node config forms — MLOps
-import ModelTrainingConfig from './configs/ModelTrainingConfig.vue'
+// Domain node config forms — Data / MLOps（异步加载，避免 HMR 循环依赖）
+import {
+  DatasetUploadConfig,
+  DataAnnotationConfig,
+  DataAugmentationConfig,
+  ModelTrainingConfig,
+} from './configs/asyncConfigComponents'
 import ModelEvaluationConfig from './configs/ModelEvaluationConfig.vue'
 import ModelDeploymentConfig from './configs/ModelDeploymentConfig.vue'
 
@@ -434,8 +433,6 @@ import FileWriterConfig from './configs/FileWriterConfig.vue'
 import WebScraperConfig from './configs/WebScraperConfig.vue'
 import CsvTransformConfig from './configs/CsvTransformConfig.vue'
 import JsonTransformConfig from './configs/JsonTransformConfig.vue'
-
-const appStore = useAppStore()
 
 const props = defineProps({
   node: {
@@ -527,20 +524,78 @@ const handleDuplicate = () => {
   color: var(--text-primary);
   margin-bottom: $spacing-3;
   padding-bottom: $spacing-2;
-  border-bottom: 1px solid var(--el-border-color-lighter, var(--border-primary));
+  border-bottom: 1px solid var(--border-secondary);
 }
 
 .timeout-unit {
   margin-left: $spacing-2;
-  color: var(--el-text-color-secondary, var(--text-secondary));
+  color: var(--text-secondary);
   font-size: $font-size-xs;
+}
+
+// ============================================
+// 表单控件主题覆盖（el-input / el-select / el-textarea / el-input-number）
+// ============================================
+:deep(.el-input__wrapper),
+:deep(.el-textarea__inner),
+:deep(.el-select__wrapper),
+:deep(.el-input-number) {
+  background-color: var(--bg-secondary) !important;
+  box-shadow: 0 0 0 1px var(--border-primary) inset !important;
+  border-radius: $radius-md;
+}
+
+:deep(.el-input__inner),
+:deep(.el-textarea__inner),
+:deep(.el-select__wrapper .el-select__selected-item) {
+  color: var(--text-primary) !important;
+}
+
+:deep(.el-input__wrapper:hover),
+:deep(.el-textarea__inner:hover),
+:deep(.el-select__wrapper:hover) {
+  box-shadow: 0 0 0 1px var(--border-hover) inset !important;
+}
+
+:deep(.el-input__wrapper.is-focus),
+:deep(.el-textarea__inner:focus),
+:deep(.el-select__wrapper.is-focused) {
+  box-shadow: 0 0 0 1px var(--color-primary) inset !important;
+}
+
+:deep(.el-input.is-disabled .el-input__wrapper),
+:deep(.el-textarea.is-disabled .el-textarea__inner),
+:deep(.el-select .el-select__wrapper.is-disabled),
+:deep(.el-input-number.is-disabled) {
+  background-color: var(--bg-tertiary) !important;
+  opacity: 0.6;
+}
+
+:deep(.el-input__prefix),
+:deep(.el-input__suffix),
+:deep(.el-select__caret),
+:deep(.el-input-number__increase),
+:deep(.el-input-number__decrease) {
+  color: var(--text-tertiary);
+}
+
+:deep(.el-input__inner::placeholder),
+:deep(.el-textarea__inner::placeholder) {
+  color: var(--text-tertiary);
+}
+
+:deep(.el-input-group__append .el-button),
+:deep(.el-input-group__prepend .el-button) {
+  background-color: var(--bg-tertiary);
+  border-color: var(--border-primary);
+  color: var(--text-secondary);
 }
 
 .form-actions {
   display: flex;
   justify-content: space-between;
   padding-top: $spacing-4;
-  border-top: 1px solid var(--el-border-color-lighter, var(--border-primary));
+  border-top: 1px solid var(--border-secondary);
 
   :deep(.el-button) {
     flex: 1;

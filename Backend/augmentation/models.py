@@ -39,13 +39,13 @@ class AugmentationJob(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
     input_dataset = models.ForeignKey(
-        'datasets.Dataset',
+        'datasets.dataset',
         on_delete=models.CASCADE,
         related_name='augmentation_jobs',
         verbose_name='输入数据集'
     )
     output_dataset = models.ForeignKey(
-        'datasets.Dataset',
+        'datasets.dataset',
         on_delete=models.SET_NULL,
         null=True,
         blank=True,

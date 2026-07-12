@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="knowledge-base">
     <div class="page-header">
       <div class="header-left">
@@ -31,6 +31,32 @@
         label="文档集合"
         name="collections"
       >
+        <div class="collection-toolbar">
+          <el-checkbox v-model="showProjectOnly">
+            仅显示项目 Agent 记忆（project-*）
+          </el-checkbox>
+          <el-select
+            v-model="teamFilter"
+            placeholder="按团队筛选"
+            clearable
+            style="width: 200px"
+          >
+            <el-option
+              label="全部（含个人）"
+              value=""
+            />
+            <el-option
+              label="仅我个人"
+              value="mine"
+            />
+            <el-option
+              v-for="t in tenantStore.tenants"
+              :key="t.id"
+              :label="t.name"
+              :value="String(t.id)"
+            />
+          </el-select>
+        </div>
         <div
           v-if="collections.length === 0 && !isLoading"
           class="empty-state"
@@ -98,6 +124,22 @@
             </div>
             <h3 class="card-title">
               {{ collection.name }}
+              <el-tag
+                v-if="collection.tenant_name"
+                size="small"
+                type="success"
+                class="team-tag"
+              >
+                <Users class="tag-icon" />{{ collection.tenant_name }}
+              </el-tag>
+              <el-tag
+                v-else
+                size="small"
+                type="info"
+                class="team-tag"
+              >
+                个人
+              </el-tag>
             </h3>
             <p class="card-desc">
               {{ collection.description || '暂无描述' }}
@@ -207,6 +249,8 @@
       v-model="showCollectionDialog"
       title="创建文档集合"
       width="500px"
+      destroy-on-close
+      @closed="resetCollectionForm"
     >
       <el-form
         ref="collectionFormRef"
@@ -234,6 +278,45 @@
             placeholder="集合描述（可选）"
           />
         </el-form-item>
+        <el-form-item label="向量存储">
+          <el-select
+            v-model="collectionForm.vector_store"
+            placeholder="选择向量存储（可选）"
+            style="width: 100%"
+            clearable
+          >
+            <el-option
+              v-for="store in ragStore.vectorStores"
+              :key="store.id"
+              :label="store.name"
+              :value="store.id"
+            />
+          </el-select>
+          <div
+            v-if="!ragStore.vectorStores.length"
+            class="form-item-tip"
+          >
+            暂无可用向量存储，将使用默认存储
+          </div>
+        </el-form-item>
+        <el-form-item label="所属团队">
+          <el-select
+            v-model="collectionForm.tenant"
+            placeholder="仅个人可见（不选择团队）"
+            style="width: 100%"
+            clearable
+          >
+            <el-option
+              v-for="t in tenantStore.tenants"
+              :key="t.id"
+              :label="t.name"
+              :value="t.id"
+            />
+          </el-select>
+          <div class="form-item-tip">
+            选择团队后，该团队所有成员均可查看和使用此知识库
+          </div>
+        </el-form-item>
         <el-form-item label="Embedding 模型">
           <el-select
             v-model="collectionForm.embedding_model"
@@ -251,7 +334,14 @@
               label="text-embedding-3-large"
               value="text-embedding-3-large"
             />
+            <el-option
+              label="nomic-embed-text（本地 Ollama）"
+              value="nomic-embed-text"
+            />
           </el-select>
+          <div class="form-item-tip">
+            未配置 OpenAI Key 时，选择 nomic-embed-text 可使用本机 Ollama 生成真实向量（需先执行 ollama pull nomic-embed-text）
+          </div>
         </el-form-item>
         <el-form-item label="分块大小">
           <el-input-number
@@ -520,16 +610,27 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { useRAGStore } from '@/stores/rag'
 import { useAppStore } from '@/stores/app'
+import { useTenantStore } from '@/stores/tenant'
 import {
   Plus, Database, FolderOpen, FileText, Layers, GitBranch, Bot,
-  MoreVertical, Edit, Trash2, Upload, Play
+  MoreVertical, Edit, Trash2, Upload, Play, Users
 } from 'lucide-vue-next'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessageBox } from 'element-plus'
+import { APP_CONFIG } from '@/config'
 
+const DEFAULT_EMBEDDING_MODEL = APP_CONFIG.embedding.defaultModel
 const ragStore = useRAGStore()
 const appStore = useAppStore()
+const tenantStore = useTenantStore()
+const router = useRouter()
+const route = useRoute()
+
+const projectFilter = computed(() => String(route.query.collection || route.query.project || ''))
+const showProjectOnly = ref(false)
+const teamFilter = ref('')
 
 const activeTab = ref('collections')
 const showCollectionDialog = ref(false)
@@ -550,7 +651,9 @@ const pipelineFormRef = ref(null)
 const collectionForm = reactive({
   name: '',
   description: '',
-  embedding_model: 'text-embedding-ada-002',
+  vector_store: null,
+  tenant: null,
+  embedding_model: DEFAULT_EMBEDDING_MODEL,
   chunk_size: 1000,
   chunk_overlap: 200
 })
@@ -584,14 +687,28 @@ const pipelineRules = {
   collection: [{ required: true, message: '请选择文档集合', trigger: 'change' }]
 }
 
-const collections = computed(() => ragStore.collections)
+const collections = computed(() => {
+  let list = ragStore.collections
+  if (showProjectOnly.value) {
+    list = list.filter((c) => String(c.name || '').startsWith('project-'))
+  }
+  if (projectFilter.value) {
+    list = list.filter((c) => String(c.id) === projectFilter.value || String(c.name) === projectFilter.value)
+  }
+  if (teamFilter.value === 'mine') {
+    list = list.filter((c) => !c.tenant)
+  } else if (teamFilter.value) {
+    list = list.filter((c) => String(c.tenant || '') === teamFilter.value)
+  }
+  return list
+})
 const pipelines = computed(() => ragStore.pipelines)
 const isLoading = computed(() => ragStore.isLoading)
 const isSaving = computed(() => ragStore.isSaving)
 const isQuerying = computed(() => ragStore.isQuerying)
 
 function selectCollection(collection) {
-  appStore.$router.push(`/knowledge/${collection.id}`)
+  router.push(`/knowledge/${collection.id}`)
 }
 
 function editCollection(collection) {
@@ -599,6 +716,7 @@ function editCollection(collection) {
   Object.assign(collectionForm, {
     name: collection.name,
     description: collection.description,
+    tenant: collection.tenant || null,
     embedding_model: collection.embedding_model,
     chunk_size: collection.chunk_size,
     chunk_overlap: collection.chunk_overlap
@@ -736,7 +854,8 @@ function resetCollectionForm() {
   Object.assign(collectionForm, {
     name: '',
     description: '',
-    embedding_model: 'text-embedding-ada-002',
+    tenant: null,
+    embedding_model: DEFAULT_EMBEDDING_MODEL,
     chunk_size: 1000,
     chunk_overlap: 200
   })
@@ -756,9 +875,14 @@ function resetPipelineForm() {
 }
 
 onMounted(async () => {
+  if (route.query.collection) {
+    showProjectOnly.value = true
+  }
   await Promise.all([
     ragStore.fetchCollections(),
-    ragStore.fetchPipelines()
+    ragStore.fetchPipelines(),
+    ragStore.fetchVectorStores(),
+    tenantStore.fetchTenants()
   ])
 })
 </script>
@@ -784,7 +908,7 @@ onMounted(async () => {
 
   .subtitle {
     font-size: $font-size-sm;
-    color: var(--text-primary)-secondary;
+    color: var(--text-secondary);
     margin: $spacing-1 0 0;
   }
 }
@@ -807,7 +931,7 @@ onMounted(async () => {
   .empty-icon {
     width: 64px;
     height: 64px;
-    color: var(--text-primary)-tertiary;
+    color: var(--text-tertiary);
     margin-bottom: $spacing-4;
   }
 
@@ -817,12 +941,36 @@ onMounted(async () => {
   }
 
   p {
-    color: var(--text-primary)-secondary;
+    color: var(--text-secondary);
     margin: 0 0 $spacing-4;
   }
 }
 
-.collections-grid,
+.collections-grid {
+  margin-bottom: 12px;
+}
+
+.collection-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: $spacing-4;
+  margin-bottom: 12px;
+}
+
+.team-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: $spacing-2;
+  font-weight: $font-weight-normal;
+  vertical-align: middle;
+}
+
+.tag-icon {
+  width: 12px;
+  height: 12px;
+}
 .pipelines-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -879,7 +1027,7 @@ onMounted(async () => {
 
 .card-desc {
   font-size: $font-size-sm;
-  color: var(--text-primary)-secondary;
+  color: var(--text-secondary);
   margin: 0 0 $spacing-3;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -891,7 +1039,7 @@ onMounted(async () => {
   display: flex;
   gap: $spacing-4;
   font-size: $font-size-xs;
-  color: var(--text-primary)-tertiary;
+  color: var(--text-tertiary);
 
   .stat {
     display: flex;
@@ -913,7 +1061,7 @@ onMounted(async () => {
 
   .usage {
     font-size: $font-size-xs;
-    color: var(--text-primary)-tertiary;
+    color: var(--text-tertiary);
   }
 }
 
@@ -945,12 +1093,12 @@ onMounted(async () => {
       font-size: $font-size-sm;
       font-weight: $font-weight-semibold;
       margin: 0 0 $spacing-2;
-      color: var(--text-primary)-secondary;
+      color: var(--text-secondary);
     }
   }
 
   .response-content {
-    background: var(--bg-primary)-tertiary;
+    background: var(--bg-tertiary);
     padding: $spacing-4;
     border-radius: $radius-lg;
     font-size: $font-size-sm;
@@ -959,7 +1107,7 @@ onMounted(async () => {
   }
 
   .source-item {
-    background: var(--bg-primary)-tertiary;
+    background: var(--bg-tertiary);
     padding: $spacing-3;
     border-radius: $radius-md;
     margin-bottom: $spacing-2;
@@ -975,9 +1123,15 @@ onMounted(async () => {
 
     .source-score {
       font-size: $font-size-xs;
-      color: var(--text-primary)-tertiary;
+      color: var(--text-tertiary);
     }
   }
+}
+
+.form-item-tip {
+  font-size: $font-size-xs;
+  color: var(--text-tertiary);
+  margin-top: $spacing-1;
 }
 </style>
 

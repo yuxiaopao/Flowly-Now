@@ -78,6 +78,11 @@ export function formatFileSize(bytes) {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
 
+export function formatLocaleNumber(num, locale = 'zh-CN') {
+  if (num === null || num === undefined || Number.isNaN(Number(num))) return '0'
+  return Number(num).toLocaleString(locale)
+}
+
 /**
  * 格式化数字
  * @param {number} num - 数字
@@ -85,7 +90,7 @@ export function formatFileSize(bytes) {
  * @returns {string}
  */
 export function formatNumber(num, decimals = 0) {
-  if (num === null || num === undefined) return ''
+  if (num === null || num === undefined) return '0'
   return Number(num).toLocaleString('zh-CN', {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals
@@ -155,6 +160,7 @@ export default {
   formatRelativeTime,
   formatFileSize,
   formatNumber,
+  formatLocaleNumber,
   formatPercent,
   formatDuration,
   truncateText,

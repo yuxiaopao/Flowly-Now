@@ -4,6 +4,10 @@
     title="变量管理"
     size="560px"
     direction="rtl"
+    :show-close="true"
+    :close-on-click-modal="true"
+    :close-on-press-escape="true"
+    class="variable-panel-drawer"
     :before-close="handleClose"
   >
     <el-tabs
@@ -62,7 +66,7 @@
             label="名称"
             width="140"
           >
-            <template #default="{ row, $index }">
+            <template #default="{ row }">
               <el-input
                 v-if="row._editing"
                 v-model="row.name"
@@ -548,7 +552,10 @@
     </el-dialog>
 
     <div class="drawer-footer">
-      <el-button @click="handleClose">
+      <el-button
+        type="default"
+        @click="handleClose"
+      >
         关闭
       </el-button>
       <el-button
@@ -567,10 +574,8 @@ import { ref, reactive, computed, watch } from 'vue'
 import { useVariableStore } from '@/stores/variables'
 import { useAppStore } from '@/stores/app'
 import {
-  Plus, Upload, Download, RefreshCw, Key, Variable,
-  CheckCircle, X, AlertCircle
+  Plus, Upload, Download, RefreshCw, Key, Variable
 } from 'lucide-vue-next'
-import { ElMessage } from 'element-plus'
 
 const props = defineProps({
   modelValue: {
@@ -608,7 +613,6 @@ const importing = ref(false)
 const importJson = ref('')
 const importErrors = ref([])
 const editingVar = ref(null)
-const editingVarIndex = ref(-1)
 
 // 表单数据
 const editForm = reactive({
@@ -625,8 +629,34 @@ const secretVariables = ref([])
 const runtimeVariables = ref([])
 
 // 初始化数据
-function initData() {
-  // 从 store 加载环境变量
+async function initData() {
+  if (props.workflowId) {
+    try {
+      const { getVariables } = await import('@/api/variable')
+      const results = await getVariables(props.workflowId)
+      const list = results.results || results || []
+      envVariables.value = list
+        .filter(v => v.type !== 'secret')
+        .map(v => ({
+          ...v,
+          _editing: false,
+          _nameError: false,
+        }))
+      secretVariables.value = list
+        .filter(v => v.type === 'secret')
+        .map(v => ({
+          ...v,
+          createdAt: v.createdAt || v.created_at || new Date().toISOString(),
+        }))
+      refreshRuntime()
+      return
+    } catch (error) {
+      console.error('Failed to load workflow variables:', error)
+      appStore.error('加载工作流变量失败')
+    }
+  }
+
+  // 从 store 加载环境变量（无 workflowId 时）
   const allVars = variableStore.allVariables
   envVariables.value = Object.entries(allVars)
     .filter(([key]) => !key.includes('_description'))
@@ -666,9 +696,7 @@ function refreshRuntime() {
   try {
     runtimeVariables.value = variableStore.extractRuntimeVariables(props.nodes || [])
   } finally {
-    setTimeout(() => {
-      refreshing.value = false
-    }, 300)
+    refreshing.value = false
   }
 }
 
@@ -689,13 +717,13 @@ watch(visible, (val) => {
 // 类型标签样式
 function getTypeTagType(type) {
   const map = {
-    string: '',
+    string: 'info',
     number: 'success',
     boolean: 'warning',
     json: 'info',
     secret: 'danger'
   }
-  return map[type] || ''
+  return map[type] || 'info'
 }
 
 // 来源标签样式
@@ -791,7 +819,7 @@ function validateVarName(row) {
 
   // 检查重复
   const duplicate = envVariables.value.find(
-    (v, i) => v !== row && v.name === row.name
+    (v) => v !== row && v.name === row.name
   )
   if (duplicate) {
     row._nameError = true
@@ -804,7 +832,7 @@ function validateVarName(row) {
 }
 
 // 保存变量（行内编辑）
-function saveVariable(row) {
+async function saveVariable(row) {
   if (!row.name.trim()) {
     appStore.error('变量名不能为空')
     return
@@ -814,8 +842,39 @@ function saveVariable(row) {
     return
   }
 
+  if (props.workflowId) {
+    try {
+      const { createVariable, updateVariable } = await import('@/api/variable')
+      const payload = {
+        name: row.name,
+        value: row.value,
+        type: row.type,
+        environment: row.environment,
+        description: row.description,
+      }
+      if (row.id) {
+        await updateVariable(row.id, payload)
+      } else {
+        const created = await createVariable(props.workflowId, payload)
+        row.id = created.id
+      }
+    } catch (error) {
+      console.error('Failed to save variable:', error)
+      appStore.error('保存变量失败')
+      return
+    }
+  } else {
+    variableStore.setEnvironmentVariable(row.name, {
+      value: row.value,
+      type: row.type,
+      environment: row.environment,
+      description: row.description,
+    }, row.environment)
+  }
+
   row._editing = false
   appStore.success('变量已保存')
+  emit('change', { [row.name]: row })
 }
 
 // 取消编辑
@@ -828,7 +887,18 @@ function cancelEdit(row, index) {
 }
 
 // 删除变量
-function removeVariable(row, type) {
+async function removeVariable(row, type) {
+  if (props.workflowId && row.id) {
+    try {
+      const { deleteVariable } = await import('@/api/variable')
+      await deleteVariable(row.id)
+    } catch (error) {
+      console.error('Failed to delete variable:', error)
+      appStore.error('删除变量失败')
+      return
+    }
+  }
+
   if (type === 'secret') {
     const idx = secretVariables.value.findIndex(v => v.name === row.name)
     if (idx !== -1) {
@@ -841,29 +911,6 @@ function removeVariable(row, type) {
     }
   }
   appStore.success('变量已删除')
-}
-
-// 打开编辑对话框
-function openEditDialog(row = null) {
-  editingVar.value = row
-  if (row) {
-    Object.assign(editForm, {
-      name: row.name,
-      value: row.value,
-      type: row.type || 'string',
-      environment: row.environment || 'development',
-      description: row.description || ''
-    })
-  } else {
-    Object.assign(editForm, {
-      name: '',
-      value: '',
-      type: 'string',
-      environment: 'development',
-      description: ''
-    })
-  }
-  showEditDialog.value = true
 }
 
 // 保存编辑
@@ -1013,17 +1060,20 @@ function handleExport() {
 
 // 轮换密钥
 async function handleRotateSecret(row) {
+  if (!row.id) {
+    appStore.warning('该密钥未保存到服务器，无法轮换')
+    return
+  }
   try {
     const { rotateSecret } = await import('@/api/variable')
-    if (row.id) {
-      await rotateSecret(row.id)
-      appStore.success('密钥已轮换')
-    } else {
-      appStore.warning('该密钥未保存到服务器，无法轮换')
+    await rotateSecret(row.id)
+    appStore.success('密钥已轮换')
+    if (props.workflowId) {
+      await initData()
     }
-  } catch (e) {
-    // API 可能不存在，使用 mock
-    appStore.info('密钥轮换功能需要后端支持')
+  } catch (error) {
+    console.error('Failed to rotate secret:', error)
+    appStore.error('密钥轮换失败')
   }
 }
 
@@ -1059,16 +1109,14 @@ async function handleSaveAll() {
 
     // 如果有 workflowId，尝试同步到后端
     if (props.workflowId) {
-      try {
-        await variableStore.saveVariables(props.workflowId, vars)
-      } catch (e) {
-        // 后端 API 可能不存在，静默失败
-        console.warn('Failed to sync variables to backend:', e)
-      }
+      await variableStore.saveVariables(props.workflowId, vars)
     }
 
     appStore.success('所有变量已保存')
     emit('change', vars)
+  } catch (error) {
+    console.error('Failed to save all variables:', error)
+    appStore.error('保存变量失败')
   } finally {
     saving.value = false
   }

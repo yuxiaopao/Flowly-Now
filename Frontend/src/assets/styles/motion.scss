@@ -1,0 +1,245 @@
+// Flowly Motion System — 现代化动效与多彩边框修饰
+// 全部基于主题 CSS 变量，跟随四套主题切换
+// 引入位置：main.js（在 themes.scss 之后）
+
+// ============================================
+// 1. 关键帧
+// ============================================
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes slide-in-right {
+  from { opacity: 0; transform: translateX(18px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes border-flow {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 var(--accent-blue-soft); }
+  50%      { box-shadow: 0 0 16px 2px var(--accent-blue-soft); }
+}
+
+@keyframes shimmer-sweep {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(200%); }
+}
+
+// ============================================
+// 2. 入场动画工具类（页面加载交错显现）
+// ============================================
+
+.anim-fade-up {
+  animation: fade-up 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.anim-fade-in {
+  animation: fade-in 0.4s ease-out both;
+}
+
+.anim-scale-in {
+  animation: scale-in 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.anim-slide-in-right {
+  animation: slide-in-right 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+// 交错延迟（配合 v-for 列表 / 网格使用）
+@for $i from 1 through 12 {
+  .anim-stagger > *:nth-child(#{$i}) {
+    animation: fade-up 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation-delay: #{($i - 1) * 0.06}s;
+  }
+}
+
+.anim-delay-1 { animation-delay: 0.06s; }
+.anim-delay-2 { animation-delay: 0.12s; }
+.anim-delay-3 { animation-delay: 0.18s; }
+.anim-delay-4 { animation-delay: 0.24s; }
+.anim-delay-5 { animation-delay: 0.3s; }
+
+// ============================================
+// 3. 路由页面过渡（配合 App.vue <transition name="page">）
+// ============================================
+
+.page-enter-active {
+  transition: opacity 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+              transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.page-leave-active {
+  transition: opacity 0.18s ease-in;
+}
+
+.page-enter-from {
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+.page-leave-to {
+  opacity: 0;
+}
+
+// ============================================
+// 4. 悬停微交互
+// ============================================
+
+.hover-lift {
+  transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1),
+              box-shadow 0.25s cubic-bezier(0.22, 1, 0.36, 1),
+              border-color 0.25s ease;
+
+  &:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-lg);
+  }
+}
+
+.hover-glow {
+  transition: box-shadow 0.3s ease, border-color 0.3s ease;
+
+  &:hover {
+    border-color: var(--accent-blue);
+    box-shadow: 0 0 0 1px var(--accent-blue-soft), 0 8px 24px var(--accent-blue-soft);
+  }
+}
+
+// ============================================
+// 5. 多彩边框修饰
+// ============================================
+
+// 渐变描边卡片：双层背景实现（内容层 + 渐变边框层）
+@mixin gradient-border($gradient) {
+  position: relative;
+  background: var(--card-bg);
+  border: 1px solid transparent;
+  background-clip: padding-box;
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    z-index: -1;
+    border-radius: inherit;
+    background: $gradient;
+  }
+}
+
+.border-gradient-brand   { @include gradient-border(var(--border-gradient-brand)); }
+.border-gradient-warm    { @include gradient-border(var(--border-gradient-warm)); }
+.border-gradient-cool    { @include gradient-border(var(--border-gradient-cool)); }
+.border-gradient-rainbow { @include gradient-border(var(--border-gradient-rainbow)); }
+
+// 流光彩色边框（动态流动渐变）
+.border-flow {
+  position: relative;
+  background: var(--card-bg);
+  border: 1px solid transparent;
+  background-clip: padding-box;
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    z-index: -1;
+    border-radius: inherit;
+    background: var(--border-gradient-rainbow);
+    background-size: 300% 300%;
+    animation: border-flow 6s ease infinite;
+  }
+}
+
+// 顶部彩色描边（hover 时显现，全宽渐变）
+.border-top-accent {
+  position: relative;
+  overflow: hidden;
+
+  &::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: var(--border-gradient-brand);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+
+  &:hover::after,
+  &.is-active::after {
+    opacity: 1;
+  }
+}
+
+// 单色彩边变体（卡片分类修饰用）
+.border-accent-cyan    { border-color: var(--accent-cyan-soft) !important; }
+.border-accent-violet  { border-color: var(--accent-violet-soft) !important; }
+.border-accent-amber   { border-color: var(--accent-amber-soft) !important; }
+.border-accent-emerald { border-color: var(--accent-emerald-soft) !important; }
+.border-accent-rose    { border-color: var(--accent-rose-soft) !important; }
+.border-accent-blue    { border-color: var(--accent-blue-soft) !important; }
+
+// ============================================
+// 6. 骨架屏微光
+// ============================================
+
+.skeleton-shimmer {
+  position: relative;
+  overflow: hidden;
+  background: var(--surface-muted);
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    width: 50%;
+    background: linear-gradient(90deg, transparent, var(--surface-strong), transparent);
+    animation: shimmer-sweep 1.6s ease-in-out infinite;
+  }
+}
+
+// ============================================
+// 7. 无障碍：尊重用户减少动效偏好
+// ============================================
+
+@media (prefers-reduced-motion: reduce) {
+  .anim-fade-up,
+  .anim-fade-in,
+  .anim-scale-in,
+  .anim-slide-in-right,
+  .anim-stagger > *,
+  .border-flow::before,
+  .skeleton-shimmer::after {
+    animation: none !important;
+  }
+
+  .page-enter-active,
+  .page-leave-active,
+  .hover-lift,
+  .hover-glow {
+    transition: none !important;
+  }
+
+  .page-enter-from {
+    transform: none;
+  }
+}

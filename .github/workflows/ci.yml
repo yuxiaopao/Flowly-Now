@@ -88,6 +88,58 @@ jobs:
           REDIS_HOST: 127.0.0.1
         run: |
           pytest Backend --cov=Backend --cov-report=xml --cov-report=term
+          cd Backend
+          python manage.py cleanup_stale_executions --force-active --user-email=nlwftest@flowly.test || true
+
+      - name: Run NL2WF dialogue matrix (offline)
+        env:
+          DB_NAME: flowly_test
+          DB_USER: root
+          DB_PASSWORD: root
+          DB_HOST: 127.0.0.1
+          REDIS_HOST: 127.0.0.1
+          DEBUG: "True"
+          NL_WORKFLOW_USE_MOCK: "True"
+        run: |
+          cd Backend
+          python scripts/nl2wf_dialogue_e2e.py
+
+      - name: Seed smoke test user and demo data
+        env:
+          DB_NAME: flowly_test
+          DB_USER: root
+          DB_PASSWORD: root
+          DB_HOST: 127.0.0.1
+        run: |
+          cd Backend
+          python scripts/ensure_smoke_test_user.py
+
+      - name: Run user API smoke tests
+        env:
+          DB_NAME: flowly_test
+          DB_USER: root
+          DB_PASSWORD: root
+          DB_HOST: 127.0.0.1
+          REDIS_HOST: 127.0.0.1
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OLLAMA_HOST: ${{ secrets.OLLAMA_HOST }}
+          FLOWLY_REQUIRE_LLM: "1"
+        run: |
+          cd Backend
+          daphne -b 127.0.0.1 -p 8000 config.asgi:application &
+          SERVER_PID=$!
+          sleep 8
+          python scripts/frontend_user_api_smoke_test.py
+          SMOKE_EXIT=$?
+          python scripts/frontend_user_action_integration_test.py
+          ACTION_EXIT=$?
+          python scripts/llm_probe_test.py
+          LLM_EXIT=$?
+          python manage.py cleanup_stale_executions --force-active --user-email=nlwftest@flowly.test || true
+          kill $SERVER_PID || true
+          if [ $SMOKE_EXIT -ne 0 ] || [ $ACTION_EXIT -ne 0 ] || [ $LLM_EXIT -ne 0 ]; then
+            exit 1
+          fi
 
       - name: Upload coverage
         uses: codecov/codecov-action@v4

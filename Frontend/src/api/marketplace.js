@@ -1,4 +1,12 @@
 import { request } from './index'
+import {
+  getWorkflowTemplates,
+  getTemplate,
+  getFeaturedTemplates,
+  getTemplatesByCategory,
+  getTemplateCategories,
+  getTemplateCategory,
+} from './workflow'
 
 function unwrapListResponse(response) {
   if (Array.isArray(response)) {
@@ -29,73 +37,73 @@ function unwrapPaginatedResponse(response) {
 export const marketplaceApi = {
   // Workflow Templates
   getTemplates(params = {}) {
-    return request.get('/marketplace/templates/', params).then(unwrapPaginatedResponse)
+    return getWorkflowTemplates(params)
   },
 
   getTemplate(id) {
-    return request.get(`/marketplace/templates/${id}/`)
+    return getTemplate(id)
   },
 
   createTemplate(data) {
-    return request.post('/marketplace/templates/', data)
+    return request.post('/templates/', data)
   },
 
   updateTemplate(id, data) {
-    return request.patch(`/marketplace/templates/${id}/`, data)
+    return request.patch(`/templates/${id}/`, data)
   },
 
   deleteTemplate(id) {
-    return request.delete(`/marketplace/templates/${id}/`)
+    return request.delete(`/templates/${id}/`)
   },
 
   getFeaturedTemplates(params = {}) {
-    return request.get('/marketplace/templates/featured/', params).then(unwrapPaginatedResponse)
+    return getFeaturedTemplates(params)
   },
 
   getTemplatesByCategory(params = {}) {
-    return request.get('/marketplace/templates/by_category/', params).then(unwrapListResponse)
+    return getTemplatesByCategory(params)
   },
 
   installTemplate(id) {
-    return request.post(`/marketplace/templates/${id}/install/`)
+    return request.post(`/templates/${id}/install/`)
   },
 
   rateTemplate(id, rating) {
-    return request.post(`/marketplace/templates/${id}/rate/`, { rating })
+    return request.post(`/templates/${id}/rate/`, { rating })
   },
 
   getTemplateStats(id) {
-    return request.get(`/marketplace/templates/${id}/stats/`)
+    return request.get(`/templates/${id}/stats/`)
   },
 
   reportTemplate(id, reason) {
-    return request.post(`/marketplace/templates/${id}/report/`, { reason })
+    return request.post(`/templates/${id}/report/`, { reason })
   },
 
   // Categories
   getCategories(params = {}) {
-    return request.get('/marketplace/categories/', params)
+    return getTemplateCategories(params)
   },
 
   getCategory(id) {
-    return request.get(`/marketplace/categories/${id}/`)
+    return getTemplateCategory(id)
   },
 
   getCategoryTemplates(id, params = {}) {
-    return request.get(`/marketplace/categories/${id}/templates/`, params).then(unwrapPaginatedResponse)
+    return request.get('/templates/', { ...params, category: id }).then(unwrapPaginatedResponse)
   },
 
   // My Templates
   getMyTemplates(params = {}) {
-    return request.get('/marketplace/my-templates/', params).then(unwrapPaginatedResponse)
+    return request.get('/templates/mine/', params).then(unwrapPaginatedResponse)
   },
 
   publishTemplate(id) {
-    return request.post(`/marketplace/my-templates/${id}/publish/`)
+    return request.patch(`/templates/${id}/publish/`)
   },
 
   unpublishTemplate(id) {
-    return request.post(`/marketplace/my-templates/${id}/unpublish/`)
+    return request.patch(`/templates/${id}/unpublish/`)
   },
 
   getTemplateInstalls(id, params = {}) {
@@ -104,7 +112,7 @@ export const marketplaceApi = {
 
   // Installed Templates
   getInstalledTemplates(params = {}) {
-    return request.get('/marketplace/installed/', params).then(unwrapPaginatedResponse)
+    return request.get('/templates/installed/', params).then(unwrapPaginatedResponse)
   }
 }
 

@@ -1,13 +1,17 @@
 import { request } from './index'
-import { getApiBaseUrl } from '@/config'
+import { APP_CONFIG, getApiBaseUrl } from '@/config'
+
+const NL_REQUEST_TIMEOUT = APP_CONFIG.nlWorkflowRequestTimeout
 import Cookies from 'js-cookie'
 
 export const nlWorkflowApi = {
   /**
    * 获取可用的模型列表
    */
-  getModels() {
-    return request.get('/nl-workflow/models/')
+  getModels(includeAll = false) {
+    return request.get('/nl-workflow/models/', {
+      params: includeAll ? { include_all: true } : {}
+    })
   },
 
   /**
@@ -15,7 +19,7 @@ export const nlWorkflowApi = {
    * @param {Object} data - { description, name, model, temperature }
    */
   createSession(data) {
-    return request.post('/nl-workflow/sessions/', data)
+    return request.post('/nl-workflow/sessions/', data, { timeout: NL_REQUEST_TIMEOUT })
   },
 
   /**
@@ -60,7 +64,7 @@ export const nlWorkflowApi = {
     return request.post(`/nl-workflow/sessions/${sessionId}/message/`, {
       message,
       ...options
-    })
+    }, { timeout: NL_REQUEST_TIMEOUT })
   },
 
   /**
@@ -72,6 +76,14 @@ export const nlWorkflowApi = {
    */
   streamMessage(sessionId, message, options = {}) {
     const token = Cookies.get('access_token') || localStorage.getItem('access_token')
+    const { workflow, workflowJson, ...rest } = options
+    const payload = {
+      message,
+      ...rest
+    }
+    if (workflow || workflowJson) {
+      payload.workflow = workflow || workflowJson
+    }
     return fetch(`${getApiBaseUrl()}/nl-workflow/sessions/${sessionId}/message/stream/`, {
       method: 'POST',
       headers: {
@@ -79,10 +91,7 @@ export const nlWorkflowApi = {
         'Authorization': `Bearer ${token}`
       },
       credentials: 'include',
-      body: JSON.stringify({
-        message,
-        ...options
-      })
+      body: JSON.stringify(payload)
     })
   },
 
@@ -101,6 +110,10 @@ export const nlWorkflowApi = {
    */
   streamWorkflow(data) {
     const token = Cookies.get('access_token') || localStorage.getItem('access_token')
+    const payload = { ...data }
+    if (data.workflow || data.workflowJson) {
+      payload.workflow = data.workflow || data.workflowJson
+    }
     return fetch(`${getApiBaseUrl()}/nl-workflow/stream/`, {
       method: 'POST',
       headers: {
@@ -108,7 +121,7 @@ export const nlWorkflowApi = {
         'Authorization': `Bearer ${token}`
       },
       credentials: 'include',
-      body: JSON.stringify(data)
+      body: JSON.stringify(payload)
     })
   },
 
@@ -118,6 +131,14 @@ export const nlWorkflowApi = {
    */
   preview(data) {
     return request.post('/nl-workflow/preview/', data)
+  },
+
+  /**
+   * 编辑器排布助手同步应用（不占用 stream 限流配额）
+   * @param {Object} data - { message, workflow, mode?, model?, temperature? }
+   */
+  applyEditorAction(data) {
+    return request.post('/nl-workflow/editor/apply/', data, { timeout: NL_REQUEST_TIMEOUT })
   },
 
   /**

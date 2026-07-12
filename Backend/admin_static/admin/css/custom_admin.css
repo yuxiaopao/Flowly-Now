@@ -1,0 +1,600 @@
+/**
+ * Flowly Admin — Deep Blue + White Theme
+ * Tokens inlined for Jazzmin (single custom_css file; source: flowly_tokens.css)
+ */
+/** Flowly design tokens — keep in sync with flowly_tokens.css */
+:root {
+    --bg-base: #f0f6fc;
+    --bg-card: #ffffff;
+    --bg-glass: rgba(255,255,255,0.94);
+    --accent: #1d4ed8;
+    --accent-hover: #1e40af;
+    --accent-light: #2563eb;
+    --accent-pale: #60a5fa;
+    --accent-glow: rgba(29,78,216,0.2);
+    --accent-soft: rgba(29,78,216,0.08);
+    --navy-950: #0a1628;
+    --navy-900: #0f2847;
+    --navy-800: #1e3a5f;
+    --success: #10b981;
+    --warning: #f59e0b;
+    --danger: #ef4444;
+    --info: #0284c7;
+    --text-primary: #0f172a;
+    --text-secondary: #334155;
+    --text-muted: #64748b;
+    --border: rgba(15,40,71,0.1);
+    --border-strong: rgba(15,40,71,0.16);
+    --shadow-sm: 0 1px 2px rgba(10,22,40,0.04);
+    --shadow-md: 0 4px 12px rgba(10,22,40,0.06);
+    --shadow-lg: 0 8px 30px rgba(10,22,40,0.08);
+    --shadow-xl: 0 20px 50px rgba(10,22,40,0.1);
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --radius-xl: 24px;
+    --sidebar-bg: linear-gradient(180deg, #0a1628 0%, #0f2847 100%);
+    --sidebar-w: 248px;
+    --content-gutter: 20px;
+    --flowly-navy-950: var(--navy-950);
+    --flowly-navy-900: var(--navy-900);
+    --flowly-navy-800: var(--navy-800);
+    --flowly-blue-700: var(--accent);
+    --flowly-blue-600: var(--accent-light);
+    --flowly-blue-400: var(--accent-pale);
+    --flowly-blue-100: #dbeafe;
+    --flowly-accent: var(--accent);
+    --flowly-accent-hover: var(--accent-hover);
+    --flowly-accent-soft: var(--accent-soft);
+    --flowly-accent-glow: var(--accent-glow);
+}
+
+/* ─── Jazzmin overrides (AdminLTE 3 + 4) ─── */
+body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; background: #f0f6fc; }
+
+.main-sidebar,
+.app-sidebar {
+    background: var(--sidebar-bg) !important;
+    box-shadow: 4px 0 20px rgba(10, 22, 40, 0.25) !important;
+}
+
+.sidebar-menu > li > a,
+.app-sidebar .sidebar-menu .nav-link {
+    border-radius: 8px; margin: 3px 10px; padding: 10px 15px;
+    transition: all 0.25s ease; color: rgba(255, 255, 255, 0.85);
+    font-weight: 500;
+}
+.sidebar-menu > li > a:hover,
+.app-sidebar .sidebar-menu .nav-link:hover {
+    background: rgba(255, 255, 255, 0.1) !important; color: #fff;
+    transform: translateX(4px);
+}
+.sidebar-menu > li > a > i,
+.app-sidebar .sidebar-menu .nav-link .nav-icon { color: rgba(255, 255, 255, 0.55) !important; }
+
+.main-header.navbar,
+.app-header.navbar,
+.navbar-white.navbar-light {
+    background: #ffffff !important;
+    border-bottom: 1px solid rgba(15, 40, 71, 0.08) !important;
+    box-shadow: 0 1px 3px rgba(10, 22, 40, 0.06) !important;
+}
+
+.content-wrapper,
+.app-main { background: #f0f6fc !important; }
+
+.content-wrapper > .content,
+.app-content {
+    padding: var(--content-gutter) calc(var(--content-gutter) + 4px) !important;
+    max-width: none !important;
+    width: 100% !important;
+    box-sizing: border-box;
+    overflow: visible !important;
+}
+
+.content-wrapper > .content > .container-fluid,
+.app-content > .container-fluid {
+    max-width: none !important;
+    width: 100% !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+}
+
+#content-main.card,
+.content-wrapper > .content > .card,
+.content-wrapper .card.card-primary.card-outline,
+.app-content .card {
+    border: 1px solid rgba(15, 40, 71, 0.06) !important;
+    border-radius: var(--radius-md) !important;
+    box-shadow: 0 1px 3px rgba(10, 22, 40, 0.04) !important;
+    overflow: hidden;
+    background: #fff !important;
+}
+
+.card {
+    border: 1px solid rgba(15, 40, 71, 0.06) !important;
+    border-radius: var(--radius-md) !important;
+    box-shadow: 0 1px 3px rgba(10, 22, 40, 0.04) !important;
+    overflow: hidden;
+    background: #fff !important;
+}
+
+.btn-primary,
+.btn-outline-primary:hover {
+    background: var(--flowly-blue-700) !important;
+    border-color: var(--flowly-blue-700) !important;
+}
+
+.btn {
+    border-radius: 8px !important; font-weight: 600;
+    transition: all 0.2s; font-size: 0.875rem;
+}
+.btn:hover { transform: translateY(-1px); box-shadow: 0 4px 8px rgba(10, 22, 40, 0.1); }
+
+.table { border-collapse: separate !important; border-spacing: 0; }
+.table thead th {
+    background: #f8fafc !important;
+    color: var(--flowly-navy-800) !important; font-weight: 700; font-size: 0.75rem;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    border-bottom: 2px solid rgba(15, 40, 71, 0.1) !important;
+    padding: 12px 16px !important;
+}
+.table tbody tr { transition: background 0.15s; }
+.table tbody tr:hover td { background: var(--flowly-accent-soft) !important; }
+.table tbody td {
+    padding: 12px 16px !important; vertical-align: middle;
+    border-bottom: 1px solid rgba(15, 40, 71, 0.06) !important;
+}
+
+.form-control {
+    border-radius: 8px !important; border: 1.5px solid rgba(15, 40, 71, 0.12) !important;
+    padding: 9px 14px !important; transition: all 0.2s; background: #fff !important;
+}
+.form-control:focus {
+    border-color: var(--flowly-blue-700) !important;
+    box-shadow: 0 0 0 3px var(--flowly-accent-glow) !important;
+}
+
+.pagination .page-item .page-link {
+    border-radius: 8px !important; margin: 0 3px;
+    border: 1.5px solid rgba(15, 40, 71, 0.1); color: #334155;
+    font-weight: 600; font-size: 0.85rem; padding: 7px 13px;
+    transition: all 0.2s; background: #fff;
+}
+.pagination .page-item .page-link:hover {
+    border-color: var(--flowly-blue-700); color: var(--flowly-blue-700);
+}
+.pagination .page-item.active .page-link {
+    background: var(--flowly-blue-700) !important;
+    border-color: var(--flowly-blue-700) !important;
+    color: #fff !important;
+    box-shadow: 0 2px 8px rgba(29, 78, 216, 0.35);
+}
+
+.sidebar-menu li.active > a,
+.app-sidebar .sidebar-menu .nav-link.active {
+    background: rgba(29, 78, 216, 0.22) !important;
+    color: #fff !important; font-weight: 700;
+}
+.sidebar-menu li.active > a i,
+.app-sidebar .sidebar-menu .nav-link.active .nav-icon { color: var(--flowly-blue-400) !important; }
+
+/* ─── 侧边栏分组折叠（treeview） ─── */
+.main-sidebar,
+.app-sidebar {
+    width: var(--sidebar-w) !important;
+    min-width: var(--sidebar-w);
+    height: 100vh !important;
+    overflow: hidden !important;
+    transition: width 0.25s ease, min-width 0.25s ease;
+}
+
+/* 汉堡按钮：整体侧栏收起为图标栏 */
+body.sidebar-mini.sidebar-collapse .main-sidebar,
+body.sidebar-collapse .main-sidebar,
+body.sidebar-mini.sidebar-collapse .app-sidebar,
+body.sidebar-collapse .app-sidebar {
+    width: 4.6rem !important;
+    min-width: 4.6rem !important;
+}
+
+body.sidebar-mini.sidebar-collapse .main-sidebar .sidebar,
+body.sidebar-collapse .main-sidebar .sidebar,
+body.sidebar-mini.sidebar-collapse .app-sidebar .sidebar,
+body.sidebar-collapse .app-sidebar .sidebar {
+    width: 4.6rem !important;
+    overflow-x: hidden !important;
+}
+
+body.sidebar-collapse .flowly-sidebar-tools {
+    display: none !important;
+}
+
+/* ─── 统一滚动：仅主内容区显示滚动条；侧栏可滚但隐藏滚动条 ─── */
+html,
+body {
+    height: 100%;
+    overflow: hidden;
+}
+
+.wrapper {
+    height: 100vh;
+    overflow: hidden;
+}
+
+.content-wrapper,
+.app-main {
+    height: calc(100vh - 3.5rem) !important;
+    min-height: 0 !important;
+    max-height: calc(100vh - 3.5rem) !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+}
+
+.main-sidebar .sidebar,
+.app-sidebar .sidebar {
+    height: calc(100vh - 3.5rem - 1px) !important;
+    max-height: calc(100vh - 3.5rem - 1px) !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    overscroll-behavior: contain;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.main-sidebar .sidebar::-webkit-scrollbar,
+.app-sidebar .sidebar::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+    display: none;
+}
+
+/* Flowly 面板随主内容区滚动，不再嵌套独立滚动容器 */
+.flowly-content-wrap,
+.flowly-shell,
+.flowly-content-inner,
+.settings-panel,
+.settings-main {
+    max-height: none !important;
+    overflow: visible !important;
+}
+
+.sidebar .nav-sidebar > .nav-item > .nav-link,
+.app-sidebar .nav-sidebar > .nav-item > .nav-link {
+    font-weight: 600;
+    font-size: 0.875rem;
+}
+
+.sidebar .nav-sidebar .nav-item.has-treeview > .nav-link,
+.app-sidebar .nav-sidebar .nav-item.has-treeview > .nav-link {
+    cursor: pointer;
+    user-select: none;
+}
+
+.sidebar .nav-sidebar .nav-item.has-treeview > .nav-link .right,
+.app-sidebar .nav-sidebar .nav-item.has-treeview > .nav-link .right {
+    transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+    opacity: 0.75;
+}
+
+.sidebar .nav-sidebar .nav-item.has-treeview.menu-open > .nav-link .right,
+.app-sidebar .nav-sidebar .nav-item.has-treeview.menu-open > .nav-link .right {
+    transform: rotate(-90deg);
+    opacity: 1;
+}
+
+.sidebar .nav-sidebar .nav-treeview,
+.app-sidebar .nav-sidebar .nav-treeview {
+    padding-left: 0.35rem;
+    margin-left: 0.65rem;
+    border-left: 1px solid rgba(255, 255, 255, 0.12);
+    overflow: hidden;
+}
+
+.sidebar .nav-sidebar .nav-item.has-treeview:not(.menu-open) > .nav-treeview,
+.app-sidebar .nav-sidebar .nav-item.has-treeview:not(.menu-open) > .nav-treeview {
+    display: none !important;
+}
+
+.sidebar .nav-sidebar .nav-item.has-treeview.menu-open > .nav-treeview,
+.app-sidebar .nav-sidebar .nav-item.has-treeview.menu-open > .nav-treeview {
+    display: block !important;
+}
+
+.sidebar .nav-sidebar .nav-treeview > .nav-item > .nav-link,
+.app-sidebar .nav-sidebar .nav-treeview > .nav-item > .nav-link {
+    padding: 8px 12px 8px 14px !important;
+    margin: 2px 8px !important;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.78) !important;
+}
+
+.sidebar .nav-sidebar .nav-treeview > .nav-item > .nav-link:hover,
+.app-sidebar .nav-sidebar .nav-treeview > .nav-item > .nav-link:hover {
+    transform: none;
+    background: rgba(255, 255, 255, 0.08) !important;
+}
+
+.sidebar .nav-sidebar .nav-treeview .nav-icon,
+.app-sidebar .nav-sidebar .nav-treeview .nav-icon {
+    font-size: 0.72rem !important;
+    width: 1.1rem !important;
+}
+
+.sidebar .nav-sidebar .nav-item.has-treeview.menu-open > .nav-link,
+.app-sidebar .nav-sidebar .nav-item.has-treeview.menu-open > .nav-link {
+    background: rgba(255, 255, 255, 0.08) !important;
+    color: #fff !important;
+}
+
+.sidebar .nav-sidebar .nav-treeview .nav-link.active,
+.app-sidebar .nav-sidebar .nav-treeview .nav-link.active {
+    background: rgba(29, 78, 216, 0.28) !important;
+    color: #fff !important;
+}
+
+.flowly-sidebar-tools {
+    display: flex;
+    gap: 6px;
+    padding: 0 12px 10px;
+    margin-top: -4px;
+}
+
+.flowly-sidebar-tool {
+    flex: 1;
+    min-height: 32px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.06);
+    color: rgba(255, 255, 255, 0.82);
+    font-size: 0.72rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.flowly-sidebar-tool:hover {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.22);
+    color: #fff;
+}
+
+.flowly-sidebar-tool:focus-visible {
+    outline: 2px solid var(--flowly-blue-400);
+    outline-offset: 2px;
+}
+
+@media (max-width: 991.98px) {
+    .main-sidebar,
+    .app-sidebar {
+        width: min(86vw, 300px) !important;
+        min-width: 0;
+    }
+
+    html,
+    body {
+        overflow: hidden;
+    }
+
+    .content-wrapper,
+    .app-main {
+        height: calc(100vh - 3.5rem) !important;
+        max-height: calc(100vh - 3.5rem) !important;
+    }
+
+    .content-wrapper > .content,
+    .app-content {
+        padding: 12px 14px !important;
+    }
+
+    .flowly-content-wrap {
+        padding: 10px 12px 16px;
+    }
+
+    .flowly-sidebar-tools {
+        padding: 0 10px 8px;
+    }
+}
+
+@media (max-width: 575.98px) {
+    .content-wrapper > .content,
+    .app-content {
+        padding: 8px 10px !important;
+    }
+
+    .flowly-sidebar-tools {
+        padding: 0 10px 8px;
+    }
+}
+
+.quick-links { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
+
+.small-box {
+    border-radius: 12px !important; border: none !important;
+    box-shadow: 0 1px 3px rgba(10, 22, 40, 0.06) !important;
+    transition: all 0.25s ease;
+}
+.small-box:hover { transform: translateY(-3px); box-shadow: 0 8px 25px rgba(10, 22, 40, 0.1) !important; }
+
+/* ─── Login page ─── */
+.login-page,
+body.hold-transition.jazzmin-login-page {
+    background: linear-gradient(135deg, #0a1628 0%, #0f2847 50%, #1e3a5f 100%) !important;
+}
+.login-box, .login-card {
+    border-radius: 20px !important; overflow: hidden;
+    border: none !important;
+    box-shadow: 0 25px 60px rgba(10, 22, 40, 0.5) !important;
+}
+.login-box-msg, .login-logo { font-weight: 800 !important; letter-spacing: -0.02em; }
+.login-box .card { border: none !important; background: #fff !important; }
+
+/* ─── Navbar brand ─── */
+.brand-link { font-weight: 700 !important; letter-spacing: -0.01em; color: var(--flowly-navy-900) !important; }
+.brand-link .brand-image {
+    opacity: 0.95;
+    filter: drop-shadow(0 2px 4px rgba(10, 22, 40, 0.15));
+    max-height: 36px !important;
+    width: auto !important;
+    object-fit: contain !important;
+}
+
+/* ─── Breadcrumb / content-header (B5) ─── */
+.content-header,
+.app-content-header {
+    padding: 16px 24px !important;
+    background: #fff !important;
+    border-bottom: 1px solid rgba(15, 40, 71, 0.08) !important;
+    margin-bottom: 0 !important;
+}
+.content-header h1,
+.content-header .m-0,
+.app-content-header h3 {
+    font-size: 1.35rem !important;
+    font-weight: 800 !important;
+    color: var(--flowly-navy-900) !important;
+    letter-spacing: -0.02em;
+}
+.breadcrumb { background: transparent !important; padding: 0 !important; font-size: 0.82rem !important; }
+.breadcrumb-item a { color: var(--flowly-blue-700) !important; font-weight: 500; }
+.breadcrumb-item.active { color: #64748b !important; }
+
+.object-tools a {
+    border-radius: 8px !important; font-weight: 600 !important;
+    background: var(--flowly-blue-700) !important; color: #fff !important;
+    border: none !important;
+}
+
+.select2-container--default .select2-selection--single {
+    border-radius: 8px !important;
+    border: 1.5px solid rgba(15, 40, 71, 0.12) !important;
+    height: 38px !important;
+}
+.select2-container--default .select2-selection--single .select2-selection__rendered { line-height: 36px !important; }
+
+.alert { border-radius: 10px !important; border: none !important; font-weight: 500; }
+.alert-info { background: var(--flowly-blue-100) !important; color: var(--flowly-navy-800) !important; }
+
+.module h2, .module caption {
+    background: linear-gradient(135deg, var(--flowly-navy-900), var(--flowly-blue-700)) !important;
+    border-radius: 8px 8px 0 0 !important;
+    color: #fff !important;
+}
+
+.submit-row {
+    border-radius: 0 0 12px 12px !important;
+    background: #f8fafc !important;
+    border-top: 1px solid rgba(15, 40, 71, 0.08) !important;
+}
+
+/* B-04: changeform 主保存按钮对齐 f-btn-primary */
+.card-footer,
+.submit-row {
+    padding: 14px 20px !important;
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+    align-items: center !important;
+}
+
+input[name="_save"],
+button[name="_save"] {
+    background: var(--flowly-blue-700) !important;
+    border-color: var(--flowly-blue-700) !important;
+    color: #fff !important;
+    border-radius: 8px !important;
+    font-weight: 600 !important;
+    padding: 8px 18px !important;
+}
+
+input[name="_save"]:hover,
+button[name="_save"]:hover {
+    background: var(--flowly-accent-hover) !important;
+    border-color: var(--flowly-accent-hover) !important;
+}
+
+input[name="_addanother"],
+input[name="_continue"],
+button[name="_addanother"],
+button[name="_continue"] {
+    border-radius: 8px !important;
+    font-weight: 600 !important;
+}
+
+.user-panel { border-bottom: 1px solid rgba(255,255,255,0.08) !important; }
+.user-panel .info a { color: #e2e8f0 !important; font-weight: 600; }
+
+.f-health-dot.error { background: #ef4444; box-shadow: 0 0 8px rgba(239,68,68,0.5); }
+.f-health-dot.unknown { background: #94a3b8; }
+
+@keyframes fade-up {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+.content-wrapper > .content,
+.app-content { animation: fade-up 0.35s ease-out; }
+
+.login-box { border-radius: 16px !important; overflow: hidden; }
+.login-card-body { padding: 30px 24px !important; }
+
+/* ─── Top nav links ─── */
+.navbar-nav .nav-link { color: var(--flowly-navy-800) !important; font-weight: 500; }
+.navbar-nav .nav-link:hover { color: var(--flowly-blue-700) !important; }
+
+@media print {
+    .main-sidebar, .app-sidebar, .main-header, .app-header, .btn, .action-buttons { display: none !important; }
+    .content-wrapper, .app-main { margin: 0 !important; padding: 0 !important; }
+    .card { box-shadow: none !important; border: 1px solid #ddd !important; }
+}
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+/* ─── Changelist / 过滤器增强 ─── */
+#changelist-search .form-control,
+#searchbar {
+    border-radius: 10px !important;
+    min-width: 280px;
+    padding-left: 14px !important;
+}
+#changelist .actions {
+    padding: 12px 16px !important;
+    background: #f8fafc !important;
+    border-radius: var(--radius-sm) !important;
+    margin-bottom: 12px !important;
+}
+#changelist .actions select {
+    border-radius: 8px !important;
+    font-weight: 600;
+}
+#changelist-filter {
+    border-radius: var(--radius-md) !important;
+    border: 1px solid var(--border) !important;
+    background: #fff !important;
+    box-shadow: var(--shadow-sm) !important;
+}
+#changelist-filter h2 {
+    font-size: 0.72rem !important;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted) !important;
+}
+.paginator {
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+.change-list .empty {
+    padding: 48px 24px !important;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.95rem;
+}
+.deletelink, a.deletelink {
+    color: var(--danger) !important;
+    font-weight: 600 !important;
+}

@@ -3,6 +3,7 @@
  */
 
 import { defineStore } from 'pinia'
+import { APP_CONFIG } from '@/config'
 import {
   getProviders,
   getModels,
@@ -285,7 +286,7 @@ export const useGatewayStore = defineStore('gateway', {
 
     // ==================== Embeddings ====================
 
-    async getEmbeddings(texts, model = 'text-embedding-ada-002') {
+    async getEmbeddings(texts, model = APP_CONFIG.embedding.defaultModel) {
       this.embeddingsLoading = true
       this.error = null
       try {

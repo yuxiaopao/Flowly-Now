@@ -23,7 +23,7 @@ from .utils import (
     download_from_url, download_from_s3, ensure_storage_dir
 )
 
-logger = logging.getLogger(__name__)
+from tenants.access import get_accessible_tenant_ids
 
 
 class DatasetViewSet(viewsets.ModelViewSet):
@@ -40,7 +40,7 @@ class DatasetViewSet(viewsets.ModelViewSet):
         """Return datasets filtered by tenant and user access."""
         user = self.request.user
         queryset = Dataset.objects.filter(
-            Q(tenant__isnull=True) | Q(tenant__in=user.tenants.values_list('tenant', flat=True))
+            Q(tenant__isnull=True) | Q(tenant_id__in=get_accessible_tenant_ids(user))
         )
 
         source = self.request.query_params.get('source')
@@ -428,10 +428,12 @@ class DatasetViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
     def _get_tenant(self, request):
-        """Get tenant from request if available."""
-        if hasattr(request, 'user') and hasattr(request.user, 'current_tenant'):
-            return request.user.current_tenant
-        return None
+        """Get user's primary active tenant."""
+        ids = get_accessible_tenant_ids(request.user)
+        if not ids:
+            return None
+        from tenants.models import Tenant
+        return Tenant.objects.filter(id=ids[0]).first()
 
     def _process_dataset(self, dataset):
         """Process an uploaded dataset file."""

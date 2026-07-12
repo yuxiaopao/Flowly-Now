@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div
     class="reranker-node"
     :class="{ selected, expanded: isExpanded, 'is-running': isRunning, 'is-completed': isCompleted, 'is-failed': isFailed }"
@@ -10,16 +10,7 @@
     />
 
     <div class="node-header">
-      <div
-        class="node-type-badge"
-        :style="{ backgroundColor: nodeColor + '22', borderColor: nodeColor }"
-      >
-        <Layers
-          class="badge-icon"
-          :style="{ color: nodeColor }"
-        />
-        <span :style="{ color: nodeColor }">重排序</span>
-      </div>
+      <NodeTypeBadge :node-type="NODE_TYPE" />
       <button
         class="action-btn"
         @click.stop="toggleExpand"
@@ -33,12 +24,14 @@
 
     <div class="node-name-section">
       <input
+        :id="id ? `node-label-${id}` : undefined"
+        name="node-label"
         v-model="localName"
         class="node-name-input"
         placeholder="节点名称..."
         @blur="handleChange"
         @keydown.enter="handleChange"
-        @click.stop
+        @click.stop="handleSelect"
       >
     </div>
 
@@ -211,6 +204,9 @@ import { ref, watch, computed } from 'vue'
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
 import { Layers, ChevronDown, Loader } from 'lucide-vue-next'
 import { useExecutionStore } from '@/stores/execution'
+import NodeTypeBadge from '@/components/workflow/nodes/NodeTypeBadge.vue'
+import { useNodePresentation } from '@/composables/useNodePresentation'
+
 
 const props = defineProps({
   id: { type: String, default: '' },
@@ -218,12 +214,14 @@ const props = defineProps({
   selected: { type: Boolean, default: false }
 })
 
+const NODE_TYPE = 'reranker'
+const { nodeIcon, nodeColor, nodeLabel } = useNodePresentation(NODE_TYPE)
+
 const emit = defineEmits(['select'])
 const { updateNodeData } = useVueFlow()
 const executionStore = useExecutionStore()
 
 const isExpanded = ref(false)
-const nodeColor = '#06b6d4'
 
 const localName = ref(props.data.label || '重排序')
 const localConfig = ref({
@@ -289,7 +287,10 @@ watch(() => props.data, (d) => {
   }
 }, { deep: true })
 
-function toggleExpand() { isExpanded.value = !isExpanded.value }
+function toggleExpand() {
+  handleSelect()
+  isExpanded.value = !isExpanded.value
+}
 
 function handleChange() {
   if (props.id) updateNodeData(props.id, { label: localName.value, config: { ...localConfig.value } })

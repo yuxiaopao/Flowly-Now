@@ -10,10 +10,7 @@
     />
 
     <div class="node-header">
-      <div class="node-type-badge">
-        <Mail class="badge-icon" />
-        <span>邮件</span>
-      </div>
+      <NodeTypeBadge :node-type="NODE_TYPE" />
       <button
         class="action-btn"
         @click.stop="toggleExpand"
@@ -27,12 +24,14 @@
 
     <div class="node-name-section">
       <input
+        :id="id ? `node-label-${id}` : undefined"
+        name="node-label"
         v-model="localName"
         class="node-name-input"
         placeholder="节点名称..."
         @blur="handleChange"
         @keydown.enter="handleChange"
-        @click.stop
+        @click.stop="handleSelect"
       >
     </div>
 
@@ -165,13 +164,20 @@
         </div>
         <div class="config-section">
           <label class="config-label">SMTP 配置</label>
+          <div
+            v-if="localConfig.useGlobalSmtp !== false"
+            class="smtp-global-hint"
+          >
+            使用全局 SMTP（可在右侧属性面板关闭并自定义）
+          </div>
           <el-input
-            v-model="localConfig.smtpConfig"
+            v-else
+            v-model="smtpConfigText"
             type="textarea"
             :rows="2"
             size="small"
             placeholder="SMTP 服务器配置 (可选)"
-            @change="handleChange"
+            @change="handleSmtpTextChange"
           />
         </div>
       </div>
@@ -189,12 +195,15 @@ import { ref, watch, computed } from 'vue'
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
 import { Mail, ChevronDown, FileText, Send, Loader } from 'lucide-vue-next'
 import { useExecutionStore } from '@/stores/execution'
+import NodeTypeBadge from '@/components/workflow/nodes/NodeTypeBadge.vue'
 
 const props = defineProps({
   id: { type: String, default: '' },
   data: { type: Object, default: () => ({}) },
   selected: { type: Boolean, default: false }
 })
+
+const NODE_TYPE = 'email'
 
 const emit = defineEmits(['select'])
 const { updateNodeData } = useVueFlow()
@@ -207,8 +216,11 @@ const localConfig = ref({
   cc: props.data.config?.cc || '',
   subject: props.data.config?.subject || '',
   body: props.data.config?.body || '',
-  smtpConfig: props.data.config?.smtpConfig || ''
+  useGlobalSmtp: props.data.config?.useGlobalSmtp !== false,
+  smtpConfig: props.data.config?.smtpConfig || {}
 })
+
+const smtpConfigText = ref(JSON.stringify(props.data.config?.smtpConfig || {}, null, 2))
 
 const nodeStatus = computed(() => executionStore.nodeStatusMap[props.id])
 const nodeOutput = computed(() => executionStore.nodeOutputs[props.id])
@@ -239,11 +251,32 @@ function truncate(str, len) {
 watch(() => props.data, (d) => {
   if (d) {
     localName.value = d.label || '发送邮件'
-    localConfig.value = { to: d.config?.to || '', cc: d.config?.cc || '', subject: d.config?.subject || '', body: d.config?.body || '', smtpConfig: d.config?.smtpConfig || '', ...d.config }
+    localConfig.value = {
+      to: d.config?.to || '',
+      cc: d.config?.cc || '',
+      subject: d.config?.subject || '',
+      body: d.config?.body || '',
+      useGlobalSmtp: d.config?.useGlobalSmtp !== false,
+      smtpConfig: d.config?.smtpConfig || {},
+      ...d.config,
+    }
+    smtpConfigText.value = JSON.stringify(d.config?.smtpConfig || {}, null, 2)
   }
 }, { deep: true })
 
-function toggleExpand() { isExpanded.value = !isExpanded.value }
+function handleSmtpTextChange() {
+  try {
+    localConfig.value.smtpConfig = JSON.parse(smtpConfigText.value || '{}')
+  } catch {
+    // keep previous config if JSON invalid
+  }
+  handleChange()
+}
+
+function toggleExpand() {
+  handleSelect()
+  isExpanded.value = !isExpanded.value
+}
 
 function handleChange() {
   if (props.id) updateNodeData(props.id, { label: localName.value, config: { ...localConfig.value } })
@@ -257,33 +290,66 @@ function handleSelect() {
 
 <style lang="scss" scoped>
 .email-node {
-  background: var(--node-bg, #dc2626);
-  border: 2px solid var(--node-border, #dc2626);
+  --email-accent: #dc2626;
+  --node-bg: #ffffff;
+  --node-text: #111827;
+  --node-text-muted: #4b5563;
+  --node-text-faint: #6b7280;
+  --node-border-color: #dc2626;
+  --node-divider: rgba(17, 24, 39, 0.1);
+  --node-surface: #f9fafb;
+  --node-input-bg: #ffffff;
+  --node-input-border: rgba(17, 24, 39, 0.14);
+  --node-shadow: rgba(220, 38, 38, 0.18);
+
+  background: var(--node-bg);
+  border: 2px solid var(--node-border-color);
   border-radius: 12px;
   min-width: 160px;
   max-width: 280px;
-  box-shadow: 0 4px 20px rgba(220, 38, 38, 0.3);
+  color: var(--node-text);
+  box-shadow: 0 4px 20px var(--node-shadow);
   transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
   cursor: pointer;
   overflow: hidden;
 
-  &.selected { box-shadow: 0 8px 32px rgba(220, 38, 38, 0.35), 0 0 0 2px rgba(220, 38, 38, 0.3); transform: translateY(-2px); }
-  &:hover:not(.selected) { box-shadow: 0 6px 24px rgba(220, 38, 38, 0.35); transform: translateY(-1px); }
+  &.selected {
+    box-shadow: 0 8px 32px var(--node-shadow), 0 0 0 2px rgba(220, 38, 38, 0.25);
+    transform: translateY(-2px);
+  }
+
+  &:hover:not(.selected) {
+    box-shadow: 0 6px 24px var(--node-shadow);
+    transform: translateY(-1px);
+  }
+
   &.is-running { animation: email-pulse 1.8s ease-in-out infinite; }
-  &.is-completed .email-card { border-color: rgba(16, 185, 129, 0.4); }
-  &.is-failed { border-color: rgba(239, 68, 68, 0.6) !important; }
+  &.is-completed .email-card { border-color: rgba(16, 185, 129, 0.45); }
+  &.is-failed { border-color: rgba(239, 68, 68, 0.75) !important; }
+}
+
+:global(.dark) .email-node {
+  --node-bg: #18181b;
+  --node-text: #f4f4f5;
+  --node-text-muted: #d4d4d8;
+  --node-text-faint: #a1a1aa;
+  --node-divider: rgba(255, 255, 255, 0.1);
+  --node-surface: #27272a;
+  --node-input-bg: #27272a;
+  --node-input-border: rgba(255, 255, 255, 0.14);
+  --node-shadow: rgba(0, 0, 0, 0.35);
 }
 
 @keyframes email-pulse {
-  0%, 100% { box-shadow: 0 4px 20px rgba(220, 38, 38, 0.3), 0 0 0 0 rgba(220, 38, 38, 0.3); }
-  50% { box-shadow: 0 4px 20px rgba(220, 38, 38, 0.3), 0 0 0 6px rgba(220, 38, 38, 0); }
+  0%, 100% { box-shadow: 0 4px 20px var(--node-shadow), 0 0 0 0 rgba(220, 38, 38, 0.25); }
+  50% { box-shadow: 0 4px 20px var(--node-shadow), 0 0 0 6px rgba(220, 38, 38, 0); }
 }
 
 .email-card {
   margin: 0 12px 8px;
   border-radius: 8px;
-  border: 2px solid rgba(255, 255, 255, 0.15);
-  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--node-divider);
+  background: var(--node-surface);
   overflow: hidden;
   transition: all 0.3s ease;
 }
@@ -293,7 +359,7 @@ function handleSelect() {
   align-items: center;
   justify-content: space-between;
   padding: 8px 10px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid var(--node-divider);
 }
 
 .email-from {
@@ -301,8 +367,19 @@ function handleSelect() {
   flex-direction: column;
   gap: 2px;
 
-  .email-label { font-size: 8px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(255, 255, 255, 0.4); }
-  .email-value { font-size: 10px; font-family: 'JetBrains Mono', monospace; color: rgba(255, 255, 255, 0.9); }
+  .email-label {
+    font-size: 8px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--node-text-faint);
+  }
+
+  .email-value {
+    font-size: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--node-text);
+  }
 }
 
 .email-send-status {
@@ -313,8 +390,8 @@ function handleSelect() {
   height: 24px;
 
   .send-icon { width: 16px; height: 16px; }
-  .ok { color: #4ade80; }
-  .spinning { animation: spin 1s linear infinite; color: rgba(255, 255, 255, 0.7); }
+  .ok { color: #16a34a; }
+  .spinning { animation: spin 1s linear infinite; color: var(--node-text-muted); }
 }
 
 @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
@@ -327,12 +404,36 @@ function handleSelect() {
   gap: 6px;
   margin-bottom: 4px;
 
-  .field-label { font-size: 8px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(255, 255, 255, 0.4); flex-shrink: 0; }
-  .field-value { font-size: 11px; font-weight: 600; color: white; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .field-label {
+    font-size: 8px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--node-text-faint);
+    flex-shrink: 0;
+  }
+
+  .field-value {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--node-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 }
 
 .email-snippet {
-  .snippet-text { font-size: 10px; color: rgba(255, 255, 255, 0.7); line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .snippet-text {
+    font-size: 10px;
+    color: var(--node-text-muted);
+    line-height: 1.4;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
 }
 
 .status-bar {
@@ -345,30 +446,226 @@ function handleSelect() {
   align-items: center;
   gap: 5px;
 
-  &.running { background: rgba(255, 255, 255, 0.15); color: white; border: 1px solid rgba(255, 255, 255, 0.25); }
-  &.completed { background: rgba(16, 185, 129, 0.2); color: #4ade80; border: 1px solid rgba(16, 185, 129, 0.3); }
-  &.failed { background: rgba(239, 68, 68, 0.2); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.3); }
+  &.running {
+    background: rgba(220, 38, 38, 0.08);
+    color: var(--email-accent);
+    border: 1px solid rgba(220, 38, 38, 0.2);
+  }
+
+  &.completed {
+    background: rgba(16, 185, 129, 0.12);
+    color: #15803d;
+    border: 1px solid rgba(16, 185, 129, 0.28);
+  }
+
+  &.failed {
+    background: rgba(239, 68, 68, 0.12);
+    color: #b91c1c;
+    border: 1px solid rgba(239, 68, 68, 0.28);
+  }
 }
 
-.status-running, .status-done, .status-error { display: flex; align-items: center; gap: 5px; }
-.status-icon { width: 12px; height: 12px; &.spinning { animation: spin 1s linear infinite; } }
-.status-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+:global(.dark) .status-bar {
+  &.completed { color: #4ade80; }
+  &.failed { color: #fca5a5; }
+}
 
-.node-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-bottom: 1px solid rgba(255, 255, 255, 0.1); background: rgba(255, 255, 255, 0.05); }
-.node-type-badge { display: flex; align-items: center; gap: 6px; padding: 3px 10px; background: rgba(255, 255, 255, 0.2); border: 1px solid rgba(255, 255, 255, 0.25); border-radius: 20px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: white; .badge-icon { width: 11px; height: 11px; } }
-.action-btn { width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 6px; cursor: pointer; color: rgba(255, 255, 255, 0.7); transition: all 0.15s ease; &:hover { background: rgba(255, 255, 255, 0.2); color: white; } .action-icon { width: 14px; height: 14px; transition: transform 0.2s ease; &.rotated { transform: rotate(180deg); } } }
+.status-running,
+.status-done,
+.status-error {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.status-icon {
+  width: 12px;
+  height: 12px;
+
+  &.spinning { animation: spin 1s linear infinite; }
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+.node-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--node-divider);
+  background: var(--node-surface);
+}
+
+.action-btn {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--node-input-bg);
+  border: 1px solid var(--node-input-border);
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--node-text-muted);
+  transition: all 0.15s ease;
+
+  &:hover {
+    background: var(--node-surface);
+    color: var(--node-text);
+    border-color: var(--email-accent);
+  }
+
+  .action-icon {
+    width: 14px;
+    height: 14px;
+    transition: transform 0.2s ease;
+
+    &.rotated { transform: rotate(180deg); }
+  }
+}
+
 .node-name-section { padding: 10px 12px 6px; }
-.node-name-input { width: 100%; background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 6px; padding: 6px 10px; font-size: 13px; font-weight: 600; color: white; outline: none; transition: all 0.15s ease; &::placeholder { color: rgba(255, 255, 255, 0.5); } &:focus { border-color: rgba(255, 255, 255, 0.4); background: rgba(255, 255, 255, 0.15); } }
-.compact-view { padding: 0 12px 10px; display: flex; flex-direction: column; gap: 4px; }
-.email-preview, .subject-preview { display: flex; align-items: center; gap: 6px; .preview-icon { width: 12px; height: 12px; color: rgba(255, 255, 255, 0.7); flex-shrink: 0; } .preview-text { font-size: 11px; color: rgba(255, 255, 255, 0.9); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } }
-.expanded-config { border-top: 1px solid rgba(255, 255, 255, 0.1); padding: 8px 12px 10px; display: flex; flex-direction: column; gap: 10px; }
-.config-section { display: flex; flex-direction: column; gap: 5px; }
-.config-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(255, 255, 255, 0.6); }
-:deep(.el-select), :deep(.el-input), :deep(.el-input-number) { width: 100%; .el-input__wrapper { background: rgba(255, 255, 255, 0.1) !important; border: 1px solid rgba(255, 255, 255, 0.15) !important; box-shadow: none !important; border-radius: 6px; } .el-input__inner { color: white !important; font-size: 12px !important; } }
-.expand-enter-active, .expand-leave-active { transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1); overflow: hidden; }
-.expand-enter-from, .expand-leave-to { opacity: 0; max-height: 0; }
-.expand-enter-to, .expand-leave-from { opacity: 1; max-height: 400px; }
-:deep(.vue-flow__handle) { width: 10px; height: 10px; background: #dc2626; border: 2px solid white; border-radius: 50%; &:hover { background: white; transform: scale(1.3); } }
-:global(.dark) { .email-node { --node-bg: linear-gradient(145deg, #dc2626 0%, #f87171 100%); --node-border: #dc2626; } }
-:global(.light) { .email-node { --node-bg: linear-gradient(145deg, #f87171 0%, #fca5a5 100%); --node-border: #dc2626; } }
+
+.node-name-input {
+  width: 100%;
+  background: var(--node-input-bg);
+  border: 1px solid var(--node-input-border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--node-text);
+  outline: none;
+  transition: all 0.15s ease;
+
+  &::placeholder { color: var(--node-text-faint); }
+
+  &:focus {
+    border-color: var(--email-accent);
+    box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.12);
+  }
+}
+
+.compact-view {
+  padding: 0 12px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.email-preview,
+.subject-preview {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
+  .preview-icon {
+    width: 12px;
+    height: 12px;
+    color: var(--email-accent);
+    flex-shrink: 0;
+  }
+
+  .preview-text {
+    font-size: 11px;
+    color: var(--node-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.expanded-config {
+  border-top: 1px solid var(--node-divider);
+  padding: 8px 12px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--node-surface);
+}
+
+.config-section {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.config-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--node-text-muted);
+}
+
+.smtp-global-hint {
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--node-input-border);
+  background: var(--node-input-bg);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--node-text-muted);
+}
+
+:deep(.el-select),
+:deep(.el-input),
+:deep(.el-input-number) {
+  width: 100%;
+
+  .el-input__wrapper {
+    background: var(--node-input-bg) !important;
+    border: 1px solid var(--node-input-border) !important;
+    box-shadow: none !important;
+    border-radius: 6px;
+  }
+
+  .el-input__inner,
+  .el-textarea__inner {
+    color: var(--node-text) !important;
+    font-size: 12px !important;
+    background: transparent !important;
+
+    &::placeholder {
+      color: var(--node-text-faint) !important;
+    }
+  }
+}
+
+.expand-enter-active,
+.expand-leave-active {
+  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  overflow: hidden;
+}
+
+.expand-enter-from,
+.expand-leave-to {
+  opacity: 0;
+  max-height: 0;
+}
+
+.expand-enter-to,
+.expand-leave-from {
+  opacity: 1;
+  max-height: 400px;
+}
+
+:deep(.vue-flow__handle) {
+  width: 10px;
+  height: 10px;
+  background: var(--email-accent);
+  border: 2px solid var(--node-bg);
+  border-radius: 50%;
+
+  &:hover {
+    background: var(--node-text);
+    transform: scale(1.3);
+  }
+}
 </style>

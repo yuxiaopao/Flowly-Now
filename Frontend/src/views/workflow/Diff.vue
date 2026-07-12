@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="workflow-diff-page">
     <div class="page-header">
       <div class="header-left">
@@ -35,7 +35,7 @@
               <div class="workflow-option">
                 <Workflow class="wf-icon" />
                 <span>{{ wf.name }}</span>
-                <span class="wf-date">{{ formatDate(wf.updated_at) }}</span>
+                <span class="wf-date">{{ formatDate(wf.updatedAt || wf.updated_at) }}</span>
               </div>
             </el-option>
           </el-select>
@@ -65,7 +65,7 @@
               <div class="workflow-option">
                 <Workflow class="wf-icon" />
                 <span>{{ wf.name }}</span>
-                <span class="wf-date">{{ formatDate(wf.updated_at) }}</span>
+                <span class="wf-date">{{ formatDate(wf.updatedAt || wf.updated_at) }}</span>
               </div>
             </el-option>
           </el-select>
@@ -182,7 +182,7 @@
                       :class="['mini-node', getNodeStatus(node.id)]"
                       :style="getNodeStyle(node)"
                     >
-                      {{ node.data?.label || node.type }}
+                      {{ getNodeLabel(node) }}
                     </div>
                   </div>
                 </div>
@@ -206,7 +206,7 @@
                       :class="['mini-node', getNodeStatus(node.id)]"
                       :style="getNodeStyle(node)"
                     >
-                      {{ node.data?.label || node.type }}
+                      {{ getNodeLabel(node) }}
                     </div>
                   </div>
                 </div>
@@ -250,7 +250,7 @@
                       />
                     </span>
                     <span class="node-type">{{ node.type }}</span>
-                    <span class="node-label">{{ node.data?.label || '未命名' }}</span>
+                    <span class="node-label">{{ getNodeLabel(node) }}</span>
                     <el-tag
                       size="small"
                       :type="getStatusTagType(node.diffStatus)"
@@ -429,7 +429,8 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import {
   Workflow, GitCompare, Copy, GitMerge,
   PlusCircle, MinusCircle, Edit, Minus, ArrowRight
@@ -439,6 +440,48 @@ import { useAppStore } from '@/stores/app'
 import { getWorkflowList, getWorkflowById, updateWorkflow } from '@/api/workflow'
 
 const appStore = useAppStore()
+const route = useRoute()
+
+function getNodeType(node) {
+  return node?.type || node?.nodeType || node?.node_type || 'unknown'
+}
+
+function getNodeLabel(node) {
+  return node?.data?.label || node?.name || getNodeType(node) || '未命名'
+}
+
+function normalizeWorkflowNode(node) {
+  if (!node) return node
+  const nodeType = getNodeType(node)
+  return {
+    ...node,
+    type: nodeType,
+    data: node.data || {
+      label: node.name || nodeType,
+      config: node.config || {},
+    },
+    position: node.position || {
+      x: node.positionX ?? node.position_x ?? 0,
+      y: node.positionY ?? node.position_y ?? 0,
+    },
+  }
+}
+
+function extractWorkflowGraph(data) {
+  const workflowData = data?.workflowData || data?.workflow_data || {}
+  const rawNodes = data?.nodes || workflowData.nodes || []
+  const rawEdges = data?.edges || workflowData.edges || []
+  return {
+    nodes: rawNodes.map(normalizeWorkflowNode),
+    edges: rawEdges,
+  }
+}
+
+function unwrapList(response) {
+  if (Array.isArray(response)) return response
+  if (Array.isArray(response?.results)) return response.results
+  return []
+}
 
 const workflowA = ref(null)
 const workflowB = ref(null)
@@ -457,7 +500,7 @@ const searchWorkflowsA = async (query) => {
   searchingA.value = true
   try {
     const res = await getWorkflowList({ search: query, page_size: 20 })
-    workflowListA.value = res.results || res || []
+    workflowListA.value = unwrapList(res)
   } catch (e) {
     appStore.error('加载工作流列表失败')
     workflowListA.value = []
@@ -470,7 +513,7 @@ const searchWorkflowsB = async (query) => {
   searchingB.value = true
   try {
     const res = await getWorkflowList({ search: query, page_size: 20 })
-    workflowListB.value = res.results || res || []
+    workflowListB.value = unwrapList(res)
   } catch (e) {
     appStore.error('加载工作流列表失败')
     workflowListB.value = []
@@ -483,10 +526,7 @@ const loadWorkflowA = async (id) => {
   try {
     const data = await getWorkflowById(id)
     workflowAName.value = data.name
-    workflowAData.value = {
-      nodes: data.nodes || [],
-      edges: data.edges || []
-    }
+    workflowAData.value = extractWorkflowGraph(data)
   } catch (e) {
     appStore.error('加载工作流详情失败')
   }
@@ -496,10 +536,7 @@ const loadWorkflowB = async (id) => {
   try {
     const data = await getWorkflowById(id)
     workflowBName.value = data.name
-    workflowBData.value = {
-      nodes: data.nodes || [],
-      edges: data.edges || []
-    }
+    workflowBData.value = extractWorkflowGraph(data)
   } catch (e) {
     appStore.error('加载工作流详情失败')
   }
@@ -520,6 +557,8 @@ const compareWorkflows = async () => {
 
   const addedNodes = nodesB.filter(n => !nodesAIds.has(n.id))
   const removedNodes = nodesA.filter(n => !nodesBIds.has(n.id))
+  const addedEdges = edgesB.filter(e => !edgesA.some(ex => ex.id === e.id))
+  const removedEdges = edgesA.filter(e => !edgesB.some(ex => ex.id === e.id))
 
   const modifiedNodes = nodesA.filter(a => {
     const b = nodesB.find(n => n.id === a.id)
@@ -527,11 +566,11 @@ const compareWorkflows = async () => {
     return JSON.stringify(a) !== JSON.stringify(b)
   }).map(a => ({
     ...a,
-    name: a.data?.label || a.type,
+    name: getNodeLabel(a),
     changes: {
       config: {
-        old: a.data?.config,
-        new: nodesB.find(n => n.id === a.id)?.data?.config
+        old: a.data?.config || a.config,
+        new: nodesB.find(n => n.id === a.id)?.data?.config || nodesB.find(n => n.id === a.id)?.config
       }
     }
   }))
@@ -548,21 +587,22 @@ const compareWorkflows = async () => {
       nodesRemoved: removedNodes.length,
       nodesModified: modifiedNodes.length,
       unchanged: unchangedNodes.length,
-      edgesAdded: edgesB.length - edgesA.length
+      edgesAdded: addedEdges.length,
+      edgesRemoved: removedEdges.length,
     },
     nodes: [
-      ...addedNodes.map(n => ({ id: n.id, type: n.type, name: n.data?.label || n.type, status: 'added' })),
-      ...removedNodes.map(n => ({ id: n.id, type: n.type, name: n.data?.label || n.type, status: 'removed' })),
+      ...addedNodes.map(n => ({ id: n.id, type: getNodeType(n), name: getNodeLabel(n), status: 'added' })),
+      ...removedNodes.map(n => ({ id: n.id, type: getNodeType(n), name: getNodeLabel(n), status: 'removed' })),
       ...modifiedNodes.map(n => ({ ...n, status: 'modified' })),
-      ...unchangedNodes.map(n => ({ id: n.id, type: n.type, name: n.data?.label || n.type, status: 'unchanged' }))
+      ...unchangedNodes.map(n => ({ id: n.id, type: getNodeType(n), name: getNodeLabel(n), status: 'unchanged' }))
     ],
     edges: [
-      ...edgesB.filter(e => !edgesA.some(ex => ex.id === e.id)).map(e => ({ ...e, status: 'added' })),
-      ...edgesA.filter(e => !edgesB.some(ex => ex.id === e.id)).map(e => ({ ...e, status: 'removed' }))
+      ...addedEdges.map(e => ({ ...e, status: 'added' })),
+      ...removedEdges.map(e => ({ ...e, status: 'removed' }))
     ],
     rawDiff: {
       nodes: { added: addedNodes, removed: removedNodes, modified: modifiedNodes },
-      edges: { added: edgesB.length - edgesA.length }
+      edges: { added: addedEdges, removed: removedEdges }
     }
   }
   } catch (e) {
@@ -585,7 +625,6 @@ const getNodeStatus = (nodeId) => {
 }
 
 const getNodeStyle = (node) => {
-  const status = getNodeStatus(node.id)
   return {
     left: `${(node.position?.x || 0) / 5}px`,
     top: `${(node.position?.y || 0) / 5}px`
@@ -633,6 +672,31 @@ const mergeChanges = () => {
     }
   }).catch(() => {})
 }
+
+onMounted(async () => {
+  await Promise.all([searchWorkflowsA(''), searchWorkflowsB('')])
+
+  const queryA = route.query.a || route.query.workflowA
+  const queryB = route.query.b || route.query.workflowB
+
+  if (queryA && queryB) {
+    workflowA.value = String(queryA)
+    workflowB.value = String(queryB)
+    await loadWorkflowA(workflowA.value)
+    await loadWorkflowB(workflowB.value)
+    compareWorkflows()
+    return
+  }
+
+  const candidates = workflowListA.value.filter(item => item?.id)
+  if (candidates.length >= 2 && route.query.auto === '1') {
+    workflowA.value = candidates[0].id
+    workflowB.value = candidates[1].id
+    await loadWorkflowA(workflowA.value)
+    await loadWorkflowB(workflowB.value)
+    compareWorkflows()
+  }
+})
 </script>
 
 <style lang="scss" scoped>
@@ -829,9 +893,9 @@ const mergeChanges = () => {
     font-size: 11px;
     white-space: nowrap;
 
-    &.added { background: rgba(16, 185, 129, 0.2); border: 1px solid var(--el-color-success); }
-    &.removed { background: rgba(239, 68, 68, 0.2); border: 1px solid var(--el-color-danger); }
-    &.modified { background: rgba(245, 158, 11, 0.2); border: 1px solid var(--el-color-warning); }
+    &.added { background: var(--success-bg); border: 1px solid var(--success); }
+    &.removed { background: var(--error-bg); border: 1px solid var(--error); }
+    &.modified { background: var(--warning-bg); border: 1px solid var(--warning); }
   }
 }
 
@@ -846,9 +910,9 @@ const mergeChanges = () => {
       border-radius: 4px;
       font-size: 12px;
 
-      &.added { background: rgba(16, 185, 129, 0.2); color: var(--el-color-success); }
-      &.removed { background: rgba(239, 68, 68, 0.2); color: var(--el-color-danger); }
-      &.modified { background: rgba(245, 158, 11, 0.2); color: var(--el-color-warning); }
+      &.added { background: var(--success-bg); color: var(--success); }
+      &.removed { background: var(--error-bg); color: var(--error); }
+      &.modified { background: var(--warning-bg); color: var(--warning); }
       &.unchanged { background: var(--el-fill-color); }
     }
   }
@@ -860,9 +924,9 @@ const mergeChanges = () => {
   margin-bottom: 8px;
   background: var(--el-fill-color-light);
 
-  &.added { background: rgba(16, 185, 129, 0.1); border-left: 3px solid var(--el-color-success); }
-  &.removed { background: rgba(239, 68, 68, 0.1); border-left: 3px solid var(--el-color-danger); }
-  &.modified { background: rgba(245, 158, 11, 0.1); border-left: 3px solid var(--el-color-warning); }
+  &.added { background: var(--success-bg); border-left: 3px solid var(--success); }
+  &.removed { background: var(--error-bg); border-left: 3px solid var(--error); }
+  &.modified { background: var(--warning-bg); border-left: 3px solid var(--warning); }
 
   .node-header {
     display: flex;
@@ -922,13 +986,13 @@ const mergeChanges = () => {
         }
 
         .old-value {
-          background: rgba(239, 68, 68, 0.1);
-          color: var(--el-color-danger);
+          background: var(--error-bg);
+          color: var(--error);
         }
 
         .new-value {
-          background: rgba(16, 185, 129, 0.1);
-          color: var(--el-color-success);
+          background: var(--success-bg);
+          color: var(--success);
         }
 
         .arrow-icon {
@@ -966,14 +1030,15 @@ const mergeChanges = () => {
 }
 
 .json-diff {
-  background: #1e1e2e;
+  background: var(--code-bg);
+  border: 1px solid var(--code-border);
   border-radius: 8px;
   padding: 16px;
   overflow: auto;
 
   pre {
     margin: 0;
-    color: #cdd6f4;
+    color: var(--code-text);
     font-family: 'JetBrains Mono', monospace;
     font-size: 13px;
   }

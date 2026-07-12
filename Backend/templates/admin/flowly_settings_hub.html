@@ -1,0 +1,105 @@
+{% extends "admin/flowly_base.html" %}
+{% load static %}
+
+{% block flowly_content %}
+<div class="f-panel settings-panel">
+
+    <div class="f-page-header">
+        <div class="f-page-header-main">
+            <h2><i class="fas fa-cogs"></i> 平台配置中心</h2>
+            <p>管理系统全局配置，变更将同步至用户端</p>
+        </div>
+        <div class="f-page-header-actions">
+            <button class="f-btn f-btn-ghost f-btn-sm" onclick="SettingsHub.refresh()">
+                <i class="fas fa-sync-alt"></i> 刷新
+            </button>
+        </div>
+    </div>
+
+    <div class="settings-layout">
+        <nav class="settings-nav" id="settingsNav"></nav>
+        <div class="settings-main">
+            <div id="settingsModuleTitle" class="settings-module-title"></div>
+            <div id="settingsFormArea" class="settings-form-area"></div>
+            <div id="settingsCrudArea" class="settings-crud-area"></div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'admin/js/settings_modules.js' %}"></script>
+<style>
+.settings-panel { width: 100%; max-width: none; }
+.settings-layout {
+    display: grid;
+    grid-template-columns: minmax(200px, 240px) minmax(0, 1fr);
+    gap: 24px;
+    margin-top: 4px;
+}
+.settings-nav {
+    background: #fff; border: 1px solid var(--border); border-radius: var(--radius-lg);
+    padding: 12px; box-shadow: var(--shadow-sm); height: fit-content;
+    position: sticky; top: 12px;
+}
+.settings-nav-item {
+    display: flex; align-items: center; gap: 10px; padding: 12px 14px;
+    min-height: 44px;
+    border-radius: var(--radius-sm); cursor: pointer; font-weight: 600; font-size: 0.88rem;
+    color: var(--text-secondary); transition: background 0.2s cubic-bezier(0.16, 1, 0.3, 1), color 0.2s ease;
+    border: none; background: transparent; width: 100%; text-align: left;
+}
+.settings-nav-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.settings-nav-item:hover { background: var(--accent-soft); color: var(--accent); }
+.settings-nav-item.active { background: var(--accent); color: #fefefe; }
+.settings-nav-item i { width: 18px; text-align: center; }
+.settings-main {
+    background: #fefefe;
+    border: 1px solid var(--border); border-radius: var(--radius-xl);
+    padding: 28px 32px; box-shadow: var(--shadow-sm); min-height: 560px;
+    width: 100%; min-width: 0;
+}
+.settings-module-title { font-size: 1.15rem; font-weight: 800; color: var(--text-primary); margin-bottom: 20px; }
+.settings-module-hint {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 14px 16px; margin-bottom: 18px;
+    background: rgba(29, 78, 216, 0.06); border: 1px solid rgba(29, 78, 216, 0.12);
+    border-radius: var(--radius-sm); font-size: 0.85rem; color: var(--text-secondary); line-height: 1.5;
+}
+.settings-module-hint a { color: var(--accent); font-weight: 600; text-decoration: none; }
+.settings-module-hint a:hover { text-decoration: underline; }
+.settings-form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; }
+.settings-field { display: flex; flex-direction: column; gap: 6px; }
+.settings-field label { font-weight: 600; font-size: 0.82rem; color: var(--text-secondary); }
+.settings-field .f-input { width: 100%; }
+.settings-actions { margin-top: 24px; display: flex; gap: 10px; justify-content: flex-end; }
+.settings-crud-area { margin-top: 28px; border-top: 1px solid var(--border); padding-top: 24px; }
+.settings-table-wrap { overflow-x: auto; margin-top: 12px; }
+.settings-toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 10px; }
+.settings-subtitle { font-size: 0.95rem; font-weight: 700; color: var(--text-primary); }
+@media (max-width: 1100px) {
+    .settings-layout { grid-template-columns: minmax(180px, 220px) minmax(0, 1fr); gap: 16px; }
+    .settings-main { padding: 22px 20px; }
+}
+@media (max-width: 900px) {
+    .settings-layout { grid-template-columns: 1fr; }
+    .settings-nav {
+        position: static;
+        display: flex; flex-wrap: wrap; gap: 6px;
+    }
+    .settings-nav-item { width: auto; flex: 1 1 auto; min-width: 140px; }
+    .settings-main { min-height: 420px; }
+}
+@media (max-width: 576px) {
+    .settings-main { padding: 16px 14px; }
+    .settings-form-grid { grid-template-columns: 1fr; }
+}
+</style>
+<script>
+(function() {
+    'use strict';
+    var params = new URLSearchParams(window.location.search);
+    SettingsHub.init(params.get('module') || 'general');
+})();
+</script>
+{% endblock %}

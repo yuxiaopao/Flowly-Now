@@ -1,16 +1,13 @@
-﻿<template>
-  <div class="agent-list">
-    <div class="list-header">
-      <div class="header-left">
-        <h1 class="page-title">
-          AI Agents
-        </h1>
-        <span class="agent-count">{{ agents.length }} 个 Agent</span>
-      </div>
-      <div class="header-actions">
+<template>
+  <PageShell width="wide">
+    <PageHeader
+      title="AI Agents"
+      :meta="`${filteredAgents.length} 个 Agent`"
+    >
+      <template #actions>
         <el-input
           v-model="searchQuery"
-          placeholder="搜索 Agent..."
+          placeholder="搜索 Agent 名称..."
           :prefix-icon="Search"
           clearable
           class="search-input"
@@ -20,7 +17,7 @@
           v-model="typeFilter"
           placeholder="类型"
           clearable
-          @change="fetchAgents"
+          class="type-select"
         >
           <el-option
             label="对话型"
@@ -39,14 +36,37 @@
             value="coding"
           />
         </el-select>
+        <el-select
+          v-model="teamFilter"
+          placeholder="按团队筛选"
+          clearable
+          class="type-select"
+        >
+          <el-option
+            label="仅我个人"
+            value="mine"
+          />
+          <el-option
+            v-for="t in tenantStore.tenants"
+            :key="t.id"
+            :label="t.name"
+            :value="String(t.id)"
+          />
+        </el-select>
+        <router-link to="/agents/marketplace">
+          <AppButton variant="secondary">
+            <Store class="btn-icon" />
+            Agent 市场
+          </AppButton>
+        </router-link>
         <router-link to="/agents/new">
           <AppButton variant="primary">
             <Plus class="btn-icon" />
             新建 Agent
           </AppButton>
         </router-link>
-      </div>
-    </div>
+      </template>
+    </PageHeader>
 
     <div
       v-if="isLoading"
@@ -58,19 +78,20 @@
       />
     </div>
 
-    <div
-      v-else-if="agents.length === 0"
-      class="empty-state"
+    <PageEmptyState
+      v-else-if="filteredAgents.length === 0"
+      :icon="Bot"
+      title="暂无 Agent"
+      description="创建您的第一个 AI Agent，用于对话、任务或自动化编排。"
     >
-      <Bot class="empty-icon" />
-      <h3>暂无 Agent</h3>
-      <p>创建您的第一个 AI Agent</p>
-      <router-link to="/agents/new">
-        <AppButton variant="primary">
-          创建 Agent
-        </AppButton>
-      </router-link>
-    </div>
+      <template #actions>
+        <router-link to="/agents/new">
+          <AppButton variant="primary">
+            创建 Agent
+          </AppButton>
+        </router-link>
+      </template>
+    </PageEmptyState>
 
     <div
       v-else
@@ -110,6 +131,12 @@
                   复制
                 </el-dropdown-item>
                 <el-dropdown-item
+                  v-if="agent.owner === authStore.user?.id"
+                  :command="agent.is_public ? 'unpublish' : 'publish'"
+                >
+                  {{ agent.is_public ? '从市场下架' : '发布到市场' }}
+                </el-dropdown-item>
+                <el-dropdown-item
                   command="delete"
                   divided
                 >
@@ -140,6 +167,27 @@
             >
               {{ agent.is_active ? '已启用' : '已禁用' }}
             </el-tag>
+            <el-tag
+              v-if="agent.tenant_name"
+              type="success"
+              size="small"
+            >
+              <Users class="tag-icon" />{{ agent.tenant_name }}
+            </el-tag>
+            <el-tag
+              v-if="agent.knowledge_collections?.length"
+              type="warning"
+              size="small"
+            >
+              <BookOpen class="tag-icon" />知识库 x{{ agent.knowledge_collections.length }}
+            </el-tag>
+            <el-tag
+              v-if="agent.is_public"
+              type="danger"
+              size="small"
+            >
+              <Store class="tag-icon" />已发布市场
+            </el-tag>
           </div>
         </div>
 
@@ -148,7 +196,7 @@
             <Cpu class="model-icon" />
             {{ agent.model || APP_CONFIG.llm.defaultModel }}
           </span>
-          <span class="updated-time">{{ formatDate(agent.updated_at) }}</span>
+          <span class="updated-time">{{ formatDate(agent.updatedAt || agent.updated_at) }}</span>
         </div>
       </div>
     </div>
@@ -165,7 +213,7 @@
         @current-change="handlePageChange"
       />
     </div>
-  </div>
+  </PageShell>
 </template>
 
 <script setup>
@@ -173,20 +221,28 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAgentStore } from '@/stores/agent'
 import { useAppStore } from '@/stores/app'
+import { useTenantStore } from '@/stores/tenant'
+import { useAuthStore } from '@/stores/auth'
 import { APP_CONFIG } from '@/config'
+import { agentApi } from '@/api/agent'
 import { ElMessageBox } from 'element-plus'
-import { Search, Plus, Bot, MoreVertical, Cpu } from 'lucide-vue-next'
+import { Search, Plus, Bot, MoreVertical, Cpu, Users, BookOpen, Store } from 'lucide-vue-next'
 import AppButton from '@/components/common/AppButton.vue'
+import PageShell from '@/components/layout/PageShell.vue'
+import PageHeader from '@/components/layout/PageHeader.vue'
+import PageEmptyState from '@/components/layout/PageEmptyState.vue'
 
 const router = useRouter()
 const agentStore = useAgentStore()
 const appStore = useAppStore()
+const tenantStore = useTenantStore()
+const authStore = useAuthStore()
 
 const searchQuery = ref('')
 const typeFilter = ref('')
+const teamFilter = ref('')
 const currentPage = ref(1)
 const pageSize = ref(12)
-const defaultModel = APP_CONFIG.llm.defaultModel
 
 const agents = computed(() => agentStore.agents)
 const isLoading = computed(() => agentStore.isLoading)
@@ -208,11 +264,18 @@ const filteredAgents = computed(() => {
     result = result.filter(a => a.agent_type === typeFilter.value)
   }
 
+  if (teamFilter.value === 'mine') {
+    result = result.filter(a => !a.tenant)
+  } else if (teamFilter.value) {
+    result = result.filter(a => String(a.tenant || '') === teamFilter.value)
+  }
+
   return result
 })
 
 onMounted(() => {
   fetchAgents()
+  tenantStore.fetchTenants()
 })
 
 async function fetchAgents() {
@@ -250,9 +313,30 @@ async function handleCommand(command, agent) {
     case 'duplicate':
       await duplicateAgent(agent)
       break
+    case 'publish':
+      await togglePublish(agent, true)
+      break
+    case 'unpublish':
+      await togglePublish(agent, false)
+      break
     case 'delete':
       await deleteAgent(agent.id)
       break
+  }
+}
+
+async function togglePublish(agent, publish) {
+  try {
+    if (publish) {
+      await agentApi.publishAgent(agent.id)
+      appStore.success('已发布到 Agent 市场')
+    } else {
+      await agentApi.unpublishAgent(agent.id)
+      appStore.success('已从市场下架')
+    }
+    fetchAgents()
+  } catch (err) {
+    appStore.error(publish ? '发布失败' : '下架失败')
   }
 }
 
@@ -331,47 +415,12 @@ function formatDate(date) {
 <style lang="scss" scoped>
 @use '@/assets/styles/variables.scss' as *;
 
-.agent-list {
-  max-width: 1400px;
-  margin: 0 auto;
-}
-
-.list-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: $spacing-6;
-  flex-wrap: wrap;
-  gap: $spacing-4;
-}
-
-.header-left {
-  display: flex;
-  align-items: baseline;
-  gap: $spacing-3;
-}
-
-.page-title {
-  font-size: $font-size-2xl;
-  font-weight: $font-weight-bold;
-  color: var(--text-primary);
-  margin: 0;
-}
-
-.agent-count {
-  font-size: $font-size-sm;
-  color: var(--text-primary);
-  opacity: 0.5;
-}
-
-.header-actions {
-  display: flex;
-  align-items: center;
-  gap: $spacing-3;
-}
-
 .search-input {
   width: 280px;
+}
+
+.type-select {
+  width: 120px;
 }
 
 .btn-icon {
@@ -383,34 +432,6 @@ function formatDate(date) {
   padding: $spacing-6;
 }
 
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: $spacing-16;
-  text-align: center;
-
-  .empty-icon {
-    width: 64px;
-    height: 64px;
-    color: var(--text-primary);
-  opacity: 0.5;
-    margin-bottom: $spacing-4;
-  }
-
-  h3 {
-    font-size: $font-size-xl;
-    color: var(--text-primary);
-    margin: 0 0 $spacing-2;
-  }
-
-  p {
-    color: var(--text-secondary);
-    margin: 0 0 $spacing-6;
-  }
-}
-
 .agent-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
@@ -418,17 +439,36 @@ function formatDate(date) {
 }
 
 .agent-card {
+  position: relative;
   background-color: var(--bg-secondary);
   border: 1px solid var(--border-primary);
   border-radius: $radius-xl;
   padding: $spacing-5;
   cursor: pointer;
-  transition: all $transition-fast;
+  transition: border-color 0.25s ease, box-shadow 0.25s ease, transform 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+  overflow: hidden;
+
+  // 顶部全宽暖色渐变描边，hover 时显现（Agent 主题色为琥珀橙）
+  &::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: var(--border-gradient-warm);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
 
   &:hover {
-    border-color: var(--accent-primary);
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-md);
+    border-color: var(--accent-amber-soft);
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-lg);
+
+    &::after {
+      opacity: 1;
+    }
   }
 }
 
@@ -508,7 +548,15 @@ function formatDate(date) {
 
 .agent-meta {
   display: flex;
+  flex-wrap: wrap;
   gap: $spacing-2;
+}
+
+.tag-icon {
+  width: 12px;
+  height: 12px;
+  margin-right: 4px;
+  vertical-align: -1px;
 }
 
 .card-footer {

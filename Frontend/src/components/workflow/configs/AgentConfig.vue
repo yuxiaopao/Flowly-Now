@@ -138,7 +138,10 @@
 </template>
 
 <script setup>
-import { ref, reactive, watch } from 'vue'
+import { reactive, watch } from 'vue'
+import { APP_CONFIG } from '@/config'
+
+const DEFAULT_LLM_MODEL = APP_CONFIG.llm.defaultModel
 
 const props = defineProps({
   modelValue: {
@@ -152,7 +155,7 @@ const emit = defineEmits(['update:modelValue', 'change'])
 const localData = reactive({
   label: '',
   description: '',
-  model: 'gpt-4',
+  model: DEFAULT_LLM_MODEL,
   tools: '',
   maxIterations: 10,
   systemPrompt: '',
@@ -164,7 +167,7 @@ watch(() => props.modelValue, (newVal) => {
     Object.assign(localData, {
       label: newVal.label || '',
       description: newVal.description || '',
-      model: newVal.model || 'gpt-4',
+      model: newVal.model || DEFAULT_LLM_MODEL,
       tools: newVal.tools || '',
       maxIterations: newVal.maxIterations ?? 10,
       systemPrompt: newVal.systemPrompt || '',

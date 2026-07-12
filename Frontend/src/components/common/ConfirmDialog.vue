@@ -48,10 +48,9 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
-import {
-  AlertCircle, CheckCircle, AlertTriangle, Info,
-  Trash2, Edit3, ShieldAlert, Settings
+import { computed } from 'vue'
+import { CheckCircle, AlertTriangle, Info,
+  Trash2
 } from 'lucide-vue-next'
 
 const props = defineProps({

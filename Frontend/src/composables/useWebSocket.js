@@ -4,6 +4,13 @@
  */
 
 import { ref, onMounted, onUnmounted } from 'vue'
+import { getWebSocketUrl as buildWebSocketUrl } from '@/config'
+
+function resolveWebSocketUrl(target) {
+  if (!target) return buildWebSocketUrl('/')
+  if (target.startsWith('ws://') || target.startsWith('wss://')) return target
+  return buildWebSocketUrl(target.startsWith('/') ? target : `/${target}`)
+}
 
 export function useWebSocket(options = {}) {
   const {
@@ -26,17 +33,25 @@ export function useWebSocket(options = {}) {
 
   let reconnectTimer = null
   let heartbeatTimer = null
+  let activeUrl = url ? resolveWebSocketUrl(url) : null
+  let activeHandlers = { onMessage, onOpen, onClose, onError }
 
-  function getWebSocketUrl() {
-    if (url) return url
+  function connect(overrideUrl, handlerOverrides = {}) {
+    if (overrideUrl) {
+      activeUrl = resolveWebSocketUrl(overrideUrl)
+    } else if (!activeUrl && url) {
+      activeUrl = resolveWebSocketUrl(url)
+    }
 
-    // 根据当前页面协议自动判断
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const host = window.location.host
-    return `${protocol}//${host}`
-  }
+    if (handlerOverrides && typeof handlerOverrides === 'object') {
+      activeHandlers = {
+        onMessage: handlerOverrides.onMessage || onMessage,
+        onOpen: handlerOverrides.onOpen || onOpen,
+        onClose: handlerOverrides.onClose || onClose,
+        onError: handlerOverrides.onError || onError
+      }
+    }
 
-  function connect() {
     if (ws.value && ws.value.readyState === WebSocket.OPEN) {
       return
     }
@@ -44,34 +59,25 @@ export function useWebSocket(options = {}) {
     isConnecting.value = true
 
     try {
-      ws.value = new WebSocket(getWebSocketUrl())
+      ws.value = new WebSocket(activeUrl || buildWebSocketUrl('/'))
 
       ws.value.onopen = (event) => {
         isConnected.value = true
         isConnecting.value = false
         reconnectAttempts.value = 0
 
-        // 启动心跳
         startHeartbeat()
 
-        if (onOpen) {
-          onOpen(event)
-        }
+        activeHandlers.onOpen?.(event)
       }
 
       ws.value.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data)
           lastMessage.value = data
-
-          if (onMessage) {
-            onMessage(data)
-          }
-        } catch (e) {
-          // 非 JSON 消息
-          if (onMessage) {
-            onMessage(event.data)
-          }
+          activeHandlers.onMessage?.(data)
+        } catch {
+          activeHandlers.onMessage?.(event.data)
         }
       }
 
@@ -80,26 +86,19 @@ export function useWebSocket(options = {}) {
         isConnecting.value = false
         stopHeartbeat()
 
-        if (onClose) {
-          onClose(event)
-        }
+        activeHandlers.onClose?.(event)
 
-        // 自动重连
         if (reconnectAttempts.value < maxReconnectAttempts) {
           scheduleReconnect()
         }
       }
 
       ws.value.onerror = (error) => {
-        if (onError) {
-          onError(error)
-        }
+        activeHandlers.onError?.(error)
       }
     } catch (error) {
       isConnecting.value = false
-      if (onError) {
-        onError(error)
-      }
+      activeHandlers.onError?.(error)
     }
   }
 

@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="workflow-detail">
     <div
       v-if="workflow"
@@ -25,7 +25,7 @@
                 {{ getStatusLabel(workflow.status) }}
               </el-tag>
               <span class="meta-text">v{{ workflow.version }}</span>
-              <span class="meta-text">更新于 {{ formatDate(workflow.updated_at) }}</span>
+              <span class="meta-text">更新于 {{ formatDate(workflow.updatedAt || workflow.updated_at) }}</span>
             </div>
           </div>
         </div>
@@ -80,16 +80,19 @@
           <div class="canvas-wrapper">
             <VueFlow
               v-if="canvasReady"
+              ref="vueFlowRef"
               v-model:nodes="nodes"
               v-model:edges="edges"
               :node-types="nodeTypesSnapshot"
               :default-viewport="viewport"
-              :zoom="zoom"
+              :min-zoom="WORKFLOW_CANVAS_ZOOM.min"
+              :max-zoom="WORKFLOW_CANVAS_ZOOM.max"
               :nodes-draggable="false"
               :nodes-connectable="false"
               :elements-selectable="true"
               fit-view-on-init
               @node-click="onNodeClick"
+              @nodes-initialized="onNodesInitialized"
             >
               <Background
                 pattern-color="#1a1a2e"
@@ -161,7 +164,7 @@
             <div class="stats-grid">
               <div class="stat-item">
                 <div class="stat-value">
-                  {{ workflow.node_count || 0 }}
+                  {{ workflow.nodeCount || workflow.node_count || nodes.length || 0 }}
                 </div>
                 <div class="stat-label">
                   节点
@@ -169,7 +172,7 @@
               </div>
               <div class="stat-item">
                 <div class="stat-value">
-                  {{ workflow.execution_count || 0 }}
+                  {{ workflow.executionCount || workflow.execution_count || 0 }}
                 </div>
                 <div class="stat-label">
                   执行次数
@@ -266,7 +269,7 @@
             width="100"
           >
             <template #default="{ row }">
-              {{ getTriggerTypeLabel(row.trigger_type) }}
+              {{ getTriggerTypeLabel(row.triggerType || row.trigger_type) }}
             </template>
           </el-table-column>
           <el-table-column
@@ -274,7 +277,7 @@
             width="180"
           >
             <template #default="{ row }">
-              {{ formatDateTime(row.started_at) }}
+              {{ formatDateTime(row.startedAt || row.started_at) }}
             </template>
           </el-table-column>
           <el-table-column
@@ -325,7 +328,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch, shallowRef, markRaw } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { VueFlow } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
@@ -333,6 +336,9 @@ import { MiniMap } from '@vue-flow/minimap'
 import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
 import '@vue-flow/minimap/dist/style.css'
+import { WORKFLOW_CANVAS_VIEWPORT, WORKFLOW_CANVAS_ZOOM } from '@/config/workflowCanvas'
+import { buildNodeTypesMap } from '@/config/nodeComponents'
+import { applyWorkflowLayout, needsAutoLayout } from '@/utils/workflowLayout'
 import { useWorkflowStore } from '@/stores/workflow'
 import { useAppStore } from '@/stores/app'
 import {
@@ -340,75 +346,8 @@ import {
   Maximize2, RefreshCw, PlayCircle, MessageSquare,
   GitBranch, Hammer, User, FileText, Zap, Circle
 } from 'lucide-vue-next'
-import AppButton from '@/components/common/AppButton.vue'
 
-// 本地导入节点组件（避免 main.js 顶层 import 触发 Pinia）
-import StartNode from '@/components/workflow/nodes/StartNode.vue'
-import EndNode from '@/components/workflow/nodes/EndNode.vue'
-import LLMNode from '@/components/workflow/nodes/LLMNode.vue'
-import PromptNode from '@/components/workflow/nodes/PromptNode.vue'
-import ConditionNode from '@/components/workflow/nodes/ConditionNode.vue'
-import LoopNode from '@/components/workflow/nodes/LoopNode.vue'
-import InputNode from '@/components/workflow/nodes/InputNode.vue'
-import OutputNode from '@/components/workflow/nodes/OutputNode.vue'
-import CodeNode from '@/components/workflow/nodes/CodeNode.vue'
-import VariableNode from '@/components/workflow/nodes/VariableNode.vue'
-import ToolNode from '@/components/workflow/nodes/ToolNode.vue'
-import HttpNode from '@/components/workflow/nodes/HttpNode.vue'
-import SwitchNode from '@/components/workflow/nodes/SwitchNode.vue'
-import DelayNode from '@/components/workflow/nodes/DelayNode.vue'
-import EmailNode from '@/components/workflow/nodes/EmailNode.vue'
-import TransformNode from '@/components/workflow/nodes/TransformNode.vue'
-import SubworkflowNode from '@/components/workflow/nodes/SubworkflowNode.vue'
-import ImageGenerationNode from '@/components/workflow/nodes/ImageGenerationNode.vue'
-import VideoGenerationNode from '@/components/workflow/nodes/VideoGenerationNode.vue'
-import AudioGenerationNode from '@/components/workflow/nodes/AudioGenerationNode.vue'
-import SubtitleGenerationNode from '@/components/workflow/nodes/SubtitleGenerationNode.vue'
-import ImageEditingNode from '@/components/workflow/nodes/ImageEditingNode.vue'
-import DatasetUploadNode from '@/components/workflow/nodes/DatasetUploadNode.vue'
-import DataAnnotationNode from '@/components/workflow/nodes/DataAnnotationNode.vue'
-import DataAugmentationNode from '@/components/workflow/nodes/DataAugmentationNode.vue'
-import ModelTrainingNode from '@/components/workflow/nodes/ModelTrainingNode.vue'
-import ModelEvaluationNode from '@/components/workflow/nodes/ModelEvaluationNode.vue'
-import ModelDeploymentNode from '@/components/workflow/nodes/ModelDeploymentNode.vue'
-import WebsiteGeneratorNode from '@/components/workflow/nodes/WebsiteGeneratorNode.vue'
-import DocumentLoaderNode from '@/components/workflow/nodes/DocumentLoaderNode.vue'
-import EmbeddingNode from '@/components/workflow/nodes/EmbeddingNode.vue'
-import VectorStoreNode from '@/components/workflow/nodes/VectorStoreNode.vue'
-import RetrieverNode from '@/components/workflow/nodes/RetrieverNode.vue'
-import RerankerNode from '@/components/workflow/nodes/RerankerNode.vue'
-import AgentNode from '@/components/workflow/nodes/AgentNode.vue'
-import PlannerNode from '@/components/workflow/nodes/PlannerNode.vue'
-import ExecutorNode from '@/components/workflow/nodes/ExecutorNode.vue'
-import MemoryNode from '@/components/workflow/nodes/MemoryNode.vue'
-import FileReaderNode from '@/components/workflow/nodes/FileReaderNode.vue'
-import FileWriterNode from '@/components/workflow/nodes/FileWriterNode.vue'
-import WebScraperNode from '@/components/workflow/nodes/WebScraperNode.vue'
-import CsvTransformNode from '@/components/workflow/nodes/CsvTransformNode.vue'
-import JsonTransformNode from '@/components/workflow/nodes/JsonTransformNode.vue'
-
-// 注册节点类型（markRaw 防止 Vue 代理导致 VueFlow 读取失败）
-const nodeTypes = markRaw({
-  start: StartNode, end: EndNode, llm: LLMNode, prompt: PromptNode,
-  condition: ConditionNode, loop: LoopNode, input: InputNode, output: OutputNode,
-  code: CodeNode, variable: VariableNode, tool: ToolNode, http: HttpNode,
-  switch: SwitchNode, delay: DelayNode, transform: TransformNode, email: EmailNode,
-  subworkflow: SubworkflowNode, image_generation: ImageGenerationNode,
-  video_generation: VideoGenerationNode, audio_generation: AudioGenerationNode,
-  subtitle_generation: SubtitleGenerationNode, image_editing: ImageEditingNode,
-  dataset_upload: DatasetUploadNode, data_annotation: DataAnnotationNode,
-  data_augmentation: DataAugmentationNode, model_training: ModelTrainingNode,
-  model_evaluation: ModelEvaluationNode, model_deployment: ModelDeploymentNode,
-  website_generator: WebsiteGeneratorNode, document_loader: DocumentLoaderNode,
-  embedding: EmbeddingNode, vector_store: VectorStoreNode, retriever: RetrieverNode,
-  reranker: RerankerNode, agent: AgentNode, planner: PlannerNode,
-  executor: ExecutorNode, memory: MemoryNode, file_reader: FileReaderNode,
-  file_writer: FileWriterNode, web_scraper: WebScraperNode,
-  csv_transform: CsvTransformNode, json_transform: JsonTransformNode,
-})
-
-// 确保 VueFlow 在组件完全注册后再渲染
-const canvasReady = ref(false)
+const nodeTypesSnapshot = buildNodeTypesMap()
 
 const route = useRoute()
 const router = useRouter()
@@ -420,39 +359,53 @@ const workflowId = computed(() => route.params.id)
 const workflow = computed(() => workflowStore.currentWorkflow)
 const nodes = ref([])
 const edges = ref([])
+const vueFlowRef = ref(null)
+
+// 确保 VueFlow 在数据就绪后再渲染
+const canvasReady = ref(false)
 
 function syncWorkflowToCanvas() {
   if (!workflow.value) return
-  // workflow.value.nodes 已经由 store 的 fetchWorkflow 通过 backendWorkflowToFrontend 转换好了
-  nodes.value = (workflow.value.nodes || []).map(n => ({
+  let mappedNodes = (workflow.value.nodes || []).map(n => ({
     id: String(n.id),
-    type: n.type, // 已是转换后的 type（backendNodeToVueFlow 已处理）
+    type: n.type,
     position: { x: Number(n.position?.x) || 0, y: Number(n.position?.y) || 0 },
     data: { ...n.data }
   }))
-  edges.value = (workflow.value.edges || []).map(e => ({
+  const mappedEdges = (workflow.value.edges || []).map(e => ({
     id: String(e.id),
     source: String(e.source),
     target: String(e.target),
     label: e.label
   }))
+  if (needsAutoLayout(mappedNodes) && mappedNodes.length > 0) {
+    mappedNodes = applyWorkflowLayout(mappedNodes, mappedEdges, mappedNodes)
+  }
+  nodes.value = mappedNodes
+  edges.value = mappedEdges
 }
 
-// 传递非响应式的 nodeTypes 快照给 VueFlow
-const nodeTypesSnapshot = Object.assign({}, nodeTypes)
-
-watch(workflow, syncWorkflowToCanvas, { immediate: false })
+watch(workflow, syncWorkflowToCanvas)
 const executionHistory = computed(() => workflowStore.executionHistory)
 
-const viewport = ref({ x: 50, y: 50, zoom: 1 })
-const zoom = ref(1)
+const viewport = ref({ ...WORKFLOW_CANVAS_VIEWPORT })
 const selectedNodeId = ref(null)
+
+function onNodesInitialized() {
+  nextTick(() => {
+    vueFlowRef.value?.fitView({ padding: 0.2, duration: 400 })
+  })
+}
 
 onMounted(async () => {
   try {
     await workflowStore.fetchWorkflow(workflowId.value)
     await workflowStore.fetchExecutionHistory(workflowId.value)
+    syncWorkflowToCanvas()
     canvasReady.value = true
+    await nextTick()
+    await nextTick()
+    vueFlowRef.value?.fitView({ padding: 0.2, duration: 400 })
   } catch (err) {
     appStore.error('加载工作流失败')
   }
@@ -494,15 +447,15 @@ function onNodeClick(event) {
 }
 
 function zoomIn() {
-  zoom.value = Math.min(2, zoom.value + 0.1)
+  vueFlowRef.value?.zoomIn?.()
 }
 
 function zoomOut() {
-  zoom.value = Math.max(0.5, zoom.value - 0.1)
+  vueFlowRef.value?.zoomOut?.()
 }
 
 function fitView() {
-  viewport.value = { x: 50, y: 50, zoom: 1 }
+  vueFlowRef.value?.fitView({ padding: 0.2, duration: 400 })
 }
 
 async function refreshHistory() {
@@ -517,7 +470,7 @@ function viewExecution(execution) {
   router.push(`/workflows/${workflowId.value}/execute?execution=${execution.id}`)
 }
 
-async function retryExecution(execution) {
+async function retryExecution(_execution) {
   try {
     await workflowStore.executeWorkflow({})
     appStore.success('执行已启动')
@@ -632,6 +585,7 @@ function formatDuration(seconds) {
 
 <style lang="scss" scoped>
 @use '@/assets/styles/variables.scss' as *;
+@import '@/styles/workflow-domain-node.scss';
 
 .workflow-detail {
   max-width: 1400px;

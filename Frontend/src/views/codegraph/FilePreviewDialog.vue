@@ -1,58 +1,45 @@
 <template>
   <el-dialog
     v-model="visible"
-    :title="filePath"
+    title="文件预览"
     width="80%"
-    top="5vh"
-    class="file-preview-dialog"
+    :before-close="handleClose"
   >
     <div
-      v-if="loading"
-      class="loading-state"
+      v-if="filePath"
+      class="file-preview-content"
     >
-      <el-icon class="is-loading">
-        <Loading />
-      </el-icon>
-      <span>加载中...</span>
+      <div class="preview-header">
+        <span class="file-name">{{ filePath }}</span>
+      </div>
+      <div class="preview-body">
+        <div
+          v-if="loading"
+          class="no-file"
+        >
+          加载中...
+        </div>
+        <pre
+          v-else
+          class="code-preview"
+        >{{ previewContent }}</pre>
+      </div>
     </div>
-
-    <div
-      v-else-if="error"
-      class="error-state"
-    >
-      <el-empty :description="error" />
-    </div>
-
     <div
       v-else
-      class="file-content"
+      class="no-file"
     >
-      <div class="content-header">
-        <el-tag size="small">
-          {{ fileData?.extension }}
-        </el-tag>
-        <span class="file-info">
-          {{ fileData?.lines }} 行 | {{ formatSize(fileData?.size || 0) }}
-        </span>
-      </div>
-
-      <div class="code-container">
-        <pre class="code-pre"><code class="code-block">{{ fileData?.content }}</code></pre>
-      </div>
+      暂无预览内容
     </div>
-
-    <template #footer>
-      <el-button @click="visible = false">
-        关闭
-      </el-button>
-    </template>
   </el-dialog>
 </template>
 
 <script setup>
-import { ref, watch, computed } from 'vue'
-import { useCodeGraphStore } from '@/stores/codeGraph'
-import { Loading } from '@element-plus/icons-vue'
+import { ref, watch } from 'vue'
+import { getFileContent } from '@/api/codegraph'
+import { useAppStore } from '@/stores/app'
+
+const appStore = useAppStore()
 
 const props = defineProps({
   modelValue: {
@@ -64,111 +51,96 @@ const props = defineProps({
     default: ''
   },
   projectId: {
-    type: Number,
+    type: [String, Number],
     default: null
   }
 })
 
 const emit = defineEmits(['update:modelValue'])
 
-const store = useCodeGraphStore()
+const visible = ref(props.modelValue)
+const previewContent = ref('')
+const loading = ref(false)
 
-const visible = computed({
-  get: () => props.modelValue,
-  set: (val) => emit('update:modelValue', val)
+watch(() => props.modelValue, (val) => {
+  visible.value = val
 })
 
-const loading = ref(false)
-const error = ref(null)
-const fileData = ref(null)
+watch(visible, (val) => {
+  emit('update:modelValue', val)
+})
 
-watch(() => [props.modelValue, props.filePath], async ([newVisible, newPath]) => {
-  if (newVisible && newPath) {
-    await loadFileContent(newPath)
+async function loadPreview(path) {
+  if (!path || !props.projectId) {
+    previewContent.value = path ? `// 未选择项目，无法加载: ${path}` : ''
+    return
   }
-}, { immediate: true })
 
-async function loadFileContent(path) {
   loading.value = true
-  error.value = null
-  fileData.value = null
-
   try {
-    const content = await store.fetchFileContent(path)
-    if (content) {
-      fileData.value = content
-    } else {
-      error.value = '无法加载文件内容'
-    }
+    const data = await getFileContent(props.projectId, path)
+    previewContent.value = data?.content || data?.source || data?.text || String(data || '')
   } catch (err) {
-    error.value = err.message || '加载失败'
+    console.error('Failed to load file preview:', err)
+    previewContent.value = `// 加载失败: ${path}`
+    appStore.error('文件预览加载失败')
   } finally {
     loading.value = false
   }
 }
 
-function formatSize(bytes) {
-  if (bytes >= 1024 * 1024) {
-    return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
-  }
-  if (bytes >= 1024) {
-    return (bytes / 1024).toFixed(1) + ' KB'
-  }
-  return bytes + ' B'
+watch(
+  () => [props.filePath, props.projectId],
+  ([path]) => {
+    if (path) loadPreview(path)
+  },
+  { immediate: true }
+)
+
+function handleClose() {
+  visible.value = false
 }
 </script>
 
-<style lang="scss" scoped>
-.loading-state,
-.error-state {
+<style scoped>
+.file-preview-content {
+  height: 60vh;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 60px 20px;
-  gap: 12px;
+}
+
+.preview-header {
+  padding: 8px 12px;
+  background: var(--bg-secondary);
+  border-radius: 4px;
+  margin-bottom: 12px;
+}
+
+.file-name {
+  font-family: monospace;
+  font-size: 13px;
   color: var(--text-secondary);
 }
 
-.file-content {
-  display: flex;
-  flex-direction: column;
-  height: 70vh;
-}
-
-.content-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--border-color);
-  margin-bottom: 12px;
-
-  .file-info {
-    font-size: 12px;
-    color: var(--text-secondary);
-  }
-}
-
-.code-container {
+.preview-body {
   flex: 1;
   overflow: auto;
-  background: var(--bg-primary);
-  border-radius: 8px;
-  border: 1px solid var(--border-color);
 }
 
-.code-pre {
-  margin: 0;
-  padding: 16px;
-  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+.code-preview {
+  padding: 12px;
+  background: var(--bg-tertiary);
+  border-radius: 4px;
+  font-family: monospace;
   font-size: 13px;
   line-height: 1.5;
-  white-space: pre-wrap;
-  word-break: break-all;
+  overflow: auto;
+  max-height: 50vh;
 }
 
-.code-block {
-  color: var(--text-primary);
+.no-file {
+  text-align: center;
+  color: var(--text-tertiary);
+  padding: 40px;
 }
 </style>

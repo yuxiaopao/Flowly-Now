@@ -14,7 +14,7 @@ from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from django.utils import timezone
 from django.utils.encoding import force_bytes, force_str
 from django.template.loader import render_to_string
-from django.core.mail import send_mail
+from core.email_delivery import send_email_with_fallback
 from django.conf import settings
 from .serializers import (
     UserSerializer, UserCreateSerializer, LoginSerializer,
@@ -63,11 +63,61 @@ class RegisterView(generics.CreateAPIView):
     permission_classes = [AllowAny]
 
     def create(self, request, *args, **kwargs):
+        from admin.models import LegalDocument, UserTermsAcceptance
+        from admin.services.config_service import get_active_legal_document
+        from admin.models import SystemSetting
+
+        if not SystemSetting.get('allow_registration', True):
+            return Response(
+                {'error': '系统当前不允许新用户注册'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        terms_version = request.data.get('terms_version')
+        privacy_version = request.data.get('privacy_version')
+        agree_terms = request.data.get('agree_terms', False)
+
+        if SystemSetting.get('require_terms_on_register', True):
+            if not agree_terms:
+                return Response(
+                    {'error': '请先阅读并同意服务条款与隐私政策'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            terms_doc = get_active_legal_document('terms')
+            privacy_doc = get_active_legal_document('privacy')
+            if terms_doc and terms_version != terms_doc.version:
+                return Response(
+                    {'error': '服务条款版本已更新，请刷新页面后重新确认'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if privacy_doc and privacy_version != privacy_doc.version:
+                return Response(
+                    {'error': '隐私政策版本已更新，请刷新页面后重新确认'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
 
-        # Generate tokens
+        default_role = SystemSetting.get('default_role', 'user')
+        if default_role in ('admin', 'developer', 'user'):
+            user.role = default_role
+            user.execution_limit = SystemSetting.get('default_execution_limit', 1000)
+            user.save(update_fields=['role', 'execution_limit'])
+
+        client_ip = _get_client_ip(request)
+        user_agent = request.META.get('HTTP_USER_AGENT', '')[:500]
+        for doc in [get_active_legal_document('terms'), get_active_legal_document('privacy')]:
+            if doc:
+                UserTermsAcceptance.objects.create(
+                    user=user,
+                    document=doc,
+                    document_version=doc.version,
+                    ip_address=client_ip,
+                    user_agent=user_agent,
+                )
+
         tokens = generate_tokens(user)
         user_serializer = UserSerializer(user)
 
@@ -261,19 +311,12 @@ class PasswordResetRequestView(APIView):
 Flowly 团队
             """
 
-            try:
-                send_mail(
-                    subject=subject,
-                    message=message,
-                    from_email=settings.DEFAULT_FROM_EMAIL,
-                    recipient_list=[email],
-                    fail_silently=False
-                )
-            except Exception as e:
-                # Log error but don't reveal to user
-                import logging
-                logger = logging.getLogger(__name__)
-                logger.error(f"Failed to send password reset email: {e}")
+            send_email_with_fallback(
+                subject=subject,
+                message=message,
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[email],
+            )
 
         except User.DoesNotExist:
             # Don't reveal that the email doesn't exist

@@ -414,8 +414,10 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, RefreshCw, Loader, Upload, Database, FileText } from 'lucide-vue-next'
 import datasetApi from '@/api/dataset'
+import { useAppStore } from '@/stores/app'
 
 const router = useRouter()
+const appStore = useAppStore()
 
 // State
 const datasets = ref([])
@@ -567,25 +569,24 @@ async function submitUpload() {
 async function previewDataset(row) {
   previewDatasetId.value = row.id
   previewPage.value = 1
-  await loadPreview()
-  showPreviewDialog.value = true
+  const loaded = await loadPreview()
+  if (loaded) {
+    showPreviewDialog.value = true
+  }
 }
 
 async function loadPreview() {
-  if (!previewDatasetId.value) return
+  if (!previewDatasetId.value) return false
   try {
     const response = await datasetApi.preview(previewDatasetId.value, previewPage.value)
     previewData.value = response
+    return true
   } catch (error) {
     console.error('Preview failed:', error)
-    previewData.value = {
-      columns: ['Column1', 'Column2', 'Column3'],
-      rows: [
-        { Column1: 'Sample 1', Column2: 'Value 1', Column3: 'Data 1' },
-        { Column1: 'Sample 2', Column2: 'Value 2', Column3: 'Data 2' }
-      ],
-      total: 100
-    }
+    previewData.value = null
+    const message = error?.response?.data?.message || error?.message || '预览失败'
+    appStore.error(message)
+    return false
   }
 }
 

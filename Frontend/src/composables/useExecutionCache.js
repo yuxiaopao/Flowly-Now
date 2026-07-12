@@ -4,7 +4,7 @@
  */
 
 import { ref, computed } from 'vue'
-import { request } from '@/utils/request'
+import { request } from '@/api'
 
 // 缓存状态
 export const cacheStats = ref({
@@ -12,8 +12,8 @@ export const cacheStats = ref({
   valid: 0,
   expired: 0,
   invalid: 0,
-  hit_rate: 0,
-  by_node_type: []
+  hitRate: 0,
+  byNodeType: []
 })
 
 // 加载状态
@@ -27,14 +27,14 @@ export const isLoading = ref(false)
 export async function loadCacheStats() {
   isLoading.value = true
   try {
-    const res = await request.get('/execution-cache/stats/')
+    const data = await request.get('/execution-cache/stats/')
     cacheStats.value = {
-      total: res.data.total,
-      valid: res.data.valid,
-      expired: res.data.expired,
-      invalid: res.data.invalid,
-      hit_rate: res.data.hit_rate,
-      by_node_type: res.data.by_node_type || []
+      total: data.total ?? 0,
+      valid: data.valid ?? 0,
+      expired: data.expired ?? 0,
+      invalid: data.invalid ?? 0,
+      hitRate: data.hitRate ?? data.hit_rate ?? 0,
+      byNodeType: data.byNodeType ?? data.by_node_type ?? []
     }
     return cacheStats.value
   } catch (error) {
@@ -72,9 +72,9 @@ export async function clearCache(nodeType = null) {
 export async function cleanupExpiredCache() {
   isLoading.value = true
   try {
-    const res = await request.post('/execution-cache/cleanup/')
+    const data = await request.post('/execution-cache/cleanup/')
     await loadCacheStats()
-    return res.data.cleaned
+    return data.cleaned ?? 0
   } catch (error) {
     console.error('Failed to cleanup expired cache:', error)
     throw error
@@ -90,8 +90,7 @@ export async function cleanupExpiredCache() {
  */
 export async function getCacheConfig() {
   try {
-    const res = await request.get('/cache-config/')
-    return res.data
+    return await request.get('/cache-config/')
   } catch (error) {
     console.error('Failed to get cache config:', error)
     throw error
@@ -105,8 +104,7 @@ export async function getCacheConfig() {
  */
 export async function updateCacheConfig(nodeType, config) {
   try {
-    const res = await request.patch(`/cache-config/${nodeType}/`, config)
-    return res.data
+    return await request.patch(`/cache-config/${nodeType}/`, config)
   } catch (error) {
     console.error('Failed to update cache config:', error)
     throw error
@@ -119,8 +117,7 @@ export async function updateCacheConfig(nodeType, config) {
  */
 export async function bulkUpdateCacheConfig(configs) {
   try {
-    const res = await request.post('/cache-config/bulk_update/', { configs })
-    return res.data
+    return await request.post('/cache-config/bulk_update/', { configs })
   } catch (error) {
     console.error('Failed to bulk update cache config:', error)
     throw error
@@ -132,7 +129,7 @@ export async function bulkUpdateCacheConfig(configs) {
 export function useExecutionCache() {
   // 计算属性
   const hitRatePercent = computed(() => {
-    return `${cacheStats.value.hit_rate}%`
+    return `${cacheStats.value.hitRate}%`
   })
 
   const totalEntries = computed(() => cacheStats.value.total)
@@ -140,7 +137,7 @@ export function useExecutionCache() {
   const expiredEntries = computed(() => cacheStats.value.expired)
 
   const entriesByType = computed(() => {
-    return cacheStats.value.by_node_type || []
+    return cacheStats.value.byNodeType || []
   })
 
   /**

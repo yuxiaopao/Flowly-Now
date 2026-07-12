@@ -8,7 +8,7 @@ from django.http import StreamingHttpResponse
 from django.utils import timezone
 from django.db import models
 from django.db.models import Q
-from rest_framework import viewsets, status, permissions
+from rest_framework import viewsets, status, permissions, serializers
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
@@ -16,47 +16,29 @@ from rest_framework.views import APIView
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
 
+from tenants.access import get_accessible_tenant_ids, get_accessible_workflow_queryset, can_edit_workflow
+
 logger = logging.getLogger(__name__)
 
 
-def _get_accessible_tenant_ids(user):
-    """Return active tenant ids the user belongs to."""
-    if not user or not user.is_authenticated:
-        return []
-
-    if user.is_superuser:
-        from tenants.models import Tenant
-        return list(Tenant.objects.values_list('id', flat=True))
-
-    from tenants.models import TenantMembership
-    return list(
-        TenantMembership.objects.filter(user=user, is_active=True)
-        .values_list('tenant_id', flat=True)
-        .distinct()
-    )
-
-
-def _get_accessible_workflow_queryset(user):
-    """Return workflows visible to the current user with tenant boundary enforced."""
-    queryset = Workflow.objects.filter(is_deleted=False)
-
-    if not user or not user.is_authenticated:
-        return queryset.filter(is_public=True, tenant__isnull=True)
-
-    if user.is_superuser:
-        return queryset
-
-    tenant_ids = _get_accessible_tenant_ids(user)
-    return queryset.filter(
-        Q(owner=user)
-        | Q(tenant_id__in=tenant_ids)
-        | Q(is_public=True, tenant__isnull=True)
-    ).distinct()
+def _extract_execution_total_tokens(execution):
+    """Read total token count from WorkflowExecution.token_usage JSON."""
+    usage = execution.token_usage
+    if not isinstance(usage, dict):
+        return None
+    total = usage.get('total_tokens')
+    if total is not None:
+        return total
+    prompt = usage.get('prompt_tokens') or 0
+    completion = usage.get('completion_tokens') or 0
+    if prompt or completion:
+        return prompt + completion
+    return usage.get('total')
 
 
 def _get_accessible_workflow(user, workflow_id):
     """Resolve a workflow only if it is accessible to the current user."""
-    return _get_accessible_workflow_queryset(user).get(id=workflow_id)
+    return get_accessible_workflow_queryset(user).get(id=workflow_id)
 
 
 class CheckEnvView(APIView):
@@ -92,10 +74,82 @@ class CheckEnvView(APIView):
         return Response({'success': True, 'gpu_info': gpu_info})
 
 
+class EmailSmtpDefaultsView(APIView):
+    """Return system/global SMTP defaults for email node prefill."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        from core.email_smtp_defaults import get_global_smtp_defaults
+
+        defaults = get_global_smtp_defaults(include_secrets=False)
+        return Response({'success': True, 'smtp': defaults})
+
+
+class MediaUploadView(APIView):
+    """Upload video/audio media for multimodal and video translation workflows."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        from workflows.services.media_service import MediaServiceError, upload_video
+        from workflows.services.video_postprocess import is_ffmpeg_available
+
+        uploaded = request.FILES.get('file')
+        if not uploaded:
+            return Response(
+                {'success': False, 'error': '请使用 multipart/form-data 上传 file 字段'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            meta = upload_video(uploaded, user_id=getattr(request.user, 'id', None), original_name=uploaded.name)
+            meta['ffmpeg_available'] = is_ffmpeg_available()
+            return Response({'success': True, 'data': meta})
+        except MediaServiceError as exc:
+            return Response({'success': False, 'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as exc:
+            logger.exception('Media upload failed')
+            return Response({'success': False, 'error': str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class WorkflowOptimizeView(APIView):
+    """Analyze workflow graph and return optimization suggestions."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        nodes = request.data.get('nodes') or []
+        edges = request.data.get('edges') or []
+        dimensions = request.data.get('dimensions')
+
+        if not isinstance(nodes, list) or not isinstance(edges, list):
+            return Response(
+                {'error': 'nodes and edges must be arrays'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        from .services.workflow_optimizer import analyze_workflow
+
+        suggestions = analyze_workflow(nodes, edges, dimensions)
+        return Response({
+            'success': True,
+            'suggestions': suggestions,
+            'summary': {
+                'total': len(suggestions),
+                'critical': sum(1 for s in suggestions if s.get('severity') == 'critical'),
+                'warning': sum(1 for s in suggestions if s.get('severity') == 'warning'),
+                'info': sum(1 for s in suggestions if s.get('severity') == 'info'),
+                'auto_applicable': sum(1 for s in suggestions if s.get('autoApplicable')),
+            },
+        })
+
+
 from .models import (
     Workflow, Node, Edge, WorkflowExecution, NodeExecution,
     Variable, Tool, APICredential, AuditLog,
     TemplateCategory, WorkflowTemplate,
+    TemplateInstall, TemplateRatingRecord,
+    TemplateReport,
     ExecutionCache, ExecutionCacheConfig,
     ExecutionLog,
 )
@@ -110,6 +164,9 @@ from .serializers import (
     AuditLogSerializer,
     TemplateCategorySerializer, WorkflowTemplateListSerializer,
     WorkflowTemplateDetailSerializer, WorkflowTemplateCreateFromSerializer,
+    TemplateInstallSerializer, TemplateRatingRecordSerializer,
+    TemplateReportSerializer,
+    TemplateReportCreateSerializer,
     ExecutionCacheSerializer, ExecutionCacheConfigSerializer, ExecutionCacheStatsSerializer,
     ExecutionLogSerializer,
 )
@@ -119,16 +176,16 @@ from .tasks import execute_workflow_task
 
 
 class IsOwnerOrReadOnly(permissions.BasePermission):
-    """Custom permission to only allow owners to edit."""
+    """Custom permission to only allow owners (or tenant admins / superusers) to edit."""
 
     def has_object_permission(self, request, view, obj):
         if request.method in permissions.SAFE_METHODS:
             return True
 
         if isinstance(obj, Workflow):
-            return obj.owner == request.user
+            return can_edit_workflow(request.user, obj)
         elif hasattr(obj, 'workflow'):
-            return obj.workflow.owner == request.user
+            return can_edit_workflow(request.user, obj.workflow)
 
         return False
 
@@ -140,7 +197,7 @@ class WorkflowViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         """Filter workflows based on tenant membership and visibility."""
-        queryset = _get_accessible_workflow_queryset(self.request.user)
+        queryset = get_accessible_workflow_queryset(self.request.user)
 
         # Filter by owner
         if not self.request.user.is_superuser:
@@ -177,7 +234,7 @@ class WorkflowViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         """Set owner and tenant on create."""
-        tenant_ids = _get_accessible_tenant_ids(self.request.user)
+        tenant_ids = get_accessible_tenant_ids(self.request.user)
         tenant = None
         requested_tenant_id = self.request.data.get('tenant') or self.request.data.get('tenant_id')
         if requested_tenant_id:
@@ -244,7 +301,7 @@ class WorkflowViewSet(viewsets.ModelViewSet):
             import traceback
             execution.mark_failed(
                 error_message=str(e),
-                traceback=traceback.format_exc()
+                error_stack=traceback.format_exc()
             )
 
             return Response({
@@ -452,7 +509,7 @@ class NodeViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         """Filter nodes by accessible workflow."""
-        queryset = Node.objects.filter(workflow__in=_get_accessible_workflow_queryset(self.request.user))
+        queryset = Node.objects.filter(workflow__in=get_accessible_workflow_queryset(self.request.user))
 
         workflow_id = self.request.query_params.get('workflow')
         if workflow_id:
@@ -542,7 +599,7 @@ class EdgeViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         """Filter edges by accessible workflow."""
-        queryset = Edge.objects.filter(workflow__in=_get_accessible_workflow_queryset(self.request.user))
+        queryset = Edge.objects.filter(workflow__in=get_accessible_workflow_queryset(self.request.user))
 
         workflow_id = self.request.query_params.get('workflow')
         if workflow_id:
@@ -598,7 +655,7 @@ class WorkflowExecutionViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self):
         """Filter executions by accessible workflow or current user."""
         queryset = WorkflowExecution.objects.filter(
-            workflow__in=_get_accessible_workflow_queryset(self.request.user)
+            workflow__in=get_accessible_workflow_queryset(self.request.user)
         )
 
         workflow_id = self.request.query_params.get('workflow')
@@ -608,7 +665,7 @@ class WorkflowExecutionViewSet(viewsets.ReadOnlyModelViewSet):
             queryset = queryset.filter(
                 Q(workflow__owner=self.request.user) |
                 Q(triggered_by=self.request.user) |
-                Q(workflow__tenant_id__in=_get_accessible_tenant_ids(self.request.user))
+                Q(workflow__tenant_id__in=get_accessible_tenant_ids(self.request.user))
             ).distinct()
 
         status_filter = self.request.query_params.get('status')
@@ -757,29 +814,102 @@ class WorkflowExecutionViewSet(viewsets.ReadOnlyModelViewSet):
     def legacy_logs(self, request, pk=None):
         """Legacy execution log payload retained for backward compatibility."""
         execution = self.get_object()
+        legacy_log_entries = [
+            {
+                'id': str(log.id),
+                'level': log.level,
+                'message': log.message,
+                'timestamp': log.timestamp,
+                'node_execution_id': str(log.node_execution_id) if log.node_execution_id else None,
+                'metadata': log.metadata,
+            }
+            for log in execution.exec_logs.order_by('timestamp')
+        ]
         return Response({
             'node_status': execution.node_status,
-            'execution_logs': execution.execution_logs,
+            'execution_logs': legacy_log_entries,
             'error_message': execution.error_message,
-            'traceback': execution.traceback
+            'error_stack': execution.error_stack
         })
 
     @action(detail=True, methods=['get'])
     def status(self, request, pk=None):
-        """Get current execution status."""
+        """Get execution status."""
         execution = self.get_object()
         return Response({
-            'execution_id': execution.id,
+            'id': execution.id,
             'status': execution.status,
-            'node_status': execution.node_status,
-            'node_status_summary': self._get_node_status_summary(execution),
-            'output_data': execution.output_data,
-            'error_message': execution.error_message,
             'progress': execution.progress,
-            'current_node_id': execution.current_node_id,
             'started_at': execution.started_at,
+            'finished_at': execution.completed_at,
             'completed_at': execution.completed_at,
-            'duration': execution.duration
+        })
+
+    @action(detail=True, methods=['get'])
+    def timeline(self, request, pk=None):
+        """
+        Unified execution timeline — returns status, node executions, and logs in one call.
+        Eliminates the need for frontend to make 3-4 separate requests for an execution detail page.
+        """
+        execution = self.get_object()
+        level = request.query_params.get('level')
+        node_id = request.query_params.get('node_id')
+
+        node_executions_qs = NodeExecution.objects.filter(execution=execution)
+        if node_id:
+            try:
+                import uuid as uuid_lib
+                node_executions_qs = node_executions_qs.filter(node_id=uuid_lib.UUID(node_id))
+            except (ValueError, TypeError):
+                pass
+
+        node_executions = node_executions_qs.select_related('node').order_by('started_at')
+
+        logs_qs = ExecutionLog.objects.filter(execution=execution)
+        if level:
+            logs_qs = logs_qs.filter(level=level.upper())
+        if node_id:
+            try:
+                import uuid as uuid_lib
+                logs_qs = logs_qs.filter(node_execution_id=uuid_lib.UUID(node_id))
+            except (ValueError, TypeError):
+                pass
+        logs = list(logs_qs.order_by('timestamp'))
+
+        from .serializers import NodeExecutionSerializer, ExecutionLogSerializer
+        node_execution_data = NodeExecutionSerializer(node_executions, many=True).data
+        log_data = ExecutionLogSerializer(logs, many=True).data
+
+        return Response({
+            'execution': {
+                'id': str(execution.id),
+                'workflow_id': str(execution.workflow_id),
+                'status': execution.status,
+                'progress': execution.progress,
+                'node_status': execution.node_status,
+                'node_status_summary': self._get_node_status_summary(execution),
+                'current_node_id': str(execution.current_node_id) if execution.current_node_id else None,
+                'output_data': execution.output_data,
+                'error_message': execution.error_message,
+                'error_stack': execution.error_stack,
+                'trigger_type': execution.trigger_type,
+                'triggered_by': execution.triggered_by.username if execution.triggered_by else None,
+                'trigger_source': execution.trigger_source,
+                'started_at': execution.started_at,
+                'completed_at': execution.completed_at,
+                'duration': execution.duration,
+                'duration_ms': execution.duration_ms,
+                'total_tokens': _extract_execution_total_tokens(execution),
+                'total_cost': float(execution.cost_amount) if execution.cost_amount is not None else None,
+                'cost_currency': execution.cost_currency,
+                'created_at': execution.queued_at,
+            },
+            'node_executions': node_execution_data,
+            'logs': log_data,
+            'counts': {
+                'total_nodes': len(node_execution_data),
+                'total_logs': len(log_data),
+            }
         })
 
     @action(detail=True, methods=['get'])
@@ -808,6 +938,121 @@ class WorkflowExecutionViewSet(viewsets.ReadOnlyModelViewSet):
             'by_status': by_status,
             'completed_count': completed_count
         })
+
+    @action(detail=False, methods=['get'])
+    def analytics(self, request):
+        """
+        Layer 3 aggregated metrics — template/workflow/tenant dimensions.
+        Query params:
+            - scope: 'workflow', 'template', 'tenant', 'all' (default 'all')
+            - workflow_id: filter by specific workflow
+            - days: lookback window in days (default 30)
+        """
+        from django.db.models import Count, Avg, Sum, F
+        from django.utils import timezone
+        from datetime import timedelta
+
+        days = int(request.query_params.get('days', 30))
+        cutoff = timezone.now() - timedelta(days=days)
+        queryset = self.get_queryset().filter(queued_at__gte=cutoff)
+
+        scope = request.query_params.get('scope', 'all')
+        result = {}
+
+        if scope in ('all', 'workflow'):
+            workflow_stats = queryset.values(
+                'workflow__id', 'workflow__name'
+            ).annotate(
+                total=Count('id'),
+                completed=Count('id', filter=models.Q(status='completed')),
+                failed=Count('id', filter=models.Q(status='failed')),
+                avg_duration=Avg('duration_ms'),
+                total_cost=Sum('cost_amount'),
+            ).order_by('-total')[:20]
+
+            result['workflows'] = [{
+                'workflow_id': str(s['workflow__id']),
+                'workflow_name': s['workflow__name'],
+                'total': s['total'],
+                'completed': s['completed'],
+                'failed': s['failed'],
+                'success_rate': round(s['completed'] / max(s['total'], 1) * 100, 1),
+                'avg_duration_ms': round(s['avg_duration'] or 0, 1),
+                'total_tokens': 0,
+                'total_cost': float(s['total_cost'] or 0),
+            } for s in workflow_stats]
+
+        if scope in ('all', 'template'):
+            template_workflows = Workflow.objects.filter(
+                config__template_id__isnull=False
+            ).exclude(
+                config__template_id=''
+            ).values('config__template_id').annotate(count=Count('id'))
+
+            workflow_ids = list(template_workflows.values_list('id', flat=True))
+            template_executions = queryset.filter(workflow_id__in=workflow_ids)
+
+            template_stats = template_executions.values(
+                'workflow__config__template_id'
+            ).annotate(
+                total=Count('id'),
+                completed=Count('id', filter=models.Q(status='completed')),
+                failed=Count('id', filter=models.Q(status='failed')),
+                success_rate=Count('id', filter=models.Q(status='completed')) * 1.0 / Count('id') * 100,
+            ).order_by('-total')[:10]
+
+            result['templates'] = [{
+                'template_id': s['workflow__config__template_id'],
+                'total_runs': s['total'],
+                'successful_runs': s['completed'],
+                'failed_runs': s['failed'],
+                'success_rate': round(s['success_rate'] or 0, 1),
+            } for s in template_stats]
+
+        if scope in ('all', 'tenant'):
+            tenant_stats = queryset.exclude(
+                workflow__tenant__isnull=True
+            ).values(
+                'workflow__tenant__id', 'workflow__tenant__name'
+            ).annotate(
+                total=Count('id'),
+                completed=Count('id', filter=models.Q(status='completed')),
+                failed=Count('id', filter=models.Q(status='failed')),
+                total_cost=Sum('cost_amount'),
+            ).order_by('-total')[:10]
+
+            result['tenants'] = [{
+                'tenant_id': str(s['workflow__tenant__id']),
+                'tenant_name': s['workflow__tenant__name'],
+                'total_executions': s['total'],
+                'completed': s['completed'],
+                'failed': s['failed'],
+                'success_rate': round(s['completed'] / max(s['total'], 1) * 100, 1),
+                'total_cost': float(s['total_cost'] or 0),
+                'total_tokens': 0,
+            } for s in tenant_stats]
+
+        overall = queryset.aggregate(
+            total_executions=Count('id'),
+            completed=Count('id', filter=models.Q(status='completed')),
+            failed=Count('id', filter=models.Q(status='failed')),
+            avg_duration=Avg('duration_ms'),
+            total_cost=Sum('cost_amount'),
+        )
+        result['overall'] = {
+            'period_days': days,
+            'total_executions': overall['total_executions'] or 0,
+            'completed': overall['completed'] or 0,
+            'failed': overall['failed'] or 0,
+            'success_rate': round(
+                (overall['completed'] or 0) / max(overall['total_executions'], 1) * 100, 1
+            ),
+            'avg_duration_ms': round(overall['avg_duration'] or 0, 1),
+            'total_tokens': 0,
+            'total_cost': float(overall['total_cost'] or 0),
+        }
+
+        return Response(result)
 
     def _get_node_status_summary(self, execution):
         """Get summary of node execution status."""
@@ -992,8 +1237,10 @@ class NodeExecutionViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        """Filter by execution or node."""
-        queryset = NodeExecution.objects.all()
+        """Filter by execution or node within accessible workflow scope."""
+        queryset = NodeExecution.objects.filter(
+            execution__workflow__in=get_accessible_workflow_queryset(self.request.user)
+        )
 
         execution_id = self.request.query_params.get('execution')
         if execution_id:
@@ -1043,7 +1290,7 @@ class VariableViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         """Filter by workflow or list all for accessible workflows."""
         queryset = Variable.objects.all()
-        accessible_workflows = _get_accessible_workflow_queryset(self.request.user)
+        accessible_workflows = get_accessible_workflow_queryset(self.request.user)
 
         workflow_id = self.request.query_params.get('workflow')
         if workflow_id:
@@ -1072,7 +1319,7 @@ class ToolViewSet(viewsets.ModelViewSet):
         queryset = Tool.objects.all()
 
         if not self.request.user.is_superuser:
-            tenant_ids = _get_accessible_tenant_ids(self.request.user)
+            tenant_ids = get_accessible_tenant_ids(self.request.user)
             queryset = queryset.filter(
                 Q(is_public=True, tenant__isnull=True)
                 | Q(credential__owner=self.request.user)
@@ -1109,7 +1356,7 @@ class ToolViewSet(viewsets.ModelViewSet):
                 from tenants.models import Tenant
                 tenant = Tenant.objects.filter(
                     id=requested_tenant_id,
-                    id__in=_get_accessible_tenant_ids(self.request.user)
+                    id__in=get_accessible_tenant_ids(self.request.user)
                 ).first()
         serializer.save(tenant=tenant)
 
@@ -1153,39 +1400,71 @@ class ToolViewSet(viewsets.ModelViewSet):
 
 
 class APICredentialViewSet(viewsets.ModelViewSet):
-    """ViewSet for APICredential model with encryption support."""
+    """
+    ViewSet for APICredential model with encryption support.
+
+    Scope-based visibility:
+    - superuser: sees all credentials
+    - regular user: sees own user-level + accessible tenant-level + global credentials
+    - Creating global/tenant-level: superuser only
+    """
 
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        """Only show credentials the user owns or can manage within their tenants."""
-        queryset = APICredential.objects.filter(owner=self.request.user)
-        if self.request.user.is_superuser:
-            return APICredential.objects.all()
+        """Scope-aware queryset filtering."""
+        queryset = APICredential.objects.all()
 
-        tenant_ids = _get_accessible_tenant_ids(self.request.user)
-        return queryset.filter(Q(tenant__isnull=True) | Q(tenant_id__in=tenant_ids)).distinct()
+        if self.request.user.is_superuser:
+            pass
+        else:
+            tenant_ids = get_accessible_tenant_ids(self.request.user)
+            queryset = queryset.filter(
+                Q(owner=self.request.user)
+                | Q(scope='global')
+                | Q(scope='tenant', tenant_id__in=tenant_ids)
+            ).distinct()
+
+        scope = self.request.query_params.get('scope')
+        if scope in ('user', 'tenant', 'global'):
+            queryset = queryset.filter(scope=scope)
+
+        service_type = self.request.query_params.get('service_type')
+        if service_type:
+            queryset = queryset.filter(service_type=service_type)
+
+        return queryset.order_by('-created_at')
 
     def get_serializer_class(self):
         if self.action in ['create', 'update', 'partial_update']:
             return APICredentialCreateSerializer
+        if self.action == 'admin_list':
+            return APICredentialSerializer
         return APICredentialSerializer
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context['request_user'] = self.request.user
+        return context
 
     def perform_create(self, serializer):
         """Save with owner and encrypt credential data."""
+        user = self.request.user
+        scope = serializer.validated_data.get('scope', 'user')
         tenant = None
-        requested_tenant_id = self.request.data.get('tenant') or self.request.data.get('tenant_id')
-        if requested_tenant_id:
-            if self.request.user.is_superuser:
+
+        if scope == 'tenant':
+            if not user.is_superuser:
+                raise PermissionError('只有管理员可以创建租户级凭证')
+            tenant_id = serializer.validated_data.get('tenant', {}).get('id')
+            if tenant_id:
                 from tenants.models import Tenant
-                tenant = Tenant.objects.filter(id=requested_tenant_id).first()
-            else:
-                from tenants.models import Tenant
-                tenant = Tenant.objects.filter(
-                    id=requested_tenant_id,
-                    id__in=_get_accessible_tenant_ids(self.request.user)
-                ).first()
-        credential = serializer.save(owner=self.request.user, tenant=tenant)
+                tenant = Tenant.objects.filter(id=tenant_id).first()
+        elif scope == 'global':
+            if not user.is_superuser:
+                raise PermissionError('只有管理员可以创建全局凭证')
+
+        credential = serializer.save(owner=user, tenant=tenant)
         raw_data = serializer.validated_data.get('credential_data', '')
         if raw_data:
             credential.set_encrypted_data(raw_data)
@@ -1193,10 +1472,45 @@ class APICredentialViewSet(viewsets.ModelViewSet):
     def perform_update(self, serializer):
         """Update and re-encrypt credential data if changed."""
         credential = serializer.save()
-        # Re-encrypt if credential data was changed
         raw_data = serializer.validated_data.get('credential_data', '')
         if raw_data:
             credential.set_encrypted_data(raw_data)
+
+    @action(detail=False, methods=['get'], url_path='my')
+    def my_credentials(self, request):
+        """List only the current user's own credentials."""
+        qs = APICredential.objects.filter(owner=request.user).order_by('-created_at')
+        service_type = request.query_params.get('service_type')
+        if service_type:
+            qs = qs.filter(service_type=service_type)
+        serializer = APICredentialSerializer(qs, many=True)
+        return Response({'credentials': serializer.data, 'count': qs.count()})
+
+    @action(detail=False, methods=['get'], url_path='global')
+    def global_credentials(self, request):
+        """List all global credentials (admin only)."""
+        if not request.user.is_superuser:
+            return Response(
+                {'error': '需要管理员权限'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        qs = APICredential.objects.filter(scope='global').order_by('-created_at')
+        serializer = APICredentialSerializer(qs, many=True)
+        return Response({'credentials': serializer.data, 'count': qs.count()})
+
+    @action(detail=False, methods=['get'], url_path='tenant-list')
+    def tenant_credential_list(self, request):
+        """List tenant-level credentials (admin only)."""
+        if not request.user.is_superuser:
+            return Response(
+                {'error': '需要管理员权限'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        qs = APICredential.objects.filter(scope='tenant').order_by('-created_at')
+        tenant_ids = get_accessible_tenant_ids(request.user)
+        qs = qs.filter(tenant_id__in=tenant_ids)
+        serializer = APICredentialSerializer(qs, many=True)
+        return Response({'credentials': serializer.data, 'count': qs.count()})
 
     @action(detail=False, methods=['get'])
     def providers(self, request):
@@ -1210,44 +1524,101 @@ class APICredentialViewSet(viewsets.ModelViewSet):
             'count': len(providers)
         })
 
+    @action(detail=False, methods=['get'])
+    def scopes(self, request):
+        """List available scope types."""
+        return Response({
+            'scopes': [
+                {'id': choice[0], 'name': choice[1]}
+                for choice in APICredential.SCOPE_CHOICES
+            ]
+        })
+
     @action(detail=True, methods=['post'])
     def verify(self, request, pk=None):
         """Verify credential validity."""
         credential = self.get_object()
-
         try:
             from .services.credential_verifier import verify_credential
             is_valid, message = verify_credential(credential)
-
-            return Response({
-                'valid': is_valid,
-                'message': message
-            })
+            return Response({'valid': is_valid, 'message': message})
         except Exception as e:
-            return Response({
-                'valid': False,
-                'error': str(e)
-            }, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {'valid': False, 'error': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
     @action(detail=True, methods=['post'])
     def rotate(self, request, pk=None):
         """Rotate credential (update secret with encryption)."""
         credential = self.get_object()
         new_value = request.data.get('new_credential')
-
         if not new_value:
             return Response(
                 {'error': 'new_credential is required'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-
-        # Use encryption method
         credential.set_encrypted_data(new_value)
         credential.save()
+        return Response({'message': 'Credential rotated successfully'})
 
-        return Response({
-            'message': 'Credential rotated successfully'
-        })
+    @action(detail=False, methods=['post'], url_path='test-provider')
+    def test_provider(self, request):
+        """Test connectivity with a specific provider using given or user credentials."""
+        provider = request.data.get('provider')
+        credential_id = request.data.get('credential_id')
+        raw_key = request.data.get('api_key')
+
+        if not provider:
+            return Response(
+                {'error': 'provider is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if raw_key:
+            cred = APICredential(
+                owner=request.user,
+                service_type=provider,
+                credential_type='api_key',
+                credential_data='',
+                scope='user'
+            )
+            from .services.encryption_utils import encrypt_value
+            cred.credential_data = encrypt_value(raw_key)
+        elif credential_id:
+            cred = APICredential.objects.filter(
+                id=credential_id,
+                is_active=True
+            ).first()
+            if not cred:
+                return Response(
+                    {'error': 'Credential not found or inactive'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+        else:
+            cred = APICredential.get_best_for_user(
+                request.user, provider
+            )
+
+        if not cred:
+            return Response(
+                {'valid': False, 'error': f'No active credential found for provider: {provider}'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        try:
+            from .services.credential_verifier import verify_credential
+            is_valid, message = verify_credential(cred)
+            return Response({
+                'valid': is_valid,
+                'message': message,
+                'credential_id': str(cred.id)
+            })
+        except Exception as e:
+            return Response(
+                {'valid': False, 'error': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
 
 class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
@@ -1257,12 +1628,15 @@ class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        """Filter audit logs."""
-        queryset = AuditLog.objects.all()
-
-        # Regular users can only see their own logs
-        if not self.request.user.is_superuser:
-            queryset = queryset.filter(user=self.request.user)
+        if self.request.user.is_superuser:
+            queryset = AuditLog.objects.all()
+        else:
+            tenant_ids = get_accessible_tenant_ids(self.request.user)
+            queryset = AuditLog.objects.filter(
+                Q(user=self.request.user)
+                | Q(tenant_id__in=tenant_ids)
+                | Q(tenant__isnull=True)
+            ).distinct()
 
         # Filter by user
         user_id = self.request.query_params.get('user_id')
@@ -1358,16 +1732,46 @@ class TemplateCategoryViewSet(viewsets.ReadOnlyModelViewSet):
     pagination_class = None
 
 
-class WorkflowTemplateViewSet(viewsets.ReadOnlyModelViewSet):
+class WorkflowTemplateViewSet(viewsets.ModelViewSet):
     """ViewSet for WorkflowTemplate model."""
 
     queryset = WorkflowTemplate.objects.filter(is_active=True).select_related('category', 'created_by')
     permission_classes = [permissions.IsAuthenticated]
+    http_method_names = ['get', 'post', 'patch', 'delete']
+
+    def _resolve_template_tenant(self, request):
+        tenant_ids = get_accessible_tenant_ids(request.user)
+        requested_tenant_id = request.data.get('tenant') or request.data.get('tenant_id')
+        if not requested_tenant_id:
+            return None
+
+        from tenants.models import Tenant
+        if request.user.is_superuser:
+            return Tenant.objects.filter(id=requested_tenant_id).first()
+        return Tenant.objects.filter(id=requested_tenant_id, id__in=tenant_ids).first()
+
+    def _serialize_template_page(self, queryset):
+        page = self.paginate_queryset(queryset)
+        serializer = WorkflowTemplateListSerializer(page or queryset, many=True)
+        if page is not None:
+            return self.get_paginated_response(serializer.data)
+        return Response(serializer.data)
 
     def get_serializer_class(self):
+        if self.action in ['create', 'partial_update']:
+            return WorkflowTemplateDetailSerializer
         if self.action == 'list':
             return WorkflowTemplateListSerializer
         return WorkflowTemplateDetailSerializer
+
+    def destroy(self, request, pk=None):
+        """Delete a canonical workflow template."""
+        template = self.get_object()
+        if template.created_by_id != request.user.id and not request.user.is_superuser:
+            return Response({'error': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
+
+        template.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -1376,6 +1780,13 @@ class WorkflowTemplateViewSet(viewsets.ReadOnlyModelViewSet):
         featured = self.request.query_params.get('featured')
         search = self.request.query_params.get('search')
         tag = self.request.query_params.get('tag')
+        mine = self.request.query_params.get('mine')
+        created_by = self.request.query_params.get('created_by')
+
+        if mine == 'true':
+            queryset = queryset.filter(created_by=self.request.user)
+        elif created_by:
+            queryset = queryset.filter(created_by_id=created_by)
 
         if category:
             queryset = queryset.filter(category__slug=category)
@@ -1390,31 +1801,60 @@ class WorkflowTemplateViewSet(viewsets.ReadOnlyModelViewSet):
         if tag:
             queryset = queryset.filter(tags__contains=[tag])
 
-        return queryset.order_by('-use_count', '-rating')
+        sort = self.request.query_params.get('sort', 'popular')
+        if sort == 'popular':
+            queryset = queryset.order_by('-use_count', '-rating')
+        elif sort == 'rating':
+            queryset = queryset.order_by('-rating', '-rating_count')
+        elif sort == 'newest':
+            queryset = queryset.order_by('-created_at')
+        elif sort == 'name':
+            queryset = queryset.order_by('name')
+        else:
+            queryset = queryset.order_by('-use_count', '-rating')
+
+        return queryset
 
     @action(detail=True, methods=['post'])
     def create_from_template(self, request, pk=None):
-        """Create a new workflow from this template."""
+        """Create a new workflow from this template. Delegates to install."""
+        return self.install(request, pk)
+
+    @action(detail=True, methods=['post'])
+    def install(self, request, pk=None):
+        """Install a canonical workflow template by creating a workflow instance."""
         template = self.get_object()
+
+        if TemplateInstall.objects.filter(user=request.user, template=template).exists():
+            return Response(
+                {'error': 'Template already installed'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         serializer = WorkflowTemplateCreateFromSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
         workflow_name = data.get('name') or f"{template.name} (副本)"
         variables = data.get('variables', {})
+        tenant = self._resolve_template_tenant(request)
 
         workflow = Workflow.objects.create(
             name=workflow_name,
             description=template.description,
             owner=request.user,
-            tenant=getattr(request.user, 'tenant', None),
+            tenant=tenant,
             status='draft',
             tags=template.tags.copy() if template.tags else [],
-            config=template.workflow_data.get('settings', {}).copy() if template.workflow_data.get('settings') else {},
+            config={
+                **((template.workflow_data or {}).get('settings', {}).copy() if (template.workflow_data or {}).get('settings') else {}),
+                'template_id': str(template.id),
+                'template_name': template.name,
+            },
         )
 
         node_id_map = {}
-        for node_data in template.workflow_data.get('nodes', []):
+        for node_data in (template.workflow_data or {}).get('nodes', []):
             new_node = Node.objects.create(
                 workflow=workflow,
                 node_type=node_data['type'],
@@ -1426,12 +1866,11 @@ class WorkflowTemplateViewSet(viewsets.ReadOnlyModelViewSet):
             )
             node_id_map[node_data['id']] = str(new_node.id)
 
-        for edge_data in template.workflow_data.get('edges', []):
+        for edge_data in (template.workflow_data or {}).get('edges', []):
             source_node_id = node_id_map.get(edge_data['source'])
             target_node_id = node_id_map.get(edge_data['target'])
             if not source_node_id or not target_node_id:
                 continue
-
             Edge.objects.create(
                 workflow=workflow,
                 source_node_id=source_node_id,
@@ -1442,15 +1881,147 @@ class WorkflowTemplateViewSet(viewsets.ReadOnlyModelViewSet):
                 style=edge_data.get('style', {}),
             )
 
-        template.use_count += 1
-        template.save(update_fields=['use_count'])
+        install_record = TemplateInstall.objects.create(
+            user=request.user,
+            template=template,
+            workflow=workflow,
+        )
 
-        return Response(WorkflowDetailSerializer(workflow).data, status=status.HTTP_201_CREATED)
+        template.use_count = TemplateInstall.objects.filter(template=template).count()
+        template.save(update_fields=['use_count', 'updated_at'])
+
+        return Response({
+            'message': 'Template installed successfully',
+            'install': TemplateInstallSerializer(install_record).data,
+            'workflow': WorkflowDetailSerializer(workflow).data,
+            'install_count': template.use_count,
+        }, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['post'])
+    def rate(self, request, pk=None):
+        """Rate a canonical workflow template."""
+        template = self.get_object()
+        rating_value = request.data.get('rating')
+
+        try:
+            rating_value = int(rating_value)
+            if not (1 <= rating_value <= 5):
+                raise ValueError()
+        except (TypeError, ValueError):
+            return Response(
+                {'error': 'Rating must be between 1 and 5'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        rating_record, created = TemplateRatingRecord.objects.update_or_create(
+            user=request.user,
+            template=template,
+            defaults={'rating': rating_value}
+        )
+
+        agg = TemplateRatingRecord.objects.filter(template=template).aggregate(
+            avg=models.Avg('rating'),
+            count=models.Count('id')
+        )
+        template.rating = round(agg['avg'] or 0, 2)
+        template.rating_count = agg['count'] or 0
+        template.save(update_fields=['rating', 'rating_count', 'updated_at'])
+
+        return Response({
+            'user_rating': rating_record.rating,
+            'rating': float(template.rating or 0),
+            'rating_count': template.rating_count,
+        })
+
+    @action(detail=True, methods=['post'])
+    def report(self, request, pk=None):
+        """Submit a report against this template."""
+        template = self.get_object()
+
+        if str(template.created_by_id) == str(request.user.id):
+            return Response(
+                {'error': 'Cannot report your own template'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        serializer = TemplateReportCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        report_record, created = TemplateReport.objects.get_or_create(
+            user=request.user,
+            template=template,
+            reason=data['reason'],
+            defaults={'description': data.get('description', '')}
+        )
+
+        if not created:
+            return Response(
+                {'error': 'You have already reported this template with this reason'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        template.report_count = TemplateReport.objects.filter(template=template).count()
+        template.save(update_fields=['report_count', 'updated_at'])
+
+        return Response({
+            'message': 'Report submitted successfully',
+            'report': TemplateReportSerializer(report_record).data,
+            'report_count': template.report_count,
+        }, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['get'])
+    def stats(self, request, pk=None):
+        """Get canonical template statistics."""
+        template = self.get_object()
+        install_count = TemplateInstall.objects.filter(template=template).count()
+        return Response({
+            'install_count': install_count,
+            'avg_rating': float(template.rating or 0),
+            'rating_count': template.rating_count,
+        })
+
+    @action(detail=True, methods=['patch'])
+    def publish(self, request, pk=None):
+        """Publish a canonical workflow template."""
+        template = self.get_object()
+        if template.created_by_id != request.user.id and not request.user.is_superuser:
+            return Response({'error': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
+
+        template.is_active = True
+        template.save(update_fields=['is_active', 'updated_at'])
+        return Response(WorkflowTemplateDetailSerializer(template).data)
+
+    @action(detail=True, methods=['patch'])
+    def unpublish(self, request, pk=None):
+        """Unpublish a canonical workflow template."""
+        template = self.get_object()
+        if template.created_by_id != request.user.id and not request.user.is_superuser:
+            return Response({'error': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
+
+        template.is_active = False
+        template.save(update_fields=['is_active', 'updated_at'])
+        return Response(WorkflowTemplateDetailSerializer(template).data)
+
+    @action(detail=False, methods=['get'])
+    def installed(self, request):
+        """List templates installed by the current user via TemplateInstall records."""
+        install_ids = TemplateInstall.objects.filter(
+            user=request.user
+        ).values_list('template_id', flat=True)
+        queryset = self.get_queryset().filter(id__in=install_ids)
+        return self._serialize_template_page(queryset)
+
+    @action(detail=False, methods=['get'])
+    def mine(self, request):
+        """List templates created by the current user."""
+        queryset = self.get_queryset().filter(created_by=request.user)
+        return self._serialize_template_page(queryset)
 
     @action(detail=False, methods=['get'])
     def featured(self, request):
         """Get featured templates."""
-        queryset = self.get_queryset().filter(is_featured=True)[:6]
+        queryset = self.get_queryset().filter(is_featured=True, is_active=True)[:6]
         serializer = WorkflowTemplateListSerializer(queryset, many=True)
         return Response(serializer.data)
 
@@ -1481,6 +2052,17 @@ class ExecutionCacheViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self):
         """Filter cache entries to accessible workflow scope when possible."""
         queryset = ExecutionCache.objects.all()
+
+        if not self.request.user.is_superuser:
+            cache_keys = NodeExecution.objects.filter(
+                execution__workflow__in=get_accessible_workflow_queryset(self.request.user),
+                cache_hit=True,
+            ).exclude(
+                cache_key__isnull=True,
+            ).exclude(
+                cache_key=''
+            ).values_list('cache_key', flat=True).distinct()
+            queryset = queryset.filter(config_hash__in=cache_keys)
         
         # Filter by node type
         node_type = self.request.query_params.get('node_type')

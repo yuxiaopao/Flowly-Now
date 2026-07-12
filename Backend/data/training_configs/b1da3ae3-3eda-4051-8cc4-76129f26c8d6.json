@@ -1,0 +1,25 @@
+{
+  "job_id": "b1da3ae3-3eda-4051-8cc4-76129f26c8d6",
+  "training_kind": "clip_ret",
+  "framework": "pytorch",
+  "model_type": "retrieval",
+  "config": {
+    "base_weight_uri": "ViT-B-32/openai",
+    "training_kind": "clip_ret",
+    "framework": "pytorch",
+    "model_type": "retrieval",
+    "yolo_version": "",
+    "model_variant": ""
+  },
+  "dataset_id": "",
+  "dataset_path": "",
+  "dataset_yaml_path": "",
+  "dataset_source_mode": "",
+  "annotation_project_id": "",
+  "class_names": [],
+  "yolo_version": "",
+  "model_variant": "",
+  "base_weight_uri": "ViT-B-32/openai",
+  "base_weight_path": "",
+  "hyperparameters": {}
+}

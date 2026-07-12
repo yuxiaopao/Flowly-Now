@@ -3,30 +3,26 @@
     <div class="settings-container">
       <div class="settings-sidebar">
         <nav class="settings-nav">
-          <router-link
-            to="/settings/profile"
-            class="nav-item"
-            :class="{ active: activeTab === 'profile' }"
+          <template
+            v-for="item in navItems"
+            :key="item.key"
           >
-            <User class="nav-icon" />
-            个人资料
-          </router-link>
-          <router-link
-            to="/settings/credentials"
-            class="nav-item"
-            :class="{ active: activeTab === 'credentials' }"
-          >
-            <Key class="nav-icon" />
-            统一凭证管理
-          </router-link>
-          <router-link
-            to="/settings/preferences"
-            class="nav-item"
-            :class="{ active: activeTab === 'preferences' }"
-          >
-            <Settings class="nav-icon" />
-            偏好设置
-          </router-link>
+            <router-link
+              :to="item.to"
+              class="nav-item"
+              :class="{ active: activeTab === item.key }"
+              :title="item.description"
+            >
+              <component
+                :is="item.icon"
+                class="nav-icon"
+              />
+              <div class="nav-text">
+                <span class="nav-label">{{ item.label }}</span>
+                <span class="nav-desc">{{ item.description }}</span>
+              </div>
+            </router-link>
+          </template>
         </nav>
       </div>
 
@@ -40,15 +36,16 @@
 <script setup>
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { User, Key, Settings } from 'lucide-vue-next'
+import {
+  PERSONAL_CENTER_NAV_ITEMS,
+  resolvePersonalCenterActiveKey,
+} from '@/config/userNavigation'
 
 const route = useRoute()
-const activeTab = computed(() => {
-  const path = route.path
-  if (path.includes('api-keys') || path.includes('credentials')) return 'credentials'
-  if (path.includes('preferences')) return 'preferences'
-  return 'profile'
-})
+
+const navItems = PERSONAL_CENTER_NAV_ITEMS
+
+const activeTab = computed(() => resolvePersonalCenterActiveKey(route.path))
 </script>
 
 <style lang="scss" scoped>
@@ -72,12 +69,12 @@ const activeTab = computed(() => {
 .settings-nav {
   display: flex;
   flex-direction: column;
-  gap: $spacing-1;
+  gap: $spacing-2;
 }
 
 .nav-item {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: $spacing-3;
   padding: $spacing-3 $spacing-4;
   color: var(--text-secondary);
@@ -101,6 +98,27 @@ const activeTab = computed(() => {
 .nav-icon {
   width: 18px;
   height: 18px;
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.nav-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.nav-label {
+  font-size: $font-size-sm;
+  font-weight: $font-weight-medium;
+  color: inherit;
+}
+
+.nav-desc {
+  font-size: $font-size-xs;
+  line-height: 1.4;
+  color: var(--text-tertiary);
 }
 
 .settings-content {

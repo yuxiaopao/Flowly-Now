@@ -15,7 +15,7 @@ class DatasetSerializer(serializers.ModelSerializer):
     source_display = serializers.CharField(source='get_source_display', read_only=True)
     format_display = serializers.CharField(source='get_format_display', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
-    size_display = serializers.CharField(source='size_display', read_only=True)
+    size_display = serializers.CharField(read_only=True)
     is_ready = serializers.BooleanField(read_only=True)
     creator_name = serializers.CharField(source='created_by.username', read_only=True)
     creator_email = serializers.CharField(source='created_by.email', read_only=True)
@@ -48,7 +48,7 @@ class DatasetListSerializer(serializers.ModelSerializer):
 
     source_display = serializers.CharField(source='get_source_display', read_only=True)
     format_display = serializers.CharField(source='get_format_display', read_only=True)
-    size_display = serializers.CharField(source='size_display', read_only=True)
+    size_display = serializers.CharField(read_only=True)
     is_ready = serializers.BooleanField(read_only=True)
     creator_name = serializers.CharField(source='created_by.username', read_only=True)
 

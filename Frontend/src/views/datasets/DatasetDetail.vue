@@ -151,6 +151,13 @@
           </div>
 
           <div
+            v-else-if="previewData.length === 0"
+            class="loading-state"
+          >
+            <el-empty description="暂无预览数据" />
+          </div>
+
+          <div
             v-else
             class="preview-table-wrapper"
           >
@@ -193,6 +200,13 @@
               <Loader />
             </el-icon>
             <span>加载中...</span>
+          </div>
+
+          <div
+            v-else-if="columnDetails.length === 0"
+            class="loading-state"
+          >
+            <el-empty description="暂无列统计信息" />
           </div>
 
           <div
@@ -278,7 +292,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
@@ -335,96 +349,91 @@ async function loadDataset() {
   } catch (error) {
     console.error('Failed to load dataset:', error)
     ElMessage.error('加载数据集失败')
-    // Use mock data for demo
-    dataset.value = {
-      id: datasetId.value,
-      name: `Dataset ${datasetId.value}`,
-      description: '这是一个示例数据集描述',
-      format: 'csv',
-      size: 1048576,
-      rowCount: 10000,
-      columns: ['id', 'text', 'label', 'score', 'timestamp'],
-      createdAt: new Date().toISOString()
-    }
+    router.push('/datasets')
   }
+}
+
+function mapColumnStats(columnStats) {
+  if (Array.isArray(columnStats)) {
+    return columnStats
+  }
+  if (!columnStats || typeof columnStats !== 'object') {
+    return []
+  }
+  return Object.entries(columnStats).map(([name, stats]) => ({
+    name,
+    type: stats.dtype || stats.type || 'string',
+    nullCount: stats.null_count ?? stats.nullCount ?? 0,
+    unique: stats.unique_count ?? stats.unique ?? 0,
+    sample: stats.sample || '-',
+    distribution: stats.distribution || [],
+  }))
 }
 
 async function loadStats() {
   loadingStats.value = true
   try {
     const response = await datasetApi.stats(datasetId.value)
-    datasetStats.value = response
-    if (response.columnStats) {
-      columnDetails.value = response.columnStats
-    } else {
-      columnDetails.value = generateMockColumnStats()
+    const columnStats = response.column_stats || response.columnStats || {}
+    const nullCount = Object.values(columnStats).reduce(
+      (sum, col) => sum + (col?.null_count ?? col?.nullCount ?? 0),
+      0,
+    )
+
+    datasetStats.value = {
+      totalRows: response.row_count ?? response.rowCount ?? dataset.value.rowCount ?? 0,
+      columns: response.column_count ?? response.columnCount ?? dataset.value.columns?.length ?? 0,
+      memory: response.size ?? dataset.value.size ?? 0,
+      nullCount,
     }
+    columnDetails.value = mapColumnStats(columnStats)
   } catch (error) {
     console.error('Failed to load stats:', error)
+    ElMessage.error('加载统计信息失败')
     datasetStats.value = {
-      totalRows: dataset.value.rowCount || 10000,
-      columns: dataset.value.columns?.length || 5,
-      memory: dataset.value.size || 1048576,
-      nullCount: 15
+      totalRows: dataset.value.rowCount || 0,
+      columns: dataset.value.columns?.length || 0,
+      memory: dataset.value.size || 0,
+      nullCount: 0,
     }
-    columnDetails.value = generateMockColumnStats()
+    columnDetails.value = []
   } finally {
     loadingStats.value = false
   }
-}
-
-function generateMockColumnStats() {
-  return [
-    { name: 'id', type: 'int64', nullCount: 0, unique: 10000, sample: '1', distribution: [{ value: '1', count: 1 }] },
-    { name: 'text', type: 'string', nullCount: 5, unique: 9850, sample: '这是一条示例文本...', distribution: [] },
-    { name: 'label', type: 'string', nullCount: 0, unique: 10, sample: 'positive', distribution: [
-      { value: 'positive', count: 5500 },
-      { value: 'negative', count: 4500 }
-    ]},
-    { name: 'score', type: 'float64', nullCount: 10, unique: 9800, sample: '0.85', distribution: [] },
-    { name: 'timestamp', type: 'datetime', nullCount: 0, unique: 10000, sample: '2024-01-15 10:30:00', distribution: [] }
-  ]
 }
 
 async function loadPreview() {
   loadingPreview.value = true
   try {
     const response = await datasetApi.preview(datasetId.value, previewPage.value)
-    if (response.rows && response.columns) {
-      previewData.value = response.rows
-      previewColumns.value = response.columns
-    } else {
-      previewData.value = generateMockPreviewData()
-      previewColumns.value = dataset.value.columns || ['id', 'text', 'label', 'score', 'timestamp']
+    previewData.value = response.preview || response.rows || []
+    previewColumns.value = response.columns || dataset.value.columns || []
+    if (!previewColumns.value.length && previewData.value.length && typeof previewData.value[0] === 'object') {
+      previewColumns.value = Object.keys(previewData.value[0])
     }
   } catch (error) {
     console.error('Failed to load preview:', error)
-    previewData.value = generateMockPreviewData()
-    previewColumns.value = dataset.value.columns || ['id', 'text', 'label', 'score', 'timestamp']
+    ElMessage.error('加载数据预览失败')
+    previewData.value = []
+    previewColumns.value = dataset.value.columns || []
   } finally {
     loadingPreview.value = false
   }
 }
 
-function generateMockPreviewData() {
-  const rows = []
-  for (let i = 0; i < 20; i++) {
-    rows.push({
-      id: i + 1,
-      text: `这是第 ${i + 1} 条示例文本内容`,
-      label: i % 2 === 0 ? 'positive' : 'negative',
-      score: (Math.random()).toFixed(4),
-      timestamp: new Date(Date.now() - i * 86400000).toISOString().slice(0, 19).replace('T', ' ')
-    })
-  }
-  return rows
-}
-
 async function downloadDataset() {
   try {
-    const response = await datasetApi.get(datasetId.value)
-    ElMessage.success('下载功能开发中')
+    const blob = await datasetApi.download(datasetId.value)
+    const filename = `${dataset.value.name || 'dataset'}.${dataset.value.format || 'csv'}`
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = filename
+    link.click()
+    URL.revokeObjectURL(url)
+    ElMessage.success('下载已开始')
   } catch (error) {
+    console.error('Download failed:', error)
     ElMessage.error('下载失败')
   }
 }

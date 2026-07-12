@@ -80,14 +80,6 @@ const resumeToast = (id) => {
   }
 }
 
-const onProgressDone = (id) => {
-  const timer = timers.get(id)
-  if (timer !== undefined) {
-    clearTimeout(timer)
-    timers.delete(id)
-  }
-}
-
 watch(
   () => appStore.toasts.length,
   () => {

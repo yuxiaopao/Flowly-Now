@@ -328,7 +328,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, watch } from 'vue'
+import { reactive, watch } from 'vue'
 import { Plus, Minus } from 'lucide-vue-next'
 
 const props = defineProps({

@@ -181,10 +181,12 @@
     <!-- Vue Flow Canvas -->
     <VueFlow
       ref="vueFlowRef"
-      v-model:nodes="nodes"
-      v-model:edges="edges"
+      v-model:nodes="flowNodes"
+      v-model:edges="flowEdges"
       :node-types="nodeTypes"
       :default-viewport="defaultViewport"
+      :min-zoom="WORKFLOW_CANVAS_ZOOM.min"
+      :max-zoom="WORKFLOW_CANVAS_ZOOM.max"
       :snap-to-grid="snapToGrid"
       :snap-grid="[16, 16]"
       :mini-map="miniMapConfig"
@@ -201,10 +203,7 @@
       @selection-change="handleSelectionChange"
       @move-end="handleMoveEnd"
     >
-      <Background
-        pattern-color="#1a1a2e"
-        :gap="16"
-      />
+      <Background :gap="16" />
 
       <MiniMap
         v-if="showMiniMapEnabled"
@@ -214,193 +213,719 @@
         zoomable
       />
 
-      <template #node-start="{ data }">
-        <StartNode :data="data" />
+      <template #node-start="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="StartNode"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
       </template>
 
-      <template #node-end="{ data }">
-        <EndNode :data="data" />
+      <template #node-end="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="EndNode"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
       </template>
 
-      <template #node-llm="{ data }">
-        <LLMNode :data="data" />
+      <template #node-llm="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="LLMNode"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
       </template>
 
-      <template #node-prompt="{ data }">
-        <PromptNode :data="data" />
+      <template #node-prompt="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="PromptNode"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
       </template>
 
-      <template #node-condition="{ data }">
-        <ConditionNode :data="data" />
+      <template #node-condition="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="ConditionNode"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
       </template>
 
-      <template #node-tool="{ data }">
-        <ToolNode :data="data" />
+      <template #node-tool="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="ToolNode"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
       </template>
 
-      <template #node-input="{ data }">
-        <InputNode :data="data" />
+      <template #node-input="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="InputNode"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
       </template>
 
-      <template #node-output="{ data }">
-        <OutputNode :data="data" />
+      <template #node-output="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="OutputNode"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
       </template>
 
-      <template #node-http="{ data }">
-        <HttpNode :data="data" />
+      <template #node-http="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="HttpNode"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
       </template>
 
-      <template #node-code="{ data }">
-        <CodeNode :data="data" />
+      <template #node-code="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="CodeNode"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
       </template>
 
-      <template #node-loop="{ data }">
-        <LoopNode :data="data" />
+      <template #node-loop="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="LoopNode"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
       </template>
 
-      <template #node-variable="{ data }">
-        <VariableNode :data="data" />
+      <template #node-variable="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="VariableNode"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
       </template>
 
-      <template #node-switch="{ data }">
-        <SwitchNode :data="data" />
+      <template #node-switch="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="SwitchNode"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
       </template>
 
-      <template #node-delay="{ data }">
-        <DelayNode :data="data" />
+      <template #node-delay="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="DelayNode"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
       </template>
 
-      <template #node-transform="{ data }">
-        <TransformNode :data="data" />
+      <template #node-transform="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="TransformNode"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
       </template>
 
-      <template #node-image_generation="{ data }">
-        <ImageGenerationNode :data="data" />
+      <template #node-image_generation="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="ImageGenerationNode"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
       </template>
 
-      <template #node-video_generation="{ data }">
-        <VideoGenerationNode :data="data" />
+      <template #node-video_generation="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="VideoGenerationNode"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
       </template>
 
-      <template #node-audio_generation="{ data }">
-        <AudioGenerationNode :data="data" />
+      <template #node-audio_generation="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="AudioGenerationNode"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
       </template>
 
-      <template #node-subtitle_generation="{ data }">
-        <SubtitleGenerationNode :data="data" />
+      <template #node-subtitle_generation="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="SubtitleGenerationNode"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
       </template>
 
-      <template #node-image_editing="{ data }">
-        <ImageEditingNode :data="data" />
+      <template #node-video_translation="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="VideoTranslationNode"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
       </template>
 
-      <template #node-dataset_upload="{ data }">
-        <DatasetUploadNode :data="data" />
+      <template #node-video_upload="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="VideoUploadNode"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
       </template>
 
-      <template #node-data_annotation="{ data }">
-        <DataAnnotationNode :data="data" />
+      <template #node-subtitle_translate="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="SubtitleTranslateNode"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
       </template>
 
-      <template #node-data_augmentation="{ data }">
-        <DataAugmentationNode :data="data" />
+      <template #node-segment_dubbing="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="SegmentDubbingNode"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
       </template>
 
-      <template #node-model_training="{ data }">
-        <ModelTrainingNode :data="data" />
+      <template #node-lip_sync="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="LipSyncNode"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
       </template>
 
-      <template #node-model_evaluation="{ data }">
-        <ModelEvaluationNode :data="data" />
+      <template #node-subtitle_burn="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="SubtitleBurnNode"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
       </template>
 
-      <template #node-model_deployment="{ data }">
-        <ModelDeploymentNode :data="data" />
+      <template #node-image_editing="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="ImageEditingNode"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
       </template>
 
-      <template #node-website_generator="{ data }">
-        <WebsiteGeneratorNode :data="data" />
+      <template #node-dataset_upload="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="DatasetUploadNode"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
       </template>
 
-      <template #node-document_loader="{ data }">
-        <DocumentLoaderNode :data="data" />
+      <template #node-data_annotation="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="DataAnnotationNode"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
       </template>
 
-      <template #node-embedding="{ data }">
-        <EmbeddingNode :data="data" />
+      <template #node-data_augmentation="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="DataAugmentationNode"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
       </template>
 
-      <template #node-vector_store="{ data }">
-        <VectorStoreNode :data="data" />
+      <template #node-model_training="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="ModelTrainingNode"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
       </template>
 
-      <template #node-retriever="{ data }">
-        <RetrieverNode :data="data" />
+      <template #node-yolo_training="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="YoloTrainingNode"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
       </template>
 
-      <template #node-reranker="{ data }">
-        <RerankerNode :data="data" />
+      <template #node-clip_classification="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="ClipClassificationNode"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
       </template>
 
-      <template #node-agent="{ data }">
-        <AgentNodeComponent :data="data" />
+      <template #node-clip_retrieval="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="ClipRetrievalNode"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
       </template>
 
-      <template #node-planner="{ data }">
-        <PlannerNode :data="data" />
+      <template #node-project_profiler="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="ProjectProfilerNode"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
       </template>
 
-      <template #node-executor="{ data }">
-        <ExecutorNode :data="data" />
+      <template #node-model_evaluation="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="ModelEvaluationNode"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
       </template>
 
-      <template #node-memory="{ data }">
-        <MemoryNode :data="data" />
+      <template #node-model_deployment="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="ModelDeploymentNode"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
       </template>
 
-      <template #node-file_reader="{ data }">
-        <FileReaderNode :data="data" />
+      <template #node-website_generator="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="WebsiteGeneratorNode"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
       </template>
 
-      <template #node-file_writer="{ data }">
-        <FileWriterNode :data="data" />
+      <template #node-environment_provision="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="EnvironmentProvisionNode"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
       </template>
 
-      <template #node-web_scraper="{ data }">
-        <WebScraperNode :data="data" />
+      <template #node-site_qa="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="SiteQaNode"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
       </template>
 
-      <template #node-csv_transform="{ data }">
-        <CsvTransformNode :data="data" />
+      <template #node-site_preview="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="SitePreviewNode"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
       </template>
 
-      <template #node-json_transform="{ data }">
-        <JsonTransformNode :data="data" />
+      <template #node-project_agent="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="ProjectAgentNode"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
       </template>
 
-      <template #node-email="{ data }">
-        <EmailNode :data="data" />
+      <template #node-backend_setup="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="BackendSetupNode"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
       </template>
 
-      <template #node-subworkflow="{ data }">
-        <SubworkflowNode :data="data" />
+      <template #node-frontend_setup="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="FrontendSetupNode"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
       </template>
 
-      <template #node-email_node="{ data }">
-        <EmailNode :data="data" />
+      <template #node-ui_beautify="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="UiBeautifyNode"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
+      </template>
+
+      <template #node-site_code_review="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="SiteCodeReviewNode"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
+      </template>
+
+      <template #node-document_loader="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="DocumentLoaderNode"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
+      </template>
+
+      <template #node-embedding="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="EmbeddingNode"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
+      </template>
+
+      <template #node-vector_store="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="VectorStoreNode"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
+      </template>
+
+      <template #node-retriever="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="RetrieverNode"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
+      </template>
+
+      <template #node-reranker="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="RerankerNode"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
+      </template>
+
+      <template #node-agent="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="AgentNodeComponent"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
+      </template>
+
+      <template #node-planner="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="PlannerNode"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
+      </template>
+
+      <template #node-executor="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="ExecutorNode"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
+      </template>
+
+      <template #node-memory="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="MemoryNode"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
+      </template>
+
+      <template #node-file_reader="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="FileReaderNode"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
+      </template>
+
+      <template #node-file_writer="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="FileWriterNode"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
+      </template>
+
+      <template #node-web_scraper="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="WebScraperNode"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
+      </template>
+
+      <template #node-csv_transform="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="CsvTransformNode"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
+      </template>
+
+      <template #node-json_transform="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="JsonTransformNode"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
+      </template>
+
+      <template #node-email="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="EmailNode"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
+      </template>
+
+      <template #node-subworkflow="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="SubworkflowNode"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
+      </template>
+
+      <template #node-manual="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="ManualTriggerNode"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
+      </template>
+
+      <template #node-schedule="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="ScheduleTriggerNode"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
+      </template>
+
+      <template #node-form="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="FormTriggerNode"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
+      </template>
+
+      <template #node-webhook="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="WebhookTriggerNode"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
+      </template>
+
+      <template #node-split="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="SplitBatchesNode"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
+      </template>
+
+      <template #node-merge="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="MergeNode"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
+      </template>
+
+      <template #node-filter="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="FilterNode"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
+      </template>
+
+      <template #node-datetime="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="DateTimeNode"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
+      </template>
+
+      <template #node-set="{ data, id, selected }">
+        <WorkflowNodeHost
+          :node-component="SetNode"
+          :id="id"
+          :data="data"
+          :selected="selected"
+          @select="handleCustomNodeSelect"
+        />
       </template>
     </VueFlow>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, h, watch } from 'vue'
-import { VueFlow, useVueFlow } from '@vue-flow/core'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { VueFlow } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import { MiniMap } from '@vue-flow/minimap'
 import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
 import '@vue-flow/minimap/dist/style.css'
+import { WORKFLOW_CANVAS_VIEWPORT, WORKFLOW_CANVAS_ZOOM } from '@/config/workflowCanvas'
+import WorkflowNodeHost from './WorkflowNodeHost.vue'
 
 import StartNode from './nodes/StartNode.vue'
 import EndNode from './nodes/EndNode.vue'
@@ -421,14 +946,30 @@ import ImageGenerationNode from './nodes/ImageGenerationNode.vue'
 import VideoGenerationNode from './nodes/VideoGenerationNode.vue'
 import AudioGenerationNode from './nodes/AudioGenerationNode.vue'
 import SubtitleGenerationNode from './nodes/SubtitleGenerationNode.vue'
+import VideoTranslationNode from './nodes/VideoTranslationNode.vue'
+import VideoUploadNode from './nodes/VideoUploadNode.vue'
+import SubtitleTranslateNode from './nodes/SubtitleTranslateNode.vue'
+import SegmentDubbingNode from './nodes/SegmentDubbingNode.vue'
+import LipSyncNode from './nodes/LipSyncNode.vue'
+import SubtitleBurnNode from './nodes/SubtitleBurnNode.vue'
 import ImageEditingNode from './nodes/ImageEditingNode.vue'
 import DatasetUploadNode from './nodes/DatasetUploadNode.vue'
 import DataAnnotationNode from './nodes/DataAnnotationNode.vue'
 import DataAugmentationNode from './nodes/DataAugmentationNode.vue'
 import ModelTrainingNode from './nodes/ModelTrainingNode.vue'
+import YoloTrainingNode from './nodes/YoloTrainingNode.vue'
+import ProjectProfilerNode from './nodes/ProjectProfilerNode.vue'
 import ModelEvaluationNode from './nodes/ModelEvaluationNode.vue'
 import ModelDeploymentNode from './nodes/ModelDeploymentNode.vue'
 import WebsiteGeneratorNode from './nodes/WebsiteGeneratorNode.vue'
+import EnvironmentProvisionNode from './nodes/EnvironmentProvisionNode.vue'
+import SiteQaNode from './nodes/SiteQaNode.vue'
+import SitePreviewNode from './nodes/SitePreviewNode.vue'
+import ProjectAgentNode from './nodes/ProjectAgentNode.vue'
+import BackendSetupNode from './nodes/BackendSetupNode.vue'
+import FrontendSetupNode from './nodes/FrontendSetupNode.vue'
+import UiBeautifyNode from './nodes/UiBeautifyNode.vue'
+import SiteCodeReviewNode from './nodes/SiteCodeReviewNode.vue'
 import DocumentLoaderNode from './nodes/DocumentLoaderNode.vue'
 import EmbeddingNode from './nodes/EmbeddingNode.vue'
 import VectorStoreNode from './nodes/VectorStoreNode.vue'
@@ -445,6 +986,15 @@ import CsvTransformNode from './nodes/CsvTransformNode.vue'
 import JsonTransformNode from './nodes/JsonTransformNode.vue'
 import EmailNode from './nodes/EmailNode.vue'
 import SubworkflowNode from './nodes/SubworkflowNode.vue'
+import ManualTriggerNode from './nodes/ManualTriggerNode.vue'
+import ScheduleTriggerNode from './nodes/ScheduleTriggerNode.vue'
+import FormTriggerNode from './nodes/FormTriggerNode.vue'
+import SplitBatchesNode from './nodes/SplitBatchesNode.vue'
+import SetNode from './nodes/SetNode.vue'
+import DateTimeNode from './nodes/DateTimeNode.vue'
+import FilterNode from './nodes/FilterNode.vue'
+import MergeNode from './nodes/MergeNode.vue'
+import WebhookTriggerNode from './nodes/WebhookTriggerNode.vue'
 
 import {
   ZoomIn, ZoomOut, Maximize2, Grid3x3, Map, CheckSquare, Trash2,
@@ -473,7 +1023,7 @@ const props = defineProps({
   },
   defaultViewport: {
     type: Object,
-    default: () => ({ x: 0, y: 0, zoom: 1 })
+    default: () => ({ ...WORKFLOW_CANVAS_VIEWPORT }),
   },
   executionId: {
     type: [String, Number],
@@ -498,8 +1048,20 @@ const emit = defineEmits([
   'restore-history',
   'cancel',
   'pause',
-  'resume'
+  'resume',
+  'update:nodes',
+  'update:edges'
 ])
+
+const flowNodes = computed({
+  get: () => props.nodes,
+  set: (value) => emit('update:nodes', value)
+})
+
+const flowEdges = computed({
+  get: () => props.edges,
+  set: (value) => emit('update:edges', value)
+})
 
 const vueFlowRef = ref(null)
 const snapToGridEnabled = ref(props.snapToGrid)
@@ -537,26 +1099,19 @@ function getNodeStatusClass(nodeId) {
   return `status-${status}`
 }
 
-// Check if node is in execution state
-function isNodeRunning(nodeId) {
-  return executionStore.nodeStatusMap[nodeId] === 'running'
-}
-
-function isNodeCompleted(nodeId) {
-  return executionStore.nodeStatusMap[nodeId] === 'completed'
-}
-
-function isNodeFailed(nodeId) {
-  return executionStore.nodeStatusMap[nodeId] === 'failed'
-}
-
 const nodeTypes = [
-  'start', 'end', 'llm', 'prompt', 'condition',
-  'tool', 'input', 'output', 'http', 'code',
+  'start', 'end', 'manual', 'schedule', 'webhook', 'form',
+  'llm', 'prompt', 'condition', 'split', 'filter', 'merge',
+  'tool', 'input', 'output', 'http', 'code', 'set', 'datetime',
   'loop', 'variable', 'switch', 'delay', 'transform',
-  'image_generation', 'video_generation', 'audio_generation', 'subtitle_generation', 'image_editing',
-  'dataset_upload', 'data_annotation', 'data_augmentation', 'model_training', 'model_evaluation', 'model_deployment',
-  'website_generator', 'document_loader', 'embedding', 'vector_store', 'retriever', 'reranker',
+  'image_generation', 'video_generation', 'audio_generation', 'subtitle_generation',
+  'video_upload', 'subtitle_translate', 'segment_dubbing', 'lip_sync', 'subtitle_burn',
+  'video_translation', 'image_editing',
+  'dataset_upload', 'data_annotation', 'data_augmentation', 'model_training', 'yolo_training', 'clip_classification', 'clip_retrieval', 'project_profiler', 'model_evaluation', 'model_deployment',
+  'yolo_training', 'clip_classification', 'clip_retrieval',
+  'website_generator', 'backend_setup', 'frontend_setup', 'ui_beautify', 'site_code_review',
+  'environment_provision', 'site_qa', 'site_preview', 'project_agent',
+  'document_loader', 'embedding', 'vector_store', 'retriever', 'reranker',
   'agent', 'planner', 'executor', 'memory',
   'file_reader', 'file_writer', 'web_scraper',
   'csv_transform', 'json_transform', 'email', 'subworkflow'
@@ -590,20 +1145,47 @@ function getMiniMapNodeColor(node) {
     switch: '#3b82f6',
     delay: '#14b8a6',
     transform: '#8b5cf6',
+    // Triggers
+    manual: '#f59e0b',
+    schedule: '#06b6d4',
+    webhook: '#3b82f6',
+    form: '#8b5cf6',
+    // Control Flow
+    split: '#ec4899',
+    filter: '#f97316',
+    merge: '#22c55e',
+    // Utilities
+    datetime: '#14b8a6',
+    set: '#14b8a6',
     // Multimodal & Generation
     image_generation: '#ec4899',
     video_generation: '#8b5cf6',
     audio_generation: '#06b6d4',
     subtitle_generation: '#f59e0b',
+    video_upload: '#0284c7',
+    subtitle_translate: '#0ea5e9',
+    segment_dubbing: '#06b6d4',
+    lip_sync: '#8b5cf6',
+    subtitle_burn: '#f59e0b',
+    video_translation: '#64748b',
     image_editing: '#f97316',
     // ML & Training
     dataset_upload: '#22c55e',
     data_annotation: '#14b8a6',
     data_augmentation: '#f59e0b',
     model_training: '#ef4444',
+    project_profiler: '#a855f7',
     model_evaluation: '#3b82f6',
     model_deployment: '#10b981',
     website_generator: '#8b5cf6',
+    backend_setup: '#6366f1',
+    frontend_setup: '#818cf8',
+    ui_beautify: '#a855f7',
+    site_code_review: '#10b981',
+    environment_provision: '#06b6d4',
+    site_qa: '#10b981',
+    site_preview: '#8b5cf6',
+    project_agent: '#ec4899',
     // RAG & Retrieval
     document_loader: '#f59e0b',
     embedding: '#06b6d4',
@@ -719,6 +1301,15 @@ const handleSelectionChange = ({ nodes }) => {
   selectedNodes.value = nodes
 }
 
+/** 自定义节点 emit('select') → 同步 Editor PropertyPanel（根因：节点 @click.stop 阻止 VueFlow node-click） */
+function handleCustomNodeSelect(nodeId) {
+  if (!nodeId) return
+  const node = props.nodes.find((n) => n.id === nodeId)
+  if (node) {
+    emit('node-click', { node })
+  }
+}
+
 const handleMoveEnd = ({ viewport }) => {
   zoom.value = viewport.zoom
   emit('zoom-change', viewport)
@@ -777,7 +1368,24 @@ onUnmounted(() => {
   width: 100%;
   height: 100%;
   position: relative;
-  background-color: var(--color-bg-primary, #0f0f1a);
+  background-color: var(--canvas-bg);
+  transition: background-color 0.3s ease;
+}
+
+// 画布网格点 / 线颜色跟随主题（覆盖 Background 组件默认 pattern 色）
+:deep(.vue-flow__background) {
+  pattern circle,
+  pattern path {
+    fill: var(--canvas-pattern);
+    stroke: var(--canvas-pattern);
+  }
+}
+
+// 小地图背景跟随主题
+:deep(.vue-flow__minimap) {
+  background-color: var(--canvas-minimap-bg);
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
 }
 
 .canvas-toolbar {
@@ -790,11 +1398,11 @@ onUnmounted(() => {
   align-items: center;
   gap: 8px;
   padding: 8px 16px;
-  background: rgba(15, 15, 26, 0.9);
+  background: var(--bg-elevated);
   backdrop-filter: blur(12px);
   border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255,255,255,0.03) inset;
+  border: 1px solid var(--border-primary);
+  box-shadow: var(--shadow-lg);
 }
 
 .toolbar-group {
@@ -806,13 +1414,13 @@ onUnmounted(() => {
 .toolbar-divider {
   width: 1px;
   height: 24px;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--border-primary);
 }
 
 .zoom-level {
   font-size: 12px;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--text-secondary);
   min-width: 40px;
   text-align: center;
   font-family: 'JetBrains Mono', monospace;
@@ -832,11 +1440,11 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 4px;
   padding: 6px;
-  background: rgba(15, 15, 26, 0.9);
+  background: var(--bg-elevated);
   backdrop-filter: blur(12px);
   border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  border: 1px solid var(--border-primary);
+  box-shadow: var(--shadow-lg);
 }
 
 :deep(.vue-flow-controls-btn) {
@@ -848,15 +1456,15 @@ onUnmounted(() => {
   background: transparent;
   border: none;
   border-radius: 6px;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--text-secondary);
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
 
   &:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: white;
+    background: var(--bg-hover);
+    color: var(--text-primary);
   }
 
   &:active {
@@ -885,10 +1493,10 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   padding: 8px 16px;
-  background: rgba(15, 15, 26, 0.95);
+  background: var(--bg-elevated);
   backdrop-filter: blur(12px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  border-bottom: 1px solid var(--border-primary);
+  box-shadow: var(--shadow-md);
 }
 
 .execution-info {
@@ -914,68 +1522,58 @@ onUnmounted(() => {
   }
 
   &.running {
-    background: rgba(59, 130, 246, 0.15);
-    color: #3b82f6;
-    border: 1px solid rgba(59, 130, 246, 0.3);
+    background: var(--info-bg);
+    color: var(--info);
+    border: 1px solid var(--accent-blue-soft);
 
     .indicator-dot {
-      background: #3b82f6;
-      box-shadow: 0 0 8px rgba(59, 130, 246, 0.6);
+      background: var(--info);
+      box-shadow: 0 0 8px var(--accent-blue-soft);
     }
   }
 
   &.completed {
-    background: rgba(16, 185, 129, 0.15);
-    color: #10b981;
-    border: 1px solid rgba(16, 185, 129, 0.3);
+    background: var(--success-bg);
+    color: var(--success);
+    border: 1px solid var(--accent-emerald-soft);
 
     .indicator-dot {
-      background: #10b981;
+      background: var(--success);
       animation: none;
     }
   }
 
   &.failed {
-    background: rgba(239, 68, 68, 0.15);
-    color: #ef4444;
-    border: 1px solid rgba(239, 68, 68, 0.3);
+    background: var(--error-bg);
+    color: var(--error);
+    border: 1px solid var(--accent-rose-soft);
 
     .indicator-dot {
-      background: #ef4444;
+      background: var(--error);
       animation: none;
     }
   }
 
   &.paused {
-    background: rgba(245, 158, 11, 0.15);
-    color: #f59e0b;
-    border: 1px solid rgba(245, 158, 11, 0.3);
+    background: var(--warning-bg);
+    color: var(--warning);
+    border: 1px solid var(--accent-amber-soft);
 
     .indicator-dot {
-      background: #f59e0b;
+      background: var(--warning);
       animation: none;
     }
   }
 
-  &.cancelled {
-    background: rgba(156, 163, 175, 0.15);
-    color: #9ca3af;
-    border: 1px solid rgba(156, 163, 175, 0.3);
-
-    .indicator-dot {
-      background: #9ca3af;
-      animation: none;
-    }
-  }
-
+  &.cancelled,
   &.idle,
   &.pending {
-    background: rgba(156, 163, 175, 0.1);
-    color: #9ca3af;
-    border: 1px solid rgba(156, 163, 175, 0.2);
+    background: var(--surface-muted);
+    color: var(--text-tertiary);
+    border: 1px solid var(--border-secondary);
 
     .indicator-dot {
-      background: #9ca3af;
+      background: var(--text-tertiary);
       animation: none;
     }
   }
@@ -989,14 +1587,14 @@ onUnmounted(() => {
   .progress-bar {
     width: 120px;
     height: 6px;
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--surface-strong);
     border-radius: 3px;
     overflow: hidden;
   }
 
   .progress-fill {
     height: 100%;
-    background: linear-gradient(90deg, #3b82f6, #10b981);
+    background: linear-gradient(90deg, var(--info), var(--success));
     border-radius: 3px;
     transition: width 0.3s ease;
   }
@@ -1004,7 +1602,7 @@ onUnmounted(() => {
   .progress-text {
     font-size: 12px;
     font-weight: 600;
-    color: rgba(255, 255, 255, 0.7);
+    color: var(--text-secondary);
     font-family: 'JetBrains Mono', monospace;
     min-width: 36px;
   }
@@ -1033,15 +1631,15 @@ onUnmounted(() => {
   }
 
   &.completed {
-    color: #10b981;
+    color: var(--success);
   }
 
   &.running {
-    color: #3b82f6;
+    color: var(--info);
   }
 
   &.failed {
-    color: #ef4444;
+    color: var(--error);
   }
 }
 
@@ -1089,7 +1687,7 @@ onUnmounted(() => {
     .llm-node,
     .start-end-node,
     .node-wrapper {
-      box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.4), 0 4px 20px rgba(16, 185, 129, 0.2) !important;
+      box-shadow: 0 0 0 2px var(--accent-emerald-soft), 0 4px 20px var(--success-bg) !important;
     }
   }
 
@@ -1099,7 +1697,7 @@ onUnmounted(() => {
     .llm-node,
     .start-end-node,
     .node-wrapper {
-      box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.4), 0 4px 20px rgba(239, 68, 68, 0.2) !important;
+      box-shadow: 0 0 0 2px var(--accent-rose-soft), 0 4px 20px var(--error-bg) !important;
       animation: node-error-shake 0.5s ease-in-out;
     }
   }
@@ -1112,10 +1710,10 @@ onUnmounted(() => {
 
 @keyframes node-pulse {
   0%, 100% {
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3), 0 0 0 0 rgba(59, 130, 246, 0.4);
+    box-shadow: var(--shadow-md), 0 0 0 0 var(--accent-blue-soft);
   }
   50% {
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3), 0 0 0 8px rgba(59, 130, 246, 0);
+    box-shadow: var(--shadow-md), 0 0 0 8px transparent;
   }
 }
 
@@ -1134,18 +1732,18 @@ onUnmounted(() => {
 // Edge animation for running paths
 :deep(.vue-flow__edge-path) {
   &.running-path {
-    stroke: #3b82f6;
+    stroke: var(--info);
     stroke-width: 2;
     animation: edge-flow 1s linear infinite;
   }
 
   &.completed-path {
-    stroke: #10b981;
+    stroke: var(--success);
     stroke-width: 2;
   }
 
   &.error-path {
-    stroke: #ef4444;
+    stroke: var(--error);
     stroke-width: 2;
     stroke-dasharray: 5, 5;
   }

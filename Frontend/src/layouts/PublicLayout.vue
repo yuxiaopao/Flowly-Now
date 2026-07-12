@@ -3,13 +3,8 @@
     <div class="public-container">
       <slot />
     </div>
-    <ToastContainer />
   </div>
 </template>
-
-<script setup>
-import ToastContainer from '@/components/common/ToastContainer.vue'
-</script>
 
 <style lang="scss" scoped>
 @use '@/assets/styles/variables.scss' as *;

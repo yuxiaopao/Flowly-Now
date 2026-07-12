@@ -69,10 +69,12 @@ const closeModal = (modal) => {
 }
 
 const handleConfirm = (modal) => {
+  appStore.closeModal(modal.id)
   modal.onConfirm?.()
 }
 
 const handleCancel = (modal) => {
+  appStore.closeModal(modal.id)
   modal.onCancel?.()
 }
 

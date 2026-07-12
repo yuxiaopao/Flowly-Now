@@ -123,7 +123,7 @@
         </div>
 
         <div class="features-grid">
-          <div class="feature-card">
+          <div class="feature-card feature-pill feature-pill--blue">
             <div class="feature-icon">
               <MessageSquare class="icon" />
             </div>
@@ -135,7 +135,7 @@
             </p>
           </div>
 
-          <div class="feature-card">
+          <div class="feature-card feature-pill feature-pill--blue">
             <div class="feature-icon">
               <GitBranch class="icon" />
             </div>
@@ -147,7 +147,7 @@
             </p>
           </div>
 
-          <div class="feature-card">
+          <div class="feature-card feature-pill feature-pill--amber">
             <div class="feature-icon">
               <Bot class="icon" />
             </div>
@@ -159,7 +159,7 @@
             </p>
           </div>
 
-          <div class="feature-card">
+          <div class="feature-card feature-pill feature-pill--rose">
             <div class="feature-icon">
               <Zap class="icon" />
             </div>
@@ -171,7 +171,7 @@
             </p>
           </div>
 
-          <div class="feature-card">
+          <div class="feature-card feature-pill feature-pill--emerald">
             <div class="feature-icon">
               <Database class="icon" />
             </div>
@@ -183,7 +183,7 @@
             </p>
           </div>
 
-          <div class="feature-card">
+          <div class="feature-card feature-pill feature-pill--rose">
             <div class="feature-icon">
               <Users class="icon" />
             </div>
@@ -671,7 +671,6 @@
 
 <script setup>
 import { ref } from 'vue'
-import { useAppStore } from '@/stores/app'
 import ThemeLogo from '@/components/common/ThemeLogo.vue'
 import ThemeSwitcher from '@/components/common/ThemeSwitcher.vue'
 import {
@@ -679,7 +678,6 @@ import {
   FileText, Headphones, BarChart, ChevronRight, ChevronDown, Check
 } from 'lucide-vue-next'
 
-const appStore = useAppStore()
 const openFaq = ref(null)
 
 function toggleFaq(index) {
@@ -716,10 +714,12 @@ $white: var(--text-inverse);
   left: 0;
   right: 0;
   z-index: 100;
-  background: var(--bg-secondary);
-  backdrop-filter: blur(12px);
-  border-bottom: 1px solid var(--border-primary);
-  transition: background-color 0.3s, border-color 0.3s;
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border-bottom: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  transition: background-color 0.3s, border-color 0.3s, backdrop-filter 0.3s;
 }
 
 .nav-container {
@@ -766,7 +766,7 @@ $white: var(--text-inverse);
     transition: color 0.2s;
 
     &:hover {
-      color: var(--accent-primary);
+      color: var(--text-primary);
     }
   }
 }
@@ -809,9 +809,12 @@ $white: var(--text-inverse);
   &-primary {
     background: var(--button-primary-bg);
     color: var(--button-primary-text);
+    box-shadow: var(--button-primary-shadow, var(--shadow-sm));
 
     &:hover {
-      transform: translateY(-1px);
+      background: var(--button-primary-hover-bg);
+      color: var(--button-primary-text);
+      transform: translateY(-2px);
       box-shadow: var(--shadow-md);
     }
   }
@@ -822,8 +825,9 @@ $white: var(--text-inverse);
     color: var(--text-primary);
 
     &:hover {
-      border-color: var(--accent-primary);
-      color: var(--accent-primary);
+      border-color: var(--border-hover);
+      color: var(--text-primary);
+      background: var(--bg-hover);
     }
   }
 
@@ -894,14 +898,17 @@ $white: var(--text-inverse);
   gap: $spacing-2;
   padding: $spacing-2 $spacing-4;
   background: var(--surface-muted);
-  border: 1px solid var(--border-primary);
+  border: 1px solid var(--accent-blue-soft);
+  border-radius: $radius-full;
   color: var(--text-primary);
   margin-bottom: $spacing-6;
+  font-size: $font-size-sm;
+  font-weight: $font-weight-medium;
 
   .badge-dot {
     width: 8px;
     height: 8px;
-    background: var(--text-primary);
+    background: var(--accent-blue);
     border-radius: 50%;
     animation: pulse 2s infinite;
   }
@@ -926,8 +933,8 @@ $white: var(--text-inverse);
 
 .title-emphasis {
   color: var(--text-primary);
-  border-bottom: 0.08em solid var(--text-primary);
-  padding-bottom: 0.04em;
+  border-bottom: 2px solid var(--accent-blue-soft);
+  padding-bottom: 0.06em;
 }
 
 .hero-description {
@@ -1016,32 +1023,49 @@ $white: var(--text-inverse);
 }
 
 .feature-card {
-  background: var(--bg-tertiary);
+  position: relative;
+  background: var(--card-bg);
   padding: $spacing-6;
-  border-radius: $radius-xl;
+  border-radius: var(--radius-card, $radius-xl);
+  border: 1px solid var(--card-border);
   box-shadow: var(--shadow-sm);
-  transition: all 0.3s;
+  overflow: hidden;
+  transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+              box-shadow 0.3s ease,
+              border-color 0.3s ease;
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: var(--card-inner-highlight);
+  }
 
   &:hover {
-    transform: translateY(-4px);
-    box-shadow: var(--shadow-lg);
+    transform: translateY(-6px);
+    border-color: var(--item-accent-soft, var(--border-hover));
+    box-shadow: var(--shadow-md);
   }
 }
 
 .feature-icon {
+  position: relative;
+  z-index: 1;
   width: 48px;
   height: 48px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--surface-muted);
+  background: var(--bg-tertiary);
   border-radius: $radius-lg;
   margin-bottom: $spacing-4;
+  box-shadow: inset 0 0 0 1px var(--item-accent-soft, var(--accent-blue-soft));
 
   .icon {
     width: 24px;
     height: 24px;
-    color: var(--accent-primary);
+    color: var(--item-accent, var(--accent-blue));
   }
 }
 

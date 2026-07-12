@@ -135,7 +135,7 @@ import { useAppStore } from '@/stores/app'
 import {
   Search, Command, Home, FileText, Bot, Workflow,
   Settings, Plus, Play, Pause, Copy, Trash2,
-  Edit, Download, Upload, Eye, EyeOff, ChevronRight,
+  Download, Upload, Eye, ChevronRight,
   Users, Bell, Database, Key, Palette, Moon, Sun, Contrast, CircleDot
 } from 'lucide-vue-next'
 
@@ -162,7 +162,7 @@ const commands = computed(() => ([
   { id: 'nav-agents', title: 'Agents', description: '管理 AI Agents', icon: Bot, shortcut: ['G', 'A'], action: () => router.push('/agents'), tab: 'navigation' },
   { id: 'nav-knowledge', title: '知识库', description: 'RAG 知识库管理', icon: Database, shortcut: ['G', 'K'], action: () => router.push('/knowledge'), tab: 'navigation' },
   { id: 'nav-analytics', title: '数据分析', description: '查看分析数据', icon: Eye, shortcut: ['G', 'S'], action: () => router.push('/analytics'), tab: 'navigation' },
-  { id: 'nav-settings', title: '设置', description: '系统设置', icon: Settings, shortcut: ['G', 'S'], action: () => router.push('/settings'), tab: 'navigation' },
+  { id: 'nav-settings', title: '个人中心', description: '账号、凭证与偏好设置', icon: Settings, shortcut: ['G', 'S'], action: () => router.push('/settings'), tab: 'navigation' },
 
   { id: 'action-new-workflow', title: '新建工作流', description: '创建一个新的工作流', icon: Plus, shortcut: ['N', 'W'], action: () => router.push('/workflows/new'), tab: 'actions' },
   { id: 'action-new-agent', title: '新建 Agent', description: '创建一个新的 Agent', icon: Bot, shortcut: ['N', 'A'], action: () => router.push('/agents/new'), tab: 'actions' },
@@ -178,7 +178,7 @@ const commands = computed(() => ([
   { id: 'settings-api-keys', title: 'API 密钥', description: '管理 API 密钥', icon: Key, action: () => router.push('/settings/api-keys'), tab: 'settings' },
   { id: 'settings-billing', title: '订阅管理', description: '管理订阅和账单', icon: Palette, action: () => router.push('/settings/billing'), tab: 'settings' },
   { id: 'settings-notifications', title: '通知设置', description: '配置通知偏好', icon: Bell, action: () => router.push('/settings/preferences'), tab: 'settings' },
-  { id: 'settings-integrations', title: '集成', description: '管理第三方集成', icon: Workflow, action: () => router.push('/integrations'), tab: 'settings' },
+  { id: 'settings-integrations', title: '集成', description: '管理第三方集成', icon: Workflow, action: () => router.push('/settings/integrations'), tab: 'settings' },
 
   { id: 'theme-dark', title: '切换到深色模式', description: '使用深色主题', icon: Moon, shortcut: ['⌘', '⇧', '1'], action: () => appStore.setTheme('dark'), tab: 'settings' },
   { id: 'theme-light', title: '切换到浅色模式', description: '使用浅色主题', icon: Sun, shortcut: ['⌘', '⇧', '2'], action: () => appStore.setTheme('light'), tab: 'settings' },

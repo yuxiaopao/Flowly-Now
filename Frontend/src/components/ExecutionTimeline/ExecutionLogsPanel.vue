@@ -133,7 +133,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['filter-change', 'clear', 'download'])
+defineEmits(['filter-change', 'clear', 'download'])
 
 const logsContainerRef = ref(null)
 const selectedLevel = ref(props.levelFilter)
@@ -194,7 +194,8 @@ watch(() => props.levelFilter, (val) => {
   display: flex;
   flex-direction: column;
   height: 400px;
-  background: #1e1e2e;
+  background: var(--code-bg);
+  border: 1px solid var(--code-border);
   border-radius: 8px;
   overflow: hidden;
 }
@@ -204,8 +205,8 @@ watch(() => props.levelFilter, (val) => {
   justify-content: space-between;
   align-items: center;
   padding: 12px 16px;
-  background: #2d2d3d;
-  border-bottom: 1px solid #3d3d4d;
+  background: var(--code-surface);
+  border-bottom: 1px solid var(--code-border);
 
   .header-left {
     display: flex;
@@ -216,7 +217,7 @@ watch(() => props.levelFilter, (val) => {
   .header-title {
     font-size: 13px;
     font-weight: 600;
-    color: #e5e7eb;
+    color: var(--code-text);
   }
 
   .live-badge {
@@ -224,16 +225,16 @@ watch(() => props.levelFilter, (val) => {
     align-items: center;
     gap: 6px;
     padding: 2px 8px;
-    background: rgba(16, 185, 129, 0.2);
+    background: var(--success-bg);
     border-radius: 10px;
     font-size: 10px;
     font-weight: 700;
-    color: #10b981;
+    color: var(--success);
 
     .live-dot {
       width: 6px;
       height: 6px;
-      background: #10b981;
+      background: var(--success);
       border-radius: 50%;
       animation: pulse 1.5s infinite;
     }
@@ -258,15 +259,15 @@ watch(() => props.levelFilter, (val) => {
   }
 
   &::-webkit-scrollbar-track {
-    background: #2d2d3d;
+    background: var(--scrollbar-track);
   }
 
   &::-webkit-scrollbar-thumb {
-    background: #4b5563;
+    background: var(--scrollbar-thumb);
     border-radius: 4px;
 
     &:hover {
-      background: #6b7280;
+      background: var(--scrollbar-thumb-hover);
     }
   }
 }
@@ -277,7 +278,7 @@ watch(() => props.levelFilter, (val) => {
   align-items: center;
   justify-content: center;
   height: 100%;
-  color: #6b7280;
+  color: var(--code-muted);
 
   .empty-icon {
     width: 32px;
@@ -297,10 +298,10 @@ watch(() => props.levelFilter, (val) => {
   gap: 10px;
   padding: 4px 16px;
   line-height: 1.5;
-  transition: background-color 0.2s;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
 
   &:hover {
-    background: rgba(255, 255, 255, 0.03);
+    background: var(--surface-muted);
   }
 
   &.new {
@@ -308,27 +309,27 @@ watch(() => props.levelFilter, (val) => {
   }
 
   &.debug {
-    color: #9ca3af;
+    color: var(--code-muted);
   }
 
   &.info {
-    color: #e5e7eb;
+    color: var(--code-text);
   }
 
   &.warning {
-    color: #fbbf24;
-    background: rgba(251, 191, 36, 0.05);
+    color: var(--warning);
+    background: var(--warning-bg);
   }
 
   &.error {
-    color: #f87171;
-    background: rgba(248, 113, 113, 0.05);
+    color: var(--error);
+    background: var(--error-bg);
   }
 }
 
 .log-time {
   flex-shrink: 0;
-  color: #6b7280;
+  color: var(--code-muted);
   font-size: 11px;
 }
 
@@ -342,29 +343,29 @@ watch(() => props.levelFilter, (val) => {
   text-align: center;
 
   &.debug {
-    background: rgba(156, 163, 175, 0.2);
-    color: #9ca3af;
+    background: var(--surface-strong);
+    color: var(--code-muted);
   }
 
   &.info {
-    background: rgba(59, 130, 246, 0.2);
-    color: #60a5fa;
+    background: var(--info-bg);
+    color: var(--info);
   }
 
   &.warning {
-    background: rgba(251, 191, 36, 0.2);
-    color: #fbbf24;
+    background: var(--warning-bg);
+    color: var(--warning);
   }
 
   &.error {
-    background: rgba(248, 113, 113, 0.2);
-    color: #f87171;
+    background: var(--error-bg);
+    color: var(--error);
   }
 }
 
 .log-node {
   flex-shrink: 0;
-  color: #8b5cf6;
+  color: var(--accent-violet);
   font-size: 11px;
 }
 
@@ -378,16 +379,16 @@ watch(() => props.levelFilter, (val) => {
   justify-content: space-between;
   align-items: center;
   padding: 8px 16px;
-  background: #2d2d3d;
-  border-top: 1px solid #3d3d4d;
+  background: var(--code-surface);
+  border-top: 1px solid var(--code-border);
 
   .log-count {
     font-size: 11px;
-    color: #6b7280;
+    color: var(--code-muted);
   }
 
   .text-primary {
-    color: #60a5fa;
+    color: var(--color-primary);
   }
 }
 
@@ -402,7 +403,7 @@ watch(() => props.levelFilter, (val) => {
 }
 
 @keyframes highlight {
-  0% { background: rgba(96, 165, 250, 0.2); }
+  0% { background: var(--color-primary-20); }
   100% { background: transparent; }
 }
 </style>

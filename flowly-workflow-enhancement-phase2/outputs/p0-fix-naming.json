@@ -1,9 +1,0 @@
-{
-  "task_id": "p0-fix-naming",
-  "status": "done",
-  "result": "统一 node type 命名：WEB_SCRAPER_NODE→WEB_SCRAPER, web_scraper_node→web_scraper; 修复 seed 模板 16 个 camelCase type 字段为 snake_case",
-  "files_changed": [],
-  "files_added": [],
-  "summary": "统一 node type 命名：WEB_SCRAPER_NODE→WEB_SCRAPER, web_scraper_node→web_scraper; 修复 seed 模板 16 个 camelCase type 字段为 snake_case",
-  "completed_at": "2026-05-17T17:08:49.314964+00:00"
-}

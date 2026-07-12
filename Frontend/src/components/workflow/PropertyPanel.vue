@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div
     class="property-panel"
     :class="{ visible: !!selectedNode }"
@@ -67,7 +67,7 @@
             >
               <el-option
                 v-for="opt in modelOptions"
-                :key="opt.value"
+                :key="String(opt.value)"
                 :label="opt.label"
                 :value="opt.value"
               />
@@ -577,8 +577,22 @@
         <!-- Input 节点配置 -->
         <template v-else-if="selectedNode.type === 'input'">
           <div class="form-group">
-            <label>占位符文本</label>
+            <label for="input-variable-name-config">变量名</label>
             <el-input
+              id="input-variable-name-config"
+              v-model="nodeData.config.variableName"
+              placeholder="定义此输入的参数名，如 user_input"
+              @input="handleInputVariableChange"
+            />
+            <p class="field-hint">
+              工作流外部可通过此变量名传入数据
+            </p>
+          </div>
+
+          <div class="form-group">
+            <label for="input-placeholder-config">占位符文本</label>
+            <el-input
+              id="input-placeholder-config"
               v-model="nodeData.config.placeholder"
               placeholder="请输入..."
               @input="handleChange"
@@ -586,8 +600,9 @@
           </div>
 
           <div class="form-group">
-            <label>输入类型</label>
+            <label for="input-type-config">输入类型</label>
             <el-select
+              id="input-type-config"
               v-model="nodeData.config.inputType"
               @change="handleChange"
             >
@@ -694,6 +709,38 @@
         <!-- Model Training -->
         <template v-else-if="selectedNode.type === 'model_training'">
           <ModelTrainingConfig
+            :model-value="nodeData.config"
+            @update:model-value="handleConfigUpdate"
+            @change="handleConfigChange"
+          />
+        </template>
+
+        <!-- YOLO Training -->
+        <template v-else-if="selectedNode.type === 'yolo_training'">
+          <YoloTrainingConfig
+            :node-data="nodeData"
+            @change="handleConfigChange"
+          />
+        </template>
+
+        <template v-else-if="selectedNode.type === 'clip_classification'">
+          <ClipClassificationConfig
+            :model-value="nodeData.config"
+            @update:model-value="handleConfigUpdate"
+            @change="handleConfigChange"
+          />
+        </template>
+
+        <template v-else-if="selectedNode.type === 'clip_retrieval'">
+          <ClipRetrievalConfig
+            :model-value="nodeData.config"
+            @update:model-value="handleConfigUpdate"
+            @change="handleConfigChange"
+          />
+        </template>
+
+        <template v-else-if="selectedNode.type === 'project_profiler'">
+          <ProjectProfilerConfig
             :model-value="nodeData.config"
             @update:model-value="handleConfigUpdate"
             @change="handleConfigChange"
@@ -855,6 +902,108 @@
             @change="handleConfigChange"
           />
         </template>
+
+        <!-- 控制流扩展 -->
+        <template v-else-if="selectedNode.type === 'merge'">
+          <MergeConfig
+            :model-value="nodeData.config"
+            @update:model-value="handleConfigUpdate"
+            @change="handleConfigChange"
+          />
+        </template>
+        <template v-else-if="selectedNode.type === 'split'">
+          <SplitBatchesConfig
+            :model-value="nodeData.config"
+            @update:model-value="handleConfigUpdate"
+            @change="handleConfigChange"
+          />
+        </template>
+        <template v-else-if="selectedNode.type === 'filter'">
+          <FilterConfig
+            :model-value="nodeData.config"
+            @update:model-value="handleConfigUpdate"
+            @change="handleConfigChange"
+          />
+        </template>
+        <template v-else-if="selectedNode.type === 'set'">
+          <SetNodeConfig
+            :model-value="nodeData.config"
+            @update:model-value="handleConfigUpdate"
+            @change="handleConfigChange"
+          />
+        </template>
+        <template v-else-if="selectedNode.type === 'datetime'">
+          <DateTimeConfig
+            :model-value="nodeData.config"
+            @update:model-value="handleConfigUpdate"
+            @change="handleConfigChange"
+          />
+        </template>
+
+        <!-- 触发器 -->
+        <template v-else-if="selectedNode.type === 'manual'">
+          <ManualTriggerConfig
+            :model-value="nodeData.config"
+            @update:model-value="handleConfigUpdate"
+            @change="handleConfigChange"
+          />
+        </template>
+        <template v-else-if="selectedNode.type === 'schedule'">
+          <ScheduleTriggerConfig
+            :model-value="nodeData.config"
+            @update:model-value="handleConfigUpdate"
+            @change="handleConfigChange"
+          />
+        </template>
+        <template v-else-if="selectedNode.type === 'webhook'">
+          <WebhookTriggerConfig
+            :model-value="nodeData.config"
+            @update:model-value="handleConfigUpdate"
+            @change="handleConfigChange"
+          />
+        </template>
+        <template v-else-if="selectedNode.type === 'form'">
+          <FormTriggerConfig
+            :model-value="nodeData.config"
+            @update:model-value="handleConfigUpdate"
+            @change="handleConfigChange"
+          />
+        </template>
+
+        <!-- 子工作流 / 网站生成 -->
+        <template v-else-if="selectedNode.type === 'subworkflow'">
+          <SubworkflowConfig
+            :model-value="nodeData.config"
+            @update:model-value="handleConfigUpdate"
+            @change="handleConfigChange"
+          />
+        </template>
+        <template v-else-if="selectedNode.type === 'website_generator'">
+          <WebsiteGeneratorConfig
+            :model-value="nodeData.config"
+            @update:model-value="handleConfigUpdate"
+            @change="handleConfigChange"
+          />
+        </template>
+
+        <template v-else-if="['environment_provision', 'site_qa', 'site_preview', 'project_agent', 'backend_setup', 'frontend_setup', 'ui_beautify', 'site_code_review'].includes(selectedNode.type)">
+          <SiteFactoryNodeConfig
+            :node-type="selectedNode.type"
+            :model-value="nodeData.config"
+            @update:model-value="handleConfigUpdate"
+            @change="handleConfigChange"
+          />
+        </template>
+
+        <!-- 第三方集成节点 -->
+        <template v-else-if="isIntegrationNodeType(selectedNode.type)">
+          <IntegrationConfig
+            :integration-type="selectedNode.type"
+            :model-value="nodeData.config"
+            @update:model-value="handleConfigUpdate"
+            @change="handleConfigChange"
+          />
+        </template>
       </div>
 
       <!-- 操作按钮 -->
@@ -902,13 +1051,17 @@ import AudioGenerationConfig from './configs/AudioGenerationConfig.vue'
 import SubtitleGenerationConfig from './configs/SubtitleGenerationConfig.vue'
 import ImageEditingConfig from './configs/ImageEditingConfig.vue'
 
-// Domain node config forms — Data
-import DatasetUploadConfig from './configs/DatasetUploadConfig.vue'
-import DataAnnotationConfig from './configs/DataAnnotationConfig.vue'
-import DataAugmentationConfig from './configs/DataAugmentationConfig.vue'
-
-// Domain node config forms — MLOps
-import ModelTrainingConfig from './configs/ModelTrainingConfig.vue'
+// Domain node config forms — Data（异步加载，避免 HMR 循环依赖）
+import {
+  DatasetUploadConfig,
+  DataAnnotationConfig,
+  DataAugmentationConfig,
+  ModelTrainingConfig,
+  YoloTrainingConfig,
+} from './configs/asyncConfigComponents'
+import ClipClassificationConfig from './configs/ClipClassificationConfig.vue'
+import ClipRetrievalConfig from './configs/ClipRetrievalConfig.vue'
+import ProjectProfilerConfig from './configs/ProjectProfilerConfig.vue'
 import ModelEvaluationConfig from './configs/ModelEvaluationConfig.vue'
 import ModelDeploymentConfig from './configs/ModelDeploymentConfig.vue'
 
@@ -931,6 +1084,21 @@ import FileWriterConfig from './configs/FileWriterConfig.vue'
 import WebScraperConfig from './configs/WebScraperConfig.vue'
 import CsvTransformConfig from './configs/CsvTransformConfig.vue'
 import JsonTransformConfig from './configs/JsonTransformConfig.vue'
+import MergeConfig from './configs/MergeConfig.vue'
+import SplitBatchesConfig from './configs/SplitBatchesConfig.vue'
+import FilterConfig from './configs/FilterConfig.vue'
+import SetNodeConfig from './configs/SetNodeConfig.vue'
+import DateTimeConfig from './configs/DateTimeConfig.vue'
+import ManualTriggerConfig from './configs/ManualTriggerConfig.vue'
+import ScheduleTriggerConfig from './configs/ScheduleTriggerConfig.vue'
+import WebhookTriggerConfig from './configs/WebhookTriggerConfig.vue'
+import FormTriggerConfig from './configs/FormTriggerConfig.vue'
+import SubworkflowConfig from './SubworkflowConfig.vue'
+import WebsiteGeneratorConfig from './configs/WebsiteGeneratorConfig.vue'
+import SiteFactoryNodeConfig from './configs/SiteFactoryNodeConfig.vue'
+import IntegrationConfig from './configs/IntegrationConfig.vue'
+import { isIntegrationType as isIntegrationNodeType } from '@/config/integrations'
+import { getAllNodes } from '@/config/nodeRegistry'
 
 const workflowStore = useWorkflowStore()
 
@@ -965,10 +1133,15 @@ async function loadModelsAndTools() {
     ])
 
     if (modelsRes.status === 'fulfilled' && modelsRes.value) {
-      availableModels.value = modelsRes.value.map(m => ({
-        value: m.model_id || m.id,
-        label: `${m.name} (${m.provider?.name || m.provider_name || 'Unknown'})`
-      }))
+      availableModels.value = modelsRes.value
+        .map((m) => {
+          const value = m.model_id || m.id || m.name || ''
+          return {
+            value,
+            label: `${m.name || value} (${m.provider?.name || m.provider_name || 'Unknown'})`,
+          }
+        })
+        .filter((opt) => opt.value !== '' && opt.value != null)
     }
 
     if (toolsRes.status === 'fulfilled' && toolsRes.value) {
@@ -984,10 +1157,8 @@ async function loadModelsAndTools() {
 
 // 模型选项（优先使用 API 数据，备用常量）
 const modelOptions = computed(() => {
-  if (availableModels.value.length > 0) {
-    return availableModels.value
-  }
-  return MODEL_OPTIONS
+  const source = availableModels.value.length > 0 ? availableModels.value : MODEL_OPTIONS
+  return source.filter((opt) => opt.value !== '' && opt.value != null)
 })
 
 // 工具选项（优先使用 API 数据，备用常量）
@@ -1002,24 +1173,7 @@ onMounted(() => {
   loadModelsAndTools()
 })
 
-const nodeTypes = [
-  { type: 'start', label: '开始' },
-  { type: 'end', label: '结束' },
-  { type: 'llm', label: '大语言模型' },
-  { type: 'prompt', label: '提示词' },
-  { type: 'condition', label: '条件判断' },
-  { type: 'tool', label: '工具' },
-  { type: 'input', label: '输入' },
-  { type: 'output', label: '输出' },
-  { type: 'http', label: 'HTTP请求' },
-  { type: 'code', label: '代码执行' },
-  { type: 'loop', label: '循环' },
-  { type: 'variable', label: '变量' },
-  { type: 'switch', label: '分支' },
-  { type: 'transform', label: '数据转换' },
-  { type: 'email', label: '发送邮件' },
-  { type: 'delay', label: '延时' },
-]
+const nodeTypes = getAllNodes().map((n) => ({ type: n.type, label: n.label }))
 
 const sectionTitle = computed(() => {
   const titles = {
@@ -1036,7 +1190,19 @@ const sectionTitle = computed(() => {
     switch: '分支配置',
     transform: '转换配置',
     email: '邮件配置',
-    delay: '延时配置'
+    delay: '延时配置',
+    yolo_training: 'YOLO 训练配置',
+    clip_classification: 'CLIP 分类配置',
+    clip_retrieval: 'CLIP 检索配置',
+    project_profiler: '场景分析配置',
+    backend_setup: '后端搭建配置',
+    frontend_setup: '前端搭建配置',
+    ui_beautify: 'UI 美化配置',
+    site_code_review: '代码复查配置',
+    environment_provision: '环境配置',
+    site_qa: '站点 QA 配置',
+    site_preview: '站点预览配置',
+    project_agent: '项目 Agent 配置',
   }
   return titles[nodeData.type] || '节点配置'
 })
@@ -1090,10 +1256,13 @@ watch(() => props.selectedNode, (newNode) => {
         ...nodeData.config
       }
     } else if (nodeData.type === 'input') {
+      const varName = nodeData.config.variableName || nodeData.config.input_name || nodeData.config.inputName || 'user_input'
       nodeData.config = {
         placeholder: '请输入...',
         inputType: 'text',
-        ...nodeData.config
+        ...nodeData.config,
+        variableName: varName,
+        input_name: varName,
       }
     } else if (nodeData.type === 'loop') {
       nodeData.config = {
@@ -1146,6 +1315,7 @@ watch(() => props.selectedNode, (newNode) => {
         subject: '',
         isHtml: false,
         body: '',
+        useGlobalSmtp: true,
         smtpConfig: {
           server: '',
           port: 587,
@@ -1165,6 +1335,14 @@ watch(() => props.selectedNode, (newNode) => {
   }
 }, { immediate: true, deep: true })
 
+function handleInputVariableChange() {
+  const varName = nodeData.config.variableName || ''
+  if (varName) {
+    nodeData.config.input_name = varName
+  }
+  handleChange()
+}
+
 function handleChange() {
   emit('change', {
     id: props.selectedNode?.id,
@@ -1181,7 +1359,7 @@ function handleConfigUpdate(newConfig) {
   nodeData.config = newConfig
 }
 
-function handleConfigChange(newConfig) {
+function handleConfigChange() {
   handleChange()
 }
 
@@ -1240,14 +1418,17 @@ function removeAssignment(index) {
 .property-panel {
   display: flex;
   flex-direction: column;
+  flex-shrink: 0;
+  width: 0;
   height: 100%;
-  background-color: var(--bg-primary)-secondary;
-  border-left: 1px solid var(--border-primary);
-  transform: translateX(100%);
-  transition: transform $transition-normal;
+  overflow: hidden;
+  background-color: var(--bg-secondary);
+  border-left: none;
+  transition: width $transition-normal;
 
   &.visible {
-    transform: translateX(0);
+    width: 340px;
+    border-left: 1px solid var(--border-primary);
   }
 }
 
@@ -1286,22 +1467,44 @@ function removeAssignment(index) {
     margin-bottom: $spacing-2;
     font-size: $font-size-sm;
     font-weight: $font-weight-medium;
-    color: var(--text-primary)-secondary;
+    color: var(--text-secondary);
   }
 
   :deep(.el-input__wrapper),
-  :deep(.el-textarea__inner) {
-    background-color: var(--bg-primary)-tertiary;
-    border: 1px solid var(--border-primary);
-    box-shadow: none;
+  :deep(.el-textarea__inner),
+  :deep(.el-select__wrapper),
+  :deep(.el-input-number) {
+    background-color: var(--bg-secondary) !important;
+    box-shadow: 0 0 0 1px var(--border-primary) inset !important;
+    border-radius: $radius-md;
 
     &:hover {
-      border-color: var(--border-primary)-hover;
+      box-shadow: 0 0 0 1px var(--border-hover) inset !important;
     }
 
-    &:focus {
-      border-color: $color-primary;
+    &:focus-within,
+    &.is-focus {
+      box-shadow: 0 0 0 1px var(--color-primary) inset !important;
     }
+  }
+
+  :deep(.el-input__inner),
+  :deep(.el-textarea__inner),
+  :deep(.el-select__wrapper .el-select__selected-item) {
+    color: var(--text-primary) !important;
+  }
+
+  :deep(.el-input__prefix),
+  :deep(.el-input__suffix),
+  :deep(.el-select__caret),
+  :deep(.el-input-number__increase),
+  :deep(.el-input-number__decrease) {
+    color: var(--text-tertiary);
+  }
+
+  :deep(.el-input__inner::placeholder),
+  :deep(.el-textarea__inner::placeholder) {
+    color: var(--text-tertiary);
   }
 
   :deep(.el-select) {
@@ -1312,7 +1515,7 @@ function removeAssignment(index) {
 .form-hint {
   margin: $spacing-2 0 0;
   font-size: $font-size-xs;
-  color: var(--text-primary)-tertiary;
+  color: var(--text-tertiary);
 }
 
 .slider-group {
@@ -1327,7 +1530,7 @@ function removeAssignment(index) {
   .slider-value {
     min-width: 40px;
     font-size: $font-size-sm;
-    color: var(--text-primary)-secondary;
+    color: var(--text-secondary);
     text-align: right;
   }
 }
@@ -1358,7 +1561,7 @@ function removeAssignment(index) {
 
 .condition-item {
   padding: $spacing-3;
-  background-color: var(--bg-primary)-tertiary;
+  background-color: var(--bg-tertiary);
   border-radius: $radius-md;
   margin-bottom: $spacing-2;
 
@@ -1386,7 +1589,7 @@ function removeAssignment(index) {
   align-items: center;
   gap: $spacing-2;
   padding: $spacing-2;
-  background-color: var(--bg-primary)-tertiary;
+  background-color: var(--bg-tertiary);
   border-radius: $radius-md;
   margin-bottom: $spacing-2;
 
@@ -1405,7 +1608,7 @@ function removeAssignment(index) {
   align-items: center;
   gap: $spacing-2;
   padding: $spacing-2;
-  background-color: var(--bg-primary)-tertiary;
+  background-color: var(--bg-tertiary);
   border-radius: $radius-md;
   margin-bottom: $spacing-2;
 
@@ -1440,13 +1643,35 @@ function removeAssignment(index) {
   .empty-icon {
     width: 48px;
     height: 48px;
-    color: var(--text-primary)-tertiary;
+    color: var(--text-tertiary);
     margin-bottom: $spacing-4;
   }
 
   p {
-    color: var(--text-primary)-tertiary;
+    color: var(--text-tertiary);
     margin: 0;
+  }
+}
+
+@media (max-width: 1024px) {
+  .property-panel.visible {
+    width: 300px;
+  }
+}
+
+@media (max-width: 768px) {
+  .property-panel {
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    z-index: 10;
+    box-shadow: $shadow-lg;
+
+    &.visible {
+      width: 100%;
+      max-width: 340px;
+    }
   }
 }
 </style>

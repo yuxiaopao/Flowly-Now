@@ -107,7 +107,7 @@
             </el-select>
             <el-input
               v-model="requestConfig.url"
-              placeholder="Enter request URL"
+              placeholder="输入请求 URL"
               size="large"
               class="url-input"
             />
@@ -126,9 +126,9 @@
             v-model="requestTab"
             class="request-tabs"
           >
-            <!-- Params -->
+            <!-- 参数 -->
             <el-tab-pane
-              label="Params"
+              label="参数"
               name="params"
             >
               <div class="key-value-editor">
@@ -173,9 +173,9 @@
               </div>
             </el-tab-pane>
 
-            <!-- Headers -->
+            <!-- 请求头 -->
             <el-tab-pane
-              label="Headers"
+              label="请求头"
               name="headers"
             >
               <div class="key-value-editor">
@@ -234,16 +234,16 @@
               </div>
             </el-tab-pane>
 
-            <!-- Body -->
+            <!-- 请求体 -->
             <el-tab-pane
-              label="Body"
+              label="请求体"
               name="body"
             >
               <div class="body-editor">
                 <div class="body-type-selector">
                   <el-radio-group v-model="requestConfig.bodyType">
                     <el-radio label="none">
-                      None
+                      无
                     </el-radio>
                     <el-radio label="json">
                       JSON
@@ -265,7 +265,7 @@
                     v-model="requestConfig.bodyJson"
                     type="textarea"
                     :rows="12"
-                    placeholder="{&quot;key&quot;: &quot;value&quot;}"
+                    placeholder="&#123;&quot;key&quot;: &quot;value&quot;&#125;"
                     class="body-textarea"
                     style="font-family: monospace"
                   />
@@ -283,8 +283,8 @@
                   class="key-value-editor"
                 >
                   <div class="kv-header">
-                    <span>Key</span>
-                    <span>Value</span>
+                    <span>键</span>
+                    <span>值</span>
                     <span />
                   </div>
                   <div
@@ -294,11 +294,11 @@
                   >
                     <el-input
                       v-model="field.key"
-                      placeholder="Key"
+                      placeholder="键"
                     />
                     <el-input
                       v-model="field.value"
-                      placeholder="Value"
+                      placeholder="值"
                     />
                     <el-button
                       text
@@ -355,9 +355,9 @@
               </div>
             </el-tab-pane>
 
-            <!-- Auth -->
+            <!-- 认证 -->
             <el-tab-pane
-              label="Auth"
+              label="认证"
               name="auth"
             >
               <div class="auth-editor">
@@ -366,7 +366,7 @@
                   class="auth-type-selector"
                 >
                   <el-radio label="none">
-                    No Auth
+                    无认证
                   </el-radio>
                   <el-radio label="bearer">
                     Bearer Token
@@ -387,7 +387,7 @@
                     <el-form-item label="Token">
                       <el-input
                         v-model="requestConfig.bearerToken"
-                        placeholder="Enter your token"
+                        placeholder="输入你的 Token"
                         type="password"
                         show-password
                       />
@@ -400,28 +400,28 @@
                   class="auth-config"
                 >
                   <el-form label-width="100px">
-                    <el-form-item label="Key">
+                    <el-form-item label="Key 名">
                       <el-input
                         v-model="requestConfig.apiKeyName"
                         placeholder="X-API-Key"
                       />
                     </el-form-item>
-                    <el-form-item label="Value">
+                    <el-form-item label="值">
                       <el-input
                         v-model="requestConfig.apiKeyValue"
-                        placeholder="API Key value"
+                        placeholder="API Key 值"
                         type="password"
                         show-password
                       />
                     </el-form-item>
-                    <el-form-item label="Add to">
+                    <el-form-item label="附加位置">
                       <el-select v-model="requestConfig.apiKeyLocation">
                         <el-option
-                          label="Header"
+                          label="请求头"
                           value="header"
                         />
                         <el-option
-                          label="Query Param"
+                          label="查询参数"
                           value="query"
                         />
                       </el-select>
@@ -434,16 +434,16 @@
                   class="auth-config"
                 >
                   <el-form label-width="100px">
-                    <el-form-item label="Username">
+                    <el-form-item label="用户名">
                       <el-input
                         v-model="requestConfig.basicUsername"
-                        placeholder="Username"
+                        placeholder="用户名"
                       />
                     </el-form-item>
-                    <el-form-item label="Password">
+                    <el-form-item label="密码">
                       <el-input
                         v-model="requestConfig.basicPassword"
-                        placeholder="Password"
+                        placeholder="密码"
                         type="password"
                         show-password
                       />
@@ -494,7 +494,7 @@
             class="response-tabs"
           >
             <el-tab-pane
-              label="Body"
+              label="响应体"
               name="body"
             >
               <div class="response-body">
@@ -526,7 +526,7 @@
             </el-tab-pane>
 
             <el-tab-pane
-              label="Headers"
+              label="响应头"
               name="headers"
             >
               <div class="response-headers">
@@ -549,7 +549,7 @@
             </el-tab-pane>
 
             <el-tab-pane
-              label="Info"
+              label="信息"
               name="info"
             >
               <div class="response-info">
@@ -592,12 +592,12 @@
 </template>
 
 <script setup>
-import { ref, computed, reactive } from 'vue'
+import { ref, computed, reactive, onMounted } from 'vue'
 import { useAppStore } from '@/stores/app'
 import {
   Search, ArrowRight, Delete, Plus, Document, ChatDotRound
 } from '@element-plus/icons-vue'
-import { getApiBaseUrl } from '@/config'
+import { getApiUrl } from '@/config'
 
 const appStore = useAppStore()
 
@@ -607,78 +607,78 @@ const endpoints = [
     name: 'workflows',
     label: '工作流',
     endpoints: [
-      { path: '/api/workflows/', method: 'GET', description: '获取工作流列表' },
-      { path: '/api/workflows/', method: 'POST', description: '创建工作流' },
-      { path: '/api/workflows/:id/', method: 'GET', description: '获取工作流详情' },
-      { path: '/api/workflows/:id/', method: 'PUT', description: '更新工作流' },
-      { path: '/api/workflows/:id/', method: 'DELETE', description: '删除工作流' },
-      { path: '/api/workflows/:id/execute/', method: 'POST', description: '执行工作流' }
+      { path: '/workflows/', method: 'GET', description: '获取工作流列表' },
+      { path: '/workflows/', method: 'POST', description: '创建工作流' },
+      { path: '/workflows/:id/', method: 'GET', description: '获取工作流详情' },
+      { path: '/workflows/:id/', method: 'PUT', description: '更新工作流' },
+      { path: '/workflows/:id/', method: 'DELETE', description: '删除工作流' },
+      { path: '/workflows/:id/execute/', method: 'POST', description: '执行工作流' }
     ]
   },
   {
     name: 'agents',
     label: 'Agent',
     endpoints: [
-      { path: '/api/agents/', method: 'GET', description: '获取 Agent 列表' },
-      { path: '/api/agents/', method: 'POST', description: '创建 Agent' },
-      { path: '/api/agents/:id/', method: 'GET', description: '获取 Agent 详情' },
-      { path: '/api/agents/:id/', method: 'PUT', description: '更新 Agent' },
-      { path: '/api/agents/:id/', method: 'DELETE', description: '删除 Agent' },
-      { path: '/api/agents/:id/execute/', method: 'POST', description: '执行 Agent' }
+      { path: '/agents/', method: 'GET', description: '获取 Agent 列表' },
+      { path: '/agents/', method: 'POST', description: '创建 Agent' },
+      { path: '/agents/:id/', method: 'GET', description: '获取 Agent 详情' },
+      { path: '/agents/:id/', method: 'PUT', description: '更新 Agent' },
+      { path: '/agents/:id/', method: 'DELETE', description: '删除 Agent' },
+      { path: '/agents/:id/execute/', method: 'POST', description: '执行 Agent' }
     ]
   },
   {
     name: 'models',
     label: '模型管理',
     endpoints: [
-      { path: '/api/gateway/api-keys/', method: 'GET', description: '获取统一凭证兼容列表' },
-      { path: '/api/gateway/api-keys/', method: 'POST', description: '通过兼容接口创建统一凭证' },
-      { path: '/api/gateway/models/', method: 'GET', description: '获取模型列表' },
-      { path: '/api/gateway/models/:id/', method: 'GET', description: '获取模型详情' },
-      { path: '/api/gateway/chat/', method: 'POST', description: '发送聊天请求' },
-      { path: '/api/gateway/embeddings/', method: 'POST', description: '获取 embeddings' }
+      { path: '/gateway/api-keys/', method: 'GET', description: '获取统一凭证兼容列表' },
+      { path: '/gateway/api-keys/', method: 'POST', description: '通过兼容接口创建统一凭证' },
+      { path: '/gateway/models/', method: 'GET', description: '获取模型列表' },
+      { path: '/gateway/models/:id/', method: 'GET', description: '获取模型详情' },
+      { path: '/gateway/chat/', method: 'POST', description: '发送聊天请求' },
+      { path: '/gateway/embeddings/', method: 'POST', description: '获取 embeddings' }
     ]
   },
   {
     name: 'rag',
     label: 'RAG / 知识库',
     endpoints: [
-      { path: '/api/rag/vector-stores/', method: 'GET', description: '获取向量存储列表' },
-      { path: '/api/rag/vector-stores/', method: 'POST', description: '创建向量存储' },
-      { path: '/api/rag/collections/', method: 'GET', description: '获取文档集合列表' },
-      { path: '/api/rag/collections/', method: 'POST', description: '创建文档集合' },
-      { path: '/api/rag/collections/:id/documents/', method: 'POST', description: '上传文档' },
-      { path: '/api/rag/collections/:id/search/', method: 'POST', description: '搜索文档' }
+      { path: '/rag/vector-stores/', method: 'GET', description: '获取向量存储列表' },
+      { path: '/rag/vector-stores/', method: 'POST', description: '创建向量存储' },
+      { path: '/rag/collections/', method: 'GET', description: '获取文档集合列表' },
+      { path: '/rag/collections/', method: 'POST', description: '创建文档集合' },
+      { path: '/rag/collections/:id/documents/', method: 'POST', description: '上传文档' },
+      { path: '/rag/collections/:id/search/', method: 'POST', description: '搜索文档' }
     ]
   },
   {
     name: 'nl-workflow',
     label: 'NL 生成工作流',
     endpoints: [
-      { path: '/api/nl-workflow/generate/', method: 'POST', description: '生成工作流' },
-      { path: '/api/nl-workflow/generate/stream/', method: 'POST', description: '流式生成工作流' },
-      { path: '/api/nl-workflow/validate/', method: 'POST', description: '验证工作流' }
+      { path: '/nl-workflow/generate/', method: 'POST', description: '生成工作流' },
+      { path: '/nl-workflow/generate/stream/', method: 'POST', description: '流式生成工作流' },
+      { path: '/nl-workflow/validate/', method: 'POST', description: '验证工作流' }
     ]
   },
   {
     name: 'analytics',
     label: '数据分析',
     endpoints: [
-      { path: '/api/monitoring/analytics/overview/', method: 'GET', description: '获取概览数据' },
-      { path: '/api/monitoring/analytics/trends/', method: 'GET', description: '获取趋势数据' },
-      { path: '/api/monitoring/executions/', method: 'GET', description: '获取执行记录' },
-      { path: '/api/monitoring/logs/', method: 'GET', description: '获取日志' }
+      { path: '/monitoring/analytics/overview/', method: 'GET', description: '获取概览数据' },
+      { path: '/monitoring/analytics/trends/', method: 'GET', description: '获取趋势数据' },
+      { path: '/monitoring/executions/', method: 'GET', description: '获取执行记录' },
+      { path: '/monitoring/logs/', method: 'GET', description: '获取日志' }
     ]
   },
   {
     name: 'auth',
     label: '认证',
     endpoints: [
-      { path: '/api/auth/login/', method: 'POST', description: '用户登录' },
-      { path: '/api/auth/register/', method: 'POST', description: '用户注册' },
-      { path: '/api/auth/logout/', method: 'POST', description: '用户登出' },
-      { path: '/api/auth/me/', method: 'GET', description: '获取当前用户' },
-      { path: '/api/auth/refresh/', method: 'POST', description: '刷新 Token' }
+      { path: '/auth/login/', method: 'POST', description: '用户登录' },
+      { path: '/auth/register/', method: 'POST', description: '用户注册' },
+      { path: '/auth/logout/', method: 'POST', description: '用户登出' },
+      { path: '/auth/me/', method: 'GET', description: '获取当前用户' },
+      { path: '/auth/refresh/', method: 'POST', description: '刷新 Token' }
     ]
   }
 ]
@@ -742,7 +742,7 @@ const toggleCategory = (name) => {
 const selectEndpoint = (endpoint) => {
   selectedEndpoint.value = endpoint
   requestConfig.method = endpoint.method
-  requestConfig.url = `${getApiBaseUrl()}${endpoint.path}`
+  requestConfig.url = getApiUrl(endpoint.path)
 
   // Reset request config
   requestConfig.params = []
@@ -896,14 +896,14 @@ const formatResponse = () => {
     const obj = JSON.parse(responseBody.value)
     responseBody.value = JSON.stringify(obj, null, 2)
   } catch (e) {
-    appStore.info('Response is not valid JSON')
+    appStore.info('响应内容不是有效 JSON')
   }
 }
 
 const copyResponse = async () => {
   try {
     await navigator.clipboard.writeText(responseBody.value)
-    appStore.success('Response copied to clipboard')
+    appStore.success('响应内容已复制到剪贴板')
   } catch (e) {
     appStore.error('Failed to copy')
   }
@@ -932,6 +932,13 @@ const formatSize = (bytes) => {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
+
+onMounted(() => {
+  const savedToken = localStorage.getItem('access_token')
+  if (savedToken) {
+    requestConfig.bearerToken = savedToken
+  }
+})
 </script>
 
 <style scoped>

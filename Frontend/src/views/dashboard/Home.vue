@@ -1,100 +1,97 @@
 <template>
-  <div class="dashboard">
-    <div class="dashboard-header">
-      <div>
-        <h1 class="dashboard-title">
-          欢迎回来, {{ authStore.userName }}
-        </h1>
-        <p class="dashboard-subtitle">
-          这里是您的工作概览
-        </p>
-      </div>
-      <router-link to="/workflows/new">
-        <AppButton variant="primary">
-          <Plus class="button-icon" />
-          新建工作流
-        </AppButton>
-      </router-link>
-    </div>
+  <PageShell width="narrow">
+    <PageHeader
+      :title="`欢迎回来，${authStore.userName}`"
+      subtitle="这里是您的工作概览"
+    >
+      <template #actions>
+        <router-link to="/workflows/new">
+          <AppButton variant="primary">
+            <Plus class="button-icon" />
+            新建工作流
+          </AppButton>
+        </router-link>
+      </template>
+    </PageHeader>
 
-    <div class="stats-grid">
-      <div class="stat-card stat-card--workflows">
-        <div class="stat-icon stat-icon--primary">
-          <GitBranch />
-        </div>
-        <div class="stat-content">
-          <span class="stat-value">{{ stats.workflows }}</span>
-          <span class="stat-label">工作流</span>
-        </div>
-      </div>
+    <StatGrid class="anim-stagger">
+      <StatCard
+        label="工作流"
+        :value="stats.workflows"
+        :icon="GitBranch"
+        tone="primary"
+      />
+      <StatCard
+        label="执行次数"
+        :value="stats.executions"
+        :icon="Play"
+        tone="success"
+      />
+      <StatCard
+        label="Agent"
+        :value="stats.agents"
+        :icon="Bot"
+        tone="warning"
+      />
+      <StatCard
+        label="成功率"
+        :value="`${stats.successRate}%`"
+        :icon="Clock"
+        tone="info"
+      />
+    </StatGrid>
 
-      <div class="stat-card stat-card--executions">
-        <div class="stat-icon stat-icon--success">
-          <Play />
-        </div>
-        <div class="stat-content">
-          <span class="stat-value">{{ stats.executions }}</span>
-          <span class="stat-label">执行次数</span>
-        </div>
-      </div>
-
-      <div class="stat-card stat-card--agents">
-        <div class="stat-icon stat-icon--warning">
-          <Bot />
-        </div>
-        <div class="stat-content">
-          <span class="stat-value">{{ stats.agents }}</span>
-          <span class="stat-label">Agent</span>
-        </div>
-      </div>
-
-      <div class="stat-card stat-card--success">
-        <div class="stat-icon stat-icon--info">
-          <Clock />
-        </div>
-        <div class="stat-content">
-          <span class="stat-value">{{ stats.successRate }}%</span>
-          <span class="stat-label">成功率</span>
-        </div>
-      </div>
-    </div>
-
-    <div class="dashboard-grid">
-      <AppCard
+    <div class="page-shell__grid page-shell__grid--2-1">
+      <SectionCard
         title="最近工作流"
-        icon="GitBranch"
+        :icon="GitBranch"
       >
         <template #actions>
           <router-link to="/workflows">
-            <el-button
-              text
+            <AppButton
+              variant="ghost"
               size="small"
+              text
             >
               查看全部
-            </el-button>
+            </AppButton>
           </router-link>
         </template>
-        <div class="workflow-list">
-          <div
-            v-if="recentWorkflows.length === 0"
-            class="empty-state"
+
+        <div
+          v-if="recentWorkflows.length === 0"
+          class="dashboard-empty"
+        >
+          <PageEmptyState
+            :icon="GitBranch"
+            title="暂无工作流"
+            description="创建您的第一个 AI 工作流，开始自动化任务。"
           >
-            <GitBranch class="empty-icon" />
-            <p>暂无工作流</p>
-            <router-link to="/workflows/new">
-              <AppButton size="small">
-                创建第一个工作流
-              </AppButton>
-            </router-link>
-          </div>
+            <template #actions>
+              <router-link to="/workflows/new">
+                <AppButton size="small">
+                  创建第一个工作流
+                </AppButton>
+              </router-link>
+            </template>
+          </PageEmptyState>
+        </div>
+        <div
+          v-else
+          class="workflow-list"
+        >
           <div
             v-for="workflow in recentWorkflows"
             :key="workflow.id"
             class="workflow-item"
+            role="link"
+            tabindex="0"
+            @click="goToWorkflow(workflow.id)"
+            @keydown.enter="goToWorkflow(workflow.id)"
           >
             <div class="workflow-info">
               <span class="workflow-name">{{ workflow.name }}</span>
-              <span class="workflow-date">{{ formatDate(workflow.updated_at) }}</span>
+              <span class="workflow-date">{{ formatDate(workflow.updatedAt || workflow.updated_at) }}</span>
             </div>
             <el-tag
               :type="getStatusType(workflow.status)"
@@ -104,79 +101,104 @@
             </el-tag>
           </div>
         </div>
-      </AppCard>
+      </SectionCard>
 
-      <AppCard
+      <SectionCard
         title="快速操作"
-        icon="Zap"
+        :icon="Zap"
       >
         <div class="quick-actions">
           <router-link
             to="/workflows/new"
-            class="quick-action"
+            class="quick-action quick-action--blue"
           >
-            <GitBranch class="quick-action-icon" />
+            <span class="quick-action-icon"><GitBranch /></span>
             <span>新建工作流</span>
           </router-link>
           <router-link
             to="/agents/new"
-            class="quick-action"
+            class="quick-action quick-action--amber"
           >
-            <Bot class="quick-action-icon" />
+            <span class="quick-action-icon"><Bot /></span>
             <span>创建 Agent</span>
           </router-link>
           <router-link
             to="/nl-create"
-            class="quick-action"
+            class="quick-action quick-action--rose"
           >
-            <MessageSquare class="quick-action-icon" />
+            <span class="quick-action-icon"><MessageSquare /></span>
             <span>自然语言创建</span>
           </router-link>
           <router-link
-            to="/workflows"
-            class="quick-action"
+            to="/marketplace"
+            class="quick-action quick-action--emerald"
           >
-            <Search class="quick-action-icon" />
+            <span class="quick-action-icon"><Search /></span>
             <span>浏览模板</span>
           </router-link>
         </div>
-      </AppCard>
+      </SectionCard>
     </div>
-  </div>
+  </PageShell>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useWorkflowStore } from '@/stores/workflow'
-import { useAppStore } from '@/stores/app'
-import { Plus, GitBranch, Play, Bot, Clock, Zap, MessageSquare, Search } from 'lucide-vue-next'
+import { getExecutionStatistics } from '@/api/workflow'
+import { agentApi } from '@/api/agent'
+import { Plus, GitBranch, Play, Bot, Clock, MessageSquare, Search, Zap } from 'lucide-vue-next'
 import AppButton from '@/components/common/AppButton.vue'
-import AppCard from '@/components/common/AppCard.vue'
+import PageShell from '@/components/layout/PageShell.vue'
+import PageHeader from '@/components/layout/PageHeader.vue'
+import StatGrid from '@/components/layout/StatGrid.vue'
+import StatCard from '@/components/layout/StatCard.vue'
+import SectionCard from '@/components/layout/SectionCard.vue'
+import PageEmptyState from '@/components/layout/PageEmptyState.vue'
 import dayjs from 'dayjs'
 
+const router = useRouter()
 const authStore = useAuthStore()
 const workflowStore = useWorkflowStore()
-const appStore = useAppStore()
 
 const stats = ref({
   workflows: 0,
   executions: 0,
   agents: 0,
-  successRate: 0
+  successRate: 0,
 })
 
 const recentWorkflows = ref([])
 
 onMounted(async () => {
   try {
-    const response = await workflowStore.fetchWorkflows({ page_size: 5 })
-    recentWorkflows.value = response.results || response
-    stats.value.workflows = recentWorkflows.value.length
+    const [workflowRes, execStats, agentRes] = await Promise.all([
+      workflowStore.fetchWorkflows({ page_size: 5 }),
+      getExecutionStatistics(),
+      agentApi.getList({ page_size: 1 }),
+    ])
+
+    recentWorkflows.value = workflowRes.results || workflowRes
+    stats.value.workflows = workflowRes.count ?? recentWorkflows.value.length
+
+    const totalExecutions = execStats.totalExecutions ?? execStats.total_executions ?? 0
+    const completedCount = execStats.completedCount ?? execStats.completed_count ?? 0
+    stats.value.executions = totalExecutions
+    stats.value.successRate = totalExecutions > 0
+      ? Math.round((completedCount / totalExecutions) * 1000) / 10
+      : 0
+
+    stats.value.agents = agentRes.count ?? (agentRes.results?.length ?? 0)
   } catch {
-    // Silent failure - dashboard will show empty state
+    // 仪表盘允许静默失败，展示空状态
   }
 })
+
+function goToWorkflow(id) {
+  router.push(`/workflows/${id}`)
+}
 
 function formatDate(date) {
   return dayjs(date).format('MM/DD HH:mm')
@@ -187,7 +209,7 @@ function getStatusType(status) {
     draft: 'info',
     active: 'success',
     paused: 'warning',
-    archived: 'info'
+    archived: 'info',
   }
   return typeMap[status] || 'info'
 }
@@ -197,7 +219,7 @@ function getStatusLabel(status) {
     draft: '草稿',
     active: '活跃',
     paused: '已暂停',
-    archived: '已归档'
+    archived: '已归档',
   }
   return labelMap[status] || status
 }
@@ -205,135 +227,16 @@ function getStatusLabel(status) {
 
 <style lang="scss" scoped>
 @use '@/assets/styles/variables.scss' as *;
-
-.dashboard {
-  max-width: 1200px;
-  margin: 0 auto;
-}
-
-.dashboard-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: $spacing-8;
-}
-
-.dashboard-title {
-  font-size: $font-size-3xl;
-  font-weight: $font-weight-bold;
-  color: var(--text-primary);
-  margin: 0 0 $spacing-2;
-}
-
-.dashboard-subtitle {
-  font-size: $font-size-base;
-  color: var(--text-secondary);
-  margin: 0;
-}
+@use '@/assets/styles/page-layout.scss';
 
 .button-icon {
   width: 18px;
   height: 18px;
-  margin-right: $spacing-2;
 }
 
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: $spacing-4;
-  margin-bottom: $spacing-6;
-
-  @media (max-width: $breakpoint-lg) {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  @media (max-width: $breakpoint-sm) {
-    grid-template-columns: 1fr;
-  }
-}
-
-.stat-card {
-  display: flex;
-  align-items: center;
-  gap: $spacing-4;
-  padding: $spacing-5;
-  background-color: var(--bg-secondary);
-  border: 1px solid var(--border-primary);
-  border-radius: $radius-xl;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
-
-  &:hover {
-    border-color: var(--border-hover);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-    transform: translateY(-2px);
-  }
-
-  &--workflows:hover { border-color: rgba($color-primary, 0.4); }
-  &--executions:hover { border-color: rgba($color-success, 0.4); }
-  &--agents:hover { border-color: rgba($color-warning, 0.4); }
-  &--success:hover { border-color: rgba($color-info, 0.4); }
-}
-
-.stat-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 48px;
-  height: 48px;
-  border-radius: $radius-lg;
-
-  svg {
-    width: 24px;
-    height: 24px;
-  }
-
-  &--primary {
-    background-color: rgba($color-primary, 0.12);
-    color: $color-primary;
-  }
-
-  &--success {
-    background-color: rgba($color-success, 0.12);
-    color: $color-success;
-  }
-
-  &--warning {
-    background-color: rgba($color-warning, 0.12);
-    color: $color-warning;
-  }
-
-  &--info {
-    background-color: rgba($color-info, 0.12);
-    color: $color-info;
-  }
-}
-
-.stat-content {
-  display: flex;
-  flex-direction: column;
-}
-
-.stat-value {
-  font-size: $font-size-2xl;
-  font-weight: 700;
-  color: var(--text-primary);
-  font-family: 'JetBrains Mono', monospace;
-  line-height: 1.2;
-}
-
-.stat-label {
-  font-size: $font-size-sm;
-  color: var(--text-secondary);
-  margin-top: 2px;
-}
-
-.dashboard-grid {
-  display: grid;
-  grid-template-columns: 2fr 1fr;
-  gap: $spacing-6;
-
-  @media (max-width: $breakpoint-lg) {
-    grid-template-columns: 1fr;
+.dashboard-empty {
+  :deep(.page-empty-state) {
+    padding: $spacing-6 $spacing-4;
   }
 }
 
@@ -347,13 +250,23 @@ function getStatusLabel(status) {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: $spacing-3;
+  padding: $spacing-3 $spacing-4;
   background-color: var(--bg-tertiary);
+  border: 1px solid transparent;
   border-radius: $radius-lg;
-  transition: background-color $transition-fast;
+  cursor: pointer;
+  transition: background-color $transition-fast, border-color $transition-fast, transform $transition-fast, box-shadow $transition-fast;
 
   &:hover {
     background-color: var(--bg-hover);
+    border-color: var(--accent-blue-soft);
+    transform: translateX(2px);
+    box-shadow: var(--shadow-sm);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
   }
 }
 
@@ -361,6 +274,7 @@ function getStatusLabel(status) {
   display: flex;
   flex-direction: column;
   gap: $spacing-1;
+  min-width: 0;
 }
 
 .workflow-name {
@@ -371,25 +285,6 @@ function getStatusLabel(status) {
 .workflow-date {
   font-size: $font-size-xs;
   color: var(--text-tertiary);
-}
-
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: $spacing-8;
-  color: var(--text-secondary);
-
-  .empty-icon {
-    width: 48px;
-    height: 48px;
-    margin-bottom: $spacing-4;
-    opacity: 0.5;
-  }
-
-  p {
-    margin-bottom: $spacing-4;
-  }
 }
 
 .quick-actions {
@@ -403,27 +298,35 @@ function getStatusLabel(status) {
   flex-direction: column;
   align-items: center;
   gap: $spacing-2;
-  padding: $spacing-4;
+  padding: $spacing-5 $spacing-4;
   background-color: var(--bg-tertiary);
-  border-radius: $radius-lg;
+  border: 1px solid var(--border-primary);
+  border-radius: $radius-xl;
   color: var(--text-secondary);
   text-decoration: none;
-  transition: all $transition-fast;
+  transition: background-color 0.25s cubic-bezier(0.22, 1, 0.36, 1),
+              border-color 0.25s ease,
+              color 0.25s ease,
+              transform 0.25s cubic-bezier(0.22, 1, 0.36, 1),
+              box-shadow 0.25s ease;
 
   &:hover {
     background-color: var(--bg-hover);
-    color: var(--accent-primary);
+    border-color: var(--color-primary-30);
+    color: var(--text-primary);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-sm);
 
     .quick-action-icon {
-      color: $color-primary;
+      transform: scale(1.08);
     }
   }
 }
 
 .quick-action-icon {
-  width: 24px;
-  height: 24px;
-  color: var(--text-tertiary);
-  transition: color $transition-fast;
+  :deep(svg) {
+    width: 22px;
+    height: 22px;
+  }
 }
 </style>

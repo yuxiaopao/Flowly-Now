@@ -31,8 +31,8 @@ def conversation_updated(sender, instance, **kwargs):
             {
                 'type': 'conversation_update',
                 'data': {
-                    'conversation_id': instance.id,
-                    'message_count': len(instance.messages or [])
+                    'conversation_id': str(instance.id),
+                    'message_count': instance.message_count
                 }
             }
         )
@@ -42,10 +42,47 @@ def conversation_updated(sender, instance, **kwargs):
 
 @receiver(post_save, sender='agents.AgentExecution')
 def execution_completed(sender, instance, **kwargs):
-    """Handle execution completion."""
-    if instance.status in ('completed', 'failed'):
-        # Update agent stats
-        from .models import Agent
-        Agent.objects.filter(id=instance.agent_id).update(
-            updated_at=instance.started_at
+    """Handle execution completion — update agent stats and notify subscribers."""
+    if instance.status not in ('completed', 'failed'):
+        return
+
+    from django.utils import timezone
+
+    agent = instance.agent
+    settings_data = dict(agent.settings or {})
+    stats = dict(settings_data.get('execution_stats') or {})
+    stats['total'] = int(stats.get('total') or 0) + 1
+    if instance.status == 'completed':
+        stats['completed'] = int(stats.get('completed') or 0) + 1
+    else:
+        stats['failed'] = int(stats.get('failed') or 0) + 1
+    settings_data['execution_stats'] = stats
+    settings_data['last_execution'] = {
+        'id': str(instance.id),
+        'status': instance.status,
+        'completed_at': (instance.completed_at or timezone.now()).isoformat(),
+    }
+    agent.settings = settings_data
+    agent.save(update_fields=['settings', 'updated_at'])
+
+    channel_layer = get_channel_layer_safe()
+    if not channel_layer:
+        return
+
+    from asgiref.sync import async_to_sync
+
+    try:
+        async_to_sync(channel_layer.group_send)(
+            f'agent_{agent.id}',
+            {
+                'type': 'agent_execution_update',
+                'data': {
+                    'agent_id': str(agent.id),
+                    'execution_id': str(instance.id),
+                    'status': instance.status,
+                    'stats': stats,
+                },
+            },
         )
+    except Exception:
+        pass

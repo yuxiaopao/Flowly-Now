@@ -23,6 +23,7 @@
  */
 import { ref, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
+import { getWebSocketUrl } from '@/config'
 
 export function useTrainingWebSocket(jobId) {
   const isConnected = ref(false)
@@ -46,11 +47,7 @@ export function useTrainingWebSocket(jobId) {
   /**
    * Get the WebSocket URL for the training job
    */
-  const getWebSocketUrl = () => {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const host = import.meta.env.VITE_API_WS_URL || window.location.host
-    return `${protocol}//${host}/ws/training/${jobId}/`
-  }
+  const getWebSocketUrlForJob = () => getWebSocketUrl(`/ws/training/${jobId}/`)
 
   /**
    * Connect to the training WebSocket
@@ -69,7 +66,7 @@ export function useTrainingWebSocket(jobId) {
     }
 
     try {
-      ws = new WebSocket(getWebSocketUrl())
+      ws = new WebSocket(getWebSocketUrlForJob())
 
       ws.onopen = () => {
         isConnected.value = true
@@ -126,6 +123,11 @@ export function useTrainingWebSocket(jobId) {
               ElMessage.error(`训练错误: ${data.error}`)
               break
 
+            case 'training_progress':
+              progress.value = data.progress_percent ?? data.progress ?? progress.value
+              if (data.metrics) metrics.value = data.metrics
+              break
+
             case 'training_cancelled':
               isCancelled.value = true
               isComplete.value = false
@@ -153,7 +155,7 @@ export function useTrainingWebSocket(jobId) {
         error.value = 'WebSocket连接错误'
       }
 
-      ws.onclose = (event) => {
+      ws.onclose = (_event) => {
         isConnected.value = false
         
         // Don't reconnect if training is complete or cancelled
@@ -247,7 +249,6 @@ export function useTrainingWebSocket(jobId) {
  */
 export function useTrainingJobs() {
   const jobs = ref(new Map())
-  const activeJobs = ref([])
 
   /**
    * Subscribe to a training job's progress

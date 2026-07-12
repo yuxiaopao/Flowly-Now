@@ -1,0 +1,31 @@
+{
+  "job_id": "62319677-ba94-4a02-9896-7690f34419e4",
+  "training_kind": "yolo",
+  "framework": "ultralytics",
+  "model_type": "detection",
+  "dataset_id": "617a084f-d80a-44d5-af46-90a8d72df21a",
+  "dataset_path": "E:\\Flowly-now\\Backend\\scripts\\fixtures\\t2_mini_emotion",
+  "dataset_yaml_path": "E:\\Flowly-now\\Backend\\scripts\\fixtures\\t2_mini_emotion\\dataset.yaml",
+  "annotation_project_id": "",
+  "class_names": [
+    "happy",
+    "sad",
+    "angry",
+    "neutral",
+    "surprise"
+  ],
+  "yolo_version": "v8",
+  "model_variant": "n",
+  "epochs": 1,
+  "batch_size": 16,
+  "image_size": 640,
+  "learning_rate": 0.01,
+  "output_dir": "E:\\Flowly-now\\Backend\\outputs\\yolo_70660a67",
+  "device": "cpu",
+  "config": {
+    "output_dir": "E:\\Flowly-now\\Backend\\outputs\\yolo_70660a67",
+    "batch_size": 16,
+    "image_size": 640,
+    "learning_rate": 0.01
+  }
+}

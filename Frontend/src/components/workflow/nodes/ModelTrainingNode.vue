@@ -1,6 +1,6 @@
-﻿<template>
+<template>
   <div
-    class="domain-node"
+    :style="{ '--node-accent': nodeColor }" class="domain-node"
     :class="{ selected, expanded: isExpanded, 'is-running': isRunning, 'is-completed': isCompleted, 'is-failed': isFailed }"
     @click.stop="handleSelect"
   >
@@ -10,16 +10,7 @@
     />
 
     <div class="node-header">
-      <div
-        class="node-type-badge"
-        :style="{ backgroundColor: nodeColor + '22', borderColor: nodeColor }"
-      >
-        <Brain
-          class="badge-icon"
-          :style="{ color: nodeColor }"
-        />
-        <span :style="{ color: nodeColor }">模型训练</span>
-      </div>
+      <NodeTypeBadge :node-type="NODE_TYPE" />
       <button
         class="action-btn"
         @click.stop="toggleExpand"
@@ -33,12 +24,14 @@
 
     <div class="node-name-section">
       <input
+        :id="id ? `node-label-${id}` : undefined"
+        name="node-label"
         v-model="localName"
         class="node-name-input"
         placeholder="节点名称..."
         @blur="handleChange"
         @keydown.enter="handleChange"
-        @click.stop
+        @click.stop="handleSelect"
       >
     </div>
 
@@ -244,6 +237,9 @@ import { ref, watch, computed, nextTick } from 'vue'
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
 import { Brain, ChevronDown, Loader, AlertCircle } from 'lucide-vue-next'
 import { useExecutionStore } from '@/stores/execution'
+import NodeTypeBadge from '@/components/workflow/nodes/NodeTypeBadge.vue'
+import { useNodePresentation } from '@/composables/useNodePresentation'
+
 
 const props = defineProps({
   id: { type: String, default: '' },
@@ -251,11 +247,13 @@ const props = defineProps({
   selected: { type: Boolean, default: false }
 })
 
+const NODE_TYPE = 'model_training'
+const { nodeIcon, nodeColor, nodeLabel } = useNodePresentation(NODE_TYPE)
+
 const emit = defineEmits(['select'])
 const { updateNodeData } = useVueFlow()
 
 const isExpanded = ref(false)
-const nodeColor = '#f59e0b'
 
 const localName = ref(props.data.label || '模型训练')
 const localConfig = ref({
@@ -358,6 +356,7 @@ watch(() => props.data, (d) => {
 }, { deep: true })
 
 function toggleExpand() {
+  handleSelect()
   isExpanded.value = !isExpanded.value
 }
 

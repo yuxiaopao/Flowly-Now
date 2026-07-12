@@ -27,9 +27,6 @@ export const useAgentStore = defineStore('agent', () => {
   // Getters
   const activeAgents = computed(() => agents.value.filter(a => a.is_active))
 
-  // Helper to create timestamp
-  const createTimestamp = () => new Date().toISOString()
-
   // Helper to parse SSE line
   function parseSSELine(line) {
     if (line.startsWith('data: ')) {
@@ -182,7 +179,8 @@ export const useAgentStore = defineStore('agent', () => {
       debugMessages.value.push({
         role: 'assistant',
         content: response.response || response.message,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        toolCalls: response.tool_calls || null
       })
 
       if (response.execution_id) {
@@ -234,6 +232,7 @@ export const useAgentStore = defineStore('agent', () => {
       const reader = response.body.getReader()
       const decoder = new TextDecoder()
 
+      // eslint-disable-next-line no-constant-condition -- SSE stream read loop
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
@@ -253,6 +252,11 @@ export const useAgentStore = defineStore('agent', () => {
               }
             } else if (data.type === 'done') {
               assistantMessage.isStreaming = false
+              assistantMessage.toolCalls = data.tool_calls || null
+              const msgIndex = debugMessages.value.findIndex(m => m === assistantMessage)
+              if (msgIndex !== -1) {
+                debugMessages.value[msgIndex] = { ...assistantMessage }
+              }
               currentDebugSession.value = {
                 ...currentDebugSession.value,
                 conversation_id: data.conversation_id

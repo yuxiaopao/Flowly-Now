@@ -40,20 +40,19 @@ def update_template_stats():
 
     updated_count = 0
     for template in templates:
-        # Update install count
         install_count = TemplateInstall.objects.filter(template=template).count()
-        template.install_count = install_count
-
-        # Update average rating
         rating_data = TemplateRating.objects.filter(template=template).aggregate(
             avg=Avg('rating'),
             count=Count('id')
         )
-        if rating_data['avg']:
-            template.avg_rating = round(rating_data['avg'], 2)
-        template.rating_count = rating_data['count'] or 0
 
-        template.save()
+        template.install_count = install_count
+        template.avg_rating = round(rating_data['avg'], 2) if rating_data['avg'] else 0
+        template.save(update_fields=[
+            'install_count',
+            'avg_rating',
+            'updated_at',
+        ])
         updated_count += 1
 
     return {'templates_updated': updated_count}
@@ -68,18 +67,17 @@ def send_marketplace_digest(days: int = 7):
         days: Number of days to include in digest
     """
     from datetime import timedelta
+    from django.db.models import Count
 
     from .models import WorkflowTemplate, TemplateInstall
 
     cutoff = timezone.now() - timedelta(days=days)
 
-    # Get recent popular templates
     recent_templates = WorkflowTemplate.objects.filter(
         is_published=True,
         created_at__gte=cutoff
     ).order_by('-install_count')[:10]
 
-    # Get most installed templates
     top_templates = TemplateInstall.objects.filter(
         installed_at__gte=cutoff
     ).values('template__id', 'template__name').annotate(
@@ -109,10 +107,10 @@ def send_marketplace_digest(days: int = 7):
 @shared_task
 def archive_unpublished_templates(days: int = 180):
     """
-    Archive templates that have been unpublished for a long time.
+    Identify unpublished templates older than the cutoff.
 
     Args:
-        days: Days after unpublished before archiving
+        days: Days after last update before a template is considered stale
     """
     from datetime import timedelta
 
@@ -120,20 +118,15 @@ def archive_unpublished_templates(days: int = 180):
 
     cutoff = timezone.now() - timedelta(days=days)
 
-    # Find unpublished templates older than cutoff
-    old_templates = WorkflowTemplate.objects.filter(
+    stale_templates = WorkflowTemplate.objects.filter(
         is_published=False,
-        updated_at__lt=cutoff,
-        is_archived=False
+        updated_at__lt=cutoff
     )
 
-    archived_count = 0
-    for template in old_templates:
-        template.is_archived = True
-        template.save()
-        archived_count += 1
-
-    return {'templates_archived': archived_count}
+    return {
+        'templates_found': stale_templates.count(),
+        'cutoff': cutoff.isoformat(),
+    }
 
 
 @shared_task
@@ -144,26 +137,16 @@ def verify_template_integrity():
     """
     from .models import WorkflowTemplate
 
-    templates = WorkflowTemplate.objects.filter(
-        is_published=True,
-        is_archived=False
-    )
+    templates = WorkflowTemplate.objects.filter(is_published=True)
 
     issues = []
     for template in templates:
-        # Check if workflow data is valid JSON
-        if template.workflow_data:
-            import json
-            try:
-                json.loads(template.workflow_data)
-            except json.JSONDecodeError:
-                issues.append({
-                    'template_id': template.id,
-                    'issue': 'invalid_json',
-                    'name': template.name
-                })
-
-        # Could add more integrity checks
+        if template.workflow_data and not isinstance(template.workflow_data, dict):
+            issues.append({
+                'template_id': template.id,
+                'issue': 'invalid_workflow_data_type',
+                'name': template.name
+            })
 
     return {
         'templates_checked': templates.count(),
@@ -175,21 +158,22 @@ def verify_template_integrity():
 @shared_task
 def update_category_counts():
     """
-    Update template counts for each category.
+    Build current published template counts for each category.
     """
     from .models import TemplateCategory
 
-    categories = TemplateCategory.objects.filter(is_active=True)
+    category_counts = []
+    for category in TemplateCategory.objects.all().order_by('order', 'name'):
+        category_counts.append({
+            'category_id': category.id,
+            'category_slug': category.slug,
+            'template_count': category.templates.filter(is_published=True).count(),
+        })
 
-    updated_count = 0
-    for category in categories:
-        count = category.templates.filter(is_published=True).count()
-        if category.template_count != count:
-            category.template_count = count
-            category.save()
-            updated_count += 1
-
-    return {'categories_updated': updated_count}
+    return {
+        'categories_updated': len(category_counts),
+        'categories': category_counts,
+    }
 
 
 @shared_task
@@ -207,7 +191,6 @@ def generate_marketplace_report(month: int = None):
     if month is None:
         month = timezone.now().month
 
-    # Calculate date range
     year = timezone.now().year
     start_date = datetime(year, month, 1)
     if month == 12:
@@ -218,25 +201,24 @@ def generate_marketplace_report(month: int = None):
     start_date = timezone.make_aware(start_date)
     end_date = timezone.make_aware(end_date)
 
-    # Template stats
     templates_created = WorkflowTemplate.objects.filter(
         created_at__gte=start_date,
         created_at__lt=end_date
     ).count()
 
     templates_published = WorkflowTemplate.objects.filter(
-        published_at__gte=start_date,
-        published_at__lt=end_date
+        is_published=True,
+        created_at__gte=start_date,
+        created_at__lt=end_date
     ).count()
 
-    # Install stats
     installs = TemplateInstall.objects.filter(
         installed_at__gte=start_date,
         installed_at__lt=end_date
     )
 
     total_installs = installs.count()
-    unique_installers = installs.values('installed_by').distinct().count()
+    unique_installers = installs.values('user_id').distinct().count()
 
     report = {
         'year': year,

@@ -21,7 +21,7 @@ from .serializers import (
 from .tasks import run_augmentation_task
 from datasets.models import Dataset
 
-logger = logging.getLogger(__name__)
+from tenants.access import get_accessible_tenant_ids
 
 
 class AugmentationJobViewSet(viewsets.ModelViewSet):
@@ -37,7 +37,7 @@ class AugmentationJobViewSet(viewsets.ModelViewSet):
         """Return jobs filtered by tenant and user access."""
         user = self.request.user
         queryset = AugmentationJob.objects.filter(
-            Q(tenant__isnull=True) | Q(tenant__in=user.tenants.values_list('tenant', flat=True))
+            Q(tenant__isnull=True) | Q(tenant_id__in=get_accessible_tenant_ids(user))
         )
 
         status_filter = self.request.query_params.get('status')
@@ -193,7 +193,7 @@ class AugmentationJobViewSet(viewsets.ModelViewSet):
         """Get augmentation statistics."""
         user = request.user
         queryset = AugmentationJob.objects.filter(
-            Q(tenant__isnull=True) | Q(tenant__in=user.tenants.values_list('tenant', flat=True))
+            Q(tenant__isnull=True) | Q(tenant_id__in=get_accessible_tenant_ids(user))
         )
 
         stats = queryset.aggregate(

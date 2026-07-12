@@ -2,6 +2,7 @@
 Workflow models for Flowly.
 """
 
+import json
 import uuid
 from typing import Optional
 
@@ -148,6 +149,12 @@ class Node(models.Model):
         ('audio_generation', '音频生成'),
         ('subtitle_generation', '字幕生成'),
         ('image_editing', '图像编辑'),
+        ('video_translation', '视频翻译'),
+        ('video_upload', '视频上传'),
+        ('subtitle_translate', '字幕翻译'),
+        ('segment_dubbing', '分段配音'),
+        ('lip_sync', '口型同步'),
+        ('subtitle_burn', '字幕烧录'),
         # Data
         ('dataset_upload', '数据集上传'),
         ('data_annotation', '数据标注'),
@@ -157,6 +164,13 @@ class Node(models.Model):
         ('model_evaluation', '模型评估'),
         ('model_deployment', '模型部署'),
         ('website_generator', '网站生成'),
+        ('backend_setup', '后端搭建'),
+        ('frontend_setup', '前端搭建'),
+        ('ui_beautify', 'UI美化'),
+        ('site_code_review', '代码复查'),
+        ('environment_provision', '环境配置'),
+        ('site_qa', '站点自查'),
+        ('site_preview', '站点预览'),
         # RAG
         ('document_loader', '文档加载'),
         ('embedding', 'Embedding生成'),
@@ -174,6 +188,53 @@ class Node(models.Model):
         ('web_scraper', '网页抓取'),
         ('csv_transform', 'CSV转换'),
         ('json_transform', 'JSON转换'),
+        ('json_parser', 'JSON解析'),
+        ('text_template', '文本模板'),
+        # Control flow extensions
+        ('merge', '合并'),
+        ('split', '批量拆分'),
+        ('filter', '过滤器'),
+        ('set', 'Set赋值'),
+        ('datetime', '日期时间'),
+        # Triggers
+        ('manual', '手动触发'),
+        ('schedule', '定时触发'),
+        ('form', '表单触发'),
+        ('yolo_training', 'YOLO训练'),
+        ('clip_classification', 'CLIP分类'),
+        ('clip_retrieval', 'CLIP检索'),
+        ('project_profiler', '场景分析'),
+        ('project_agent', '项目Agent'),
+        # Integrations
+        ('slack', 'Slack'),
+        ('discord', 'Discord'),
+        ('telegram', 'Telegram'),
+        ('microsoft_teams', 'Microsoft Teams'),
+        ('notion', 'Notion'),
+        ('google_sheets', 'Google Sheets'),
+        ('google_drive', 'Google Drive'),
+        ('github', 'GitHub'),
+        ('gitlab', 'GitLab'),
+        ('jira', 'Jira'),
+        ('airtable', 'Airtable'),
+        ('trello', 'Trello'),
+        ('mysql', 'MySQL'),
+        ('postgres', 'PostgreSQL'),
+        ('mongodb', 'MongoDB'),
+        ('redis', 'Redis'),
+        ('elasticsearch', 'Elasticsearch'),
+        ('aws_s3', 'AWS S3'),
+        ('ftp', 'FTP/SFTP'),
+        ('stripe', 'Stripe'),
+        ('twilio', 'Twilio'),
+        ('sendgrid', 'SendGrid'),
+        ('openai_api', 'OpenAI API'),
+        ('huggingface', 'Hugging Face'),
+        ('push_notification', '推送通知'),
+        ('rss_feed', 'RSS订阅'),
+        ('feishu', '飞书'),
+        ('dingtalk', '钉钉'),
+        ('wechat_work', '企业微信'),
     ]
 
     ERROR_HANDLING_CHOICES = [
@@ -539,7 +600,7 @@ class WorkflowExecution(models.Model):
         """Mark execution as started."""
         self.status = 'running'
         self.started_at = timezone.now()
-        self.save(update_fields=['status', 'started_at', 'updated_at'])
+        self.save(update_fields=['status', 'started_at'])
 
     def mark_completed(self, output_data=None):
         """Mark execution as completed."""
@@ -550,7 +611,7 @@ class WorkflowExecution(models.Model):
             self.output_data = output_data
         if self.started_at:
             self.duration_ms = int((self.completed_at - self.started_at).total_seconds() * 1000)
-        self.save(update_fields=['status', 'completed_at', 'progress', 'output_data', 'duration_ms', 'updated_at'])
+        self.save(update_fields=['status', 'completed_at', 'progress', 'output_data', 'duration_ms'])
 
     def mark_failed(self, error_message, error_stack=None):
         """Mark execution as failed."""
@@ -561,7 +622,7 @@ class WorkflowExecution(models.Model):
             self.error_stack = error_stack
         if self.started_at:
             self.duration_ms = int((self.completed_at - self.started_at).total_seconds() * 1000)
-        self.save(update_fields=['status', 'completed_at', 'error_message', 'error_stack', 'duration_ms', 'updated_at'])
+        self.save(update_fields=['status', 'completed_at', 'error_message', 'error_stack', 'duration_ms'])
 
     def update_node_status(self, node_id: int, status: str, extra_data: dict = None):
         """Update the status of a specific node."""
@@ -769,8 +830,11 @@ class NodeExecution(models.Model):
         """Mark node execution as completed."""
         self.status = 'completed'
         self.completed_at = timezone.now()
-        if output_data:
-            self.output_data = output_data
+        if output_data is not None:
+            try:
+                self.output_data = json.loads(json.dumps(output_data, default=str, ensure_ascii=False))
+            except (TypeError, ValueError):
+                self.output_data = {'_raw': str(output_data)}
         if self.started_at:
             self.duration_ms = int((self.completed_at - self.started_at).total_seconds() * 1000)
         self.save(update_fields=['status', 'completed_at', 'output_data', 'duration_ms', 'updated_at'])
@@ -1052,6 +1116,8 @@ class APICredential(models.Model):
         'azure_tts': 'AZURE_TTS_KEY',
         'qdrant': 'QDRANT_API_KEY',
         'azure': 'AZURE_OPENAI_API_KEY',
+        'dashscope': 'DASHSCOPE_API_KEY',
+        'agnes': 'AGNES_API_KEY',
     }
 
     CREDENTIAL_TYPE_CHOICES = [
@@ -1072,6 +1138,20 @@ class APICredential(models.Model):
         ('slack', 'Slack'),
         ('discord', 'Discord'),
         ('github', 'GitHub'),
+        ('feishu', '飞书'),
+        ('dingtalk', '钉钉'),
+        ('wechat_work', '企业微信'),
+        ('telegram', 'Telegram'),
+        ('notion', 'Notion'),
+        ('jira', 'Jira'),
+        ('mysql', 'MySQL'),
+        ('postgres', 'PostgreSQL'),
+        ('mongodb', 'MongoDB'),
+        ('redis', 'Redis'),
+        ('stripe', 'Stripe'),
+        ('twilio', 'Twilio'),
+        ('sendgrid', 'SendGrid'),
+        ('microsoft_teams', 'Microsoft Teams'),
         ('stability', 'Stability AI'),
         ('replicate', 'Replicate'),
         ('elevenlabs', 'ElevenLabs'),
@@ -1080,7 +1160,19 @@ class APICredential(models.Model):
         ('cohere', 'Cohere'),
         ('runway', 'Runway'),
         ('pika', 'Pika'),
+        ('deepseek', 'DeepSeek'),
+        ('ollama', 'Ollama'),
+        ('mistral', 'Mistral'),
+        ('groq', 'Groq'),
+        ('dashscope', '阿里云百炼(DashScope)'),
+        ('agnes', 'Agnes AI'),
         ('custom', '自定义'),
+    ]
+
+    SCOPE_CHOICES = [
+        ('user', '用户级 — 仅自己可用'),
+        ('tenant', '租户级 — 租户内共享'),
+        ('global', '全局 — 所有用户可用'),
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -1122,8 +1214,17 @@ class APICredential(models.Model):
     )
     service_config = models.JSONField(default=dict, blank=True, verbose_name='服务配置')
 
+    # Scope: user / tenant / global
+    scope = models.CharField(
+        max_length=20,
+        choices=SCOPE_CHOICES,
+        default='user',
+        verbose_name='作用域',
+        db_index=True
+    )
+
     # Permission scope
-    scope = models.JSONField(default=list, blank=True, verbose_name='权限范围')
+    scope_permission = models.JSONField(default=list, blank=True, verbose_name='权限范围')
 
     # Owner
     owner = models.ForeignKey(
@@ -1153,6 +1254,9 @@ class APICredential(models.Model):
             models.Index(fields=['credential_type']),
             models.Index(fields=['service_type']),
             models.Index(fields=['is_active']),
+            models.Index(fields=['scope']),
+            models.Index(fields=['scope', 'service_type', 'is_active']),
+            models.Index(fields=['tenant', 'scope', 'service_type']),
         ]
         constraints = [
             models.UniqueConstraint(
@@ -1164,15 +1268,20 @@ class APICredential(models.Model):
     def __str__(self):
         return f"{self.name} ({self.get_credential_type_display()})"
 
+    @property
+    def scope_display_text(self) -> str:
+        """Return human-readable scope."""
+        return dict(self.SCOPE_CHOICES).get(self.scope, self.scope)
+
     @classmethod
     def get_by_provider(cls, user, provider: str) -> Optional['APICredential']:
         """
         Get active credential for a user and provider.
-        
+
         Args:
             user: User instance
             provider: Service provider name
-            
+
         Returns:
             APICredential instance or None
         """
@@ -1181,6 +1290,83 @@ class APICredential(models.Model):
             service_type=provider,
             is_active=True
         ).first()
+
+    @classmethod
+    def get_best_for_user(
+        cls,
+        user,
+        provider: str,
+        tenant_id=None,
+        include_expired=False
+    ) -> Optional['APICredential']:
+        """
+        Get the best available credential for a user with priority:
+        user-level → tenant-level → global-level.
+
+        Args:
+            user: User instance
+            provider: Service provider name
+            tenant_id: Current tenant ID (optional)
+            include_expired: If True, include expired credentials
+
+        Returns:
+            APICredential instance or None
+        """
+        from django.utils import timezone
+        qs = cls.objects.filter(service_type=provider, is_active=True)
+        if not include_expired:
+            qs = qs.filter(
+                models.Q(expires_at__isnull=True) |
+                models.Q(expires_at__gt=timezone.now())
+            )
+
+        candidates = list(qs.filter(
+            scope='user',
+            owner=user
+        ).order_by('-is_active', '-created_at'))
+
+        if not candidates and tenant_id:
+            candidates = list(qs.filter(
+                scope='tenant',
+                tenant_id=tenant_id
+            ).order_by('-is_active', '-created_at'))
+
+        if not candidates:
+            candidates = list(qs.filter(
+                scope='global'
+            ).order_by('-is_active', '-created_at'))
+
+        return candidates[0] if candidates else None
+
+    @classmethod
+    def get_for_user(cls, user, credential_id) -> Optional['APICredential']:
+        """按 ID 获取用户有权访问的凭证。"""
+        if not user or not credential_id:
+            return None
+
+        try:
+            credential = cls.objects.get(id=credential_id, is_active=True)
+        except cls.DoesNotExist:
+            return None
+
+        if user.is_superuser:
+            return credential
+
+        if credential.scope == 'global':
+            return credential
+
+        if credential.owner_id == user.id:
+            return credential
+
+        if credential.scope == 'tenant' and credential.tenant_id:
+            try:
+                from tenants.access import get_accessible_tenant_ids
+                if credential.tenant_id in get_accessible_tenant_ids(user):
+                    return credential
+            except Exception:
+                pass
+
+        return None
 
     def get_decrypted_data(self) -> str:
         """
@@ -1421,6 +1607,8 @@ class WorkflowTemplate(models.Model):
     is_featured = models.BooleanField(default=False)
     is_verified = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
+    is_public = models.BooleanField(default=False)  # Whether the template is publicly listed
+    report_count = models.IntegerField(default=0)
     version = models.IntegerField(default=1)
     created_by = models.ForeignKey(
         User,
@@ -1434,9 +1622,169 @@ class WorkflowTemplate(models.Model):
     class Meta:
         db_table = 'workflows_workflow_templates'
         ordering = ['-use_count', '-rating']
+        verbose_name = 'Workflow Template'
+        verbose_name_plural = 'Workflow Templates'
 
     def __str__(self):
         return self.name
+
+
+class TemplateInstall(models.Model):
+    """
+    Canonical record of template installations.
+    Tracks which user installed which template and the resulting workflow.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='template_installs',
+        verbose_name='User'
+    )
+    template = models.ForeignKey(
+        'WorkflowTemplate',
+        on_delete=models.CASCADE,
+        related_name='installs',
+        verbose_name='Template'
+    )
+    workflow = models.ForeignKey(
+        'Workflow',
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='template_install',
+        verbose_name='Installed Workflow'
+    )
+    installed_at = models.DateTimeField(auto_now_add=True, verbose_name='Installed At')
+
+    class Meta:
+        db_table = 'workflows_template_installs'
+        verbose_name = 'Template Install'
+        verbose_name_plural = 'Template Installs'
+        unique_together = ['user', 'template']
+        ordering = ['-installed_at']
+        indexes = [
+            models.Index(fields=['template', '-installed_at']),
+            models.Index(fields=['user', '-installed_at']),
+        ]
+
+    def __str__(self):
+        return f"{self.user} installed {self.template}"
+
+
+class TemplateRatingRecord(models.Model):
+    """
+    Canonical record of template ratings.
+    Stores individual user ratings for templates.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='template_ratings',
+        verbose_name='User'
+    )
+    template = models.ForeignKey(
+        'WorkflowTemplate',
+        on_delete=models.CASCADE,
+        related_name='rating_records',
+        verbose_name='Template'
+    )
+    rating = models.PositiveSmallIntegerField(verbose_name='Rating (1-5)')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Created At')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='Updated At')
+
+    class Meta:
+        db_table = 'workflows_template_ratings'
+        verbose_name = 'Template Rating'
+        verbose_name_plural = 'Template Ratings'
+        unique_together = ['user', 'template']
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['template', '-rating']),
+            models.Index(fields=['user']),
+        ]
+
+    def __str__(self):
+        return f"{self.user} rated {self.template}: {self.rating}"
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+        if not (1 <= self.rating <= 5):
+            raise ValidationError({'rating': 'Rating must be between 1 and 5.'})
+
+
+class TemplateReport(models.Model):
+    """
+    Canonical record of template reports.
+    Tracks user-submitted reports against workflow templates.
+    """
+    REASON_CHOICES = [
+        ('inappropriate', '不当内容'),
+        ('spam', '垃圾信息'),
+        ('copyright', '侵权内容'),
+        ('misleading', '误导性内容'),
+        ('broken', '内容损坏/不可用'),
+        ('other', '其他'),
+    ]
+
+    STATUS_CHOICES = [
+        ('pending', '待处理'),
+        ('reviewed', '已审核'),
+        ('resolved', '已处理'),
+        ('dismissed', '已驳回'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='template_reports',
+        verbose_name='举报人'
+    )
+    template = models.ForeignKey(
+        'WorkflowTemplate',
+        on_delete=models.CASCADE,
+        related_name='reports',
+        verbose_name='被举报模板'
+    )
+    reason = models.CharField(
+        max_length=20,
+        choices=REASON_CHOICES,
+        verbose_name='举报原因'
+    )
+    description = models.TextField(blank=True, verbose_name='补充说明')
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='pending',
+        verbose_name='处理状态'
+    )
+    reviewed_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='reviewed_template_reports',
+        verbose_name='审核人'
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True, verbose_name='审核时间')
+    reviewed_notes = models.TextField(blank=True, verbose_name='审核备注')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='举报时间')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='更新时间')
+
+    class Meta:
+        db_table = 'workflows_template_reports'
+        verbose_name = 'Template Report'
+        verbose_name_plural = 'Template Reports'
+        unique_together = ['user', 'template', 'reason']
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['template', '-created_at']),
+            models.Index(fields=['status', '-created_at']),
+            models.Index(fields=['user']),
+        ]
+
+    def __str__(self):
+        return f"{self.user} reported {self.template} ({self.reason})"
 
 
 class ExecutionCache(models.Model):
@@ -1497,3 +1845,7 @@ class ExecutionCacheConfig(models.Model):
     class Meta:
         verbose_name_plural = 'Execution cache configs'
         db_table = 'execution_cache_config'
+
+
+# Trigger / scheduling models (see scheduling.py)
+from .scheduling import WorkflowTrigger, TriggerExecution  # noqa: F401, E402

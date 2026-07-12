@@ -1,5 +1,13 @@
-﻿<template>
+<template>
   <div class="workflow-editor">
+    <el-alert
+      v-if="!canEditWorkflow && !isNewWorkflow"
+      class="editor-readonly-alert"
+      type="warning"
+      :closable="false"
+      show-icon
+      title="当前为只读模式：您不是此工作流的所有者，无法保存修改。请使用「复制」创建副本后再编辑。"
+    />
     <!-- 顶部工具栏 -->
     <header class="editor-toolbar">
       <!-- 左侧：返回 + 工作流名称 -->
@@ -90,7 +98,7 @@
               :type="autoConnectMode ? 'primary' : 'default'"
               :icon="Link2"
               size="small"
-              @click="autoConnectMode ? cancelAutoConnect() : null"
+              @click="autoConnectMode ? cancelAutoConnect() : enableAutoConnectMode()"
             >
               连线
             </el-button>
@@ -102,23 +110,41 @@
             <el-button
               :icon="Plus"
               size="small"
-              @click="() => {}"
+              @click="openQuickAddMenuFromToolbar"
             >
               添加
             </el-button>
           </el-tooltip>
-          <el-tooltip
-            content="自动排列节点"
-            placement="bottom"
+          <el-dropdown
+            trigger="click"
+            @command="handleAutoLayout"
           >
-            <el-button
-              :icon="Layout"
-              size="small"
-              @click="handleAutoLayout"
-            >
-              布局
-            </el-button>
-          </el-tooltip>
+            <template #default>
+              <el-button
+                :icon="Layout"
+                size="small"
+                title="自动排列节点"
+              >
+                布局
+                <ChevronDown
+                  :size="12"
+                  class="toolbar-btn-icon-right"
+                />
+              </el-button>
+            </template>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="horizontal">
+                  <ArrowRight :size="14" />
+                  水平排列（从左到右）
+                </el-dropdown-item>
+                <el-dropdown-item command="vertical">
+                  <ArrowDown :size="14" />
+                  垂直排列（从上到下）
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
           <el-tooltip
             content="触发器配置"
             placement="bottom"
@@ -156,6 +182,7 @@
           <el-button
             :icon="Save"
             :loading="isSaving"
+            :disabled="!canEditWorkflow"
             class="toolbar-core-btn"
             @click="handleSave"
           >
@@ -163,16 +190,31 @@
           </el-button>
         </el-tooltip>
         <el-tooltip
-          content="立即运行工作流"
+          :content="isExecuting ? '工作流执行中' : (hasExecutionHistory ? '再次运行工作流' : '立即运行工作流')"
           placement="bottom"
         >
           <el-button
             type="primary"
             :icon="Play"
+            :loading="isExecuting"
+            :disabled="isExecuting"
             class="toolbar-core-btn toolbar-core-btn--primary"
             @click="handleExecute"
           >
-            <span class="btn-label">执行</span>
+            <span class="btn-label">{{ executeButtonLabel }}</span>
+          </el-button>
+        </el-tooltip>
+        <el-tooltip
+          v-if="showExecutionResumeEntry"
+          content="查看最近一次执行结果"
+          placement="bottom"
+        >
+          <el-button
+            :icon="PanelBottomOpen"
+            class="toolbar-core-btn"
+            @click="reopenExecutionPanel"
+          >
+            <span class="btn-label">查看执行</span>
           </el-button>
         </el-tooltip>
 
@@ -182,15 +224,13 @@
           class="toolbar-more-dropdown"
           @command="(cmd) => handleToolbarCommand(cmd)"
         >
-          <el-tooltip
-            content="更多操作"
-            placement="bottom"
-          >
+          <template #default>
             <el-button
               :icon="MoreHorizontal"
               class="toolbar-more-btn"
+              title="更多操作"
             />
-          </el-tooltip>
+          </template>
           <template #dropdown>
             <el-dropdown-menu>
               <el-dropdown-item command="variable">
@@ -239,17 +279,22 @@
             />
           </div>
 
-          <!-- 控制流节点 -->
+          <!-- n8n 风格动态分类节点面板 -->
           <div
-            v-if="filteredControlNodes.length"
+            v-for="category in filteredNodeCategories"
+            :key="category.id"
             class="node-category"
           >
             <div class="category-header">
-              <span>控制流</span>
-              <span class="category-count">{{ filteredControlNodes.length }}</span>
+              <component
+                :is="category.icon"
+                class="category-icon"
+              />
+              <span>{{ category.label }}</span>
+              <span class="category-count">{{ category.nodes.length }}</span>
             </div>
             <div
-              v-for="node in filteredControlNodes"
+              v-for="node in category.nodes"
               :key="node.type"
               class="node-item"
               :style="{ '--node-color': node.color }"
@@ -272,318 +317,7 @@
                 <span class="node-desc">{{ node.description }}</span>
               </div>
               <kbd
-                class="node-shortcut"
-                :style="{ backgroundColor: node.bgColor, color: node.color, borderColor: node.color }"
-              >{{ node.shortcut }}</kbd>
-            </div>
-          </div>
-
-          <!-- AI 节点 -->
-          <div
-            v-if="filteredAiNodes.length"
-            class="node-category"
-          >
-            <div class="category-header">
-              <span>AI 节点</span>
-              <span class="category-count">{{ filteredAiNodes.length }}</span>
-            </div>
-            <div
-              v-for="node in filteredAiNodes"
-              :key="node.type"
-              class="node-item"
-              :style="{ '--node-color': node.color }"
-              draggable="true"
-              :title="node.description"
-              @dragstart="onDragStart($event, node)"
-            >
-              <div
-                class="node-item-preview"
-                :style="{ backgroundColor: node.bgColor, borderColor: node.color }"
-              >
-                <component
-                  :is="node.icon"
-                  class="node-icon"
-                  :style="{ color: node.color }"
-                />
-              </div>
-              <div class="node-item-info">
-                <span class="node-label">{{ node.label }}</span>
-                <span class="node-desc">{{ node.description }}</span>
-              </div>
-              <kbd
-                class="node-shortcut"
-                :style="{ backgroundColor: node.bgColor, color: node.color, borderColor: node.color }"
-              >{{ node.shortcut }}</kbd>
-            </div>
-          </div>
-
-          <!-- 数据节点 -->
-          <div
-            v-if="filteredDataNodes.length"
-            class="node-category"
-          >
-            <div class="category-header">
-              <span>数据节点</span>
-              <span class="category-count">{{ filteredDataNodes.length }}</span>
-            </div>
-            <div
-              v-for="node in filteredDataNodes"
-              :key="node.type"
-              class="node-item"
-              :style="{ '--node-color': node.color }"
-              draggable="true"
-              :title="node.description"
-              @dragstart="onDragStart($event, node)"
-            >
-              <div
-                class="node-item-preview"
-                :style="{ backgroundColor: node.bgColor, borderColor: node.color }"
-              >
-                <component
-                  :is="node.icon"
-                  class="node-icon"
-                  :style="{ color: node.color }"
-                />
-              </div>
-              <div class="node-item-info">
-                <span class="node-label">{{ node.label }}</span>
-                <span class="node-desc">{{ node.description }}</span>
-              </div>
-              <kbd
-                class="node-shortcut"
-                :style="{ backgroundColor: node.bgColor, color: node.color, borderColor: node.color }"
-              >{{ node.shortcut }}</kbd>
-            </div>
-          </div>
-
-          <!-- 工具节点 -->
-          <div
-            v-if="filteredToolNodes.length"
-            class="node-category"
-          >
-            <div class="category-header">
-              <span>工具节点</span>
-              <span class="category-count">{{ filteredToolNodes.length }}</span>
-            </div>
-            <div
-              v-for="node in filteredToolNodes"
-              :key="node.type"
-              class="node-item"
-              :style="{ '--node-color': node.color }"
-              draggable="true"
-              :title="node.description"
-              @dragstart="onDragStart($event, node)"
-            >
-              <div
-                class="node-item-preview"
-                :style="{ backgroundColor: node.bgColor, borderColor: node.color }"
-              >
-                <component
-                  :is="node.icon"
-                  class="node-icon"
-                  :style="{ color: node.color }"
-                />
-              </div>
-              <div class="node-item-info">
-                <span class="node-label">{{ node.label }}</span>
-                <span class="node-desc">{{ node.description }}</span>
-              </div>
-              <kbd
-                class="node-shortcut"
-                :style="{ backgroundColor: node.bgColor, color: node.color, borderColor: node.color }"
-              >{{ node.shortcut }}</kbd>
-            </div>
-          </div>
-
-          <!-- 多模态生成节点 -->
-          <div
-            v-if="filteredMultimodalNodes.length"
-            class="node-category"
-          >
-            <div class="category-header">
-              <span>多模态生成</span>
-              <span class="category-count">{{ filteredMultimodalNodes.length }}</span>
-            </div>
-            <div
-              v-for="node in filteredMultimodalNodes"
-              :key="node.type"
-              class="node-item"
-              :style="{ '--node-color': node.color }"
-              draggable="true"
-              :title="node.description"
-              @dragstart="onDragStart($event, node)"
-            >
-              <div
-                class="node-item-preview"
-                :style="{ backgroundColor: node.bgColor, borderColor: node.color }"
-              >
-                <component
-                  :is="node.icon"
-                  class="node-icon"
-                  :style="{ color: node.color }"
-                />
-              </div>
-              <div class="node-item-info">
-                <span class="node-label">{{ node.label }}</span>
-                <span class="node-desc">{{ node.description }}</span>
-              </div>
-              <kbd
-                class="node-shortcut"
-                :style="{ backgroundColor: node.bgColor, color: node.color, borderColor: node.color }"
-              >{{ node.shortcut }}</kbd>
-            </div>
-          </div>
-
-          <!-- 模型训练节点 -->
-          <div
-            v-if="filteredModelTrainingNodes.length"
-            class="node-category"
-          >
-            <div class="category-header">
-              <span>模型训练</span>
-              <span class="category-count">{{ filteredModelTrainingNodes.length }}</span>
-            </div>
-            <div
-              v-for="node in filteredModelTrainingNodes"
-              :key="node.type"
-              class="node-item"
-              :style="{ '--node-color': node.color }"
-              draggable="true"
-              :title="node.description"
-              @dragstart="onDragStart($event, node)"
-            >
-              <div
-                class="node-item-preview"
-                :style="{ backgroundColor: node.bgColor, borderColor: node.color }"
-              >
-                <component
-                  :is="node.icon"
-                  class="node-icon"
-                  :style="{ color: node.color }"
-                />
-              </div>
-              <div class="node-item-info">
-                <span class="node-label">{{ node.label }}</span>
-                <span class="node-desc">{{ node.description }}</span>
-              </div>
-              <kbd
-                class="node-shortcut"
-                :style="{ backgroundColor: node.bgColor, color: node.color, borderColor: node.color }"
-              >{{ node.shortcut }}</kbd>
-            </div>
-          </div>
-
-          <!-- RAG 检索节点 -->
-          <div
-            v-if="filteredRagNodes.length"
-            class="node-category"
-          >
-            <div class="category-header">
-              <span>RAG 检索</span>
-              <span class="category-count">{{ filteredRagNodes.length }}</span>
-            </div>
-            <div
-              v-for="node in filteredRagNodes"
-              :key="node.type"
-              class="node-item"
-              :style="{ '--node-color': node.color }"
-              draggable="true"
-              :title="node.description"
-              @dragstart="onDragStart($event, node)"
-            >
-              <div
-                class="node-item-preview"
-                :style="{ backgroundColor: node.bgColor, borderColor: node.color }"
-              >
-                <component
-                  :is="node.icon"
-                  class="node-icon"
-                  :style="{ color: node.color }"
-                />
-              </div>
-              <div class="node-item-info">
-                <span class="node-label">{{ node.label }}</span>
-                <span class="node-desc">{{ node.description }}</span>
-              </div>
-              <kbd
-                class="node-shortcut"
-                :style="{ backgroundColor: node.bgColor, color: node.color, borderColor: node.color }"
-              >{{ node.shortcut }}</kbd>
-            </div>
-          </div>
-
-          <!-- Agent 节点 -->
-          <div
-            v-if="filteredAgentNodes.length"
-            class="node-category"
-          >
-            <div class="category-header">
-              <span>Agent</span>
-              <span class="category-count">{{ filteredAgentNodes.length }}</span>
-            </div>
-            <div
-              v-for="node in filteredAgentNodes"
-              :key="node.type"
-              class="node-item"
-              :style="{ '--node-color': node.color }"
-              draggable="true"
-              :title="node.description"
-              @dragstart="onDragStart($event, node)"
-            >
-              <div
-                class="node-item-preview"
-                :style="{ backgroundColor: node.bgColor, borderColor: node.color }"
-              >
-                <component
-                  :is="node.icon"
-                  class="node-icon"
-                  :style="{ color: node.color }"
-                />
-              </div>
-              <div class="node-item-info">
-                <span class="node-label">{{ node.label }}</span>
-                <span class="node-desc">{{ node.description }}</span>
-              </div>
-              <kbd
-                class="node-shortcut"
-                :style="{ backgroundColor: node.bgColor, color: node.color, borderColor: node.color }"
-              >{{ node.shortcut }}</kbd>
-            </div>
-          </div>
-
-          <!-- 数据处理节点 -->
-          <div
-            v-if="filteredDataProcessNodes.length"
-            class="node-category"
-          >
-            <div class="category-header">
-              <span>数据处理</span>
-              <span class="category-count">{{ filteredDataProcessNodes.length }}</span>
-            </div>
-            <div
-              v-for="node in filteredDataProcessNodes"
-              :key="node.type"
-              class="node-item"
-              :style="{ '--node-color': node.color }"
-              draggable="true"
-              :title="node.description"
-              @dragstart="onDragStart($event, node)"
-            >
-              <div
-                class="node-item-preview"
-                :style="{ backgroundColor: node.bgColor, borderColor: node.color }"
-              >
-                <component
-                  :is="node.icon"
-                  class="node-icon"
-                  :style="{ color: node.color }"
-                />
-              </div>
-              <div class="node-item-info">
-                <span class="node-label">{{ node.label }}</span>
-                <span class="node-desc">{{ node.description }}</span>
-              </div>
-              <kbd
+                v-if="node.shortcut"
                 class="node-shortcut"
                 :style="{ backgroundColor: node.bgColor, color: node.color, borderColor: node.color }"
               >{{ node.shortcut }}</kbd>
@@ -604,6 +338,7 @@
       <!-- 中间画布 -->
       <main
         class="canvas-wrapper"
+        :class="{ 'connect-mode-active': autoConnectMode }"
         @drop="onDrop"
         @dragover.prevent
         @contextmenu="onPaneContextMenu"
@@ -615,9 +350,11 @@
           v-model:edges="edges"
           :node-types="nodeTypes"
           :default-viewport="viewport"
+          :min-zoom="WORKFLOW_CANVAS_ZOOM.min"
+          :max-zoom="WORKFLOW_CANVAS_ZOOM.max"
           :snap-to-grid="snapToGrid"
           :snap-grid="[16, 16]"
-          @node-click="onNodeClick"
+          @node-click="handleNodeClick"
           @edge-click="handleEdgeClick"
           @pane-click="onPaneClick"
           @nodes-change="handleNodesChange"
@@ -627,17 +364,32 @@
           @connect="onConnect"
           @node-context-menu="onNodeContextMenu"
           @nodes-initialized="onNodesInitialized"
+          @node-mouse-enter="onNodeMouseEnter"
+          @node-mouse-leave="onNodeMouseLeave"
+          @viewport-change="onViewportChange"
         >
+          <!-- Custom node type templates（其余类型由 nodeTypes 自动渲染） -->
+          <template #node-llm="{ id, data, selected }">
+            <WorkflowNodeHost
+              :id="id"
+              :node-component="LLMNode"
+              :data="data"
+              :selected="selected"
+              :extra-props="{ runtimeState: executionNodeStateMap[id] }"
+            />
+          </template>
           <Background
             pattern-color="#1a1a2e"
             :gap="16"
           />
           <Controls />
           <MiniMap
+            v-show="showMiniMap"
             :node-types="nodeTypes"
             :node-color="minimapNodeColor"
             :node-stroke-width="3"
             mask-color="rgba(15, 15, 30, 0.7)"
+            class="editor-minimap"
           />
         </VueFlow>
 
@@ -680,173 +432,17 @@
             </button>
           </div>
           <div class="quick-add-body">
-            <div class="quick-add-section">
+            <div
+              v-for="category in quickAddCategories"
+              :key="category.id"
+              class="quick-add-section"
+            >
               <div class="section-label">
-                控制流
+                {{ category.label }}
               </div>
               <div class="quick-add-items">
                 <button
-                  v-for="n in controlNodes"
-                  :key="n.type"
-                  class="quick-add-item"
-                  @click="handleQuickAddSelect(n.type)"
-                >
-                  <component
-                    :is="n.icon"
-                    class="item-icon"
-                    :style="{ color: n.color }"
-                  />
-                  <span>{{ n.label }}</span>
-                </button>
-              </div>
-            </div>
-            <div class="quick-add-section">
-              <div class="section-label">
-                AI 节点
-              </div>
-              <div class="quick-add-items">
-                <button
-                  v-for="n in aiNodes"
-                  :key="n.type"
-                  class="quick-add-item"
-                  @click="handleQuickAddSelect(n.type)"
-                >
-                  <component
-                    :is="n.icon"
-                    class="item-icon"
-                    :style="{ color: n.color }"
-                  />
-                  <span>{{ n.label }}</span>
-                </button>
-              </div>
-            </div>
-            <div class="quick-add-section">
-              <div class="section-label">
-                数据处理
-              </div>
-              <div class="quick-add-items">
-                <button
-                  v-for="n in dataNodes"
-                  :key="n.type"
-                  class="quick-add-item"
-                  @click="handleQuickAddSelect(n.type)"
-                >
-                  <component
-                    :is="n.icon"
-                    class="item-icon"
-                    :style="{ color: n.color }"
-                  />
-                  <span>{{ n.label }}</span>
-                </button>
-              </div>
-            </div>
-            <div class="quick-add-section">
-              <div class="section-label">
-                工具
-              </div>
-              <div class="quick-add-items">
-                <button
-                  v-for="n in toolNodes"
-                  :key="n.type"
-                  class="quick-add-item"
-                  @click="handleQuickAddSelect(n.type)"
-                >
-                  <component
-                    :is="n.icon"
-                    class="item-icon"
-                    :style="{ color: n.color }"
-                  />
-                  <span>{{ n.label }}</span>
-                </button>
-              </div>
-            </div>
-            <div class="quick-add-section">
-              <div class="section-label">
-                多模态生成
-              </div>
-              <div class="quick-add-items">
-                <button
-                  v-for="n in multimodalNodes"
-                  :key="n.type"
-                  class="quick-add-item"
-                  @click="handleQuickAddSelect(n.type)"
-                >
-                  <component
-                    :is="n.icon"
-                    class="item-icon"
-                    :style="{ color: n.color }"
-                  />
-                  <span>{{ n.label }}</span>
-                </button>
-              </div>
-            </div>
-            <div class="quick-add-section">
-              <div class="section-label">
-                模型训练
-              </div>
-              <div class="quick-add-items">
-                <button
-                  v-for="n in modelTrainingNodes"
-                  :key="n.type"
-                  class="quick-add-item"
-                  @click="handleQuickAddSelect(n.type)"
-                >
-                  <component
-                    :is="n.icon"
-                    class="item-icon"
-                    :style="{ color: n.color }"
-                  />
-                  <span>{{ n.label }}</span>
-                </button>
-              </div>
-            </div>
-            <div class="quick-add-section">
-              <div class="section-label">
-                RAG 检索
-              </div>
-              <div class="quick-add-items">
-                <button
-                  v-for="n in ragNodes"
-                  :key="n.type"
-                  class="quick-add-item"
-                  @click="handleQuickAddSelect(n.type)"
-                >
-                  <component
-                    :is="n.icon"
-                    class="item-icon"
-                    :style="{ color: n.color }"
-                  />
-                  <span>{{ n.label }}</span>
-                </button>
-              </div>
-            </div>
-            <div class="quick-add-section">
-              <div class="section-label">
-                Agent
-              </div>
-              <div class="quick-add-items">
-                <button
-                  v-for="n in agentNodes"
-                  :key="n.type"
-                  class="quick-add-item"
-                  @click="handleQuickAddSelect(n.type)"
-                >
-                  <component
-                    :is="n.icon"
-                    class="item-icon"
-                    :style="{ color: n.color }"
-                  />
-                  <span>{{ n.label }}</span>
-                </button>
-              </div>
-            </div>
-            <div class="quick-add-section">
-              <div class="section-label">
-                数据处理
-              </div>
-              <div class="quick-add-items">
-                <button
-                  v-for="n in dataProcessNodes"
+                  v-for="n in category.nodes"
                   :key="n.type"
                   class="quick-add-item"
                   @click="handleQuickAddSelect(n.type)"
@@ -903,6 +499,13 @@
           </span>
         </div>
       </main>
+
+      <!-- 右侧属性面板 -->
+      <PropertyPanel
+        :selected-node="selectedNode"
+        @change="handleNodePropertyChange"
+        @delete="handleDeleteNodeById"
+      />
     </div>
 
     <!-- 验证结果对话框 -->
@@ -978,6 +581,10 @@
       v-model="showAssistant"
       :nodes="nodes"
       :edges="edges"
+      :workflow-name="workflowName"
+      @apply-workflow="handleAssistantApplyWorkflow"
+      @highlight-nodes="handleOptimizerHighlight"
+      @apply-fix="handleOptimizerApplyFix"
     />
 
     <!-- 底部执行面板 -->
@@ -985,11 +592,16 @@
       <div
         v-if="showExecutionPanel"
         class="execution-bottom-panel"
+        :class="{ 'is-dragging': isDraggingPanel }"
+        :style="{ height: executionPanelHeight + 'px' }"
       >
+        <!-- 拖拽把手（双击折叠，拖拽调整高度） -->
         <div
           class="exec-panel-handle"
-          title="点击折叠"
-          @click="showExecutionPanel = false"
+          title="拖拽调整高度 / 双击折叠"
+          @mousedown.prevent="onPanelDragStart"
+          @touchstart.prevent="onPanelDragStart"
+          @dblclick="closeExecutionPanel"
         />
 
         <!-- 面板头部 -->
@@ -1029,7 +641,7 @@
             </el-button>
             <el-button
               size="small"
-              @click="showExecutionPanel = false"
+              @click="closeExecutionPanel"
             >
               <X class="btn-icon" />
             </el-button>
@@ -1043,12 +655,19 @@
             <div class="timeline-header">
               节点状态
             </div>
-            <div class="timeline-list">
+            <div
+              ref="executionTimelineListRef"
+              class="timeline-list"
+            >
               <div
                 v-for="node in executionNodeList"
                 :key="node.id"
+                :ref="(el) => setExecutionTimelineNodeRef(el, node.id)"
                 class="timeline-item"
-                :class="`node-${node.status}`"
+                :class="[
+                  `node-${node.status}`,
+                  { 'is-selected': selectedExecNode?.id === node.id }
+                ]"
                 @click="selectedExecNode = node"
               >
                 <div class="timeline-status">
@@ -1205,76 +824,57 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, onUnmounted, watch, shallowRef, markRaw, nextTick } from 'vue'
+defineOptions({ name: 'WorkflowEditor' })
+
+import { ref, computed, onMounted, onUnmounted, onActivated, watch, shallowRef, nextTick, provide } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useWorkflowStore } from '@/stores/workflow'
-import { autoLayoutWorkflow } from '@/utils/workflowLayout'
+import { useExecutionStore } from '@/stores/execution'
+import { autoLayoutWorkflow, applyWorkflowLayout, needsAutoLayout, resolveNodeCollision } from '@/utils/workflowLayout'
+import { captureWorkflowCanvas, buildVueFlowCaptureApi } from '@/utils/workflowCanvasCapture'
+import { resolveWorkflowCanvasPreview } from '@/utils/workflowPreview'
+import { nlWorkflowToVueFlow, normalizeNodeConfig, syncCanvasAfterSave, ensureMultimodalWorkflowGraph } from '@/utils/workflowTransform'
+import {
+  migrateNodeRuntimeCache,
+  remapExecutionStoreNodeIds,
+  remapRecordByIdMap,
+} from '@/utils/nodeRuntimePersistence'
 import { useAppStore } from '@/stores/app'
+import { useAuthStore } from '@/stores/auth'
 import {
   ArrowLeft, Save, Play, ZoomIn, ZoomOut,
   Maximize2, Undo, Redo, CheckCircle,
   AlertCircle, GitBranch,
-  PlayCircle, Circle, FileText, Zap, MessageSquare,
-  Hammer, User, Code, Webhook, Variable as VariableIcon, LogOut,
-  RefreshCw, Timer, SplitSquareHorizontal, Search,
-  Plus, Link2, Clock, GitMerge, Shuffle, Mail,
-  Brain, BookOpen, Bot, Database, Globe, Sparkles, X,
-  MoreHorizontal, ChevronDown, PanelRightClose,
-  Loader, Check, Layout
+  Circle, Zap, MessageSquare,
+  Variable as VariableIcon,
+  Search,
+  Plus, Link2, Clock, X,
+  MoreHorizontal, ChevronDown, PanelRightClose, PanelBottomOpen,
+  Loader, Check, Layout, ArrowDown, ArrowRight
 } from 'lucide-vue-next'
 import { VueFlow, useVueFlow, MarkerType } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import { Controls } from '@vue-flow/controls'
 import { MiniMap } from '@vue-flow/minimap'
-import StartNode from '@/components/workflow/nodes/StartNode.vue'
-import EndNode from '@/components/workflow/nodes/EndNode.vue'
+import {
+  filterNodeCategories,
+  getDefaultNodeConfig,
+  getMinimapNodeColor,
+  getNodeMeta,
+  NODE_CATEGORIES,
+} from '@/config/nodeRegistry'
+import { buildNodeTypesMap } from '@/config/nodeComponents'
 import LLMNode from '@/components/workflow/nodes/LLMNode.vue'
-import PromptNode from '@/components/workflow/nodes/PromptNode.vue'
-import ConditionNode from '@/components/workflow/nodes/ConditionNode.vue'
-import LoopNode from '@/components/workflow/nodes/LoopNode.vue'
-import InputNode from '@/components/workflow/nodes/InputNode.vue'
-import OutputNode from '@/components/workflow/nodes/OutputNode.vue'
-import CodeNode from '@/components/workflow/nodes/CodeNode.vue'
-import VariableNode from '@/components/workflow/nodes/VariableNode.vue'
-import ToolNode from '@/components/workflow/nodes/ToolNode.vue'
-import HttpNode from '@/components/workflow/nodes/HttpNode.vue'
-import SwitchNode from '@/components/workflow/nodes/SwitchNode.vue'
-import DelayNode from '@/components/workflow/nodes/DelayNode.vue'
-import TransformNode from '@/components/workflow/nodes/TransformNode.vue'
-import EmailNode from '@/components/workflow/nodes/EmailNode.vue'
-import SubworkflowNode from '@/components/workflow/nodes/SubworkflowNode.vue'
-import ThemeSwitcher from '@/components/common/ThemeSwitcher.vue'
+import WorkflowNodeHost from '@/components/workflow/WorkflowNodeHost.vue'
 import VariablePanel from '@/views/workflow/VariablePanel.vue'
+import PropertyPanel from '@/components/workflow/PropertyPanel.vue'
 import TriggerConfig from './TriggerConfig.vue'
 import WorkflowAssistant from '@/components/workflow/WorkflowAssistant.vue'
-
-// Domain node components (Wave 2 - placeholder imports)
-import ImageGenerationNode from '@/components/workflow/nodes/ImageGenerationNode.vue'
-import VideoGenerationNode from '@/components/workflow/nodes/VideoGenerationNode.vue'
-import AudioGenerationNode from '@/components/workflow/nodes/AudioGenerationNode.vue'
-import SubtitleGenerationNode from '@/components/workflow/nodes/SubtitleGenerationNode.vue'
-import ImageEditingNode from '@/components/workflow/nodes/ImageEditingNode.vue'
-import DatasetUploadNode from '@/components/workflow/nodes/DatasetUploadNode.vue'
-import DataAnnotationNode from '@/components/workflow/nodes/DataAnnotationNode.vue'
-import DataAugmentationNode from '@/components/workflow/nodes/DataAugmentationNode.vue'
-import ModelTrainingNode from '@/components/workflow/nodes/ModelTrainingNode.vue'
-import ModelEvaluationNode from '@/components/workflow/nodes/ModelEvaluationNode.vue'
-import ModelDeploymentNode from '@/components/workflow/nodes/ModelDeploymentNode.vue'
-import WebsiteGeneratorNode from '@/components/workflow/nodes/WebsiteGeneratorNode.vue'
-import DocumentLoaderNode from '@/components/workflow/nodes/DocumentLoaderNode.vue'
-import EmbeddingNode from '@/components/workflow/nodes/EmbeddingNode.vue'
-import VectorStoreNode from '@/components/workflow/nodes/VectorStoreNode.vue'
-import RetrieverNode from '@/components/workflow/nodes/RetrieverNode.vue'
-import RerankerNode from '@/components/workflow/nodes/RerankerNode.vue'
-import AgentNodeComponent from '@/components/workflow/nodes/AgentNode.vue'
-import PlannerNode from '@/components/workflow/nodes/PlannerNode.vue'
-import ExecutorNode from '@/components/workflow/nodes/ExecutorNode.vue'
-import MemoryNode from '@/components/workflow/nodes/MemoryNode.vue'
-import FileReaderNode from '@/components/workflow/nodes/FileReaderNode.vue'
-import FileWriterNode from '@/components/workflow/nodes/FileWriterNode.vue'
-import WebScraperNodeComponent from '@/components/workflow/nodes/WebScraperNode.vue'
-import CsvTransformNode from '@/components/workflow/nodes/CsvTransformNode.vue'
-import JsonTransformNode from '@/components/workflow/nodes/JsonTransformNode.vue'
+import { YOLO_WORKFLOW_TEMPLATE } from '@/config/yoloWorkflowTemplate'
+import { CLIP_RETRIEVAL_WORKFLOW_TEMPLATE } from '@/config/clipRetrievalWorkflowTemplate'
+import { WORKFLOW_CANVAS_VIEWPORT, WORKFLOW_CANVAS_ZOOM, WORKFLOW_SELECT_NODE_KEY } from '@/config/workflowCanvas'
+import workflowApi from '@/api/workflow'
+import { prepareDesktopClipIndexes } from '@/composables/useClipIndexDesktop'
 import '@vue-flow/core/dist/style.css'
 import '@vue-flow/controls/dist/style.css'
 import '@vue-flow/minimap/dist/style.css'
@@ -1283,9 +883,23 @@ const route = useRoute()
 const router = useRouter()
 const workflowStore = useWorkflowStore()
 const appStore = useAppStore()
+const authStore = useAuthStore()
+const executionStore = useExecutionStore()
 
 const workflowId = computed(() => route.params.id)
 const isNewWorkflow = computed(() => workflowId.value === 'new' || !workflowId.value)
+
+const canEditWorkflow = computed(() => {
+  if (isNewWorkflow.value) return true
+  const wf = workflowStore.currentWorkflow
+  if (!wf) return true
+  if (typeof wf.canEdit === 'boolean') return wf.canEdit
+  const ownerId = wf.owner?.id ?? wf.ownerId
+  const userId = authStore.user?.id
+  if (authStore.user?.isSuperuser) return true
+  if (ownerId != null && userId != null) return Number(ownerId) === Number(userId)
+  return true
+})
 
 const workflowName = ref('未命名工作流')
 const isDirty = ref(false)
@@ -1298,22 +912,31 @@ const showAssistant = ref(false)
 
 // 执行面板状态
 const showExecutionPanel = ref(false)
+const executionPanelHeight = ref(320) // 可拖拽调整高度
+const isDraggingPanel = ref(false)
 const executionId = ref(null)
 const executionStatus = ref('idle') // idle | running | completed | failed | cancelled
 const executionLogs = ref([]) // { type: 'info'|'success'|'error', time: string, text: string }
+const executionNodeStateMap = ref({})
+const executionSessionId = ref(0)
+const seenExecutionLogKeys = ref(new Set())
+const executionDurationMs = ref(null)
 const executionStartTime = ref(null)
 const selectedExecNode = ref(null)
 const elapsedTick = ref(0) // 触发 executionElapsed 重新计算
 
 const executionNodeList = computed(() => {
-  return nodes.value.map(n => ({
-    id: n.id,
-    name: n.data?.label || n.label || n.id,
-    type: n.type,
-    status: 'pending',
-    output: null,
-    error: null
-  }))
+  return nodes.value.map((n) => {
+    const runtimeState = executionNodeStateMap.value[n.id] || {}
+    return {
+      id: n.id,
+      name: n.data?.label || n.label || n.id,
+      type: n.type,
+      status: runtimeState.status || 'pending',
+      output: runtimeState.output ?? null,
+      error: runtimeState.error ?? null
+    }
+  })
 })
 
 const completedNodeCount = computed(() => executionNodeList.value.filter(n => n.status === 'completed').length)
@@ -1327,14 +950,30 @@ const executionProgressPct = computed(() => {
 
 const executionElapsed = computed(() => {
   if (!executionStartTime.value) return null
+
+  const durationMs = executionStatus.value === 'running'
+    ? null
+    : executionDurationMs.value
+
+  const ms = durationMs ?? (Date.now() - executionStartTime.value)
   elapsedTick.value // 依赖响应式，触发更新
-  const ms = Date.now() - executionStartTime.value
-  const s = Math.floor(ms / 1000)
-  const m = Math.floor(s / 60)
-  const h = Math.floor(m / 60)
-  if (h > 0) return `${h}h ${m % 60}m`
-  if (m > 0) return `${m}m ${s % 60}s`
-  return `${s}s`
+  return formatExecutionDuration(Math.max(0, ms))
+})
+
+const hasExecutionHistory = computed(() => {
+  return executionLogs.value.length > 0 || Object.keys(executionNodeStateMap.value).length > 0 || executionStatus.value !== 'idle'
+})
+
+const showExecutionResumeEntry = computed(() => {
+  return !showExecutionPanel.value && hasExecutionHistory.value
+})
+
+const isExecuting = computed(() => ['running', 'pending', 'paused', 'queued'].includes(executionStatus.value))
+
+const executeButtonLabel = computed(() => {
+  if (isExecuting.value) return '执行中'
+  if (hasExecutionHistory.value && executionStatus.value !== 'idle') return '再次执行'
+  return '执行'
 })
 
 function formatNodeOutput(output) {
@@ -1343,13 +982,317 @@ function formatNodeOutput(output) {
   try { return JSON.stringify(output, null, 2) } catch { return String(output) }
 }
 
-const viewport = ref({ x: 50, y: 50, zoom: 1 })
+function formatExecutionDuration(durationMs) {
+  if (durationMs == null || Number.isNaN(durationMs)) return ''
+
+  const totalSeconds = Math.max(0, Math.floor(durationMs / 1000))
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+
+  if (hours > 0) return `${hours}h ${minutes}m`
+  if (minutes > 0) return `${minutes}m ${seconds}s`
+  return `${seconds}s`
+}
+
+function createExecutionLog(type, text) {
+  return {
+    type,
+    time: new Date().toLocaleTimeString(),
+    text
+  }
+}
+
+function getErrorMessage(error, fallback = '操作失败') {
+  const responseData = error?.response?.data
+  if (typeof responseData?.detail === 'string' && responseData.detail) return responseData.detail
+  if (typeof responseData?.message === 'string' && responseData.message) return responseData.message
+  if (typeof responseData?.error === 'string' && responseData.error) return responseData.error
+  if (typeof error?.message === 'string' && error.message) return error.message
+  return fallback
+}
+
+function resetExecutionState() {
+  executionSessionId.value += 1
+  executionId.value = null
+  executionStatus.value = 'idle'
+  executionLogs.value = []
+  executionNodeStateMap.value = {}
+  executionDurationMs.value = null
+  executionStartTime.value = null
+  selectedExecNode.value = null
+  elapsedTick.value = 0
+  seenExecutionLogKeys.value = new Set()
+  if (elapsedTimer.value) {
+    clearInterval(elapsedTimer.value)
+    elapsedTimer.value = null
+  }
+  executionStore.reset()
+}
+
+function startExecutionElapsedTimer(sessionId = executionSessionId.value) {
+  if (elapsedTimer.value) {
+    clearInterval(elapsedTimer.value)
+    elapsedTimer.value = null
+  }
+  executionStartTime.value = executionStartTime.value || Date.now()
+  elapsedTimer.value = setInterval(() => {
+    if (executionSessionId.value !== sessionId) return
+    elapsedTick.value += 1
+  }, 1000)
+}
+
+function stopExecutionElapsedTimer() {
+  if (elapsedTimer.value) {
+    clearInterval(elapsedTimer.value)
+    elapsedTimer.value = null
+  }
+}
+
+function appendExecutionLogsFromSnapshot(execution) {
+  const nodeExecutions = execution?.node_executions || execution?.nodeExecutions || []
+  nodeExecutions.forEach((nodeExecution) => {
+    const nodeId = nodeExecution.node_id || nodeExecution.nodeId || nodeExecution.node || 'unknown'
+    const status = nodeExecution.status || 'pending'
+    const nodeName = nodeExecution.node_name || nodeExecution.nodeName || nodeId
+    const detail = nodeExecution.error_message || nodeExecution.errorMessage || ''
+    const outputData = nodeExecution.output_data ?? nodeExecution.outputData ?? nodeExecution.output ?? null
+    const normalizedOutput = outputData == null
+      ? ''
+      : typeof outputData === 'string'
+        ? outputData
+        : JSON.stringify(outputData)
+    const logKey = `${nodeId}:${status}:${detail}:${normalizedOutput}`
+    if (seenExecutionLogKeys.value.has(logKey)) return
+    seenExecutionLogKeys.value.add(logKey)
+
+    executionLogs.value.push(createExecutionLog(
+      status === 'failed' ? 'error' : status === 'completed' ? 'success' : 'info',
+      `${nodeName}: ${status}${detail ? ` — ${detail}` : ''}`
+    ))
+  })
+}
+
+function applyExecutionSnapshotLocal(execution, nodeStateMap) {
+  if (execution?.durationMs != null) {
+    executionDurationMs.value = Number(execution.durationMs) || 0
+  } else if (execution?.duration_ms != null) {
+    executionDurationMs.value = Number(execution.duration_ms) || 0
+  } else if (execution?.duration_seconds != null) {
+    executionDurationMs.value = Number(execution.duration_seconds) * 1000 || 0
+  } else if (execution?.durationSeconds != null) {
+    executionDurationMs.value = Number(execution.durationSeconds) * 1000 || 0
+  } else if (execution?.duration != null) {
+    executionDurationMs.value = Number(execution.duration) * 1000 || 0
+  }
+
+  executionNodeStateMap.value = nodeStateMap || {}
+  ensureExecutionFocusNode()
+}
+
+function handleEditorExecutionSnapshot(execution, nodeStateMap) {
+  if (!execution) return
+  const sessionId = executionSessionId.value
+  const prevStatus = executionStatus.value
+  applyExecutionSnapshotLocal(execution, nodeStateMap)
+  executionStatus.value = execution.status || executionStatus.value
+  appendExecutionLogsFromSnapshot(execution)
+
+  if (execution.status === 'completed' && prevStatus !== 'completed') {
+    stopExecutionElapsedTimer()
+    const durationText = formatExecutionDuration(executionDurationMs.value)
+    executionLogs.value.push(createExecutionLog('success', `执行完成${durationText ? ` (耗时 ${durationText})` : ''}`))
+    return
+  }
+  if (execution.status === 'failed' && prevStatus !== 'failed') {
+    stopExecutionElapsedTimer()
+    executionLogs.value.push(createExecutionLog('error', execution.error_message || execution.errorMessage || '执行失败'))
+    return
+  }
+  if (execution.status === 'cancelled' && prevStatus !== 'cancelled') {
+    stopExecutionElapsedTimer()
+    executionLogs.value.push(createExecutionLog('info', '执行已取消'))
+    return
+  }
+
+  if (['running', 'pending', 'paused', 'queued'].includes(execution.status)) {
+    startExecutionElapsedTimer(sessionId)
+  }
+}
+
+async function resumeWorkflowExecution() {
+  if (isNewWorkflow.value || !workflowId.value) return
+
+  executionStore.registerEditorSnapshotListener(workflowId.value, handleEditorExecutionSnapshot)
+
+  try {
+    const resumed = await executionStore.resumeEditorExecution(workflowId.value)
+    if (!resumed) {
+      if (Object.keys(executionStore.nodeStatusMap || {}).length > 0) {
+        executionNodeStateMap.value = { ...executionStore.canvasNodeRuntime }
+        executionStatus.value = executionStore.executionStatus
+        showExecutionPanel.value = executionStatus.value !== 'idle'
+      }
+      return
+    }
+
+    executionId.value = resumed.executionId
+    executionStatus.value = resumed.status || resumed.execution?.status || executionStore.executionStatus
+    applyExecutionSnapshotLocal(resumed.execution, executionStore.canvasNodeRuntime)
+    appendExecutionLogsFromSnapshot(resumed.execution)
+    showExecutionPanel.value = true
+
+    if (['running', 'pending', 'paused', 'queued'].includes(executionStatus.value)) {
+      executionLogs.value.unshift(createExecutionLog('info', `已恢复执行监控，ID: ${resumed.executionId}`))
+      startExecutionElapsedTimer()
+    } else if (executionStatus.value === 'completed') {
+      executionLogs.value.unshift(createExecutionLog('info', `已加载最近执行结果，ID: ${resumed.executionId}`))
+    }
+  } catch (error) {
+    console.warn('[Editor] resume workflow execution failed:', error)
+  }
+}
+
+function syncSelectedExecNode() {
+  if (!selectedExecNode.value?.id) return
+  const updatedNode = executionNodeList.value.find(node => node.id === selectedExecNode.value.id)
+  if (!updatedNode) {
+    selectedExecNode.value = null
+    return
+  }
+  const current = selectedExecNode.value
+  if (
+    current.status === updatedNode.status
+    && current.error === updatedNode.error
+    && JSON.stringify(current.output) === JSON.stringify(updatedNode.output)
+  ) {
+    return
+  }
+  selectedExecNode.value = updatedNode
+}
+
+const executionTimelineListRef = ref(null)
+const executionTimelineNodeRefs = ref({})
+
+function setExecutionTimelineNodeRef(el, nodeId) {
+  if (!nodeId) return
+
+  if (el) {
+    executionTimelineNodeRefs.value[nodeId] = el
+    return
+  }
+
+  delete executionTimelineNodeRefs.value[nodeId]
+}
+
+async function scrollSelectedExecNodeIntoView() {
+  await nextTick()
+
+  const selectedId = selectedExecNode.value?.id
+  if (!selectedId) return
+
+  const container = executionTimelineListRef.value
+  const nodeElement = executionTimelineNodeRefs.value[selectedId]
+  if (!container || !nodeElement || typeof nodeElement.scrollIntoView !== 'function') return
+
+  nodeElement.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+}
+
+function pickExecutionFocusNode() {
+  const preferredNode = executionNodeList.value.find(node => node.status === 'failed')
+    || executionNodeList.value.find(node => node.status === 'running')
+    || executionNodeList.value.find(node => node.status === 'completed')
+    || null
+
+  if (preferredNode) {
+    selectedExecNode.value = preferredNode
+  }
+}
+
+function ensureExecutionFocusNode() {
+  const previousSelectedId = selectedExecNode.value?.id || null
+
+  if (selectedExecNode.value?.id) {
+    syncSelectedExecNode()
+  }
+
+  if (!selectedExecNode.value?.id) {
+    pickExecutionFocusNode()
+  }
+
+  if (selectedExecNode.value?.id && selectedExecNode.value.id !== previousSelectedId) {
+    scrollSelectedExecNodeIntoView()
+  }
+}
+
+function closeExecutionPanel() {
+  showExecutionPanel.value = false
+}
+
+// ============================================
+// 执行面板拖拽调整高度
+// ============================================
+let panelDragStartY = 0
+let panelDragStartHeight = 0
+
+function onPanelDragStart(e) {
+  isDraggingPanel.value = true
+  panelDragStartY = e.type === 'touchstart' ? e.touches[0].clientY : e.clientY
+  panelDragStartHeight = executionPanelHeight.value
+  document.addEventListener('mousemove', onPanelDragMove)
+  document.addEventListener('mouseup', onPanelDragEnd)
+  document.addEventListener('touchmove', onPanelDragMove, { passive: false })
+  document.addEventListener('touchend', onPanelDragEnd)
+  e.preventDefault()
+}
+
+function onPanelDragMove(e) {
+  if (!isDraggingPanel.value) return
+  const clientY = e.type === 'touchmove' ? e.touches[0].clientY : e.clientY
+  const delta = panelDragStartY - clientY
+  const newHeight = Math.max(160, Math.min(window.innerHeight - 200, panelDragStartHeight + delta))
+  executionPanelHeight.value = Math.round(newHeight)
+  e.preventDefault()
+}
+
+function onPanelDragEnd() {
+  isDraggingPanel.value = false
+  document.removeEventListener('mousemove', onPanelDragMove)
+  document.removeEventListener('mouseup', onPanelDragEnd)
+  document.removeEventListener('touchmove', onPanelDragMove)
+  document.removeEventListener('touchend', onPanelDragEnd)
+}
+
+function reopenExecutionPanel() {
+  if (!hasExecutionHistory.value) return
+  ensureExecutionFocusNode()
+  showExecutionPanel.value = true
+}
+
+
+const viewport = ref({ ...WORKFLOW_CANVAS_VIEWPORT })
+const showMiniMap = ref(false)
+let minimapHideTimer = null
+const MINIMAP_BASE_ZOOM = 1
+const MINIMAP_HIDE_DELAY_MS = 1800
 const snapToGrid = ref(true)
 const vueFlowRef = ref(null)
+const previewSyncInFlight = ref(false)
+let previewSyncTimer = null
+
+function getVueFlowCaptureApi() {
+  return buildVueFlowCaptureApi({
+    fitView,
+    getViewport,
+    setViewport,
+    vueFlowRef,
+  })
+}
 
 const selectedNode = ref(null)
 const selectedEdge = ref(null)
 const execPanelBodyRef = ref(null)
+const elapsedTimer = ref(null)
 
 const nodes = shallowRef([])
 const edges = shallowRef([])
@@ -1357,8 +1300,6 @@ const edges = shallowRef([])
 // 可用的模型和工具列表（从 API 获取）
 const availableModels = ref([])
 const availableTools = ref([])
-const modelsLoading = ref(false)
-const toolsLoading = ref(false)
 
 // 历史记录（用于撤销/重做）
 const history = ref([])
@@ -1377,44 +1318,151 @@ const quickAddTargetPos = ref({ x: 0, y: 0 })
 const autoConnectMode = ref(false)
 const autoConnectSourceNode = ref(null)
 const autoConnectSourceHandle = ref(null)
-const connectionPreviewPos = ref({ x: 0, y: 0 })
+const connectHoverTargetId = ref(null)
 
-// 节点悬停高亮（用于显示连接桩）
-const hoveredNode = ref(null)
-const hoveredHandle = ref(null)
-
-// 连接桩提示
-const showHandleTooltip = ref(false)
-const handleTooltipPos = ref({ x: 0, y: 0 })
-const handleTooltipText = ref('')
-
-// 快速添加分类
-const quickAddCategories = [
-  { name: 'control', label: '控制流', icon: 'GitBranch' },
-  { name: 'ai', label: 'AI 节点', icon: 'Zap' },
-  { name: 'data', label: '数据处理', icon: 'FileText' },
-  { name: 'tools', label: '工具', icon: 'Hammer' },
+const CONNECT_VISUAL_CLASSES = [
+  'connect-source',
+  'connect-target-hover',
+  'connect-target-valid',
+  'connect-candidate',
 ]
+
+function stripConnectVisualClass(className) {
+  if (!className) return ''
+  return className
+    .split(/\s+/)
+    .filter(c => c && !CONNECT_VISUAL_CLASSES.includes(c))
+    .join(' ')
+}
+
+function syncConnectVisualClasses() {
+  if (!autoConnectMode.value) {
+    clearConnectVisuals()
+    return
+  }
+  const sourceId = autoConnectSourceNode.value
+  const hoverId = connectHoverTargetId.value
+  nodes.value = nodes.value.map((n) => {
+    const baseClass = stripConnectVisualClass(n.class)
+    const classes = baseClass ? [baseClass] : []
+    if (n.id === sourceId) {
+      classes.push('connect-source')
+    } else if (sourceId && n.id === hoverId) {
+      classes.push('connect-target-hover')
+    } else if (sourceId) {
+      classes.push('connect-target-valid')
+    } else {
+      classes.push('connect-candidate')
+    }
+    const nextClass = classes.join(' ').trim()
+    return { ...n, class: nextClass || undefined }
+  })
+}
+
+function clearConnectVisuals() {
+  connectHoverTargetId.value = null
+  nodes.value = nodes.value.map((n) => {
+    const nextClass = stripConnectVisualClass(n.class)
+    return { ...n, class: nextClass || undefined }
+  })
+}
+
+function onNodeMouseEnter({ node }) {
+  if (!autoConnectMode.value || !node?.id) return
+  if (autoConnectSourceNode.value && autoConnectSourceNode.value === node.id) return
+  connectHoverTargetId.value = node.id
+  syncConnectVisualClasses()
+}
+
+function onNodeMouseLeave({ node }) {
+  if (!autoConnectMode.value || !node?.id) return
+  if (connectHoverTargetId.value === node.id) {
+    connectHoverTargetId.value = null
+    syncConnectVisualClasses()
+  }
+}
+
+function readInputNodeValue(node) {
+  const cfg = node.data?.config || {}
+  const el = document.getElementById(`user-input-${node.id}`)
+  const domValue = el && 'value' in el ? String(el.value ?? '') : null
+  const stored = cfg.userInput ?? cfg.user_input ?? cfg.default ?? cfg.value ?? ''
+  const raw = domValue != null && domValue !== String(stored ?? '') ? domValue : stored
+  return raw != null ? String(raw).trim() : ''
+}
+
+function flushCanvasInputValues() {
+  nodes.value = nodes.value.map((node) => {
+    const type = node.data?.type || node.type
+    if (type !== 'input') return node
+    const cfg = node.data?.config || {}
+    const el = document.getElementById(`user-input-${node.id}`)
+    if (!el || !('value' in el)) return node
+    const value = String(el.value ?? '')
+    const stored = cfg.userInput ?? cfg.user_input ?? cfg.default ?? ''
+    if (value === String(stored ?? '')) return node
+    return {
+      ...node,
+      data: {
+        ...node.data,
+        config: {
+          ...cfg,
+          userInput: value,
+          user_input: value,
+          default: value,
+        },
+      },
+    }
+  })
+}
+
+function collectEmptyInputNodes() {
+  return nodes.value.filter((n) => {
+    const type = n.data?.type || n.type
+    if (type !== 'input') return false
+    return !readInputNodeValue(n)
+  })
+}
+
+function clearInputNeedsFlags() {
+  nodes.value = nodes.value.map((n) => {
+    if (!n.data?._needsInput) return n
+    const nextData = { ...n.data }
+    delete nextData._needsInput
+    return { ...n, data: nextData }
+  })
+}
+
+function markEmptyInputNodes(emptyNodes) {
+  const emptyIds = new Set(emptyNodes.map(n => n.id))
+  nodes.value = nodes.value.map((n) => ({
+    ...n,
+    data: {
+      ...n.data,
+      _needsInput: emptyIds.has(n.id),
+    },
+  }))
+}
+
+function focusEmptyInputNode(node) {
+  if (!node) return
+  selectedNode.value = node
+  nextTick(() => {
+    fitView({ nodes: [node.id], padding: WORKFLOW_CANVAS_ZOOM.fitViewPadding, duration: 450, maxZoom: WORKFLOW_CANVAS_ZOOM.fitViewMax })
+    const textarea = document.getElementById(`user-input-${node.id}`)
+    textarea?.focus()
+  })
+}
 
 // 自动连线辅助：将节点按从上到下、从左到右排序
 function getAutoConnectSuggestion(newNodeId) {
   const newNode = nodes.value.find(n => n.id === newNodeId)
   if (!newNode) return null
 
-  const nodeBelow = nodes.value.find(n =>
-    n.id !== newNodeId &&
-    Math.abs(n.position.x - newNode.position.x) < 200 &&
-    n.position.y > newNode.position.y
-  )
   const nodeAbove = nodes.value.find(n =>
     n.id !== newNodeId &&
     Math.abs(n.position.x - newNode.position.x) < 200 &&
     n.position.y < newNode.position.y
-  )
-  const nodeLeft = nodes.value.find(n =>
-    n.id !== newNodeId &&
-    Math.abs(n.position.y - newNode.position.y) < 100 &&
-    n.position.x < newNode.position.x
   )
   const nodeRight = nodes.value.find(n =>
     n.id !== newNodeId &&
@@ -1433,13 +1481,17 @@ function getAutoConnectSuggestion(newNodeId) {
   return null
 }
 
+// 检查两节点间是否已有连线
+function hasEdgeBetween(source, target) {
+  return edges.value.some((e) => e.source === source && e.target === target)
+}
+
 // 自动创建连线
 function createAutoConnect(source, target, label = '自动连线') {
-  // 避免重复连线
-  const exists = edges.value.some(
-    e => e.source === source && e.target === target
-  )
-  if (exists) return
+  if (hasEdgeBetween(source, target)) {
+    appStore.warning('这两个节点之间已存在连线')
+    return false
+  }
 
   const newEdge = {
     id: `edge_auto_${Date.now()}`,
@@ -1454,18 +1506,21 @@ function createAutoConnect(source, target, label = '自动连线') {
   edges.value = [...edges.value, newEdge]
   markDirty()
   saveHistory()
+  return true
 }
 
 // 在画布指定位置添加节点（带自动连线）
 function addNodeAtPosition(type, position) {
-  const nodeType = allNodes.find(n => n.type === type)
+  const nodeType = getNodeMeta(type)
   if (!nodeType) return
 
-  // 网格对齐
-  const snappedPos = {
-    x: Math.round(position.x / 16) * 16,
-    y: Math.round(position.y / 16) * 16
-  }
+  const snappedPos = resolveNodeCollision(
+    { id: '__new__', position: {
+      x: Math.round(position.x / 16) * 16,
+      y: Math.round(position.y / 16) * 16,
+    } },
+    nodes.value
+  )
 
   const newNode = {
     id: `node_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
@@ -1514,6 +1569,11 @@ function openQuickAddMenu(clientX, clientY) {
   showQuickAddMenu.value = true
 }
 
+// 工具栏「添加」按钮入口（模板中无法访问 window，需在 script 中计算位置）
+function openQuickAddMenuFromToolbar() {
+  openQuickAddMenu(window.innerWidth / 2, 180)
+}
+
 // 关闭快速添加菜单
 function closeQuickAddMenu() {
   showQuickAddMenu.value = false
@@ -1525,42 +1585,25 @@ function handleQuickAddSelect(type) {
   addNodeAtPosition(type, quickAddTargetPos.value)
 }
 
-// 处理连接桩点击（手动连线）
-function handleConnectClick(nodeId, handleType, handleId) {
-  if (!autoConnectMode.value) {
-    // 开始连线
-    autoConnectMode.value = true
-    autoConnectSourceNode.value = nodeId
-    autoConnectSourceHandle.value = handleId
-    document.body.style.cursor = 'crosshair'
-  } else {
-    // 完成连线
-    if (autoConnectSourceNode.value && autoConnectSourceNode.value !== nodeId) {
-      const newEdge = {
-        id: `edge_${Date.now()}`,
-        source: autoConnectSourceNode.value,
-        target: nodeId,
-        sourceHandle: autoConnectSourceHandle.value,
-        targetHandle: handleId,
-        label: '',
-        type: 'default',
-        animated: false,
-        markerEnd: MarkerType.ArrowClosed
-      }
-      edges.value = [...edges.value, newEdge]
-      saveHistory()
-      markDirty()
-    }
-    cancelAutoConnect()
-  }
-}
-
 // 取消连线模式
 function cancelAutoConnect() {
   autoConnectMode.value = false
   autoConnectSourceNode.value = null
   autoConnectSourceHandle.value = null
+  clearConnectVisuals()
   document.body.style.cursor = 'default'
+}
+
+function enableAutoConnectMode() {
+  autoConnectMode.value = true
+  autoConnectSourceNode.value = null
+  autoConnectSourceHandle.value = null
+  connectHoverTargetId.value = null
+  selectedNode.value = null
+  selectedEdge.value = null
+  document.body.style.cursor = 'crosshair'
+  syncConnectVisualClasses()
+  appStore.info('连线模式：先点击源节点，再点击目标节点')
 }
 
 // ESC 取消操作
@@ -1573,8 +1616,20 @@ function handleGlobalKeyDown(e) {
       cancelAutoConnect()
     }
   }
-  // 快捷键添加节点
-  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return
+
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+    e.preventDefault()
+    handleSave()
+    return
+  }
+
+  // 快捷键添加节点 — 输入框/可编辑区域内不拦截
+  const target = e.target
+  if (target instanceof HTMLElement) {
+    const tag = target.tagName
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable) return
+    if (target.closest('.nodrag textarea, .nodrag input, [contenteditable="true"]')) return
+  }
 
   // Delete / Backspace 删除选中节点
   if ((e.key === 'Delete' || e.key === 'Backspace') && selectedNode.value) {
@@ -1610,7 +1665,7 @@ function handleGlobalKeyDown(e) {
       y: 300 + Math.random() * 100
     }
     addNodeAtPosition(shortcuts[e.key], pos)
-    appStore.success(`已添加节点: ${allNodes.find(n => n.type === shortcuts[e.key])?.label}`)
+    appStore.success(`已添加节点: ${getNodeMeta(shortcuts[e.key])?.label}`)
   }
 }
 
@@ -1637,291 +1692,56 @@ onMounted(() => {
   document.addEventListener('keydown', handleGlobalKeyDown)
 })
 
+onActivated(async () => {
+  if (!isNewWorkflow.value && workflowId.value) {
+    await resumeWorkflowExecution()
+  }
+})
+
 onUnmounted(() => {
   document.removeEventListener('keydown', handleGlobalKeyDown)
   document.body.style.cursor = 'default'
+  stopExecutionElapsedTimer()
+  if (previewSyncTimer) {
+    clearTimeout(previewSyncTimer)
+    previewSyncTimer = null
+  }
+  if (workflowId.value) {
+    executionStore.unregisterEditorSnapshotListener(workflowId.value)
+  }
 })
 
-// 节点分类
-const controlNodes = [
-  { type: 'start', label: '开始', icon: PlayCircle, description: '工作流入口点', shortcut: 'S', color: '#10b981', bgColor: '#000' },
-  { type: 'end', label: '结束', icon: Circle, description: '工作流结束点', shortcut: 'E', color: '#ef4444', bgColor: '#000' },
-  { type: 'condition', label: '条件判断', icon: GitBranch, description: '根据条件分流执行', shortcut: 'C', color: '#3b82f6', bgColor: '#000' },
-  { type: 'loop', label: '循环', icon: RefreshCw, description: '重复执行循环体', shortcut: 'L', color: '#f59e0b', bgColor: '#000' },
-  { type: 'switch', label: '分支选择', icon: SplitSquareHorizontal, description: '多分支条件选择', shortcut: 'W', color: '#3b82f6', bgColor: '#000' },
-  { type: 'delay', label: '延时', icon: Timer, description: '等待指定时间', shortcut: 'D', color: '#14b8a6', bgColor: '#000' },
-  { type: 'subworkflow', label: '子工作流', icon: GitMerge, description: '调用子工作流', shortcut: 'F', color: '#8b5cf6', bgColor: '#000' },
-]
-
-const aiNodes = [
-  { type: 'llm', label: '大语言模型', icon: Zap, description: '调用 LLM 生成内容', shortcut: 'A', color: '#3b82f6', bgColor: '#fff' },
-  { type: 'prompt', label: '提示词', icon: MessageSquare, description: '定义结构化提示词', shortcut: 'P', color: '#f59e0b', bgColor: '#000' },
-]
-
-const dataNodes = [
-  { type: 'input', label: '输入', icon: FileText, description: '接收用户输入数据', shortcut: 'I', color: '#06b6d4', bgColor: '#fff' },
-  { type: 'output', label: '输出', icon: LogOut, description: '输出工作流结果', shortcut: 'O', color: '#84cc16', bgColor: '#fff' },
-  { type: 'code', label: '代码执行', icon: Code, description: '执行自定义 JavaScript', shortcut: 'X', color: '#f97316', bgColor: '#000' },
-  { type: 'variable', label: '变量', icon: VariableIcon, description: '变量赋值与读取', shortcut: 'V', color: '#10b981', bgColor: '#000' },
-  { type: 'transform', label: '数据转换', icon: Shuffle, description: '数据格式转换与处理', shortcut: 'T', color: '#8b5cf6', bgColor: '#fff' },
-]
-
-const toolNodes = [
-  { type: 'tool', label: '工具', icon: Hammer, description: '调用内置或自定义工具', shortcut: 'G', color: '#ec4899', bgColor: '#000' },
-  { type: 'http', label: 'HTTP请求', icon: Webhook, description: '发送 HTTP 网络请求', shortcut: 'H', color: '#f97316', bgColor: '#000' },
-  { type: 'email', label: '发送邮件', icon: Mail, description: '发送电子邮件', shortcut: 'M', color: '#dc2626', bgColor: '#fff' },
-]
-
-const multimodalNodes = [
-  { type: 'image_generation', label: '图像生成', icon: Sparkles, description: '使用 AI 生成图像', shortcut: 'I', color: '#ec4899', bgColor: '#fff' },
-  { type: 'video_generation', label: '视频生成', icon: Sparkles, description: '使用 AI 生成视频', shortcut: 'V', color: '#ec4899', bgColor: '#fff' },
-  { type: 'audio_generation', label: '音频生成', icon: Sparkles, description: '使用 AI 生成音频', shortcut: 'A', color: '#ec4899', bgColor: '#fff' },
-  { type: 'subtitle_generation', label: '字幕生成', icon: Sparkles, description: '从音视频生成字幕', shortcut: 'S', color: '#ec4899', bgColor: '#fff' },
-  { type: 'image_editing', label: '图像编辑', icon: Sparkles, description: '使用 AI 编辑图像', shortcut: 'E', color: '#ec4899', bgColor: '#fff' },
-]
-
-const modelTrainingNodes = [
-  { type: 'dataset_upload', label: '数据集上传', icon: Database, description: '上传和验证数据集', shortcut: 'D', color: '#f59e0b', bgColor: '#fff' },
-  { type: 'data_annotation', label: '数据标注', icon: Database, description: '对数据集进行标注', shortcut: 'N', color: '#f59e0b', bgColor: '#fff' },
-  { type: 'data_augmentation', label: '数据增强', icon: Database, description: '数据增强和变换', shortcut: 'U', color: '#f59e0b', bgColor: '#fff' },
-  { type: 'model_training', label: '模型训练', icon: Brain, description: '训练机器学习模型', shortcut: 'T', color: '#f59e0b', bgColor: '#000' },
-  { type: 'model_evaluation', label: '模型评估', icon: Brain, description: '评估模型性能', shortcut: 'R', color: '#f59e0b', bgColor: '#000' },
-  { type: 'model_deployment', label: '模型部署', icon: Brain, description: '部署模型到生产环境', shortcut: 'Y', color: '#f59e0b', bgColor: '#000' },
-  { type: 'website_generator', label: '网站生成', icon: Globe, description: '生成可部署的AI网站', shortcut: 'W', color: '#8b5cf6', bgColor: '#fff' },
-]
-
-const ragNodes = [
-  { type: 'document_loader', label: '文档加载', icon: BookOpen, description: '加载各种格式的文档', shortcut: 'L', color: '#06b6d4', bgColor: '#fff' },
-  { type: 'embedding', label: '向量化', icon: BookOpen, description: '文本嵌入和向量化', shortcut: 'B', color: '#06b6d4', bgColor: '#fff' },
-  { type: 'vector_store', label: '向量库', icon: BookOpen, description: '向量存储和检索', shortcut: 'K', color: '#06b6d4', bgColor: '#fff' },
-  { type: 'retriever', label: '检索器', icon: BookOpen, description: '从向量库检索相关内容', shortcut: 'R', color: '#06b6d4', bgColor: '#fff' },
-  { type: 'reranker', label: '重排序', icon: BookOpen, description: '对检索结果重排序', shortcut: 'R', color: '#06b6d4', bgColor: '#fff' },
-]
-
-const agentNodes = [
-  { type: 'agent', label: 'Agent', icon: Bot, description: 'AI Agent 执行复杂任务', shortcut: 'G', color: '#8b5cf6', bgColor: '#fff' },
-  { type: 'planner', label: '任务规划', icon: Bot, description: '分解复杂任务为子任务', shortcut: 'P', color: '#8b5cf6', bgColor: '#fff' },
-  { type: 'executor', label: '任务执行', icon: Bot, description: '执行规划的任务', shortcut: 'X', color: '#8b5cf6', bgColor: '#fff' },
-  { type: 'memory', label: '记忆存储', icon: Bot, description: 'Agent 记忆管理', shortcut: 'M', color: '#8b5cf6', bgColor: '#fff' },
-]
-
-const dataProcessNodes = [
-  { type: 'file_reader', label: '文件读取', icon: Database, description: '读取各种格式的文件', shortcut: 'R', color: '#10b981', bgColor: '#fff' },
-  { type: 'file_writer', label: '文件写入', icon: Database, description: '写入数据到文件', shortcut: 'W', color: '#10b981', bgColor: '#fff' },
-  { type: 'web_scraper', label: '网页抓取', icon: Database, description: '从网页提取数据', shortcut: 'S', color: '#10b981', bgColor: '#fff' },
-  { type: 'csv_transform', label: 'CSV 转换', icon: Database, description: 'CSV 数据转换处理', shortcut: 'C', color: '#10b981', bgColor: '#fff' },
-  { type: 'json_transform', label: 'JSON 转换', icon: Database, description: 'JSON 数据转换处理', shortcut: 'J', color: '#10b981', bgColor: '#fff' },
-]
-
-const allNodes = [...controlNodes, ...aiNodes, ...dataNodes, ...toolNodes, ...multimodalNodes, ...modelTrainingNodes, ...ragNodes, ...agentNodes, ...dataProcessNodes]
-
-// #region DEBUG: check undefined icons
-;(function(){
-  const undefinedIcons = allNodes.filter(n => typeof n.icon === 'undefined').map(n => n.type)
-  if (undefinedIcons.length > 0) {
-    console.warn('[DEBUG] UNDEFINED_ICONS:', undefinedIcons)
-  }
-})()
-// #endregion
-
+// 节点注册表（n8n 风格统一数据源）
 const nodeSearchQuery = ref('')
 
-const filteredControlNodes = computed(() => {
-  if (!nodeSearchQuery.value) return controlNodes
-  const q = nodeSearchQuery.value.toLowerCase()
-  return controlNodes.filter(n =>
-    n.label.toLowerCase().includes(q) ||
-    n.description.toLowerCase().includes(q) ||
-    n.shortcut.toLowerCase().includes(q)
-  )
-})
+const filteredNodeCategories = computed(() => filterNodeCategories(nodeSearchQuery.value))
 
-const filteredAiNodes = computed(() => {
-  if (!nodeSearchQuery.value) return aiNodes
-  const q = nodeSearchQuery.value.toLowerCase()
-  return aiNodes.filter(n =>
-    n.label.toLowerCase().includes(q) ||
-    n.description.toLowerCase().includes(q) ||
-    n.shortcut.toLowerCase().includes(q)
-  )
-})
+const hasAnyNodes = computed(() => filteredNodeCategories.value.length > 0)
 
-const filteredDataNodes = computed(() => {
-  if (!nodeSearchQuery.value) return dataNodes
-  const q = nodeSearchQuery.value.toLowerCase()
-  return dataNodes.filter(n =>
-    n.label.toLowerCase().includes(q) ||
-    n.description.toLowerCase().includes(q) ||
-    n.shortcut.toLowerCase().includes(q)
+const quickAddCategories = computed(() =>
+  NODE_CATEGORIES.filter((cat) =>
+    ['trigger', 'flow', 'ai', 'transform', 'http', 'communication'].includes(cat.id)
   )
-})
-
-const filteredToolNodes = computed(() => {
-  if (!nodeSearchQuery.value) return toolNodes
-  const q = nodeSearchQuery.value.toLowerCase()
-  return toolNodes.filter(n =>
-    n.label.toLowerCase().includes(q) ||
-    n.description.toLowerCase().includes(q) ||
-    n.shortcut.toLowerCase().includes(q)
-  )
-})
-
-const filteredMultimodalNodes = computed(() => {
-  if (!nodeSearchQuery.value) return multimodalNodes
-  const q = nodeSearchQuery.value.toLowerCase()
-  return multimodalNodes.filter(n =>
-    n.label.toLowerCase().includes(q) ||
-    n.description.toLowerCase().includes(q) ||
-    n.shortcut.toLowerCase().includes(q)
-  )
-})
-
-const filteredModelTrainingNodes = computed(() => {
-  if (!nodeSearchQuery.value) return modelTrainingNodes
-  const q = nodeSearchQuery.value.toLowerCase()
-  return modelTrainingNodes.filter(n =>
-    n.label.toLowerCase().includes(q) ||
-    n.description.toLowerCase().includes(q) ||
-    n.shortcut.toLowerCase().includes(q)
-  )
-})
-
-const filteredRagNodes = computed(() => {
-  if (!nodeSearchQuery.value) return ragNodes
-  const q = nodeSearchQuery.value.toLowerCase()
-  return ragNodes.filter(n =>
-    n.label.toLowerCase().includes(q) ||
-    n.description.toLowerCase().includes(q) ||
-    n.shortcut.toLowerCase().includes(q)
-  )
-})
-
-const filteredAgentNodes = computed(() => {
-  if (!nodeSearchQuery.value) return agentNodes
-  const q = nodeSearchQuery.value.toLowerCase()
-  return agentNodes.filter(n =>
-    n.label.toLowerCase().includes(q) ||
-    n.description.toLowerCase().includes(q) ||
-    n.shortcut.toLowerCase().includes(q)
-  )
-})
-
-const filteredDataProcessNodes = computed(() => {
-  if (!nodeSearchQuery.value) return dataProcessNodes
-  const q = nodeSearchQuery.value.toLowerCase()
-  return dataProcessNodes.filter(n =>
-    n.label.toLowerCase().includes(q) ||
-    n.description.toLowerCase().includes(q) ||
-    n.shortcut.toLowerCase().includes(q)
-  )
-})
-
-const hasAnyNodes = computed(() =>
-  filteredControlNodes.value.length ||
-  filteredAiNodes.value.length ||
-  filteredDataNodes.value.length ||
-  filteredToolNodes.value.length ||
-  filteredMultimodalNodes.value.length ||
-  filteredModelTrainingNodes.value.length ||
-  filteredRagNodes.value.length ||
-  filteredAgentNodes.value.length ||
-  filteredDataProcessNodes.value.length
 )
 
-// Custom node type components for Vue Flow
-// markRaw prevents Vue from making component definitions reactive (avoids performance overhead warning)
-const nodeTypes = markRaw({
-  start: StartNode,
-  end: EndNode,
-  llm: LLMNode,
-  prompt: PromptNode,
-  condition: ConditionNode,
-  loop: LoopNode,
-  input: InputNode,
-  output: OutputNode,
-  code: CodeNode,
-  variable: VariableNode,
-  tool: ToolNode,
-  http: HttpNode,
-  switch: SwitchNode,
-  delay: DelayNode,
-  transform: TransformNode,
-  email: EmailNode,
-  subworkflow: SubworkflowNode,
-  image_generation: ImageGenerationNode,
-  video_generation: VideoGenerationNode,
-  audio_generation: AudioGenerationNode,
-  subtitle_generation: SubtitleGenerationNode,
-  image_editing: ImageEditingNode,
-  dataset_upload: DatasetUploadNode,
-  data_annotation: DataAnnotationNode,
-  data_augmentation: DataAugmentationNode,
-  model_training: ModelTrainingNode,
-  model_evaluation: ModelEvaluationNode,
-  model_deployment: ModelDeploymentNode,
-  website_generator: WebsiteGeneratorNode,
-  document_loader: DocumentLoaderNode,
-  embedding: EmbeddingNode,
-  vector_store: VectorStoreNode,
-  retriever: RetrieverNode,
-  reranker: RerankerNode,
-  agent: AgentNodeComponent,
-  planner: PlannerNode,
-  executor: ExecutorNode,
-  memory: MemoryNode,
-  file_reader: FileReaderNode,
-  file_writer: FileWriterNode,
-  web_scraper: WebScraperNodeComponent,
-  csv_transform: CsvTransformNode,
-  json_transform: JsonTransformNode
-})
+const nodeTypes = buildNodeTypesMap()
+const minimapNodeColor = (node) => getMinimapNodeColor(node.type)
 
-// MiniMap node colors matching the actual node styles
-const minimapNodeColor = (node) => {
-  const colorMap = {
-    start: '#10b981',
-    end: '#ef4444',
-    llm: '#3b82f6',
-    prompt: '#f59e0b',
-    condition: '#3b82f6',
-    loop: '#f59e0b',
-    input: '#06b6d4',
-    output: '#84cc16',
-    code: '#f97316',
-    variable: '#22c55e',
-    tool: '#ec4899',
-    http: '#f97316',
-    switch: '#3b82f6',
-    delay: '#14b8a6',
-    subworkflow: '#8b5cf6',
-    // Domain node types (Wave 2)
-    image_generation: '#ec4899',
-    video_generation: '#ec4899',
-    audio_generation: '#ec4899',
-    subtitle_generation: '#ec4899',
-    image_editing: '#ec4899',
-    dataset_upload: '#f59e0b',
-    data_annotation: '#f59e0b',
-    data_augmentation: '#f59e0b',
-    model_training: '#f59e0b',
-    model_evaluation: '#f59e0b',
-    model_deployment: '#f59e0b',
-    document_loader: '#06b6d4',
-    embedding: '#06b6d4',
-    vector_store: '#06b6d4',
-    retriever: '#06b6d4',
-    reranker: '#06b6d4',
-    agent: '#8b5cf6',
-    planner: '#8b5cf6',
-    executor: '#8b5cf6',
-    memory: '#8b5cf6',
-    file_reader: '#10b981',
-    file_writer: '#10b981',
-    web_scraper: '#10b981',
-    csv_transform: '#10b981',
-    json_transform: '#10b981',
+function scheduleMiniMapHide() {
+  clearTimeout(minimapHideTimer)
+  minimapHideTimer = setTimeout(() => {
+    showMiniMap.value = false
+  }, MINIMAP_HIDE_DELAY_MS)
+}
+
+function onViewportChange(nextViewport) {
+  const prevZoom = viewport.value?.zoom ?? MINIMAP_BASE_ZOOM
+  viewport.value = nextViewport
+  const zoom = nextViewport?.zoom ?? MINIMAP_BASE_ZOOM
+  if (Math.abs(zoom - prevZoom) > 0.001) {
+    showMiniMap.value = true
   }
-  return colorMap[node.type] || '#6b7280'
+  scheduleMiniMapHide()
 }
 
 // Vue Flow composable
@@ -1931,23 +1751,43 @@ const {
   zoomIn,
   zoomOut,
   fitView,
-  addNodes,
+  getViewport,
+  setViewport,
   project,
-  onNodeClick,
 } = useVueFlow()
 
-onNodeClick(({ node }) => {
+function handleNodeClick({ node }) {
+  if (autoConnectMode.value) {
+    if (!autoConnectSourceNode.value) {
+      autoConnectSourceNode.value = node.id
+      connectHoverTargetId.value = null
+      syncConnectVisualClasses()
+      appStore.info(`已选源节点「${node.data?.label || node.type}」，请点击目标节点`)
+      return
+    }
+    if (autoConnectSourceNode.value === node.id) {
+      return
+    }
+    if (createAutoConnect(autoConnectSourceNode.value, node.id, '')) {
+      appStore.success('连线已创建')
+    }
+    autoConnectSourceNode.value = null
+    connectHoverTargetId.value = null
+    syncConnectVisualClasses()
+    return
+  }
+
   selectedNode.value = node
   selectedEdge.value = null
-})
-
-function onNodeSelect(nodeId) {
-  const node = nodes.value.find(n => n.id === nodeId)
-  if (node) {
-    selectedNode.value = node
-    selectedEdge.value = null
-  }
 }
+
+provide(WORKFLOW_SELECT_NODE_KEY, (nodeId) => {
+  if (!nodeId) return
+  const node = nodes.value.find((n) => n.id === nodeId)
+  if (node) {
+    handleNodeClick({ node })
+  }
+})
 
 // 撤销/重做
 const canUndo = computed(() => historyIndex.value > 0)
@@ -2002,10 +1842,21 @@ function onDrop(event) {
     y: event.clientY - top
   })
 
+  const snappedPos = resolveNodeCollision(
+    {
+      id: '__new__',
+      position: {
+        x: Math.round(position.x / 16) * 16,
+        y: Math.round(position.y / 16) * 16,
+      },
+    },
+    nodes.value
+  )
+
   const newNode = {
     id: `node_${Date.now()}`,
     type: nodeType.type,
-    position,
+    position: snappedPos,
     data: {
       label: nodeType.label,
       type: nodeType.type,
@@ -2016,89 +1867,21 @@ function onDrop(event) {
 
   nodes.value = [...nodes.value, newNode]
   saveHistory()
+  markDirty()
 }
 
 // 获取节点默认配置
 function getDefaultConfig(type) {
-  const defaults = {
-    start: {},
-    end: {},
-    input: { placeholder: '请输入...' },
-    output: {},
-    llm: { model: '', temperature: 0.7, systemPrompt: '', userTemplate: '{input}' },
-    prompt: { template: '', variables: [] },
-    condition: { conditions: [], defaultBranch: 'false' },
-    loop: {
-      loopType: 'for',
-      start: 0,
-      end: 10,
-      step: 1,
-      whileCondition: 'i < 10',
-      items: '',
-      maxIterations: 100
-    },
-    variable: {
-      operation: 'set',
-      variableName: '',
-      variableValue: '',
-      scope: 'local'
-    },
-    tool: { tool: 'calculator', parameters: {} },
-    http: { method: 'GET', url: '', headers: '{}', body: '' },
-    code: { code: 'input = input\noutput = {"result": input}' },
-    subworkflow: {
-      subworkflowId: '',
-      subworkflowName: '',
-      version: 'latest',
-      inputMapping: [],
-      outputMapping: [],
-      executionMode: 'sync',
-      timeout: 300,
-      onError: 'stop',
-      fallbackValue: null
-    },
-    switch: {
-      label: '分支',
-      description: '',
-      branches: [
-        { id: 'branch_1', label: '条件 1', conditionType: 'expression', expression: '', field: '', operator: 'equals', value: '' },
-        { id: 'branch_2', label: '条件 2', conditionType: 'expression', expression: '', field: '', operator: 'equals', value: '' }
-      ],
-      defaultBranch: '默认'
-    },
-    transform: {
-      label: '数据转换',
-      description: '',
-      transformType: 'map',
-      mappings: [],
-      filterExpression: '',
-      sortField: '',
-      sortOrder: 'asc'
-    },
-    email: {
-      label: '发送邮件',
-      description: '',
-      to: '',
-      cc: '',
-      bcc: '',
-      fromEmail: '',
-      subject: '',
-      isHtml: false,
-      body: '',
-      smtpConfig: {
-        server: '',
-        port: 587,
-        useTls: true,
-        username: '',
-        password: ''
-      }
-    }
-  }
-  return defaults[type] || {}
+  return getDefaultNodeConfig(type)
 }
 
 // 连线
 function onConnect(params) {
+  if (hasEdgeBetween(params.source, params.target)) {
+    appStore.warning('这两个节点之间已存在连线')
+    return
+  }
+
   const newEdge = {
     id: `edge_${Date.now()}`,
     source: params.source,
@@ -2123,6 +1906,13 @@ function handleEdgeClick(event) {
 
 // 画布点击
 function onPaneClick() {
+  if (autoConnectMode.value && autoConnectSourceNode.value) {
+    autoConnectSourceNode.value = null
+    connectHoverTargetId.value = null
+    syncConnectVisualClasses()
+    appStore.info('已取消当前源节点选择')
+    return
+  }
   selectedNode.value = null
   selectedEdge.value = null
 }
@@ -2137,8 +1927,65 @@ function onNodesInitialized() {
         if (vueFlowRef.value) {
           vueFlowRef.value.fitView({ padding: 0.2, duration: 400 })
         }
+        scheduleCanvasPreviewSync()
       })
     })
+  }
+}
+
+function scheduleCanvasPreviewSync() {
+  if (previewSyncTimer) {
+    clearTimeout(previewSyncTimer)
+  }
+  previewSyncTimer = setTimeout(() => {
+    syncCanvasPreviewIfMissing()
+  }, 900)
+}
+
+function applyCanvasPreviewLocally(canvasPreview, targetWorkflowId = workflowId.value) {
+  if (!canvasPreview) return
+  const existingConfig = workflowStore.currentWorkflow?.config || {}
+  if (workflowStore.currentWorkflow) {
+    workflowStore.currentWorkflow = {
+      ...workflowStore.currentWorkflow,
+      canvasPreview,
+      config: { ...existingConfig, canvasPreview },
+    }
+  }
+  const listItem = workflowStore.workflows.find((item) => item.id === targetWorkflowId)
+  if (listItem) {
+    listItem.canvasPreview = canvasPreview
+    listItem.config = { ...(listItem.config || {}), canvasPreview }
+  }
+}
+
+async function syncCanvasPreviewIfMissing() {
+  if (
+    previewSyncInFlight.value
+    || isNewWorkflow.value
+    || !canEditWorkflow.value
+    || nodes.value.length === 0
+  ) {
+    return
+  }
+
+  const existingPreview = resolveWorkflowCanvasPreview(workflowStore.currentWorkflow)
+  if (existingPreview) return
+
+  previewSyncInFlight.value = true
+  try {
+    const canvasPreview = await captureWorkflowCanvas(getVueFlowCaptureApi())
+    if (!canvasPreview) return
+
+    const existingConfig = workflowStore.currentWorkflow?.config || {}
+    await workflowApi.update(workflowId.value, {
+      config: { ...existingConfig, canvas_preview: canvasPreview },
+    })
+    applyCanvasPreviewLocally(canvasPreview)
+  } catch (captureErr) {
+    console.warn('[syncCanvasPreviewIfMissing] failed:', captureErr)
+  } finally {
+    previewSyncInFlight.value = false
   }
 }
 
@@ -2146,7 +1993,7 @@ function onNodesInitialized() {
 function handleNodesChange(changes) {
   applyNodeChanges(changes)
   changes.forEach(change => {
-    if (change.type === 'position' && change.position) {
+    if (change.type !== 'select' && change.type !== 'dimensions') {
       markDirty()
     }
   })
@@ -2157,9 +2004,25 @@ function handleEdgesChange(changes) {
   applyEdgeChanges(changes)
 }
 
-// 节点拖拽停止
-function onNodeDragStop() {
-  nodes.value = [...nodes.value]
+// 节点拖拽停止 — 防碰撞：若与其他节点重叠则自动偏移
+function onNodeDragStop({ node }) {
+  const idx = nodes.value.findIndex(n => n.id === node.id)
+  if (idx === -1) return
+
+  const resolved = resolveNodeCollision(
+    { id: node.id, position: node.position },
+    nodes.value
+  )
+
+  const updated = [...nodes.value]
+  updated[idx] = {
+    ...updated[idx],
+    position: {
+      x: Math.round(resolved.x),
+      y: Math.round(resolved.y),
+    },
+  }
+  nodes.value = updated
   markDirty()
 }
 
@@ -2174,7 +2037,7 @@ function onNodeDrag({ node }) {
 }
 
 // 节点右键菜单
-function onNodeContextMenu(event) {
+function onNodeContextMenu() {
   // 可以添加右键菜单
 }
 
@@ -2183,59 +2046,67 @@ function markDirty() {
   isDirty.value = true
 }
 
-// 添加工具函数
-function addVariable() {
-  if (selectedNodeData.value?.config?.variables) {
-    selectedNodeData.value.config.variables.push({ name: '', value: '' })
-    markDirty()
+// 属性面板更新节点
+function handleNodePropertyChange({ id, data }) {
+  if (!id || !data) return
+  const idx = nodes.value.findIndex(n => n.id === id)
+  if (idx === -1) return
+  const updated = [...nodes.value]
+  updated[idx] = {
+    ...updated[idx],
+    data: {
+      ...updated[idx].data,
+      ...data
+    }
   }
-}
-
-function removeVariable(index) {
-  if (selectedNodeData.value?.config?.variables) {
-    selectedNodeData.value.config.variables.splice(index, 1)
-    markDirty()
-  }
-}
-
-function addCondition() {
-  if (selectedNodeData.value?.config?.conditions) {
-    selectedNodeData.value.config.conditions.push({
-      field: '',
-      operator: 'equals',
-      value: '',
-      branch: 'true'
-    })
-    markDirty()
-  }
-}
-
-function removeCondition(index) {
-  if (selectedNodeData.value?.config?.conditions) {
-    selectedNodeData.value.config.conditions.splice(index, 1)
-    markDirty()
-  }
+  nodes.value = updated
+  markDirty()
 }
 
 // 删除节点
-function handleDeleteNode() {
-  if (selectedNode.value) {
-    nodes.value = nodes.value.filter(n => n.id !== selectedNode.value.id)
-    edges.value = edges.value.filter(
-      e => e.source !== selectedNode.value.id && e.target !== selectedNode.value.id
-    )
+function handleDeleteNodeById(nodeId) {
+  const targetId = nodeId || selectedNode.value?.id
+  if (!targetId) return
+  nodes.value = nodes.value.filter(n => n.id !== targetId)
+  edges.value = edges.value.filter(
+    e => e.source !== targetId && e.target !== targetId
+  )
+  if (selectedNode.value?.id === targetId) {
     selectedNode.value = null
-    saveHistory()
   }
+  saveHistory()
 }
 
-// 删除连线
-function handleDeleteEdge() {
-  if (selectedEdge.value) {
-    edges.value = edges.value.filter(e => e.id !== selectedEdge.value.id)
-    selectedEdge.value = null
-    saveHistory()
+function handleDeleteNode() {
+  handleDeleteNodeById(selectedNode.value?.id)
+}
+
+function handleAssistantApplyWorkflow(workflow) {
+  if (!workflow?.nodes?.length) return
+
+  const converted = nlWorkflowToVueFlow(workflow, {
+    preserveNodes: nodes.value
+  })
+  nodes.value = converted.nodes
+  edges.value = converted.edges.map(e => ({
+    ...e,
+    markerEnd: MarkerType.ArrowClosed
+  }))
+
+  if (workflow.name) {
+    workflowName.value = workflow.name
   }
+
+  selectedNode.value = null
+  selectedEdge.value = null
+  saveHistory()
+  markDirty()
+
+  nextTick(() => {
+    vueFlowRef.value?.fitView({ padding: 0.2, duration: 400 })
+  })
+
+  appStore.success('AI 建议的工作流已应用到画布')
 }
 
 // 缩放控制
@@ -2251,19 +2122,25 @@ function handleFitView() {
   fitView()
 }
 
-function handleAutoLayout() {
+function handleAutoLayout(direction = 'horizontal') {
   const layouted = autoLayoutWorkflow(nodes.value, edges.value, {
     nodeWidth: 220,
     nodeHeight: 140,
-    gapX: 160,
-    gapY: 60,
+    gapX: 180,
+    gapY: 80,
     startX: 80,
-    startY: 80
+    startY: 80,
+    direction
   })
   nodes.value = layouted
+  markDirty()
+  saveHistory()
   nextTick(() => {
     fitView({ padding: 0.1, duration: 300 })
   })
+  appStore.success(
+    direction === 'vertical' ? '已自动排列为垂直布局' : '已自动排列为水平布局'
+  )
 }
 
 function handleToolbarCommand(cmd) {
@@ -2280,6 +2157,46 @@ function handleToolbarCommand(cmd) {
       break
     }
   }
+}
+
+function handleOptimizerHighlight(nodeIds) {
+  if (!Array.isArray(nodeIds) || nodeIds.length === 0) return
+  const target = nodes.value.find((node) => nodeIds.includes(node.id))
+  if (!target) return
+  selectedNode.value = target
+  nextTick(() => {
+    fitView({ nodes: nodeIds, padding: WORKFLOW_CANVAS_ZOOM.fitViewPadding, duration: 450, maxZoom: WORKFLOW_CANVAS_ZOOM.fitViewMax })
+  })
+}
+
+function handleOptimizerApplyFix(suggestion) {
+  const nodeIds = suggestion?.affectedNodes || []
+  if (!nodeIds.length || !suggestion?.autoApplicable) return
+
+  let patch = {}
+  if (suggestion.fix) {
+    try {
+      patch = JSON.parse(suggestion.fix)
+    } catch {
+      appStore.warning('该建议需要手动应用')
+      return
+    }
+  }
+
+  const targetId = nodeIds[0]
+  nodes.value = nodes.value.map((node) => {
+    if (node.id !== targetId) return node
+    const currentConfig = node.data?.config || {}
+    return {
+      ...node,
+      data: {
+        ...node.data,
+        config: { ...currentConfig, ...patch },
+      },
+    }
+  })
+  markDirty()
+  appStore.success('已应用优化建议')
 }
 
 // 名称修改
@@ -2332,26 +2249,6 @@ function clearErrorHighlights() {
   }
 }
 
-// 高亮指定节点（由 WorkflowOptimizer 调用）
-function handleHighlightNodes(nodeIds) {
-  clearErrorHighlights()
-  for (const nodeId of nodeIds) {
-    const node = nodes.value.find(n => n.id === nodeId)
-    if (node) {
-      node.data = {
-        ...node.data,
-        hasError: true,
-        errorMessages: ['AI建议修改的节点']
-      }
-    }
-  }
-}
-
-// 应用 AI 修复建议
-async function handleApplyFix(fixDescription, nodeId) {
-  appStore.success(`已应用修复: ${fixDescription}`)
-}
-
 // 打开触发器配置
 function openTriggerConfig() {
   if (isNewWorkflow.value) {
@@ -2363,16 +2260,30 @@ function openTriggerConfig() {
 
 // 保存
 async function handleSave() {
+  if (!canEditWorkflow.value) {
+    appStore.warning('您没有此工作流的编辑权限，请先复制工作流后再编辑')
+    return false
+  }
   try {
+    const graphPatch = ensureMultimodalWorkflowGraph(nodes.value, edges.value)
+    if (graphPatch.patched) {
+      nodes.value = graphPatch.nodes
+      edges.value = graphPatch.edges
+    }
     const saveNodes = nodes.value.map((n, index) => ({
       id: n.id,
       node_type: n.type,
       name: n.data.label,
       description: n.data.description || '',
-      position_x: n.position.x,
-      position_y: n.position.y,
+      position_x: Math.round(Number(n.position?.x) || 0),
+      position_y: Math.round(Number(n.position?.y) || 0),
       sort_order: index,
-      config: n.data.config || {}
+      config: normalizeNodeConfig(n.data.config || {}, n.type),
+      style: {
+        ...(n.data?.style || n.style || {}),
+        ...(n.data?.uiSize ? { uiSize: n.data.uiSize } : {}),
+        ...(n.data?._runtime ? { _runtime: n.data._runtime } : {}),
+      },
     }))
     const saveEdges = edges.value.map(e => ({
       source_node: e.source,
@@ -2381,16 +2292,58 @@ async function handleSave() {
       animated: e.animated || false
     }))
 
+    let canvasPreview = null
+    try {
+      canvasPreview = await captureWorkflowCanvas(getVueFlowCaptureApi())
+    } catch (captureErr) {
+      console.warn('[handleSave] workflow preview capture failed:', captureErr)
+    }
+
+    const existingConfig = workflowStore.currentWorkflow?.config || {}
+    const savePayload = {
+      name: workflowName.value,
+      nodes: saveNodes,
+      edges: saveEdges,
+    }
+    if (canvasPreview) {
+      savePayload.config = { ...existingConfig, canvas_preview: canvasPreview }
+    }
+
     if (isNewWorkflow.value) {
-      const result = await workflowStore.createWorkflow({ name: workflowName.value, nodes: saveNodes, edges: saveEdges })
+      const result = await workflowStore.createWorkflow(savePayload)
+      if (canvasPreview && result?.id) {
+        applyCanvasPreviewLocally(canvasPreview, result.id)
+      }
       appStore.success('工作流创建成功')
       router.replace(`/workflows/${result.id}/edit`)
     } else {
-      await workflowStore.updateWorkflow(workflowId.value, { name: workflowName.value, nodes: saveNodes, edges: saveEdges })
+      const response = await workflowStore.updateWorkflow(workflowId.value, savePayload)
+      if (response?.nodes?.length) {
+        const synced = syncCanvasAfterSave(nodes.value, edges.value, response)
+        if (synced.idMap && Object.keys(synced.idMap).length > 0) {
+          try {
+            migrateNodeRuntimeCache(workflowId.value, synced.idMap)
+            remapExecutionStoreNodeIds(executionStore, synced.idMap)
+            executionNodeStateMap.value = remapRecordByIdMap(executionNodeStateMap.value, synced.idMap)
+          } catch (migrateErr) {
+            console.warn('[handleSave] node runtime migration failed:', migrateErr)
+          }
+        }
+        nodes.value = synced.nodes
+        edges.value = synced.edges.map((e) => ({
+          ...e,
+          markerEnd: MarkerType.ArrowClosed,
+        }))
+        saveHistory()
+      }
+      if (canvasPreview) {
+        applyCanvasPreviewLocally(canvasPreview)
+      }
       appStore.success('工作流已保存')
     }
 
     isDirty.value = false
+    return true
   } catch (err) {
     const resp = err?.response?.data
     let errorMsg = resp?.detail || err?.message
@@ -2411,119 +2364,153 @@ async function handleSave() {
     if (errorMsg) {
       appStore.error(`保存失败: ${errorMsg}`)
     }
+    return false
   }
 }
 
 // 执行
-function handleExecute() {
-  if (isDirty.value) {
-    appStore.warning('请先保存工作流')
+async function handleExecute() {
+  if (isNewWorkflow.value) {
+    appStore.warning('请先保存工作流后再执行')
     return
   }
+
+  if (isDirty.value) {
+    const confirmed = await appStore.confirm({
+      title: '有未保存的更改',
+      message: '执行前需要先保存工作流，是否保存并继续执行？',
+      confirmText: '保存并执行',
+      cancelText: '取消',
+      confirmType: 'primary',
+    })
+    if (!confirmed) return
+    const saved = await handleSave()
+    if (!saved) return
+  }
+
+  clearInputNeedsFlags()
+  flushCanvasInputValues()
+  const emptyInputNodes = collectEmptyInputNodes()
+  if (emptyInputNodes.length > 0) {
+    markEmptyInputNodes(emptyInputNodes)
+    const labels = emptyInputNodes.map(n => n.data?.label || '输入').join('、')
+    appStore.warning(`请先在 ${emptyInputNodes.length} 个输入节点中填写内容（${labels}）`)
+    focusEmptyInputNode(emptyInputNodes[0])
+    return
+  }
+
+  // 收集 input 节点所需的输入参数；优先使用画布节点内已填写的值
+  const inputNodes = nodes.value.filter(n => (n.data?.type || n.type) === 'input')
+  const inputData = {}
+  for (const node of inputNodes) {
+    const config = node.data?.config || {}
+    const varName = config.variable_name || config.input_name || config.variableName || config.inputName || 'user_input'
+    const value = readInputNodeValue(node)
+
+    inputData[varName] = value
+    inputData.prompt = value
+    inputData.text = value
+    inputData.user_input = value
+    if (varName === 'user_input' || varName === 'input') {
+      inputData.input = value
+    }
+  }
+
   showExecutionPanel.value = true
-  startExecution()
+  startExecution(inputData)
 }
 
 // 执行引擎
-async function startExecution() {
-  executionLogs.value = []
+async function startExecution(inputData = {}) {
+  resetExecutionState()
+  const sessionId = executionSessionId.value
+  showExecutionPanel.value = true
   executionStatus.value = 'running'
   executionStartTime.value = Date.now()
-  elapsedTimer.value = setInterval(() => {}, 1000)
+  startExecutionElapsedTimer(sessionId)
+  executionLogs.value.push(createExecutionLog('info', '开始执行工作流...'))
+
+  executionStore.registerEditorSnapshotListener(workflowId.value, handleEditorExecutionSnapshot)
 
   try {
-    const resp = await fetch(
-      `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1'}/workflows/${workflowId.value}/execute/`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('access_token')}`
-        },
-        body: JSON.stringify({ input_data: {} })
-      }
-    )
-    const data = await resp.json()
-
-    if (!resp.ok) {
-      throw new Error(data.error || data.message || '执行失败')
+    const prep = await prepareDesktopClipIndexes(nodes.value, edges.value, {
+      onProgress: ({ nodeId, progress, phase }) => {
+        if (executionSessionId.value !== sessionId) return
+        executionLogs.value.push(createExecutionLog('info', `Desktop 索引 ${nodeId}: ${phase} ${progress}%`))
+      },
+    })
+    if (executionSessionId.value !== sessionId) return
+    if (prep.patched) {
+      executionLogs.value.push(createExecutionLog('info', 'Desktop 本地 GPU 索引已构建，正在保存节点配置…'))
+      await handleSave()
     }
-
-    if (data.execution_id) {
-      executionId.value = data.execution_id
-      await pollExecutionResult(data.execution_id)
-    } else {
-      // 同步执行，结果直接返回
-      executionStatus.value = 'completed'
-      executionLogs.value.push({ type: 'info', time: new Date().toLocaleTimeString(), text: '执行完成' })
-    }
-  } catch (err) {
+  } catch (prepErr) {
+    if (executionSessionId.value !== sessionId) return
     executionStatus.value = 'failed'
-    executionLogs.value.push({ type: 'error', time: new Date().toLocaleTimeString(), text: err.message })
+    executionLogs.value.push(createExecutionLog('error', prepErr.message || 'Desktop 索引预构建失败'))
+    appStore.error(prepErr.message || 'Desktop 索引预构建失败')
+    return
   }
-}
 
-// 轮询执行结果
-async function pollExecutionResult(execId) {
-  const poll = async () => {
-    if (executionStatus.value === 'cancelled') return
-    elapsedTick.value++ // 触发 elapsed timer 更新
-    try {
-      const resp = await fetch(
-        `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1'}/executions/${execId}/`,
-        { headers: { 'Authorization': `Bearer ${localStorage.getItem('access_token')}` } }
-      )
-      const data = await resp.json()
-      const exec = data.data || data
+  try {
+    const data = await workflowApi.executeAsync(workflowId.value, inputData)
+    if (executionSessionId.value !== sessionId) return
 
-      if (exec.status === 'completed') {
-        executionStatus.value = 'completed'
-        executionLogs.value.push({ type: 'success', time: new Date().toLocaleTimeString(), text: `执行完成 (耗时 ${exec.duration_seconds || 0}s)` })
-        return
-      } else if (exec.status === 'failed') {
-        executionStatus.value = 'failed'
-        executionLogs.value.push({ type: 'error', time: new Date().toLocaleTimeString(), text: exec.error_message || '执行失败' })
-        return
-      }
-
-      if (exec.node_executions) {
-        exec.node_executions.forEach(ne => {
-          executionLogs.value.push({
-            type: ne.status === 'failed' ? 'error' : 'info',
-            time: new Date().toLocaleTimeString(),
-            text: `${ne.node_name || ne.node}: ${ne.status} ${ne.error_message ? '— ' + ne.error_message : ''}`
-          })
-        })
-      }
-
-      executionLogs.value.push({ type: 'info', time: new Date().toLocaleTimeString(), text: '执行中...' })
-      setTimeout(poll, 2000)
-    } catch {
-      setTimeout(poll, 3000)
+    if (data.execution_id || data.executionId) {
+      executionId.value = data.execution_id || data.executionId
+      executionLogs.value.push(createExecutionLog('info', `执行已启动，ID: ${executionId.value}`))
+      await executionStore.startEditorPolling(workflowId.value, executionId.value)
+      return
     }
+
+    executionStatus.value = 'completed'
+    stopExecutionElapsedTimer()
+    executionLogs.value.push(createExecutionLog('success', data.message || '执行完成'))
+  } catch (err) {
+    if (executionSessionId.value !== sessionId) return
+    executionStatus.value = 'failed'
+    stopExecutionElapsedTimer()
+    executionLogs.value.push(createExecutionLog('error', getErrorMessage(err, '执行失败')))
   }
-  await poll()
 }
 
-function cancelExecution() {
-  executionStatus.value = 'cancelled'
-  executionLogs.value.push({ type: 'info', time: new Date().toLocaleTimeString(), text: '已取消' })
+async function cancelExecution() {
+  const sessionId = executionSessionId.value
+
+  if (!executionId.value) {
+    executionStatus.value = 'cancelled'
+    stopExecutionElapsedTimer()
+    executionStore.stopEditorPolling({ resetSession: true, clearActive: true })
+    executionLogs.value.push(createExecutionLog('info', '已取消'))
+    return
+  }
+
+  try {
+    await workflowApi.cancelExecution(executionId.value)
+    if (executionSessionId.value !== sessionId) return
+    executionStatus.value = 'cancelled'
+    stopExecutionElapsedTimer()
+    executionStore.stopEditorPolling({ resetSession: true, clearActive: true })
+    executionLogs.value.push(createExecutionLog('info', '已发送取消请求'))
+  } catch (error) {
+    if (executionSessionId.value !== sessionId) return
+    executionLogs.value.push(createExecutionLog('error', getErrorMessage(error, '取消执行失败')))
+  }
 }
 
 // 返回
-function handleBack() {
+async function handleBack() {
   if (isDirty.value) {
-    appStore.confirm({
+    const confirmed = await appStore.confirm({
       title: '未保存的更改',
-      message: '您有未保存的更改，确定要离开吗？',
+      message: '您有未保存的更改，确定要离开吗？未保存的内容将丢失。',
       confirmText: '离开',
-      cancelText: '取消'
-    }).then(() => {
-      router.push('/workflows')
+      cancelText: '取消',
+      confirmType: 'danger',
     })
-  } else {
-    router.push('/workflows')
+    if (!confirmed) return
   }
+  window.history.back()
 }
 
 // 加载模型和工具列表
@@ -2552,6 +2539,31 @@ async function loadModelsAndTools() {
   }
 }
 
+function applyWorkflowTemplate(template) {
+  if (!template?.nodes?.length) return
+  workflowName.value = template.name || '未命名工作流'
+  nodes.value = template.nodes.map((n) => ({
+    id: n.id,
+    type: n.type,
+    position: n.position || { x: 0, y: 0 },
+    data: {
+      label: n.data?.label || n.data?.name || n.type,
+      config: normalizeNodeConfig(n.type, n.data?.config || {}),
+      ...n.data,
+    },
+  }))
+  edges.value = (template.edges || []).map((e) => ({
+    ...e,
+    id: e.id || `e-${e.source}-${e.target}`,
+    markerEnd: MarkerType.ArrowClosed,
+  }))
+  saveHistory()
+  isDirty.value = true
+  nextTick(() => {
+    vueFlowRef.value?.fitView({ padding: 0.2, duration: 400 })
+  })
+}
+
 onMounted(async () => {
   // 初始化历史
   saveHistory()
@@ -2559,7 +2571,21 @@ onMounted(async () => {
   // 加载模型和工具列表
   loadModelsAndTools()
 
-  if (!isNewWorkflow.value) {
+  if (isNewWorkflow.value) {
+    const pendingRaw = sessionStorage.getItem('flowly_pending_workflow_template')
+    if (pendingRaw) {
+      try {
+        applyWorkflowTemplate(JSON.parse(pendingRaw))
+        sessionStorage.removeItem('flowly_pending_workflow_template')
+      } catch {
+        sessionStorage.removeItem('flowly_pending_workflow_template')
+      }
+    } else if (route.query.template === 'yolo-detection' || route.query.template === 'yolo') {
+      applyWorkflowTemplate(YOLO_WORKFLOW_TEMPLATE)
+    } else if (route.query.template === 'clip-retrieval') {
+      applyWorkflowTemplate(CLIP_RETRIEVAL_WORKFLOW_TEMPLATE)
+    }
+  } else if (!isNewWorkflow.value) {
     try {
       await workflowStore.fetchWorkflow(workflowId.value)
       workflowName.value = workflowStore.currentWorkflow?.name || '未命名工作流'
@@ -2567,12 +2593,13 @@ onMounted(async () => {
       // Store already has Vue Flow format data from backendWorkflowToFrontend
       nodes.value = [...(workflowStore.nodes || [])]
 
-      // 自动布局：如果所有节点都在 (0,0)，使用DAG拓扑分层布局
-      const allZero = nodes.value.every(n => n.position?.x === 0 && n.position?.y === 0)
-      if (allZero && nodes.value.length > 0) {
-        const layoutedNodes = autoLayoutWorkflow(nodes.value, workflowStore.edges || [])
-        nodes.value = layoutedNodes
+      // 仅对未定位节点做布局，已保存坐标原样保留
+      const layoutEdges = workflowStore.edges || []
+      const positionsBefore = JSON.stringify(nodes.value.map(n => n.position))
+      if (needsAutoLayout(nodes.value) && nodes.value.length > 0) {
+        nodes.value = applyWorkflowLayout(nodes.value, layoutEdges, nodes.value)
       }
+      const autoLayoutApplied = positionsBefore !== JSON.stringify(nodes.value.map(n => n.position))
 
       edges.value = (workflowStore.edges || [])
         .map(e => ({
@@ -2584,8 +2611,25 @@ onMounted(async () => {
         }))
         .filter(e => e.source && e.source !== 'undefined' && e.target && e.target !== 'undefined')
 
+      const graphPatch = ensureMultimodalWorkflowGraph(nodes.value, edges.value)
+      if (graphPatch.patched) {
+        nodes.value = graphPatch.nodes
+        edges.value = graphPatch.edges.map((e) => ({
+          ...e,
+          markerEnd: MarkerType.ArrowClosed,
+        }))
+        isDirty.value = true
+        appStore.info('已自动修复输入→文生图→图生视频链路连线与配置，请保存')
+      }
+
       // 更新历史
       saveHistory()
+      isDirty.value = autoLayoutApplied
+      if (autoLayoutApplied) {
+        appStore.info('节点已自动排列，请保存以固定布局')
+      } else {
+        isDirty.value = false
+      }
 
       // 自动适应画布，让所有节点可见
       // 使用 vueFlowRef.value.fitView() 调用实例方法
@@ -2595,6 +2639,8 @@ onMounted(async () => {
       if (vueFlowRef.value) {
         vueFlowRef.value.fitView({ padding: 0.2, duration: 600 })
       }
+
+      await resumeWorkflowExecution()
     } catch (err) {
       appStore.error('加载工作流失败')
     }
@@ -2613,10 +2659,18 @@ watch(executionLogs, async () => {
     execPanelBodyRef.value.scrollTop = execPanelBodyRef.value.scrollHeight
   }
 })
+
+watch(selectedExecNode, (newNode) => {
+  if (newNode?.id) {
+    scrollSelectedExecNodeIntoView()
+  }
+})
 </script>
 
 <style lang="scss" scoped>
 @use '@/assets/styles/variables.scss' as *;
+
+@import '@/styles/workflow-domain-node.scss';
 
 .workflow-editor {
   position: fixed;
@@ -2624,6 +2678,12 @@ watch(executionLogs, async () => {
   display: flex;
   flex-direction: column;
   background-color: var(--bg-primary);
+}
+
+.editor-readonly-alert {
+  margin: 0;
+  border-radius: 0;
+  flex-shrink: 0;
 }
 
 .editor-toolbar {
@@ -2674,6 +2734,11 @@ watch(executionLogs, async () => {
   border: 1px solid var(--border-primary);
   border-radius: $radius-md;
   overflow: hidden;
+
+  .toolbar-btn-icon-right {
+    margin-left: 4px;
+    opacity: 0.7;
+  }
 
   .el-button {
     border: none;
@@ -2825,6 +2890,9 @@ watch(executionLogs, async () => {
   flex: 1;
   display: flex;
   overflow: hidden;
+  min-height: 0;
+  width: 100%;
+  position: relative;
 }
 
 .node-panel {
@@ -2870,7 +2938,7 @@ watch(executionLogs, async () => {
 .category-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 6px;
   font-size: $font-size-xs;
   color: var(--text-tertiary);
   margin-bottom: $spacing-2;
@@ -2878,7 +2946,15 @@ watch(executionLogs, async () => {
   letter-spacing: 0.08em;
   font-weight: $font-weight-medium;
 
+  .category-icon {
+    width: 14px;
+    height: 14px;
+    opacity: 0.75;
+    flex-shrink: 0;
+  }
+
   .category-count {
+    margin-left: auto;
     background: var(--bg-tertiary);
     padding: 1px 6px;
     border-radius: 999px;
@@ -2983,9 +3059,132 @@ watch(executionLogs, async () => {
 }
 
 .canvas-wrapper {
-  flex: 1;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
   position: relative;
   background-color: var(--bg-primary);
+
+  :deep(.vue-flow) {
+    width: 100%;
+    height: 100%;
+  }
+
+  :deep(.vue-flow__minimap.editor-minimap) {
+    margin: 12px;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+    transition: opacity 0.2s ease, transform 0.2s ease;
+  }
+
+  :deep(.vue-flow__minimap.editor-minimap:not([style*="display: none"])) {
+    opacity: 1;
+  }
+
+  &.connect-mode-active {
+    &::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      z-index: 2;
+      pointer-events: none;
+      background:
+        radial-gradient(circle at 20% 20%, rgba(59, 130, 246, 0.08), transparent 45%),
+        radial-gradient(circle at 80% 80%, rgba(34, 211, 238, 0.06), transparent 40%);
+      animation: connect-ambient 4s ease-in-out infinite alternate;
+    }
+
+    &::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      z-index: 2;
+      pointer-events: none;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(59, 130, 246, 0.03) 2px,
+        rgba(59, 130, 246, 0.03) 4px
+      );
+      mask-image: linear-gradient(to bottom, transparent, black 15%, black 85%, transparent);
+      animation: connect-scan 6s linear infinite;
+    }
+
+    :deep(.vue-flow__node.connect-candidate) {
+      filter: saturate(0.85);
+      opacity: 0.92;
+      transition: filter 0.25s ease, opacity 0.25s ease, transform 0.25s ease;
+    }
+
+    :deep(.vue-flow__node.connect-source) {
+      z-index: 12 !important;
+      filter: drop-shadow(0 0 18px rgba(59, 130, 246, 0.75));
+
+      > div {
+        outline: 2px solid rgba(96, 165, 250, 0.95);
+        outline-offset: 3px;
+        border-radius: 14px;
+        animation: connect-source-glow 1.4s ease-in-out infinite;
+      }
+    }
+
+    :deep(.vue-flow__node.connect-target-valid) {
+      cursor: crosshair;
+
+      > div {
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+      }
+
+      &:hover > div {
+        transform: translateY(-2px) scale(1.01);
+      }
+    }
+
+    :deep(.vue-flow__node.connect-target-hover) {
+      z-index: 11 !important;
+
+      > div {
+        outline: 2px dashed rgba(34, 211, 238, 0.95);
+        outline-offset: 4px;
+        border-radius: 14px;
+        box-shadow:
+          0 0 0 1px rgba(34, 211, 238, 0.35),
+          0 0 28px rgba(34, 211, 238, 0.35);
+        animation: connect-target-pulse 0.9s ease-in-out infinite;
+      }
+    }
+
+    :deep(.vue-flow__edge-path) {
+      stroke: rgba(96, 165, 250, 0.55);
+    }
+  }
+}
+
+@keyframes connect-ambient {
+  from { opacity: 0.55; }
+  to { opacity: 1; }
+}
+
+@keyframes connect-scan {
+  from { transform: translateY(-8%); }
+  to { transform: translateY(8%); }
+}
+
+@keyframes connect-source-glow {
+  0%, 100% {
+    box-shadow: 0 0 12px rgba(59, 130, 246, 0.45), 0 0 24px rgba(59, 130, 246, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 22px rgba(96, 165, 250, 0.75), 0 0 36px rgba(34, 211, 238, 0.35);
+  }
+}
+
+@keyframes connect-target-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.015); }
 }
 
 .empty-canvas {
@@ -3060,34 +3259,6 @@ watch(executionLogs, async () => {
         color: var(--text-tertiary);
       }
     }
-  }
-}
-
-.property-panel {
-  width: 340px;
-  background-color: var(--bg-secondary);
-  border-left: 1px solid var(--border-primary);
-  overflow-y: auto;
-  transform: translateX(100%);
-  transition: transform $transition-normal;
-
-  &.visible {
-    transform: translateX(0);
-  }
-}
-
-.property-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: $spacing-4;
-  border-bottom: 1px solid var(--border-primary);
-
-  h3 {
-    margin: 0;
-    font-size: $font-size-base;
-    font-weight: $font-weight-semibold;
-    color: var(--text-primary);
   }
 }
 
@@ -3380,12 +3551,14 @@ watch(executionLogs, async () => {
   align-items: center;
   gap: $spacing-3;
   padding: $spacing-3 $spacing-4;
-  background: rgba(59, 130, 246, 0.95);
-  backdrop-filter: blur(8px);
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  box-shadow: 0 4px 16px rgba(59, 130, 246, 0.3);
-  color: white;
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.92), rgba(30, 58, 138, 0.88));
+  backdrop-filter: blur(12px);
+  border-radius: 14px;
+  border: 1px solid rgba(96, 165, 250, 0.45);
+  box-shadow:
+    0 8px 32px rgba(37, 99, 235, 0.35),
+    0 0 0 1px rgba(34, 211, 238, 0.15) inset;
+  color: #e0f2fe;
   font-size: $font-size-sm;
   font-weight: 500;
   white-space: nowrap;
@@ -3393,8 +3566,14 @@ watch(executionLogs, async () => {
   .indicator-icon {
     width: 16px;
     height: 16px;
-    animation: pulse 1.5s infinite;
+    color: #67e8f9;
+    animation: connect-indicator-pulse 1.5s infinite;
   }
+}
+
+@keyframes connect-indicator-pulse {
+  0%, 100% { opacity: 1; filter: drop-shadow(0 0 4px rgba(34, 211, 238, 0.8)); }
+  50% { opacity: 0.55; filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.9)); }
 }
 
 @keyframes pulse {
@@ -3470,10 +3649,6 @@ watch(executionLogs, async () => {
   .node-panel {
     width: 220px;
   }
-
-  .property-panel {
-    width: 300px;
-  }
 }
 
 @media (max-width: 768px) {
@@ -3504,17 +3679,6 @@ watch(executionLogs, async () => {
     &.open {
       transform: translateX(0);
     }
-  }
-
-  .property-panel {
-    position: absolute;
-    right: 0;
-    top: 0;
-    bottom: 0;
-    z-index: 10;
-    width: 100%;
-    max-width: 340px;
-    box-shadow: $shadow-lg;
   }
 
   .canvas-wrapper {
@@ -3556,23 +3720,34 @@ watch(executionLogs, async () => {
   left: 0;
   right: 0;
   height: 320px;
+  min-height: 160px;
+  max-height: calc(100vh - 100px);
   background: var(--bg-secondary);
   border-top: 1px solid var(--border-primary);
   display: flex;
   flex-direction: column;
   z-index: 200;
   box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.3);
+  transition: box-shadow 0.2s;
+  overflow: hidden;
+
+  &.is-dragging {
+    box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.5);
+    cursor: ns-resize;
+    user-select: none;
+  }
 }
 
 .exec-panel-handle {
   height: 6px;
-  cursor: pointer;
+  cursor: ns-resize;
   background: transparent;
   border-radius: 3px 3px 0 0;
   display: flex;
   align-items: center;
   justify-content: center;
   margin-top: 2px;
+  flex-shrink: 0;
   transition: background 0.2s;
 
   &::after {
@@ -3582,11 +3757,12 @@ watch(executionLogs, async () => {
     height: 3px;
     border-radius: 2px;
     background: var(--border-primary);
-    transition: background 0.2s;
+    transition: background 0.2s, width 0.2s;
   }
 
   &:hover::after {
-    background: var(--text-muted);
+    background: var(--text-tertiary);
+    width: 60px;
   }
 }
 
@@ -3687,12 +3863,20 @@ watch(executionLogs, async () => {
   gap: 8px;
   padding: 6px 12px;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: background 0.15s, box-shadow 0.15s;
 
   &:hover { background: rgba(255,255,255,0.04); }
   &.node-running { background: rgba(59,130,246,0.08); }
   &.node-completed { background: rgba(16,185,129,0.06); }
   &.node-failed { background: rgba(239,68,68,0.08); }
+  &.is-selected {
+    background: rgba(59,130,246,0.16);
+    box-shadow: inset 2px 0 0 #3b82f6;
+  }
+  &.node-failed.is-selected {
+    background: rgba(239,68,68,0.16);
+    box-shadow: inset 2px 0 0 #ef4444;
+  }
 
   .timeline-status {
     width: 20px;

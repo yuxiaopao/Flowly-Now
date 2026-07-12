@@ -146,6 +146,20 @@ export const useTenantStore = defineStore('tenant', () => {
     }
   }
 
+  async function updateMemberRole(memberId, role) {
+    try {
+      const response = await tenantApi.updateMemberRole(memberId, { role })
+      const index = members.value.findIndex(m => m.id === memberId)
+      if (index !== -1) {
+        members.value[index] = { ...members.value[index], ...response }
+      }
+      return response
+    } catch (err) {
+      error.value = err.message
+      throw err
+    }
+  }
+
   async function removeMember(tenantId, memberId) {
     try {
       await tenantApi.removeMember(tenantId, memberId)
@@ -495,6 +509,7 @@ export const useTenantStore = defineStore('tenant', () => {
     fetchMembers,
     inviteMember,
     removeMember,
+    updateMemberRole,
 
     // Actions - Invitations
     fetchInvitations,

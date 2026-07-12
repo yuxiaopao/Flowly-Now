@@ -232,7 +232,7 @@ class Webhook(models.Model):
         User,
         on_delete=models.SET_NULL,
         null=True,
-        related_name='webhooks',
+        related_name='workflow_webhooks',
         verbose_name='创建者'
     )
 

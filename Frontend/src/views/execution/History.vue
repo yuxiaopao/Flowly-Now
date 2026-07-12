@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="execution-history-page">
     <div class="page-header">
       <div class="header-left">
@@ -20,7 +20,7 @@
           />
           <el-option
             label="成功"
-            value="success"
+            value="completed"
           />
           <el-option
             label="失败"
@@ -51,7 +51,7 @@
       <div class="stat-card">
         <div
           class="stat-icon"
-          style="background: #3b82f6;"
+          style="background: var(--info);"
         >
           <Play class="icon" />
         </div>
@@ -63,7 +63,7 @@
       <div class="stat-card">
         <div
           class="stat-icon"
-          style="background: #10b981;"
+          style="background: var(--success);"
         >
           <CheckCircle class="icon" />
         </div>
@@ -75,7 +75,7 @@
       <div class="stat-card">
         <div
           class="stat-icon"
-          style="background: #ef4444;"
+          style="background: var(--error);"
         >
           <XCircle class="icon" />
         </div>
@@ -87,7 +87,7 @@
       <div class="stat-card">
         <div
           class="stat-icon"
-          style="background: #f59e0b;"
+          style="background: var(--warning);"
         >
           <Clock class="icon" />
         </div>
@@ -116,7 +116,7 @@
             <div class="execution-id">
               <code>{{ row.id }}</code>
               <el-tag
-                v-if="row.is_replayed"
+                v-if="row.isReplayed"
                 type="info"
                 size="small"
               >
@@ -132,8 +132,41 @@
           <template #default="{ row }">
             <div class="workflow-cell">
               <Workflow class="workflow-icon" />
-              <span class="workflow-name">{{ row.workflow_name }}</span>
+              <span class="workflow-name">{{ row.workflowName || row.workflow?.name || '-' }}</span>
             </div>
+          </template>
+        </el-table-column>
+        <el-table-column
+          label="产物"
+          width="200"
+        >
+          <template #default="{ row }">
+            <div
+              v-if="getRowArtifactSummary(row).hasArtifacts"
+              class="artifact-summary-cell"
+            >
+              <img
+                v-if="getRowArtifactSummary(row).thumbnailUrl"
+                :src="getRowArtifactSummary(row).thumbnailUrl"
+                class="artifact-thumb"
+                alt=""
+                loading="lazy"
+              >
+              <div class="artifact-badges">
+                <span
+                  v-for="badge in getRowArtifactBadges(row)"
+                  :key="badge.id"
+                  class="artifact-badge"
+                  :class="`badge-${badge.id}`"
+                >
+                  {{ badge.label }} {{ badge.count }}
+                </span>
+              </div>
+            </div>
+            <span
+              v-else
+              class="artifact-empty-hint"
+            >—</span>
           </template>
         </el-table-column>
         <el-table-column
@@ -154,7 +187,7 @@
           width="100"
         >
           <template #default="{ row }">
-            <span class="duration">{{ formatDuration(row.duration_ms) }}</span>
+            <span class="duration">{{ formatDuration(getDurationMs(row)) }}</span>
           </template>
         </el-table-column>
         <el-table-column
@@ -162,7 +195,7 @@
           width="100"
         >
           <template #default="{ row }">
-            <span class="trigger">{{ getTriggerLabel(row.trigger_type) }}</span>
+            <span class="trigger">{{ getTriggerLabel(row.triggerType) }}</span>
           </template>
         </el-table-column>
         <el-table-column
@@ -170,7 +203,7 @@
           width="160"
         >
           <template #default="{ row }">
-            <span class="time">{{ formatDateTime(row.started_at) }}</span>
+            <span class="time">{{ formatDateTime(row.startedAt) }}</span>
           </template>
         </el-table-column>
         <el-table-column
@@ -189,7 +222,7 @@
             <el-button
               size="small"
               text
-              :disabled="row.status !== 'success'"
+              :disabled="!['completed', 'success'].includes(row.status)"
               @click="replayExecution(row)"
             >
               <RotateCcw class="btn-icon-small" />
@@ -250,7 +283,7 @@
         <!-- Header Info -->
         <div class="detail-header">
           <div class="detail-info">
-            <h3>{{ selectedExecution.workflow_name }}</h3>
+            <h3>{{ selectedExecution.workflowName || selectedExecution.workflow?.name || '工作流' }}</h3>
             <div class="meta-info">
               <el-tag
                 :type="getStatusType(selectedExecution.status)"
@@ -260,11 +293,11 @@
               </el-tag>
               <span class="meta-item">
                 <Clock class="meta-icon" />
-                {{ formatDuration(selectedExecution.duration_ms) }}
+                {{ formatDuration(getDurationMs(selectedExecution)) }}
               </span>
               <span class="meta-item">
                 <Calendar class="meta-icon" />
-                {{ formatDateTime(selectedExecution.started_at) }}
+                {{ formatDateTime(selectedExecution.startedAt) }}
               </span>
             </div>
           </div>
@@ -278,6 +311,21 @@
 
         <!-- Tabs -->
         <el-tabs v-model="detailTab">
+          <!-- Artifacts Tab -->
+          <el-tab-pane
+            label="产物"
+            name="artifacts"
+          >
+            <ExecutionArtifactsPanel
+              :node-executions="getNodeExecutions(selectedExecution)"
+              :output-data="getExecutionOutput(selectedExecution)"
+              :node-status-map="selectedExecution.nodeStatus || selectedExecution.node_status"
+              :execution="selectedExecution"
+              :node-name-map="detailNodeNameMap"
+              :show-header="false"
+            />
+          </el-tab-pane>
+
           <!-- Input Tab -->
           <el-tab-pane
             label="输入"
@@ -289,13 +337,13 @@
                 <el-button
                   size="small"
                   text
-                  @click="copyToClipboard(selectedExecution.input)"
+                  @click="copyToClipboard(getExecutionInput(selectedExecution))"
                 >
                   <Copy class="btn-icon-small" />
                   复制
                 </el-button>
               </div>
-              <pre class="data-content"><code>{{ formatJson(selectedExecution.input) }}</code></pre>
+              <pre class="data-content"><code>{{ formatJson(getExecutionInput(selectedExecution)) }}</code></pre>
             </div>
           </el-tab-pane>
 
@@ -310,13 +358,13 @@
                 <el-button
                   size="small"
                   text
-                  @click="copyToClipboard(selectedExecution.output)"
+                  @click="copyToClipboard(getExecutionOutput(selectedExecution))"
                 >
                   <Copy class="btn-icon-small" />
                   复制
                 </el-button>
               </div>
-              <pre class="data-content"><code>{{ formatJson(selectedExecution.output) }}</code></pre>
+              <pre class="data-content"><code>{{ formatJson(getExecutionOutput(selectedExecution)) }}</code></pre>
             </div>
           </el-tab-pane>
 
@@ -327,8 +375,8 @@
           >
             <div class="node-timeline">
               <div
-                v-for="(node, index) in selectedExecution.node_executions"
-                :key="node.id"
+                v-for="(node, index) in getNodeExecutions(selectedExecution)"
+                :key="node.id || node.nodeId || index"
                 class="node-item"
                 :class="{ failed: node.status === 'failed', running: node.status === 'running' }"
               >
@@ -338,42 +386,48 @@
                     :class="node.status"
                   />
                   <div
-                    v-if="index < selectedExecution.node_executions.length - 1"
+                    v-if="index < getNodeExecutions(selectedExecution).length - 1"
                     class="marker-line"
                   />
                 </div>
                 <div class="node-content">
                   <div class="node-header">
-                    <span class="node-name">{{ node.name }}</span>
+                    <span class="node-name">{{ node.nodeName || node.name || '节点' }}</span>
                     <el-tag
                       :type="getStatusType(node.status)"
                       size="small"
                     >
                       {{ getStatusLabel(node.status) }}
                     </el-tag>
-                    <span class="node-duration">{{ formatDuration(node.duration_ms) }}</span>
+                    <span class="node-duration">{{ formatDuration(getDurationMs(node)) }}</span>
                   </div>
                   <div class="node-details">
                     <div
-                      v-if="node.input"
+                      v-if="node.inputData || node.input"
                       class="node-data"
                     >
                       <span class="data-label">输入:</span>
-                      <code>{{ truncate(node.input) }}</code>
+                      <code>{{ truncate(node.inputData || node.input) }}</code>
                     </div>
                     <div
-                      v-if="node.output"
+                      v-if="node.outputData || node.output"
                       class="node-data"
                     >
                       <span class="data-label">输出:</span>
-                      <code>{{ truncate(node.output) }}</code>
+                      <ExecutionArtifactsPanel
+                        :node-executions="[node]"
+                        :node-name-map="detailNodeNameMap"
+                        compact
+                        :show-header="false"
+                        empty-text="该节点无产物"
+                      />
                     </div>
                     <div
-                      v-if="node.error"
+                      v-if="node.errorMessage || node.error"
                       class="node-error"
                     >
                       <span class="data-label">错误:</span>
-                      <code>{{ node.error }}</code>
+                      <code>{{ node.errorMessage || node.error }}</code>
                     </div>
                   </div>
                 </div>
@@ -415,6 +469,11 @@ import {
 import { ElMessageBox } from 'element-plus'
 import { useAppStore } from '@/stores/app'
 import { workflowApi } from '@/api/workflow'
+import ExecutionArtifactsPanel from '@/components/workflow/ExecutionArtifactsPanel.vue'
+import {
+  buildNodeNameMap,
+  getExecutionArtifactSummary,
+} from '@/utils/executionArtifacts'
 
 const router = useRouter()
 const appStore = useAppStore()
@@ -427,7 +486,19 @@ const statusFilter = ref('')
 const dateRange = ref([])
 const showDetailDrawer = ref(false)
 const selectedExecution = ref(null)
-const detailTab = ref('input')
+const detailTab = ref('artifacts')
+const detailNodeNameMap = ref({})
+const workflowNodeNameCache = ref({})
+
+const ARTIFACT_BADGE_LABELS = {
+  prompt: '词',
+  image: '图',
+  video: '视',
+  audio: '音',
+  website: '站',
+  file: '文件',
+  subtitle: '资料',
+}
 
 const stats = ref({
   total: 0,
@@ -449,13 +520,78 @@ const filteredExecutions = computed(() => {
 })
 
 const getStatusType = (status) => {
-  const types = { success: 'success', failed: 'danger', running: 'warning', pending: 'info' }
+  const types = {
+    completed: 'success',
+    success: 'success',
+    failed: 'danger',
+    running: 'warning',
+    pending: 'info',
+    cancelled: 'info',
+    paused: 'warning'
+  }
   return types[status] || 'info'
 }
 
 const getStatusLabel = (status) => {
-  const labels = { success: '成功', failed: '失败', running: '运行中', pending: '等待' }
+  const labels = {
+    completed: '已完成',
+    success: '成功',
+    failed: '失败',
+    running: '运行中',
+    pending: '等待中',
+    cancelled: '已取消',
+    paused: '已暂停'
+  }
   return labels[status] || status
+}
+
+function getDurationMs(row) {
+  if (!row) return null
+  if (row.durationMs != null) return row.durationMs
+  if (row.durationSeconds != null) return Math.round(Number(row.durationSeconds) * 1000)
+  if (row.duration != null) return Math.round(Number(row.duration) * 1000)
+  return null
+}
+
+function getExecutionInput(execution) {
+  return execution?.inputData ?? execution?.input ?? null
+}
+
+function getExecutionOutput(execution) {
+  return execution?.outputData ?? execution?.output ?? null
+}
+
+function getRowArtifactSummary(row) {
+  return getExecutionArtifactSummary(row)
+}
+
+function getRowArtifactBadges(row) {
+  const { counts } = getRowArtifactSummary(row)
+  return Object.entries(counts).map(([id, count]) => ({
+    id,
+    count,
+    label: ARTIFACT_BADGE_LABELS[id] || id,
+  }))
+}
+
+async function loadNodeNameMap(workflowId) {
+  if (!workflowId) return {}
+  if (workflowNodeNameCache.value[workflowId]) {
+    return workflowNodeNameCache.value[workflowId]
+  }
+  try {
+    const nodes = await workflowApi.getWorkflowNodes(workflowId)
+    const list = Array.isArray(nodes) ? nodes : (nodes?.results || [])
+    const map = buildNodeNameMap(list)
+    workflowNodeNameCache.value[workflowId] = map
+    return map
+  } catch {
+    return {}
+  }
+}
+
+function getNodeExecutions(execution) {
+  return execution?.nodeExecutions ?? execution?.node_executions ?? []
 }
 
 const getTriggerLabel = (type) => {
@@ -486,29 +622,48 @@ const truncate = (str) => {
   return s.length > 100 ? s.slice(0, 100) + '...' : s
 }
 
-const viewDetails = (execution) => {
+const viewDetails = async (execution) => {
   selectedExecution.value = execution
-  detailTab.value = 'input'
+  detailTab.value = 'artifacts'
   showDetailDrawer.value = true
+  const workflowId = execution.workflowId || execution.workflow || execution.workflow_id
+  detailNodeNameMap.value = await loadNodeNameMap(workflowId)
+  try {
+    const timeline = await workflowApi.getExecutionTimeline(execution.id, { skipErrorToast: true })
+    const detail = timeline?.execution
+      ? null
+      : await workflowApi.getExecution(execution.id, { skipErrorToast: true }).catch(() => null)
+    selectedExecution.value = {
+      ...execution,
+      ...(detail || {}),
+      ...(timeline?.execution || {}),
+      nodeExecutions: timeline?.nodeExecutions ?? timeline?.node_executions ?? [],
+      logs: timeline?.logs ?? [],
+      nodeStatus: timeline?.execution?.node_status || timeline?.execution?.nodeStatus || execution.nodeStatus,
+      outputData: timeline?.execution?.output_data || timeline?.execution?.outputData || execution.outputData,
+    }
+  } catch {
+    appStore.error('加载执行详情失败')
+  }
 }
 
 const replayExecution = (execution) => {
   ElMessageBox.confirm(
-    `确定要重新执行此工作流吗？这将使用相同的输入参数重新运行「${execution.workflow_name}」。`,
+    `确定要重新执行此工作流吗？这将使用相同的输入参数重新运行「${execution.workflowName || execution.workflow?.name || '工作流'}」。`,
     '重放执行',
     { confirmButtonText: '确定', cancelButtonText: '取消', type: 'info' }
   ).then(() => {
-    router.push({ path: `/workflows/${execution.workflow_id}/execute`, query: { replay: execution.id } })
+    router.push({ path: `/workflows/${execution.workflowId || execution.workflow}/execute`, query: { replay: execution.id } })
   })
 }
 
 const copyInput = (execution) => {
-  navigator.clipboard.writeText(JSON.stringify(execution.input, null, 2))
+  navigator.clipboard.writeText(JSON.stringify(getExecutionInput(execution), null, 2))
   appStore.success('输入已复制')
 }
 
 const copyOutput = (execution) => {
-  navigator.clipboard.writeText(JSON.stringify(execution.output, null, 2))
+  navigator.clipboard.writeText(JSON.stringify(getExecutionOutput(execution), null, 2))
   appStore.success('输出已复制')
 }
 
@@ -536,6 +691,11 @@ async function fetchExecutions() {
     const response = await workflowApi.getAllExecutions(params)
     executions.value = response.results || response || []
     totalCount.value = response.count || executions.value.length
+
+    const durations = executions.value.map(getDurationMs).filter(v => v != null)
+    if (durations.length > 0) {
+      stats.value.avgDuration = durations.reduce((sum, ms) => sum + ms, 0) / durations.length
+    }
   } catch {
     // Error shown via API interceptor
   } finally {
@@ -546,33 +706,14 @@ async function fetchExecutions() {
 async function fetchStats() {
   try {
     const response = await workflowApi.getExecutionStatistics()
+    const byStatus = response.byStatus || []
+    const statusMap = Object.fromEntries(byStatus.map(s => [s.status, s.count]))
     stats.value = {
-      total: response.total_executions || 0,
-      success: response.successful_executions || 0,
-      failed: response.failed_executions || 0,
-      avgDuration: response.avg_execution_time_ms || 0
+      total: response.totalExecutions || 0,
+      success: response.completedCount ?? statusMap.completed ?? 0,
+      failed: statusMap.failed ?? 0,
+      avgDuration: stats.value.avgDuration || 0
     }
-  } catch {
-    // Error shown via API interceptor
-  }
-}
-
-async function fetchExecutionDetail(execId) {
-  try {
-    const response = await workflowApi.getExecution(execId)
-    selectedExecution.value = response
-    return response
-  } catch {
-    // Error shown via API interceptor
-    return null
-  }
-}
-
-async function retryExecutionById(execId) {
-  try {
-    await workflowApi.retryExecution(execId)
-    appStore.success('执行已重新触发')
-    await fetchExecutions()
   } catch {
     // Error shown via API interceptor
   }
@@ -606,10 +747,13 @@ const deleteExecution = (execution) => {
 
 const handleSizeChange = (val) => {
   pageSize.value = val
+  currentPage.value = 1
+  fetchExecutions()
 }
 
 const handlePageChange = (val) => {
   currentPage.value = val
+  fetchExecutions()
 }
 </script>
 
@@ -726,6 +870,49 @@ const handlePageChange = (val) => {
     }
   }
 
+  .artifact-summary-cell {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 36px;
+  }
+
+  .artifact-thumb {
+    width: 36px;
+    height: 36px;
+    border-radius: 6px;
+    object-fit: cover;
+    background: rgba(0, 0, 0, 0.2);
+    flex-shrink: 0;
+  }
+
+  .artifact-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .artifact-badge {
+    font-size: 11px;
+    line-height: 1;
+    padding: 3px 6px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--el-text-color-secondary);
+    white-space: nowrap;
+
+    &.badge-image { color: #67e8f9; }
+    &.badge-video { color: #c4b5fd; }
+    &.badge-prompt { color: #fcd34d; }
+    &.badge-audio { color: #86efac; }
+    &.badge-file { color: #fdba74; }
+  }
+
+  .artifact-empty-hint {
+    color: var(--el-text-color-placeholder);
+    font-size: 13px;
+  }
+
   .duration, .trigger, .time {
     font-size: 13px;
     color: var(--el-text-color-secondary);
@@ -789,11 +976,12 @@ const handlePageChange = (val) => {
 
   .data-content {
     padding: 16px;
-    background: #1e1e2e;
+    background: var(--code-bg);
+    border: 1px solid var(--code-border);
     border-radius: 8px;
     font-family: 'JetBrains Mono', monospace;
     font-size: 13px;
-    color: #cdd6f4;
+    color: var(--code-text);
     overflow-x: auto;
     max-height: 400px;
     overflow-y: auto;
@@ -878,11 +1066,11 @@ const handlePageChange = (val) => {
 
         .node-error {
           font-size: 13px;
-          color: var(--el-color-danger);
+          color: var(--error);
 
           code {
             font-family: 'JetBrains Mono', monospace;
-            background: rgba(239, 68, 68, 0.1);
+            background: var(--error-bg);
             padding: 2px 6px;
             border-radius: 4px;
           }
@@ -893,7 +1081,8 @@ const handlePageChange = (val) => {
 }
 
 .logs-container {
-  background: #1e1e2e;
+  background: var(--code-bg);
+  border: 1px solid var(--code-border);
   border-radius: 8px;
   padding: 12px;
   font-family: 'JetBrains Mono', monospace;
@@ -905,18 +1094,23 @@ const handlePageChange = (val) => {
     display: flex;
     gap: 12px;
     padding: 4px 0;
-    color: #cdd6f4;
+    color: var(--code-text);
+    transition: background-color 0.2s ease;
+
+    &:hover {
+      background: var(--surface-muted);
+    }
 
     &.error {
-      color: #f38ba8;
+      color: var(--error);
     }
 
     &.warning {
-      color: #f9e2af;
+      color: var(--warning);
     }
 
     .log-time {
-      color: #6c7086;
+      color: var(--code-muted);
       flex-shrink: 0;
     }
 

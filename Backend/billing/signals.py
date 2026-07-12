@@ -8,6 +8,8 @@ from django.dispatch import receiver, Signal
 from django.db.models.signals import post_save, post_delete
 from django.utils import timezone
 
+from .models import SubscriptionStatus
+
 logger = logging.getLogger(__name__)
 
 # Custom signals
@@ -29,14 +31,23 @@ def get_channel_layer_safe():
 @receiver(post_save, sender='billing.Subscription')
 def on_subscription_created(sender, instance, created, **kwargs):
     """Handle subscription creation."""
-    if created:
+    if not created:
+        return
+    try:
         logger.info(f"New subscription created: {instance.id} for user {instance.user_id}")
 
-        # Update user execution limits
-        if instance.user:
+        tier = instance.get_price_tier()
+        max_executions = None
+        if tier:
+            max_executions = tier.max_executions_per_month
+        else:
+            limits = instance.get_usage_limits() or {}
+            max_executions = limits.get('max_executions_per_month')
+
+        if instance.user and max_executions:
             from users.models import User
             User.objects.filter(id=instance.user_id).update(
-                execution_limit=instance.plan.max_executions_per_month,
+                execution_limit=max_executions,
                 updated_at=timezone.now()
             )
 
@@ -44,31 +55,44 @@ def on_subscription_created(sender, instance, created, **kwargs):
             sender=sender,
             subscription_id=instance.id,
             user_id=instance.user_id,
-            plan=instance.plan.plan_type if instance.plan else 'free'
+            plan=instance.plan_type,
         )
+    except Exception as exc:
+        logger.exception("Subscription create signal failed: %s", exc)
 
 
 @receiver(post_save, sender='billing.Subscription')
-def on_subscription_status_changed(sender, instance, **kwargs):
+def on_subscription_status_changed(sender, instance, created, **kwargs):
     """Handle subscription status changes."""
-    if instance.tracker.has_changed('status'):
-        old_status = instance.tracker.previous('status')
+    if created:
+        return
+
+    tracker = getattr(instance, 'tracker', None)
+    if tracker is None or not hasattr(tracker, 'has_changed'):
+        return
+    if not tracker.has_changed('status'):
+        return
+
+    try:
+        old_status = tracker.previous('status')
         new_status = instance.status
 
         logger.info(f"Subscription status changed: {instance.id} from {old_status} to {new_status}")
 
-        if new_status == 'cancelled':
+        if new_status == SubscriptionStatus.CANCELED:
             subscription_cancelled.send(
                 sender=sender,
                 subscription_id=instance.id,
                 user_id=instance.user_id
             )
-        elif new_status == 'active' and old_status == 'past_due':
+        elif new_status == SubscriptionStatus.ACTIVE and old_status == SubscriptionStatus.PAST_DUE:
             subscription_renewed.send(
                 sender=sender,
                 subscription_id=instance.id,
                 user_id=instance.user_id
             )
+    except Exception as exc:
+        logger.exception("Subscription status signal failed: %s", exc)
 
 
 @receiver(post_save, sender='billing.UsageRecord')
@@ -79,27 +103,29 @@ def on_usage_recorded(sender, instance, created, **kwargs):
                     f"executions={instance.execution_count}")
 
         # Check usage thresholds
-        if instance.subscription and instance.subscription.plan:
-            plan = instance.subscription.plan
-            if plan.max_executions_per_month:
-                usage_percentage = (instance.execution_count / plan.max_executions_per_month) * 100
+        tier = None
+        if getattr(instance, 'subscription', None):
+            tier = instance.subscription.get_price_tier()
+        max_executions = tier.max_executions_per_month if tier else None
+        if max_executions:
+            usage_percentage = (instance.execution_count / max_executions) * 100
 
-                if usage_percentage >= 100:
-                    usage_threshold_reached.send(
-                        sender=sender,
-                        tenant_id=instance.tenant_id,
-                        usage_type='executions',
-                        percentage=usage_percentage,
-                        threshold=100
-                    )
-                elif usage_percentage >= 80:
-                    usage_threshold_reached.send(
-                        sender=sender,
-                        tenant_id=instance.tenant_id,
-                        usage_type='executions',
-                        percentage=usage_percentage,
-                        threshold=80
-                    )
+            if usage_percentage >= 100:
+                usage_threshold_reached.send(
+                    sender=sender,
+                    tenant_id=instance.tenant_id,
+                    usage_type='executions',
+                    percentage=usage_percentage,
+                    threshold=100
+                )
+            elif usage_percentage >= 80:
+                usage_threshold_reached.send(
+                    sender=sender,
+                    tenant_id=instance.tenant_id,
+                    usage_type='executions',
+                    percentage=usage_percentage,
+                    threshold=80
+                )
 
 
 @receiver(post_save, sender='billing.Payment')

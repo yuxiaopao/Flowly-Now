@@ -320,7 +320,7 @@ watch(() => props.modelValue, (newVal) => {
       Object.assign(localData, {
         label: newVal.label || '',
         description: newVal.description || '',
-        variableName: newVal.variableName || '',
+        variableName: newVal.variableName || newVal.input_name || newVal.inputName || '',
         prompt: newVal.prompt || '',
         required: newVal.required || false,
         default: newVal.default || null,
@@ -375,8 +375,12 @@ const updateResponseHeaders = () => {
 }
 
 const handleChange = () => {
-  emit('update:modelValue', { ...localData })
-  emit('change', { ...localData })
+  const payload = { ...localData }
+  if (props.nodeMode === 'input' && payload.variableName) {
+    payload.input_name = payload.variableName
+  }
+  emit('update:modelValue', payload)
+  emit('change', payload)
 }
 </script>
 

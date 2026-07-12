@@ -1,8 +1,10 @@
 <template>
   <div class="preferences-settings">
-    <h2 class="section-title">
-      偏好设置
-    </h2>
+    <PageHeader
+      compact
+      title="偏好设置"
+      subtitle="自定义外观、编辑器与通知行为"
+    />
 
     <div class="preference-group">
       <h3 class="group-title">
@@ -50,28 +52,6 @@
 
     <el-divider />
 
-    <div class="preference-group">
-      <h3 class="group-title">
-        通知
-      </h3>
-      <div class="preference-item">
-        <div class="preference-info">
-          <span class="preference-label">执行完成通知</span>
-          <span class="preference-desc">工作流执行完成时发送通知</span>
-        </div>
-        <el-switch v-model="preferences.notifyOnComplete" />
-      </div>
-      <div class="preference-item">
-        <div class="preference-info">
-          <span class="preference-label">执行失败通知</span>
-          <span class="preference-desc">工作流执行失败时发送通知</span>
-        </div>
-        <el-switch v-model="preferences.notifyOnError" />
-      </div>
-    </div>
-
-    <el-divider />
-
     <div class="preference-actions">
       <AppButton @click="resetPreferences">
         恢复默认
@@ -91,6 +71,7 @@ import { reactive, onMounted } from 'vue'
 import { useAppStore } from '@/stores/app'
 import AppButton from '@/components/common/AppButton.vue'
 import ThemeSwitcher from '@/components/common/ThemeSwitcher.vue'
+import PageHeader from '@/components/layout/PageHeader.vue'
 
 const appStore = useAppStore()
 
@@ -98,9 +79,7 @@ const preferences = reactive({
   theme: 'dark',
   autoSave: true,
   snapToGrid: true,
-  showMinimap: true,
-  notifyOnComplete: true,
-  notifyOnError: true
+  showMinimap: true
 })
 
 onMounted(() => {
@@ -130,9 +109,7 @@ function resetPreferences() {
     theme: 'dark',
     autoSave: true,
     snapToGrid: true,
-    showMinimap: true,
-    notifyOnComplete: true,
-    notifyOnError: true
+    showMinimap: true
   })
   savePreferences()
 }
@@ -140,13 +117,6 @@ function resetPreferences() {
 
 <style lang="scss" scoped>
 @use '@/assets/styles/variables.scss' as *;
-
-.section-title {
-  font-size: $font-size-xl;
-  font-weight: $font-weight-semibold;
-  color: var(--text-primary);
-  margin: 0 0 $spacing-6;
-}
 
 .preference-group {
   margin-bottom: $spacing-4;

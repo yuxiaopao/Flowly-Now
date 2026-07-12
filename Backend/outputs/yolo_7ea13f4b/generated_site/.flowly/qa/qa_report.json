@@ -1,0 +1,25 @@
+{
+  "gate": "red",
+  "profile": "default",
+  "website_type": "detection",
+  "generated_site_id": "d712518c-de47-45e1-8d6f-8b82ed1d6dcc",
+  "metrics": {},
+  "layers": {
+    "l1": "pass",
+    "l2": "fail",
+    "l3": "skip",
+    "l4": "skip"
+  },
+  "layer_errors": [
+    "Flask 启动失败: Traceback (most recent call last):\r\n  File \"E:\\Flowly-now\\Backend\\outputs\\yolo_7ea13f4b\\generated_site\\backend\\app.py\", line 8, in <module>\r\n    from flask import Flask, request, jsonify, send_from_directory\r\nModuleNotFoundError: No module named 'flask'\r\n"
+  ],
+  "recommendations": [
+    "修复上述检查项后重新运行 QA"
+  ],
+  "summary_zh": "Flask 启动失败: Traceback (most recent call last):\r\n  File \"E:\\Flowly-now\\Backend\\outputs\\yolo_7ea13f4b\\generated_site\\backend\\app.py\", line 8, in <module>\r\n    from flask import Flask, request, jsonify, send_from_directory\r\nModuleNotFoundError: No module named 'flask'\r\n",
+  "assigned_port": 49152,
+  "screenshots": [],
+  "thresholds_used": {
+    "source": "qa-threshold-matrix.md"
+  }
+}

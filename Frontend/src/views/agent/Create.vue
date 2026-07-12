@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="agent-create">
     <div class="create-container">
       <div class="page-header">
@@ -117,6 +117,23 @@
                 inactive-text="禁用"
               />
             </el-form-item>
+
+            <el-form-item label="所属团队">
+              <el-select
+                v-model="form.tenant"
+                placeholder="仅个人可见（不选择团队）"
+                style="width: 100%"
+                clearable
+              >
+                <el-option
+                  v-for="t in tenantStore.tenants"
+                  :key="t.id"
+                  :label="t.name"
+                  :value="t.id"
+                />
+              </el-select>
+              <span class="input-hint">选择团队后，该团队所有成员均可查看和使用此 Agent</span>
+            </el-form-item>
           </div>
 
           <!-- 右侧：AI 配置 -->
@@ -234,7 +251,7 @@
             >
               <div class="tool-header">
                 <component
-                  :is="getToolIcon(tool.type)"
+                  :is="getToolIcon(tool.id)"
                   class="tool-icon"
                 />
                 <el-checkbox
@@ -252,6 +269,44 @@
             </div>
           </div>
         </div>
+
+        <!-- 知识库关联 -->
+        <div
+          v-if="isToolSelected('knowledge_base')"
+          class="form-section full-width"
+        >
+          <h3 class="section-title">
+            关联知识库
+          </h3>
+          <el-form-item>
+            <el-select
+              v-model="form.knowledge_collections"
+              multiple
+              filterable
+              placeholder="选择该 Agent 可检索的知识库集合"
+              style="width: 100%"
+            >
+              <el-option
+                v-for="c in availableCollections"
+                :key="c.id"
+                :label="c.tenant_name ? `${c.name}（团队: ${c.tenant_name}）` : `${c.name}（个人）`"
+                :value="c.id"
+              />
+            </el-select>
+            <div
+              v-if="!availableCollections.length"
+              class="input-hint"
+            >
+              暂无可用知识库，请先前往「知识库」页面创建文档集合
+            </div>
+            <div
+              v-else
+              class="input-hint"
+            >
+              已启用「知识库检索」工具，Agent 会在回答时自动检索所选集合中的相关内容
+            </div>
+          </el-form-item>
+        </div>
       </el-form>
     </div>
   </div>
@@ -263,10 +318,13 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAgentStore } from '@/stores/agent'
 import { useAppStore } from '@/stores/app'
 import { useWorkflowStore } from '@/stores/workflow'
+import { useRAGStore } from '@/stores/rag'
+import { useTenantStore } from '@/stores/tenant'
+import { agentApi } from '@/api/agent'
 import { APP_CONFIG } from '@/config'
 import {
   ArrowLeft, MessageCircle, CheckSquare, Search, Code,
-  Calculator, Globe, Database, Terminal
+  Calculator, Globe, Terminal, Cloud, FileJson, Clock, BookOpen
 } from 'lucide-vue-next'
 import AppButton from '@/components/common/AppButton.vue'
 
@@ -275,6 +333,8 @@ const router = useRouter()
 const agentStore = useAgentStore()
 const appStore = useAppStore()
 const workflowStore = useWorkflowStore()
+const ragStore = useRAGStore()
+const tenantStore = useTenantStore()
 
 const formRef = ref(null)
 const isSaving = computed(() => agentStore.isSaving)
@@ -287,13 +347,15 @@ const form = reactive({
   description: '',
   agent_type: 'conversational',
   is_active: true,
+  tenant: null,
   model: APP_CONFIG.llm.defaultModel,
   temperature: 0.7,
   max_tokens: 2000,
   context_window: 10,
   system_prompt: '',
   tools: [],
-  skills: []
+  skills: [],
+  knowledge_collections: []
 })
 
 const rules = {
@@ -316,12 +378,33 @@ const temperatureMarks = {
   2: '2'
 }
 
-const availableTools = ref([
-  { id: 'calculator', name: '计算器', type: 'math', description: '数学计算和表达式求值' },
-  { id: 'search', name: '网络搜索', type: 'web', description: '搜索互联网信息' },
-  { id: 'database', name: '数据库查询', type: 'db', description: '查询数据库记录' },
-  { id: 'code', name: '代码执行', type: 'code', description: '执行 Python/JS 代码' }
-])
+const availableTools = ref([])
+const availableCollections = computed(() => ragStore.collections)
+
+const TOOL_DISPLAY_META = {
+  calculator: { name: '计算器', icon: Calculator, description: '数学计算和表达式求值' },
+  search: { name: '网络搜索', icon: Search, description: '搜索互联网信息' },
+  weather: { name: '天气查询', icon: Cloud, description: '查询指定城市的天气信息' },
+  web_scraper: { name: '网页抓取', icon: Globe, description: '抓取并提取网页正文内容' },
+  text_template: { name: '文本模板', icon: FileJson, description: '按模板生成结构化文本' },
+  json_parser: { name: 'JSON 解析', icon: Code, description: '解析和处理 JSON 数据' },
+  datetime: { name: '日期时间', icon: Clock, description: '获取和计算日期时间' },
+  knowledge_base: { name: '知识库检索', icon: BookOpen, description: '检索团队/个人知识库中的相关内容作答' }
+}
+
+async function loadAvailableTools() {
+  try {
+    const types = await agentApi.getAvailableToolTypes()
+    availableTools.value = (types || []).map((t) => ({
+      id: t.name,
+      name: TOOL_DISPLAY_META[t.name]?.name || t.name,
+      description: TOOL_DISPLAY_META[t.name]?.description || t.description || '',
+      icon: TOOL_DISPLAY_META[t.name]?.icon || Terminal
+    }))
+  } catch (err) {
+    appStore.error('加载工具列表失败')
+  }
+}
 
 const agentModelOptions = computed(() => {
   const models = workflowStore.availableModels
@@ -342,6 +425,11 @@ const agentModelOptions = computed(() => {
 
 onMounted(async () => {
   workflowStore.fetchAvailableModels({ type: 'chat' })
+  await Promise.all([
+    loadAvailableTools(),
+    ragStore.fetchCollections(),
+    tenantStore.fetchTenants()
+  ])
   if (isEdit.value) {
     try {
       await agentStore.fetchAgent(agentId.value)
@@ -351,6 +439,7 @@ onMounted(async () => {
         form.description = agent.description || ''
         form.agent_type = agent.agent_type || 'conversational'
         form.is_active = agent.is_active ?? true
+        form.tenant = agent.tenant || null
         form.model = agent.model || ''
         form.temperature = agent.temperature || 0.7
         form.max_tokens = agent.max_tokens || 2000
@@ -358,6 +447,7 @@ onMounted(async () => {
         form.system_prompt = agent.system_prompt || ''
         form.tools = agent.tools || []
         form.skills = agent.skills || []
+        form.knowledge_collections = agent.knowledge_collections || []
       }
     } catch (err) {
       appStore.error('加载 Agent 失败')
@@ -378,14 +468,8 @@ function toggleTool(toolId) {
   }
 }
 
-function getToolIcon(type) {
-  const icons = {
-    math: Calculator,
-    web: Globe,
-    db: Database,
-    code: Terminal
-  }
-  return icons[type] || Calculator
+function getToolIcon(toolId) {
+  return availableTools.value.find((t) => t.id === toolId)?.icon || Terminal
 }
 
 function handleBack() {

@@ -44,11 +44,16 @@
               label="OpenAI (DALL-E)"
               value="openai"
             />
+            <el-option
+              label="阿里云百炼 (通义万相 Wanx)"
+              value="dashscope"
+            />
           </el-select>
         </el-form-item>
 
         <el-form-item label="模型">
           <el-select
+            v-if="localData.provider === 'openai'"
             v-model="localData.model"
             @change="handleChange"
           >
@@ -61,6 +66,12 @@
               value="dall-e-3"
             />
           </el-select>
+          <el-input
+            v-else
+            v-model="localData.model"
+            placeholder="wan2.6-image"
+            @change="handleChange"
+          />
         </el-form-item>
       </div>
 
@@ -80,7 +91,7 @@
             @change="handleChange"
           />
           <div class="field-hint">
-            要编辑的原始图像
+            {{ localData.provider === 'dashscope' ? '要编辑的原始图像（需为公网可访问 URL）' : '要编辑的原始图像' }}
           </div>
         </el-form-item>
 
@@ -135,7 +146,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, watch } from 'vue'
+import { reactive, watch } from 'vue'
 
 const props = defineProps({
   modelValue: {
@@ -170,9 +181,11 @@ watch(() => props.modelValue, (newVal) => {
   }
 }, { immediate: true, deep: true })
 
+const defaultModels = { openai: 'dall-e-3', dashscope: 'wan2.6-image' }
+
 const handleProviderChange = () => {
-  if (localData.provider === 'openai' && !localData.model) {
-    localData.model = 'dall-e-3'
+  if (!localData.model || Object.values(defaultModels).includes(localData.model)) {
+    localData.model = defaultModels[localData.provider] || ''
   }
   handleChange()
 }

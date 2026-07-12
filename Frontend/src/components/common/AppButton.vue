@@ -44,7 +44,10 @@ const props = defineProps({
   },
   disabled: Boolean,
   loading: Boolean,
-  icon: [String, Object, Function],
+  icon: {
+    type: [String, Object, Function],
+    default: null
+  },
   circle: Boolean,
   round: Boolean,
   plain: Boolean,
@@ -87,14 +90,14 @@ const iconComponent = computed(() => {
     background-color: var(--button-primary-bg);
     border: 1.5px solid transparent;
     color: var(--button-primary-text);
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+    box-shadow: var(--button-primary-shadow, 0 1px 3px rgba(0, 0, 0, 0.12));
 
     &:hover:not(:disabled) {
-      background-color: var(--accent-secondary);
-      border-color: var(--accent-secondary);
-      color: var(--text-inverse);
+      background-color: var(--button-primary-hover-bg);
+      border-color: var(--button-primary-hover-bg);
+      color: var(--button-primary-text);
       transform: translateY(-1px);
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+      box-shadow: var(--button-primary-shadow, 0 4px 12px rgba(0, 0, 0, 0.2));
     }
 
     &:active:not(:disabled) {
@@ -121,14 +124,15 @@ const iconComponent = computed(() => {
   }
 
   &--success {
-    background-color: var(--success);
+    background-color: var(--button-primary-bg);
     border: 1.5px solid var(--success);
-    color: #fff;
+    color: var(--button-primary-text);
 
     &:hover:not(:disabled) {
-      filter: brightness(1.1);
+      background-color: var(--button-primary-hover-bg);
+      border-color: var(--success);
       transform: translateY(-1px);
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      box-shadow: var(--shadow-sm);
     }
 
     &:active:not(:disabled) {
@@ -137,14 +141,15 @@ const iconComponent = computed(() => {
   }
 
   &--warning {
-    background-color: var(--warning);
+    background-color: var(--button-primary-bg);
     border: 1.5px solid var(--warning);
-    color: #000;
+    color: var(--button-primary-text);
 
     &:hover:not(:disabled) {
-      filter: brightness(1.1);
+      background-color: var(--button-primary-hover-bg);
+      border-color: var(--warning);
       transform: translateY(-1px);
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      box-shadow: var(--shadow-sm);
     }
 
     &:active:not(:disabled) {
@@ -153,14 +158,15 @@ const iconComponent = computed(() => {
   }
 
   &--error {
-    background-color: var(--error);
+    background-color: var(--button-primary-bg);
     border: 1.5px solid var(--error);
-    color: #fff;
+    color: var(--button-primary-text);
 
     &:hover:not(:disabled) {
-      filter: brightness(1.1);
+      background-color: var(--button-primary-hover-bg);
+      border-color: var(--error);
       transform: translateY(-1px);
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      box-shadow: var(--shadow-sm);
     }
 
     &:active:not(:disabled) {

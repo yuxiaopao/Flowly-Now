@@ -8,298 +8,327 @@
     :close-on-click-modal="false"
     destroy-on-close
   >
-    <!-- Execution Status Header -->
-    <div class="execution-status-bar">
-      <div class="status-info">
-        <span
-          class="status-badge large"
-          :class="execution?.status"
-        >
-          <span class="status-icon">
-            <Loader
-              v-if="execution?.status === 'running'"
-              class="spin"
-            />
-            <CheckCircle v-else-if="execution?.status === 'completed'" />
-            <XCircle v-else-if="execution?.status === 'failed'" />
-            <Pause v-else-if="execution?.status === 'paused'" />
-            <Clock v-else />
-          </span>
-          {{ statusLabel(execution?.status) }}
-        </span>
-        <span class="execution-id">#{{ executionId }}</span>
-        <span
-          v-if="execution?.workflow_name"
-          class="workflow-name"
-        >
-          <Workflow class="workflow-icon" />
-          {{ execution.workflow_name }}
-        </span>
-      </div>
-      <div class="action-buttons">
-        <el-button
-          v-if="execution?.status === 'running'"
-          type="warning"
-          @click="handlePause"
-        >
-          <Pause class="btn-icon" />
-          暂停
-        </el-button>
-        <el-button
-          v-if="execution?.status === 'paused'"
-          type="success"
-          @click="handleResume"
-        >
-          <Play class="btn-icon" />
-          继续
-        </el-button>
-        <el-button
-          v-if="['running', 'pending'].includes(execution?.status)"
-          type="danger"
-          @click="handleCancel"
-        >
-          <Square class="btn-icon" />
-          取消
-        </el-button>
-        <el-button
-          v-if="execution?.status === 'failed'"
-          type="primary"
-          @click="handleRetry"
-        >
-          <RotateCcw class="btn-icon" />
-          重试
-        </el-button>
-        <el-button @click="downloadLogs">
-          <Download class="btn-icon" />
-          下载日志
-        </el-button>
-      </div>
-    </div>
-
-    <!-- Progress Section -->
     <div
-      v-if="execution?.status === 'running' || execution?.status === 'pending'"
-      class="progress-section"
+      v-if="isLoadingExecution"
+      v-loading="true"
+      class="execution-loading"
+      element-loading-text="加载执行详情..."
+    />
+
+    <el-empty
+      v-else-if="loadError"
+      :description="loadError"
     >
-      <div class="progress-header">
-        <span class="progress-label">执行进度</span>
-        <span class="progress-percentage">{{ progressPercentage }}%</span>
-      </div>
-      <el-progress
-        :percentage="progressPercentage"
-        :status="progressStatus"
-        :stroke-width="10"
-        :duration="6"
-      />
-      <p class="progress-message">
-        <span v-if="currentNodeName">正在执行: {{ currentNodeName }}</span>
-        <span v-else>等待执行...</span>
-      </p>
-    </div>
-
-    <!-- Node Status Overview -->
-    <div class="node-status-overview">
-      <div
-        class="status-card"
-        :class="{ active: true }"
+      <el-button
+        type="primary"
+        @click="loadExecutionData"
       >
-        <span class="status-count pending">{{ nodeStatusSummary.pending }}</span>
-        <span class="status-label">待处理</span>
-      </div>
-      <div class="status-card">
-        <span class="status-count running">{{ nodeStatusSummary.running }}</span>
-        <span class="status-label">执行中</span>
-      </div>
-      <div class="status-card">
-        <span class="status-count completed">{{ nodeStatusSummary.completed }}</span>
-        <span class="status-label">已完成</span>
-      </div>
-      <div class="status-card">
-        <span class="status-count failed">{{ nodeStatusSummary.failed }}</span>
-        <span class="status-label">失败</span>
-      </div>
-      <div class="status-card">
-        <span class="status-count skipped">{{ nodeStatusSummary.skipped }}</span>
-        <span class="status-label">跳过</span>
-      </div>
-    </div>
+        重试
+      </el-button>
+    </el-empty>
 
-    <!-- Tabs -->
-    <el-tabs
-      v-model="activeTab"
-      class="execution-tabs"
-    >
-      <!-- Node Timeline Tab -->
-      <el-tab-pane
-        label="节点时间线"
-        name="timeline"
-      >
-        <NodeExecutionTimeline
-          v-if="execution"
-          :nodes="executionNodes"
-          :active-node-id="selectedNodeId"
-          :is-running="execution?.status === 'running'"
-          @node-click="handleNodeClick"
-        />
-        <el-empty
-          v-else
-          description="暂无节点数据"
-        />
-      </el-tab-pane>
+    <el-empty
+      v-else-if="!execution"
+      description="暂无执行详情"
+    />
 
-      <!-- Node Detail Tab -->
-      <el-tab-pane
-        label="节点详情"
-        name="node-detail"
-      >
-        <NodeExecutionDetail
-          v-if="selectedNode"
-          :node="selectedNode"
-          :is-loading="isLoadingNodeDetail"
-        />
-        <el-empty
-          v-else
-          description="请从节点时间线选择一个节点查看详情"
-        />
-      </el-tab-pane>
-
-      <!-- Input Tab -->
-      <el-tab-pane
-        label="输入数据"
-        name="input"
-      >
-        <div class="data-viewer">
-          <div class="data-header">
-            <h4>输入参数</h4>
-            <el-button
-              size="small"
-              text
-              @click="copyToClipboard(executionInput)"
-            >
-              <Copy class="btn-icon-small" />
-              复制
-            </el-button>
-          </div>
-          <pre class="data-content"><code>{{ formatJson(executionInput) }}</code></pre>
+    <template v-else>
+      <!-- Execution Status Header -->
+      <div class="execution-status-bar">
+        <div class="status-info">
+          <span
+            class="status-badge large"
+            :class="execution?.status"
+          >
+            <span class="status-icon">
+              <Loader
+                v-if="execution?.status === 'running'"
+                class="spin"
+              />
+              <CheckCircle v-else-if="execution?.status === 'completed'" />
+              <XCircle v-else-if="execution?.status === 'failed'" />
+              <Pause v-else-if="execution?.status === 'paused'" />
+              <Clock v-else />
+            </span>
+            {{ statusLabel(execution?.status) }}
+          </span>
+          <span class="execution-id">#{{ executionId }}</span>
+          <span
+            v-if="execution?.workflowName || execution?.workflow_name"
+            class="workflow-name"
+          >
+            <Workflow class="workflow-icon" />
+            {{ execution.workflowName || execution.workflow_name }}
+          </span>
         </div>
-      </el-tab-pane>
+        <div class="action-buttons">
+          <el-button
+            v-if="execution?.status === 'running'"
+            type="warning"
+            @click="handlePause"
+          >
+            <Pause class="btn-icon" />
+            暂停
+          </el-button>
+          <el-button
+            v-if="execution?.status === 'paused'"
+            type="success"
+            @click="handleResume"
+          >
+            <Play class="btn-icon" />
+            继续
+          </el-button>
+          <el-button
+            v-if="['running', 'pending'].includes(execution?.status)"
+            type="danger"
+            @click="handleCancel"
+          >
+            <Square class="btn-icon" />
+            取消
+          </el-button>
+          <el-button
+            v-if="execution?.status === 'failed'"
+            type="primary"
+            @click="handleRetry"
+          >
+            <RotateCcw class="btn-icon" />
+            重试
+          </el-button>
+          <el-button @click="downloadLogs">
+            <Download class="btn-icon" />
+            下载日志
+          </el-button>
+        </div>
+      </div>
 
-      <!-- Output Tab -->
-      <el-tab-pane
-        label="输出数据"
-        name="output"
+      <!-- Progress Section -->
+      <div
+        v-if="execution?.status === 'running' || execution?.status === 'pending'"
+        class="progress-section"
       >
-        <div class="data-viewer">
-          <div class="data-header">
-            <h4>执行结果</h4>
-            <div class="header-actions">
-              <span
-                v-if="execution?.tokens"
-                class="token-count"
-              >
-                {{ execution.tokens.prompt || 0 }} tokens
-              </span>
-              <el-button
-                size="small"
-                text
-                @click="copyToClipboard(executionOutput)"
-              >
-                <Copy class="btn-icon-small" />
-                复制
-              </el-button>
-            </div>
-          </div>
-          <pre
-            v-if="executionOutput"
-            class="data-content"
-          ><code>{{ formatJson(executionOutput) }}</code></pre>
-          <el-empty
-            v-else-if="execution?.status === 'running'"
-            description="执行中，输出暂不可用"
+        <div class="progress-header">
+          <span class="progress-label">执行进度</span>
+          <span class="progress-percentage">{{ progressPercentage }}%</span>
+        </div>
+        <el-progress
+          :percentage="progressPercentage"
+          :status="progressStatus"
+          :stroke-width="10"
+          :duration="6"
+        />
+        <p class="progress-message">
+          <span v-if="currentNodeName">正在执行: {{ currentNodeName }}</span>
+          <span v-else>等待执行...</span>
+        </p>
+      </div>
+
+      <!-- Node Status Overview -->
+      <div class="node-status-overview">
+        <div
+          class="status-card"
+          :class="{ active: true }"
+        >
+          <span class="status-count pending">{{ nodeStatusSummary.pending }}</span>
+          <span class="status-label">待处理</span>
+        </div>
+        <div class="status-card">
+          <span class="status-count running">{{ nodeStatusSummary.running }}</span>
+          <span class="status-label">执行中</span>
+        </div>
+        <div class="status-card">
+          <span class="status-count completed">{{ nodeStatusSummary.completed }}</span>
+          <span class="status-label">已完成</span>
+        </div>
+        <div class="status-card">
+          <span class="status-count failed">{{ nodeStatusSummary.failed }}</span>
+          <span class="status-label">失败</span>
+        </div>
+        <div class="status-card">
+          <span class="status-count skipped">{{ nodeStatusSummary.skipped }}</span>
+          <span class="status-label">跳过</span>
+        </div>
+      </div>
+
+      <!-- Tabs -->
+      <el-tabs
+        v-model="activeTab"
+        class="execution-tabs"
+      >
+        <!-- Node Timeline Tab -->
+        <el-tab-pane
+          label="节点时间线"
+          name="timeline"
+        >
+          <NodeExecutionTimeline
+            v-if="execution"
+            :nodes="executionNodes"
+            :active-node-id="selectedNodeId"
+            :is-running="execution?.status === 'running'"
+            @node-click="handleNodeClick"
           />
           <el-empty
             v-else
-            description="暂无输出数据"
+            description="暂无节点数据"
           />
-        </div>
-      </el-tab-pane>
+        </el-tab-pane>
 
-      <!-- Streaming Output Tab -->
-      <el-tab-pane
-        v-if="isStreaming"
-        label="实时输出"
-        name="streaming"
-      >
-        <StreamingOutputPanel
-          :content="streamingContent"
-          :is-streaming="isStreaming"
-          :current-node="currentStreamingNode"
-          @copy="copyToClipboard(streamingContent)"
-        />
-      </el-tab-pane>
-
-      <!-- Logs Tab -->
-      <el-tab-pane
-        label="执行日志"
-        name="logs"
-      >
-        <ExecutionLogsPanel
-          :logs="executionLogs"
-          :is-live="execution?.status === 'running'"
-          :level-filter="logLevelFilter"
-          @filter-change="logLevelFilter = $event"
-          @clear="clearLogs"
-          @download="downloadLogs"
-        />
-      </el-tab-pane>
-
-      <!-- Error Tab -->
-      <el-tab-pane
-        v-if="execution?.error"
-        label="错误信息"
-        name="error"
-      >
-        <div class="error-viewer">
-          <el-alert
-            :title="execution.error"
-            type="error"
-            :closable="false"
-            show-icon
+        <!-- Node Detail Tab -->
+        <el-tab-pane
+          label="节点详情"
+          name="node-detail"
+        >
+          <NodeExecutionDetail
+            v-if="selectedNode"
+            :node="selectedNode"
+            :is-loading="isLoadingNodeDetail"
           />
-          <div
-            v-if="execution?.traceback"
-            class="traceback-section"
-          >
-            <div class="section-header">
-              <h4>堆栈跟踪</h4>
+          <el-empty
+            v-else
+            description="请从节点时间线选择一个节点查看详情"
+          />
+        </el-tab-pane>
+
+        <!-- Input Tab -->
+        <el-tab-pane
+          label="输入数据"
+          name="input"
+        >
+          <div class="data-viewer">
+            <div class="data-header">
+              <h4>输入参数</h4>
               <el-button
                 size="small"
                 text
-                @click="copyToClipboard(execution.traceback)"
+                @click="copyToClipboard(executionInput)"
               >
                 <Copy class="btn-icon-small" />
                 复制
               </el-button>
             </div>
-            <pre class="traceback-content">{{ execution.traceback }}</pre>
+            <pre class="data-content"><code>{{ formatJson(executionInput) }}</code></pre>
           </div>
-        </div>
-      </el-tab-pane>
-    </el-tabs>
+        </el-tab-pane>
 
-    <template #footer>
+        <!-- Output Tab -->
+        <el-tab-pane
+          label="输出数据"
+          name="output"
+        >
+          <div class="data-viewer">
+            <div class="data-header">
+              <h4>执行结果</h4>
+              <div class="header-actions">
+                <span
+                  v-if="execution?.tokens"
+                  class="token-count"
+                >
+                  {{ execution.tokens.prompt || 0 }} tokens
+                </span>
+                <el-button
+                  size="small"
+                  text
+                  @click="copyToClipboard(executionOutput)"
+                >
+                  <Copy class="btn-icon-small" />
+                  复制
+                </el-button>
+              </div>
+            </div>
+            <pre
+              v-if="executionOutput"
+              class="data-content"
+            ><code>{{ formatJson(executionOutput) }}</code></pre>
+            <el-empty
+              v-else-if="execution?.status === 'running'"
+              description="执行中，输出暂不可用"
+            />
+            <el-empty
+              v-else
+              description="暂无输出数据"
+            />
+          </div>
+        </el-tab-pane>
+
+        <!-- Streaming Output Tab -->
+        <el-tab-pane
+          v-if="isStreaming"
+          label="实时输出"
+          name="streaming"
+        >
+          <StreamingOutputPanel
+            :content="streamingContent"
+            :is-streaming="isStreaming"
+            :current-node="currentStreamingNode"
+            @copy="copyToClipboard(streamingContent)"
+          />
+        </el-tab-pane>
+
+        <!-- Logs Tab -->
+        <el-tab-pane
+          label="执行日志"
+          name="logs"
+        >
+          <ExecutionLogsPanel
+            :logs="executionLogs"
+            :is-live="execution?.status === 'running'"
+            :level-filter="logLevelFilter"
+            @filter-change="logLevelFilter = $event"
+            @clear="clearLogs"
+            @download="downloadLogs"
+          />
+        </el-tab-pane>
+
+        <!-- Error Tab -->
+        <el-tab-pane
+          v-if="execution?.error"
+          label="错误信息"
+          name="error"
+        >
+          <div class="error-viewer">
+            <el-alert
+              :title="execution.error"
+              type="error"
+              :closable="false"
+              show-icon
+            />
+            <div
+              v-if="execution?.traceback"
+              class="traceback-section"
+            >
+              <div class="section-header">
+                <h4>堆栈跟踪</h4>
+                <el-button
+                  size="small"
+                  text
+                  @click="copyToClipboard(execution.traceback)"
+                >
+                  <Copy class="btn-icon-small" />
+                  复制
+                </el-button>
+              </div>
+              <pre class="traceback-content">{{ execution.traceback }}</pre>
+            </div>
+          </div>
+        </el-tab-pane>
+      </el-tabs>
+    </template>
+
+    <template
+      v-if="execution"
+      #footer
+    >
       <div class="dialog-footer">
         <div class="footer-left">
           <span class="execution-meta">
             <Clock class="meta-icon" />
-            开始: {{ formatDateTime(execution?.started_at) }}
+            开始: {{ formatDateTime(execution?.startedAt || execution?.started_at) }}
           </span>
           <span
-            v-if="execution?.duration"
+            v-if="execution?.duration != null || execution?.durationMs != null"
             class="execution-meta"
           >
             <Timer class="meta-icon" />
-            耗时: {{ formatDuration(execution.duration) }}
+            耗时: {{ formatDuration(execution.durationMs != null ? execution.durationMs / 1000 : execution.duration) }}
           </span>
         </div>
         <div class="footer-right">
@@ -362,31 +391,38 @@ const dialogVisible = computed({
 const activeTab = ref('timeline')
 const selectedNodeId = ref(null)
 const isLoadingNodeDetail = ref(false)
+const isLoadingExecution = ref(false)
+const loadError = ref('')
 const logLevelFilter = ref('all')
 const streamingContent = ref('')
 const isStreaming = computed(() => executionStore.isStreaming)
 const currentStreamingNode = ref('')
 
-// WebSocket connection
-let wsConnection = null
+// Polling fallback
 let pollingInterval = null
 
 // Computed
 const execution = computed(() => {
   if (props.execution) return props.execution
   if (executionStore.currentExecution) return executionStore.currentExecution
-  return getMockExecution()
+  return null
 })
 
 const executionNodes = computed(() => {
-  if (execution.value?.nodes) return execution.value.nodes
-  if (execution.value?.node_executions) return execution.value.node_executions
-  return getMockNodes()
+  if (!execution.value) return []
+  if (execution.value.nodes) return execution.value.nodes
+  if (execution.value.nodeExecutions) return execution.value.nodeExecutions
+  if (execution.value.node_executions) return execution.value.node_executions
+  return []
 })
 
 const selectedNode = computed(() => {
   if (!selectedNodeId.value || !executionNodes.value.length) return null
-  return executionNodes.value.find(n => n.id === selectedNodeId.value || n.node_id === selectedNodeId.value)
+  return executionNodes.value.find(n =>
+    n.id === selectedNodeId.value ||
+    n.nodeId === selectedNodeId.value ||
+    n.node_id === selectedNodeId.value
+  )
 })
 
 const executionInput = computed(() => {
@@ -415,7 +451,7 @@ const nodeStatusSummary = computed(() => {
 
   nodes.forEach(node => {
     const status = node.status || 'pending'
-    if (summary.hasOwnProperty(status)) {
+    if (Object.hasOwn(summary, status)) {
       summary[status]++
     }
   })
@@ -442,28 +478,6 @@ const currentNodeName = computed(() => {
 })
 
 // Methods
-function getMockExecution() {
-  return {
-    id: props.executionId,
-    workflow_name: '数据处理流水线',
-    status: 'completed',
-    duration: 4521,
-    started_at: '2024-01-15T14:30:00Z',
-    input_data: { query: 'test', limit: 10 },
-    output_data: { result: 'success', count: 10 }
-  }
-}
-
-function getMockNodes() {
-  return [
-    { id: '1', node_id: '1', name: '开始', type: 'start', status: 'completed', duration_ms: 5 },
-    { id: '2', node_id: '2', name: '数据获取', type: 'http', status: 'completed', duration_ms: 1200 },
-    { id: '3', node_id: '3', name: 'LLM处理', type: 'llm', status: 'completed', duration_ms: 3000, prompt_tokens: 150, completion_tokens: 80, model: 'gpt-4' },
-    { id: '4', node_id: '4', name: '结果保存', type: 'tool', status: 'completed', duration_ms: 316 },
-    { id: '5', node_id: '5', name: '结束', type: 'end', status: 'completed', duration_ms: 0 }
-  ]
-}
-
 function statusLabel(status) {
   const labels = {
     pending: '待处理',
@@ -617,12 +631,33 @@ function stopPolling() {
   }
 }
 
+async function loadExecutionData() {
+  if (!props.executionId) {
+    loadError.value = '缺少执行 ID'
+    return
+  }
+
+  isLoadingExecution.value = true
+  loadError.value = ''
+
+  try {
+    await executionStore.fetchExecutionDetails(props.executionId)
+    await executionStore.fetchExecutionLogs(props.executionId)
+  } catch (error) {
+    loadError.value = error?.message || '加载执行详情失败'
+  } finally {
+    isLoadingExecution.value = false
+  }
+}
+
 // Watchers
-watch(dialogVisible, (val) => {
+watch(dialogVisible, async (val) => {
   if (val) {
     activeTab.value = 'timeline'
     selectedNodeId.value = null
-    if (props.executionId) {
+    loadError.value = ''
+    await loadExecutionData()
+    if (props.executionId && !loadError.value) {
       connectWebSocket()
     }
   } else {
@@ -649,6 +684,10 @@ onUnmounted(() => {
 </script>
 
 <style lang="scss" scoped>
+.execution-loading {
+  min-height: 240px;
+}
+
 .execution-status-bar {
   display: flex;
   justify-content: space-between;
@@ -684,28 +723,28 @@ onUnmounted(() => {
   }
 
   &.pending {
-    background: rgba(107, 114, 128, 0.1);
-    color: #6b7280;
+    background: var(--surface-muted);
+    color: var(--text-tertiary);
   }
 
   &.running {
-    background: rgba(59, 130, 246, 0.1);
-    color: #3b82f6;
+    background: var(--info-bg);
+    color: var(--info);
   }
 
   &.completed {
-    background: rgba(16, 185, 129, 0.1);
-    color: #10b981;
+    background: var(--success-bg);
+    color: var(--success);
   }
 
   &.failed {
-    background: rgba(239, 68, 68, 0.1);
-    color: #ef4444;
+    background: var(--error-bg);
+    color: var(--error);
   }
 
   &.paused {
-    background: rgba(245, 158, 11, 0.1);
-    color: #f59e0b;
+    background: var(--warning-bg);
+    color: var(--warning);
   }
 
   &.large {
@@ -803,11 +842,11 @@ onUnmounted(() => {
     font-size: 24px;
     font-weight: 700;
 
-    &.pending { color: #6b7280; }
-    &.running { color: #3b82f6; }
-    &.completed { color: #10b981; }
-    &.failed { color: #ef4444; }
-    &.skipped { color: #9ca3af; }
+    &.pending { color: var(--text-tertiary); }
+    &.running { color: var(--info); }
+    &.completed { color: var(--success); }
+    &.failed { color: var(--error); }
+    &.skipped { color: var(--text-tertiary); }
   }
 
   .status-label {

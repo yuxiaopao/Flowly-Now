@@ -175,17 +175,44 @@ class WorkflowExecutor:
 
         node_exec = self._create_or_update_node_execution(node, status='running', started_at=timezone.now())
 
-        timeout_seconds = getattr(node, 'timeout_seconds', None) or 300
+        timeout_seconds = getattr(node, 'timeout_seconds', None)
+        if not timeout_seconds:
+            defaults = {
+                'image_generation': 900,
+                'video_generation': 1800,
+                'audio_generation': 300,
+                'subtitle_generation': 600,
+                'video_translation': 3600,
+                'video_upload': 120,
+                'subtitle_translate': 600,
+                'segment_dubbing': 900,
+                'lip_sync': 1200,
+                'subtitle_burn': 600,
+                'model_training': 3600,
+            }
+            timeout_seconds = defaults.get(node.node_type, 300)
         error_handler = ErrorHandlerRegistry.create_from_node(node)
 
         def _do_execute() -> Dict[str, Any]:
-            return langchain_service.execute_node(
+            node_config = node.config or {}
+            if node.node_type == 'email':
+                node_config = self.langchain_service._normalize_email_node_config(node_config)
+            return self.langchain_service.execute_node(
                 node.node_type,
-                node.config,
+                node_config,
                 self.context.to_dict(),
                 timeout_seconds=timeout_seconds
             )
 
+        def _progress_reporter(payload: Dict[str, Any]) -> None:
+            if not node_exec:
+                return
+            merged = {**(node_exec.output_data or {}), **(payload or {})}
+            node_exec.output_data = merged
+            node_exec.save(update_fields=['output_data', 'updated_at'])
+            self._update_node_status(node.id, 'running', merged)
+
+        self.langchain_service.set_progress_reporter(_progress_reporter)
         try:
             result = _do_execute()
         except ExecutionTimeoutError as e:
@@ -202,6 +229,8 @@ class WorkflowExecutor:
             logger.warning(f"Node '{node.name}' execution error: {e}")
             self._handle_node_error(node, result if 'result' in dir() else None, node_exec, error_handler, e)
             raise
+        finally:
+            self.langchain_service.clear_progress_reporter()
 
         if result is None:
             return {
@@ -359,7 +388,10 @@ class WorkflowExecutor:
                 if edge.label == 'default':
                     return [edge.target_node]
 
-            return []
+            # 无分支标签时沿用线性连线（编辑器默认不设置 edge.label）
+            if len(outgoing_edges) == 1:
+                return [outgoing_edges[0].target_node]
+            return [edge.target_node for edge in outgoing_edges]
 
         return [edge.target_node for edge in outgoing_edges]
 
@@ -378,6 +410,9 @@ class WorkflowExecutor:
                 self.context = ExecutionContext(input_data=self.execution.input_data)
             else:
                 self.context = ExecutionContext(input_data={})
+            self.context.set_metadata('user_id', self.execution.triggered_by_id)
+            self.context.set_metadata('workflow_id', str(self.workflow.id))
+            self.context.set_metadata('execution_id', str(self.execution.id))
 
             start_nodes = self.find_start_nodes()
 
@@ -402,7 +437,10 @@ class WorkflowExecutor:
 
                 self._visited.add(current_node.id)
 
-                if current_node.node_type not in ['start', 'end']:
+                if current_node.node_type in ['start', 'end']:
+                    self.node_results[current_node.id] = {'success': True, 'output': {}}
+                    self._update_node_status(current_node.id, 'completed', {})
+                elif current_node.node_type not in ['start', 'end']:
                     result = self.execute_node(current_node)
 
                     if not result.get('success') and not result.get('skipped'):
@@ -518,6 +556,9 @@ class WorkflowExecutor:
                 self.context = ExecutionContext(input_data=self.execution.input_data)
             else:
                 self.context = ExecutionContext(input_data={})
+            self.context.set_metadata('user_id', self.execution.triggered_by_id)
+            self.context.set_metadata('workflow_id', str(self.workflow.id))
+            self.context.set_metadata('execution_id', str(self.execution.id))
 
             start_nodes = self.find_start_nodes()
 
@@ -551,7 +592,17 @@ class WorkflowExecutor:
 
                 self._visited.add(current_node.id)
 
-                if current_node.node_type not in ['start', 'end']:
+                if current_node.node_type in ['start', 'end']:
+                    self.node_results[current_node.id] = {'success': True, 'output': {}}
+                    self._update_node_status(current_node.id, 'completed', {})
+                    yield {
+                        'type': 'node_complete',
+                        'node_id': current_node.id,
+                        'node_name': current_node.name,
+                        'status': 'completed',
+                        'output': {},
+                    }
+                elif current_node.node_type not in ['start', 'end']:
                     yield {
                         'type': 'node_start',
                         'node_id': current_node.id,
@@ -619,24 +670,63 @@ class WorkflowExecutor:
                 'error': str(e)
             }
 
+    def _resolve_node_label(self, node: Optional[Node]) -> str:
+        """Human-readable node label for execution snapshots."""
+        if not node:
+            return ''
+        config = node.config if isinstance(node.config, dict) else {}
+        label = config.get('label')
+        if isinstance(label, str) and label.strip():
+            return label.strip()
+        if node.name and str(node.name).strip():
+            return str(node.name).strip()
+        display = node.get_node_type_display()
+        return display if display else str(node.node_type)
+
     def _update_node_status(
         self,
         node_id: int,
         status: str,
         output: Any = None,
-        error: str = None
+        error: str = None,
+        node: Optional[Node] = None,
     ) -> None:
         """Update node status in execution record."""
         node_status = self.execution.node_status or {}
         existing = node_status.get(str(node_id), {})
-        node_status[str(node_id)] = {
+        if not isinstance(existing, dict):
+            existing = {'status': existing} if existing else {}
+
+        safe_output = self._json_safe(output) if output is not None else existing.get('output')
+        resolved_node = node or self.node_map.get(node_id)
+
+        entry = {
             'status': status,
-            'output': output or existing.get('output'),
-            'error': error or existing.get('error'),
-            'updated_at': timezone.now().isoformat()
+            'output': safe_output,
+            'error': error if error is not None else existing.get('error'),
+            'updated_at': timezone.now().isoformat(),
         }
+
+        if resolved_node:
+            entry['node_name'] = self._resolve_node_label(resolved_node)
+            entry['node_type'] = resolved_node.node_type
+            entry['node_type_display'] = resolved_node.get_node_type_display()
+        else:
+            for key in ('node_name', 'node_type', 'node_type_display'):
+                if existing.get(key) is not None:
+                    entry[key] = existing[key]
+
+        node_status[str(node_id)] = entry
         self.execution.node_status = node_status
         self.execution.save(update_fields=['node_status'])
+
+    @staticmethod
+    def _json_safe(value: Any) -> Any:
+        """Strip circular refs / non-JSON values before persisting node output."""
+        try:
+            return json.loads(json.dumps(value, default=str, ensure_ascii=False))
+        except (TypeError, ValueError):
+            return str(value)
 
     def _broadcast_execution_start(self) -> None:
         """Broadcast execution start via WebSocket."""

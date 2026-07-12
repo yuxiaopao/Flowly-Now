@@ -12,14 +12,16 @@ const routes = [
   {
     path: '/login',
     name: 'Login',
-    component: () => import('@/views/auth/Login.vue'),
+    component: () => import('@/views/auth/AuthPortal.vue'),
     meta: { title: '登录', requiresAuth: false, layout: 'blank' }
   },
   {
     path: '/register',
     name: 'Register',
-    component: () => import('@/views/auth/Register.vue'),
-    meta: { title: '注册', requiresAuth: false, layout: 'blank' }
+    redirect: (to) => ({
+      path: '/login',
+      query: { ...to.query, tab: 'register' },
+    }),
   },
   {
     path: '/forgot-password',
@@ -97,6 +99,18 @@ const routes = [
     component: () => import('@/views/agent/Debugger.vue'),
     meta: { title: 'Agent 调试器', requiresAuth: true, layout: 'default' }
   },
+  {
+    path: '/agents/collaborate',
+    name: 'AgentCollaborate',
+    component: () => import('@/views/agent/Collaborate.vue'),
+    meta: { title: '多智能体协作', requiresAuth: true, layout: 'default' }
+  },
+  {
+    path: '/agents/marketplace',
+    name: 'AgentMarketplace',
+    component: () => import('@/views/agent/Marketplace.vue'),
+    meta: { title: 'Agent 市场', requiresAuth: true, layout: 'default' }
+  },
 
   // NL 生成工作流
   {
@@ -158,12 +172,24 @@ const routes = [
     meta: { title: '标注工作台', requiresAuth: true, layout: 'blank' }
   },
 
-  // 模型训练
+  // 训练页已迁移至工作流节点（旧链接重定向提示）
   {
     path: '/training',
-    name: 'TrainingProgress',
-    component: () => import('@/views/training/TrainingProgress.vue'),
-    meta: { title: '模型训练', requiresAuth: true, layout: 'default' }
+    name: 'TrainingRedirect',
+    component: () => import('@/views/training/TrainingRedirect.vue'),
+    meta: { title: '训练（工作流）', requiresAuth: true, layout: 'default' }
+  },
+  {
+    path: '/training/yolo/:pathMatch(.*)*',
+    redirect: '/training'
+  },
+
+  // 识别项目（website_generator 生成站点）
+  {
+    path: '/projects/:id',
+    name: 'GeneratedSiteProject',
+    component: () => import('@/views/projects/GeneratedSiteDetail.vue'),
+    meta: { title: '识别项目', requiresAuth: true, layout: 'default' }
   },
 
   // Prompt 模板
@@ -203,13 +229,17 @@ const routes = [
     component: () => import('@/views/team/Index.vue'),
     meta: { title: '团队管理', requiresAuth: true, layout: 'default' }
   },
+  {
+    path: '/team/join',
+    name: 'TeamJoin',
+    component: () => import('@/views/team/Join.vue'),
+    meta: { title: '加入团队', requiresAuth: true, layout: 'default' }
+  },
 
-  // 集成
+  // 集成（归入个人中心，旧路径重定向）
   {
     path: '/integrations',
-    name: 'Integrations',
-    component: () => import('@/views/settings/Integrations.vue'),
-    meta: { title: '集成', requiresAuth: true, layout: 'default' }
+    redirect: '/settings/integrations',
   },
 
   // 监控中心
@@ -226,14 +256,6 @@ const routes = [
     name: 'Analytics',
     component: () => import('@/views/analytics/Index.vue'),
     meta: { title: '数据分析', requiresAuth: true, layout: 'default' }
-  },
-
-  // 系统管理
-  {
-    path: '/admin',
-    name: 'Admin',
-    component: () => import('@/views/admin/Index.vue'),
-    meta: { title: '系统管理', requiresAuth: true, layout: 'default', requiresAdmin: true }
   },
 
   // 代码图谱
@@ -257,19 +279,19 @@ const routes = [
     path: '/marketplace',
     name: 'Marketplace',
     component: () => import('@/views/marketplace/Marketplace.vue'),
-    meta: { title: 'Template Gallery', requiresAuth: true, layout: 'default' }
+    meta: { title: '模板市场', requiresAuth: true, layout: 'default' }
   },
   {
     path: '/marketplace/:id',
     name: 'TemplateDetail',
     component: () => import('@/views/marketplace/TemplateDetail.vue'),
-    meta: { title: 'Template Detail', requiresAuth: true, layout: 'default' }
+    meta: { title: '模板详情', requiresAuth: true, layout: 'default' }
   },
   {
     path: '/my-templates',
     name: 'MyTemplates',
     component: () => import('@/views/marketplace/MyTemplates.vue'),
-    meta: { title: 'My Templates', requiresAuth: true, layout: 'default' }
+    meta: { title: '我的模板', requiresAuth: true, layout: 'default' }
   },
 
   // 执行历史
@@ -293,7 +315,7 @@ const routes = [
     path: '/settings',
     name: 'Settings',
     component: () => import('@/views/settings/Settings.vue'),
-    meta: { title: '设置', requiresAuth: true, layout: 'default' },
+    meta: { title: '个人中心', requiresAuth: true, layout: 'default' },
     children: [
       {
         path: '',
@@ -316,6 +338,12 @@ const routes = [
         name: 'SettingsApiDoc',
         component: () => import('@/views/settings/ApiDoc.vue'),
         meta: { title: 'API 文档' }
+      },
+      {
+        path: 'notifications',
+        name: 'SettingsNotifications',
+        component: () => import('@/views/settings/Notifications.vue'),
+        meta: { title: '通知与邮件' }
       },
       {
         path: 'preferences',
@@ -346,6 +374,18 @@ const routes = [
                   name: 'SettingsCredentials',
                   component: () => import('@/views/settings/Credentials.vue'),
                   meta: { title: '凭证管理' }
+                },
+                {
+                  path: 'integrations',
+                  name: 'SettingsIntegrations',
+                  component: () => import('@/views/settings/Integrations.vue'),
+                  meta: { title: '第三方集成' }
+                },
+                {
+                  path: 'desktop-agent',
+                  name: 'SettingsDesktopAgent',
+                  component: () => import('@/views/settings/DesktopAgent.vue'),
+                  meta: { title: '桌面端' }
                 }
             ]
           },
@@ -364,9 +404,10 @@ function setupRouterGuard(router) {
   router.beforeEach(async (to, from, next) => {
     const authStore = useAuthStore()
     
-    // 设置页面标题
-    document.title = to.meta.title
-      ? `${to.meta.title} - Flowly`
+    // 设置页面标题（嵌套路由取最深匹配项的 title）
+    const routeTitle = [...to.matched].reverse().find((record) => record.meta?.title)?.meta?.title
+    document.title = routeTitle
+      ? `${routeTitle} - Flowly`
       : 'Flowly - AI Agent 工作流编排平台'
 
     // 检查是否需要认证
@@ -390,11 +431,6 @@ function setupRouterGuard(router) {
           return
         }
       }
-    }
-
-    if (to.meta.requiresAdmin && !authStore.isAdmin) {
-      next({ name: 'Dashboard' })
-      return
     }
 
     // 已登录用户访问登录/注册页，重定向到首页

@@ -56,12 +56,30 @@
         >
           <el-input
             v-model="localData.inputPath"
-            placeholder="音频或视频文件路径"
+            placeholder="音频或视频文件路径，或公网可访问的 URL"
             @change="handleChange"
           />
           <div class="field-hint">
-            支持本地路径或URL
+            本地路径使用 OpenAI Whisper；公网 URL 使用阿里云百炼 Paraformer
           </div>
+        </el-form-item>
+
+        <el-form-item label="语音识别服务商">
+          <el-select
+            v-model="localData.provider"
+            placeholder="自动（本地文件用 OpenAI，URL 用 DashScope）"
+            clearable
+            @change="handleChange"
+          >
+            <el-option
+              label="OpenAI Whisper (本地文件)"
+              value="openai"
+            />
+            <el-option
+              label="阿里云百炼 Paraformer (公网 URL)"
+              value="dashscope"
+            />
+          </el-select>
         </el-form-item>
       </div>
 
@@ -110,6 +128,10 @@
             <span class="preview-value">{{ localData.inputType || 'audio' }}</span>
           </div>
           <div class="preview-row">
+            <span class="preview-label">服务商:</span>
+            <span class="preview-value">{{ localData.provider || '自动' }}</span>
+          </div>
+          <div class="preview-row">
             <span class="preview-label">语言:</span>
             <span class="preview-value">{{ localData.language || 'en' }}</span>
           </div>
@@ -124,7 +146,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, watch } from 'vue'
+import { reactive, watch } from 'vue'
 
 const props = defineProps({
   modelValue: {
@@ -140,6 +162,7 @@ const localData = reactive({
   description: '',
   inputType: 'audio',
   inputPath: '',
+  provider: '',
   language: 'en',
   format: 'srt'
 })
@@ -151,6 +174,7 @@ watch(() => props.modelValue, (newVal) => {
       description: newVal.description || '',
       inputType: newVal.inputType || 'audio',
       inputPath: newVal.inputPath || '',
+      provider: newVal.provider || '',
       language: newVal.language || 'en',
       format: newVal.format || 'srt'
     })

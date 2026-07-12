@@ -1,0 +1,102 @@
+name: Nightly Workflow Node Tests
+
+on:
+  schedule:
+    # Daily at 18:00 UTC (02:00 CST)
+    - cron: '0 18 * * *'
+  workflow_dispatch:
+    inputs:
+      require_llm:
+        description: 'Fail the job if LLM-dependent nodes fail'
+        required: false
+        default: 'false'
+        type: boolean
+
+env:
+  PYTHON_VERSION: '3.12'
+
+jobs:
+  workflow-all-nodes:
+    runs-on: ubuntu-latest
+    continue-on-error: ${{ github.event_name == 'schedule' || github.event.inputs.require_llm != 'true' }}
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: flowly_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-nightly-${{ hashFiles('requirements.txt', 'requirements.in') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-nightly-
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run migrations
+        env:
+          DB_NAME: flowly_test
+          DB_USER: root
+          DB_PASSWORD: root
+          DB_HOST: 127.0.0.1
+        run: |
+          cd Backend
+          python manage.py migrate --settings=config.settings
+
+      - name: Seed smoke test user and demo data
+        env:
+          DB_NAME: flowly_test
+          DB_USER: root
+          DB_PASSWORD: root
+          DB_HOST: 127.0.0.1
+        run: |
+          cd Backend
+          python scripts/ensure_smoke_test_user.py
+
+      - name: Run workflow all-nodes test
+        env:
+          DB_NAME: flowly_test
+          DB_USER: root
+          DB_PASSWORD: root
+          DB_HOST: 127.0.0.1
+          REDIS_HOST: 127.0.0.1
+          OLLAMA_HOST: ${{ secrets.OLLAMA_HOST }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          cd Backend
+          daphne -b 127.0.0.1 -p 8000 config.asgi:application &
+          SERVER_PID=$!
+          sleep 10
+          if [ -z "$OLLAMA_HOST" ] && [ -z "$OPENAI_API_KEY" ]; then
+            echo "No LLM credentials configured — running direct-only subset may still fail on llm/agent nodes."
+          fi
+          python scripts/workflow_all_nodes_test.py
+          EXIT_CODE=$?
+          kill $SERVER_PID || true
+          exit $EXIT_CODE

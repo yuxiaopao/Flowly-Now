@@ -6,6 +6,7 @@
 
 import { request } from './index'
 import Cookies from 'js-cookie'
+import { getPublicApiUrl } from '@/config'
 
 // =============================================================================
 // 类型定义 (引用自 @/types/)
@@ -457,6 +458,14 @@ export async function getExecutionStatus(executionId) {
 }
 
 /**
+ * 获取执行时间线（状态 + 节点执行 + 日志，单次请求）
+ * @param {number|string} executionId
+ */
+export async function getExecutionTimeline(executionId) {
+  return request.get(`/workflows/executions/${executionId}/timeline/`)
+}
+
+/**
  * 获取执行输出
  * @param {number|string} executionId - 执行ID
  * @returns {Promise<{output_data: Object}>}
@@ -576,7 +585,8 @@ export async function getExecutionStatistics() {
  * const nodes = await getExecutionNodes(123)
  */
 export async function getExecutionNodes(executionId) {
-  return request.get(`/workflows/executions/${executionId}/nodes/`)
+  const timeline = await getExecutionTimeline(executionId)
+  return timeline.nodeExecutions ?? timeline.node_executions ?? []
 }
 
 /**
@@ -589,7 +599,14 @@ export async function getExecutionNodes(executionId) {
  * const nodeDetail = await getExecutionNodeDetail(123, 'node-1')
  */
 export async function getExecutionNodeDetail(executionId, nodeId) {
-  return request.get(`/workflows/executions/${executionId}/nodes/${nodeId}/`)
+  const nodes = await getExecutionNodes(executionId)
+  const matched = nodes.find(n =>
+    String(n.id) === String(nodeId) ||
+    String(n.nodeId) === String(nodeId) ||
+    String(n.node_id) === String(nodeId)
+  )
+  if (matched) return matched
+  return request.get(`/node-executions/${nodeId}/`)
 }
 
 /**
@@ -606,9 +623,7 @@ export async function getExecutionNodeDetail(executionId, nodeId) {
  */
 export async function streamExecuteSSE(workflowId, inputData = {}) {
   const token = Cookies.get('access_token') || localStorage.getItem('access_token')
-  const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:'
-  const host = window.location.host
-  const url = `${protocol}//${host}/api/v1/workflows/${workflowId}/stream_execute/`
+  const url = getPublicApiUrl(`/workflows/${workflowId}/stream_execute/`)
   
   return new EventSource(`${url}?${new URLSearchParams({ input_data: JSON.stringify(inputData), token })}`)
 }
@@ -802,6 +817,88 @@ export async function getTemplatesByCategory() {
 }
 
 /**
+ * 创建模板（发布态，非草稿）
+ * @param {Object} data - 模板数据
+ * @returns {Promise<Object>} 创建的模板
+ */
+export async function createTemplate(data) {
+  return request.post('/templates/', data)
+}
+
+/**
+ * 更新模板
+ * @param {string|number} id - 模板 ID
+ * @param {Object} data - 更新数据
+ * @returns {Promise<Object>} 更新后的模板
+ */
+export async function updateTemplate(id, data) {
+  return request.patch(`/templates/${id}/`, data)
+}
+
+/**
+ * 删除模板
+ * @param {string|number} id - 模板 ID
+ */
+export async function deleteTemplate(id) {
+  return request.delete(`/templates/${id}/`)
+}
+
+/**
+ * 发布模板
+ * @param {string|number} id - 模板 ID
+ * @returns {Promise<Object>} 更新后的模板
+ */
+export async function publishTemplate(id) {
+  return request.patch(`/templates/${id}/publish/`)
+}
+
+/**
+ * 取消发布模板
+ * @param {string|number} id - 模板 ID
+ * @returns {Promise<Object>} 更新后的模板
+ */
+export async function unpublishTemplate(id) {
+  return request.patch(`/templates/${id}/unpublish/`)
+}
+
+/**
+ * 安装模板（返回安装记录）
+ * @param {string|number} id - 模板 ID
+ * @returns {Promise<Object>} 安装结果
+ */
+export async function installTemplate(id) {
+  return request.post(`/templates/${id}/install/`)
+}
+
+/**
+ * 评分模板
+ * @param {string|number} id - 模板 ID
+ * @param {number} rating - 评分 1-5
+ * @returns {Promise<Object>} 评分结果
+ */
+export async function rateTemplate(id, rating) {
+  return request.post(`/templates/${id}/rate/`, { rating })
+}
+
+/**
+ * 获取我的模板列表（分页）
+ * @param {Object} params - 查询参数
+ * @returns {Promise<Object>} 分页结果 { count, results }
+ */
+export async function getMyTemplates(params = {}) {
+  return request.get('/templates/mine/', { params }).then(unwrapPaginatedResponse)
+}
+
+/**
+ * 获取已安装模板列表（分页）
+ * @param {Object} params - 查询参数
+ * @returns {Promise<Object>} 分页结果 { count, results }
+ */
+export async function getInstalledTemplates(params = {}) {
+  return request.get('/templates/installed/', { params }).then(unwrapPaginatedResponse)
+}
+
+/**
  * 领域节点类型元数据
  * @returns {Promise<Array>} 可用的领域节点类型
  * @throws {import('@/utils/request').RequestError}
@@ -809,7 +906,24 @@ export async function getTemplatesByCategory() {
  * const nodeTypes = await getDomainNodeTypes()
  */
 export async function getDomainNodeTypes() {
-  return request.get('/nodes/available_types/')
+  return request.get('/workflows/nodes/available_types/')
+}
+
+/**
+ * 系统/global SMTP 默认配置（供邮件节点预填，密码已脱敏）
+ */
+export async function getEmailSmtpDefaults() {
+  return request.get('/workflows/email-smtp-defaults/')
+}
+
+/**
+ * 上传视频/音频媒体（视频翻译等）
+ * @param {File} file
+ */
+export async function uploadMedia(file) {
+  const formData = new FormData()
+  formData.append('file', file)
+  return request.post('/media/upload/', formData)
 }
 
 // =============================================================================
@@ -852,6 +966,7 @@ export const workflowApi = {
   // 执行管理
   getExecution,
   getExecutionStatus,
+  getExecutionTimeline,
   getExecutionOutput,
   getExecutionHistory,
   getAllExecutions,
@@ -873,7 +988,18 @@ export const workflowApi = {
   getTemplateCategory,
   getFeaturedTemplates,
   getTemplatesByCategory,
+  createTemplate,
+  updateTemplate,
+  deleteTemplate,
+  publishTemplate,
+  unpublishTemplate,
+  installTemplate,
+  rateTemplate,
+  getMyTemplates,
+  getInstalledTemplates,
   getDomainNodeTypes,
+  getEmailSmtpDefaults,
+  uploadMedia,
 
   // 工具
   getTools,

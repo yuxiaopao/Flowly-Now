@@ -1,0 +1,30 @@
+{% if flowly_tabs %}
+<nav class="flowly-tab-bar" aria-label="Flowly 管理导航">
+    <div class="flowly-tab-chrome" aria-hidden="true"></div>
+    <div class="flowly-tab-row">
+        <div class="flowly-tab-strip" role="tablist">
+            {% for tab in flowly_tabs %}
+            <a href="{{ tab.url }}"
+               class="f-tab{% if flowly_active_tab == tab.id %} active{% endif %}"
+               role="tab"
+               data-tab="{{ tab.id }}"
+               {% if flowly_active_tab == tab.id %}aria-selected="true" aria-current="page"{% else %}aria-selected="false"{% endif %}
+               tabindex="{% if flowly_active_tab == tab.id %}0{% else %}-1{% endif %}">
+                <i class="{{ tab.icon }}" aria-hidden="true"></i>
+                <span>{{ tab.label }}</span>
+            </a>
+            {% endfor %}
+        </div>
+        <div class="flowly-tab-tools">
+            <a href="/api/docs/" class="flowly-tab-tool" target="_blank" rel="noopener noreferrer" title="API 文档">
+                <i class="fas fa-book" aria-hidden="true"></i>
+                <span>API</span>
+            </a>
+            <a href="{{ frontend_url }}/" target="_blank" rel="noopener noreferrer" class="flowly-tab-tool" title="打开用户端">
+                <i class="fas fa-external-link-alt" aria-hidden="true"></i>
+                <span>用户端</span>
+            </a>
+        </div>
+    </div>
+</nav>
+{% endif %}

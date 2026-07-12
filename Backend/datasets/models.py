@@ -36,6 +36,10 @@ class Dataset(models.Model):
         ('csv', 'CSV'),
         ('json', 'JSON'),
         ('parquet', 'Parquet'),
+        ('yolo', 'YOLO'),
+        ('image_folder', 'Image Folder'),
+        ('image_text_pairs', 'Image-Text Pairs'),
+        ('classification_folders', 'Classification Folders'),
     ]
 
     STATUS_CHOICES = [
@@ -68,7 +72,7 @@ class Dataset(models.Model):
     s3_bucket = models.CharField(max_length=255, blank=True, verbose_name='S3存储桶')
 
     format = models.CharField(
-        max_length=10,
+        max_length=32,
         choices=FORMAT_CHOICES,
         default='csv',
         verbose_name='数据格式'
@@ -142,7 +146,12 @@ class Dataset(models.Model):
     @property
     def is_ready(self):
         """Check if dataset is ready for use."""
-        return self.status == 'ready' and self.row_count > 0
+        if self.status != 'ready':
+            return False
+        if self.row_count > 0:
+            return True
+        stats = (self.metadata or {}).get('stats') or {}
+        return bool(stats.get('image_count') or stats.get('label_count'))
 
     def get_absolute_file_path(self):
         """Get the absolute file path for the dataset."""

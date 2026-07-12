@@ -6,11 +6,14 @@
 import { ref, computed } from 'vue'
 import { agentApi } from '@/api/agent'
 import { useAgentStore } from '@/stores/agent'
+import { useAppStore } from '@/stores/app'
+import { APP_CONFIG } from '@/config'
 
 const DEFAULT_MESSAGE_TIMESTAMP = () => new Date().toISOString()
 
-export function useAgent(options = {}) {
+export function useAgent(_options = {}) {
   const agentStore = useAgentStore()
+  const appStore = useAppStore()
 
   // Agent 状态
   const currentAgent = ref(null)
@@ -223,6 +226,8 @@ export function useAgent(options = {}) {
     }
     messages.value.push(assistantMessage)
 
+    let reader = null
+
     try {
       // Use config-based URL for stream request
       const baseUrl = APP_CONFIG.apiBaseUrl
@@ -248,9 +253,10 @@ export function useAgent(options = {}) {
         throw new Error(`HTTP error! status: ${response.status}`)
       }
 
-      const reader = response.body.getReader()
+      reader = response.body.getReader()
       const decoder = new TextDecoder()
 
+      // eslint-disable-next-line no-constant-condition -- SSE stream read loop
       while (true) {
         const { done, value } = await reader.read()
         if (done) break

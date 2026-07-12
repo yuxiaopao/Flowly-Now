@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="collection-detail">
     <div class="page-header">
       <div class="header-left">
@@ -76,7 +76,7 @@
         <div class="stat-content">
           <Clock class="stat-icon" />
           <div class="stat-info">
-            <span class="stat-value">{{ formatDate(collection.updated_at) }}</span>
+            <span class="stat-value">{{ formatDate(collection.updatedAt || collection.updated_at) }}</span>
             <span class="stat-label">最后更新</span>
           </div>
         </div>
@@ -95,7 +95,7 @@
       >
         <div class="tab-toolbar">
           <el-input
-            v-model="searchQuery"
+            v-model="documentFilterQuery"
             placeholder="搜索文档..."
             :prefix-icon="Search"
             clearable
@@ -302,7 +302,7 @@
           </el-table-column>
           <el-table-column
             prop="token_count"
-            label="Token"
+            label="Token 数"
             width="100"
             align="center"
           />
@@ -340,7 +340,7 @@
             </template>
             <div class="search-form">
               <el-input
-                v-model="searchQuery"
+                v-model="semanticSearchQuery"
                 type="textarea"
                 :rows="3"
                 placeholder="输入搜索查询..."
@@ -525,7 +525,7 @@
               </div>
               <el-button
                 type="danger"
-                @click="clearCollection"
+                @click="clearCollectionAction"
               >
                 清空
               </el-button>
@@ -537,7 +537,7 @@
               </div>
               <el-button
                 type="danger"
-                @click="deleteCollection"
+                @click="deleteCollectionAction"
               >
                 删除
               </el-button>
@@ -739,7 +739,7 @@
           </el-col>
           <el-col :span="8">
             <div class="mini-stat">
-              <span class="mini-value">{{ stats.totalTokens.toLocaleString() }}</span>
+              <span class="mini-value">{{ (stats.totalTokens ?? 0).toLocaleString() }}</span>
               <span class="mini-label">总 Token</span>
             </div>
           </el-col>
@@ -756,7 +756,7 @@
               <div class="bar-track">
                 <div
                   class="bar-fill"
-                  :style="{ width: (count / stats.chunks * 100) + '%' }"
+                  :style="{ width: (stats.chunks ? (count / stats.chunks * 100) : 0) + '%' }"
                 />
               </div>
               <span class="bar-value">{{ count }}</span>
@@ -774,11 +774,14 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
 import { useAppStore } from '@/stores/app'
 import {
-  ArrowLeft, Edit, Upload, Document, Grid, Box, Clock, Search,
+  ArrowLeft, Edit, Upload, Document, Clock, Search,
   TrendCharts, UploadFilled
 } from '@element-plus/icons-vue'
 import { formatDate, formatDateTime } from '@/utils/formatters'
 import { ragApi } from '@/api/rag'
+import { APP_CONFIG } from '@/config'
+
+const DEFAULT_EMBEDDING_MODEL = APP_CONFIG.embedding.defaultModel
 
 const appStore = useAppStore()
 const route = useRoute()
@@ -823,7 +826,8 @@ const stats = ref({
 const documents = ref([])
 const chunks = ref([])
 
-const searchQuery = ref('')
+const documentFilterQuery = ref('')
+const semanticSearchQuery = ref('')
 const chunkSearchQuery = ref('')
 const chunkPage = ref(1)
 const chunkPageSize = ref(20)
@@ -836,7 +840,7 @@ const textForm = reactive({ title: '', content: '' })
 const urlForm = reactive({ url: '', title: '' })
 
 const settingsForm = reactive({
-  embedding_model: 'text-embedding-ada-002',
+  embedding_model: DEFAULT_EMBEDDING_MODEL,
   chunk_size: 1000,
   chunk_overlap: 200,
   dimension: 1536,
@@ -860,8 +864,8 @@ const chunkDistribution = ref({
 const filteredDocuments = computed(() => {
   let result = [...documents.value]
 
-  if (searchQuery.value) {
-    const query = searchQuery.value.toLowerCase()
+  if (documentFilterQuery.value) {
+    const query = documentFilterQuery.value.toLowerCase()
     result = result.filter(d => d.title.toLowerCase().includes(query))
   }
 
@@ -897,6 +901,25 @@ async function fetchCollection() {
   try {
     const response = await ragApi.getCollection(collectionId)
     collection.value = { ...collection.value, ...response }
+    Object.assign(settingsForm, {
+      embedding_model: response.embeddingModel || response.embedding_model || settingsForm.embedding_model,
+      chunk_size: response.chunkSize || response.chunk_size || settingsForm.chunk_size,
+      chunk_overlap: response.chunkOverlap || response.chunk_overlap || settingsForm.chunk_overlap,
+    })
+    Object.assign(editForm, {
+      name: response.name || collection.value.name,
+      description: response.description || collection.value.description || '',
+    })
+  } catch {
+    // Error shown via API interceptor
+  }
+}
+
+async function fetchStats() {
+  try {
+    const data = await ragApi.getCollectionStats(route.params.id)
+    stats.value.documents = data.documentCount ?? data.document_count ?? 0
+    stats.value.chunks = data.chunkCount ?? data.chunk_count ?? 0
   } catch {
     // Error shown via API interceptor
   }
@@ -905,7 +928,7 @@ async function fetchCollection() {
 async function fetchDocuments() {
   loadingDocuments.value = true
   try {
-    const response = await ragApi.getDocuments(route.params.id)
+    const response = await ragApi.getDocuments({ collection: route.params.id })
     documents.value = response.results || response || []
   } catch {
     // Error shown via API interceptor
@@ -917,11 +940,27 @@ async function fetchDocuments() {
 async function fetchChunks() {
   loadingChunks.value = true
   try {
-    const response = await ragApi.getChunks(route.params.id, {
-      page: chunkPage.value,
-      page_size: chunkPageSize.value
-    })
-    chunks.value = response.results || response || []
+    const docs = documents.value.length
+      ? documents.value
+      : ((await ragApi.getDocuments({ collection: route.params.id })).results || [])
+    const allChunks = []
+    for (const doc of docs) {
+      const chunksRes = await ragApi.getDocumentChunks(doc.id)
+      const list = chunksRes.results || chunksRes || []
+      for (const chunk of list) {
+        allChunks.push({
+          ...chunk,
+          document_id: doc.id,
+          document_title: doc.title,
+        })
+      }
+    }
+    chunks.value = allChunks
+    const tokenCounts = allChunks.map(c => c.tokenCount ?? c.token_count ?? 0).filter(Boolean)
+    if (tokenCounts.length) {
+      stats.value.avgTokens = Math.round(tokenCounts.reduce((a, b) => a + b, 0) / tokenCounts.length)
+      stats.value.totalTokens = tokenCounts.reduce((a, b) => a + b, 0)
+    }
   } catch {
     // Error shown via API interceptor
   } finally {
@@ -929,14 +968,14 @@ async function fetchChunks() {
   }
 }
 
+async function refreshCollectionData() {
+  await Promise.all([fetchCollection(), fetchDocuments(), fetchStats()])
+  await fetchChunks()
+}
+
 // Initial data fetch
 onMounted(async () => {
-  await Promise.all([
-    fetchCollection(),
-    fetchDocuments(),
-    fetchChunks()
-  ])
-  Object.assign(editForm, { name: collection.value.name, description: collection.value.description })
+  await refreshCollectionData()
 })
 
 const formatSize = (bytes) => {
@@ -969,21 +1008,65 @@ const handleSelectionChange = (selection) => {
 
 const handleUpload = async () => {
   uploading.value = true
+  const collectionId = route.params.id
   try {
-    await new Promise(resolve => setTimeout(resolve, 1500))
+    if (uploadTab.value === 'file') {
+      if (!fileList.value.length) {
+        appStore.error('请选择要上传的文件')
+        return
+      }
+      for (const file of fileList.value) {
+        const rawFile = file.raw || file.originFileObj || (file instanceof File ? file : null)
+        if (!rawFile) {
+          appStore.error('无法读取文件内容，请重新选择')
+          return
+        }
+        const formData = new FormData()
+        formData.append('file', rawFile)
+        await ragApi.uploadFile(collectionId, formData)
+      }
+    } else if (uploadTab.value === 'text') {
+      if (!textForm.title.trim() || !textForm.content.trim()) {
+        appStore.error('请填写标题和内容')
+        return
+      }
+      await ragApi.addDocument(collectionId, {
+        title: textForm.title,
+        content: textForm.content,
+      })
+    } else {
+      if (!urlForm.url.trim()) {
+        appStore.error('请填写 URL')
+        return
+      }
+      await ragApi.addUrl(collectionId, {
+        url: urlForm.url,
+        title: urlForm.title || undefined,
+      })
+    }
     appStore.success('文档上传成功')
     showUploadDialog.value = false
     fileList.value = []
     Object.assign(textForm, { title: '', content: '' })
     Object.assign(urlForm, { url: '', title: '' })
+    await refreshCollectionData()
   } finally {
     uploading.value = false
   }
 }
 
-const viewDocument = (doc) => {
-  selectedDocument.value = doc
-  showDocumentDialog.value = true
+const viewDocument = async (doc) => {
+  try {
+    const detail = await ragApi.getDocument(doc.id)
+    const chunksRes = await ragApi.getDocumentChunks(doc.id)
+    selectedDocument.value = {
+      ...detail,
+      chunks: chunksRes.results || chunksRes || [],
+    }
+    showDocumentDialog.value = true
+  } catch {
+    // Error shown via API interceptor
+  }
 }
 
 const viewDocumentById = (id) => {
@@ -994,42 +1077,57 @@ const viewDocumentById = (id) => {
 const reprocessDocument = async (doc) => {
   try {
     await ElMessageBox.confirm(`重新处理文档「${doc.title}」？`, '确认', { type: 'info' })
+    await ragApi.reprocessDocument(doc.id)
     appStore.success('文档重新处理已启动')
-  } catch (e) {}
+    await refreshCollectionData()
+  } catch (_e) { /* noop */ }
 }
 
 const deleteDocument = async (doc) => {
   try {
     await ElMessageBox.confirm(`删除文档「${doc.title}」？`, '确认', { type: 'warning' })
+    await ragApi.deleteDocument(doc.id)
     appStore.success('文档已删除')
-  } catch (e) {}
+    await refreshCollectionData()
+  } catch (_e) { /* noop */ }
 }
 
 const reprocessDocuments = async () => {
   try {
     await ElMessageBox.confirm(`重新处理选中的 ${selectedDocuments.value.length} 个文档？`, '确认', { type: 'info' })
+    await Promise.all(selectedDocuments.value.map(doc => ragApi.reprocessDocument(doc.id)))
     appStore.success('批量重新处理已启动')
-  } catch (e) {}
+    await refreshCollectionData()
+  } catch (_e) { /* noop */ }
 }
 
 const deleteDocuments = async () => {
   try {
     await ElMessageBox.confirm(`删除选中的 ${selectedDocuments.value.length} 个文档？`, '确认', { type: 'warning' })
+    await Promise.all(selectedDocuments.value.map(doc => ragApi.deleteDocument(doc.id)))
     appStore.success('批量删除成功')
-  } catch (e) {}
+    selectedDocuments.value = []
+    await refreshCollectionData()
+  } catch (_e) { /* noop */ }
 }
 
 const performSearch = async () => {
-  if (!searchQuery.value.trim()) return
+  if (!semanticSearchQuery.value.trim()) return
   searching.value = true
   hasSearched.value = true
   try {
-    await new Promise(resolve => setTimeout(resolve, 1000))
-    searchResults.value = [
-      { score: 0.92, content: '这是搜索结果的第一条内容...', document_title: '产品介绍.pdf' },
-      { score: 0.87, content: '这是搜索结果的第二条内容...', document_title: '用户手册.docx' },
-      { score: 0.75, content: '这是搜索结果的第三条内容...', document_title: 'API 文档.md' }
-    ]
+    const response = await ragApi.searchCollection(route.params.id, {
+      query: semanticSearchQuery.value.trim(),
+      top_k: searchTopK.value,
+    })
+    const results = response.results || []
+    searchResults.value = results
+      .filter(r => (r.score ?? 0) >= searchMinSimilarity.value)
+      .map(r => ({
+        score: r.score ?? 0,
+        content: r.content || '',
+        document_title: r.metadata?.title || r.documentTitle || '未知文档',
+      }))
   } finally {
     searching.value = false
   }
@@ -1037,41 +1135,54 @@ const performSearch = async () => {
 
 const saveSettings = async () => {
   try {
-    await new Promise(resolve => setTimeout(resolve, 500))
+    await ragApi.updateCollection(route.params.id, {
+      embedding_model: settingsForm.embedding_model,
+      chunk_size: settingsForm.chunk_size,
+      chunk_overlap: settingsForm.chunk_overlap,
+    })
     appStore.success('设置保存成功')
-  } catch (e) {}
+    await fetchCollection()
+  } catch (_e) { /* noop */ }
 }
 
 const reprocessAll = async () => {
   try {
     await ElMessageBox.confirm('重新处理集合中的所有文档？这可能需要较长时间。', '确认', { type: 'warning' })
+    await Promise.all(documents.value.map(doc => ragApi.reprocessDocument(doc.id)))
     appStore.success('重新处理任务已启动')
-  } catch (e) {}
+    await refreshCollectionData()
+  } catch (_e) { /* noop */ }
 }
 
-const clearCollection = async () => {
+const clearCollectionAction = async () => {
   try {
     await ElMessageBox.confirm('清空集合中的所有文档和分块？此操作不可撤销。', '警告', { type: 'warning' })
+    await ragApi.clearCollection(route.params.id)
     appStore.success('集合已清空')
-  } catch (e) {}
+    await refreshCollectionData()
+  } catch (_e) { /* noop */ }
 }
 
-const deleteCollection = async () => {
+const deleteCollectionAction = async () => {
   try {
     await ElMessageBox.confirm('永久删除此集合？所有数据将无法恢复。', '危险操作', { type: 'error' })
+    await ragApi.deleteCollection(route.params.id)
     appStore.success('集合已删除')
     router.push('/knowledge')
-  } catch (e) {}
+  } catch (_e) { /* noop */ }
 }
 
 const saveEdit = async () => {
   try {
-    await new Promise(resolve => setTimeout(resolve, 500))
+    await ragApi.updateCollection(route.params.id, {
+      name: editForm.name,
+      description: editForm.description,
+    })
     collection.value.name = editForm.name
     collection.value.description = editForm.description
     appStore.success('保存成功')
     showEditDialog.value = false
-  } catch (e) {}
+  } catch (_e) { /* noop */ }
 }
 </script>
 
@@ -1178,6 +1289,7 @@ const saveEdit = async () => {
   text-overflow: ellipsis;
   display: -webkit-box;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
 }
 

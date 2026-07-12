@@ -29,10 +29,7 @@
       ref="contentRef"
       class="stream-content"
     >
-      <pre
-        class="content-text"
-        v-html="formattedContent"
-      />
+      <pre class="content-text">{{ content }}</pre>
       <span
         v-if="isStreaming"
         class="streaming-cursor"
@@ -53,7 +50,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, watch, nextTick } from 'vue'
 import { Zap, Copy, Loader } from 'lucide-vue-next'
 
 const props = defineProps({
@@ -71,28 +68,9 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['copy'])
+defineEmits(['copy'])
 
 const contentRef = ref(null)
-
-const formattedContent = computed(() => {
-  if (!props.content) return ''
-
-  let formatted = props.content
-    // Escape HTML
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    // Format markdown
-    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*(.*?)\*/g, '<em>$1</em>')
-    .replace(/`(.*?)`/g, '<code>$1</code>')
-    .replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>')
-    // Line breaks
-    .replace(/\n/g, '<br>')
-
-  return formatted
-})
 
 function scrollToBottom() {
   if (contentRef.value) {
@@ -109,7 +87,8 @@ watch(() => props.content, () => {
 
 <style lang="scss" scoped>
 .streaming-output-panel {
-  background: #1e1e2e;
+  background: var(--code-bg);
+  border: 1px solid var(--code-border);
   border-radius: 8px;
   overflow: hidden;
 }
@@ -119,8 +98,8 @@ watch(() => props.content, () => {
   justify-content: space-between;
   align-items: center;
   padding: 12px 16px;
-  background: #2d2d3d;
-  border-bottom: 1px solid #3d3d4d;
+  background: var(--code-surface);
+  border-bottom: 1px solid var(--code-border);
 
   .header-left {
     display: flex;
@@ -133,11 +112,12 @@ watch(() => props.content, () => {
     align-items: center;
     gap: 6px;
     padding: 4px 10px;
-    background: rgba(59, 130, 246, 0.2);
+    background: var(--info-bg);
     border-radius: 12px;
     font-size: 12px;
     font-weight: 600;
-    color: #60a5fa;
+    color: var(--info);
+    transition: background-color 0.2s ease;
 
     .stream-icon {
       width: 14px;
@@ -147,7 +127,7 @@ watch(() => props.content, () => {
 
   .current-node {
     font-size: 12px;
-    color: #9ca3af;
+    color: var(--code-muted);
   }
 }
 
@@ -158,46 +138,17 @@ watch(() => props.content, () => {
   font-family: 'JetBrains Mono', monospace;
   font-size: 13px;
   line-height: 1.6;
-  color: #e5e7eb;
+  color: var(--code-text);
 
   .content-text {
     margin: 0;
     white-space: pre-wrap;
     word-break: break-word;
-
-    :deep(strong) {
-      font-weight: 600;
-      color: #f9fafb;
-    }
-
-    :deep(em) {
-      font-style: italic;
-      color: #d1d5db;
-    }
-
-    :deep(code) {
-      background: rgba(255, 255, 255, 0.1);
-      padding: 2px 6px;
-      border-radius: 4px;
-      font-size: 12px;
-    }
-
-    :deep(pre) {
-      background: rgba(0, 0, 0, 0.3);
-      padding: 12px;
-      border-radius: 6px;
-      overflow-x: auto;
-
-      code {
-        background: transparent;
-        padding: 0;
-      }
-    }
   }
 
   .streaming-cursor {
     display: inline-block;
-    color: #60a5fa;
+    color: var(--color-primary);
     font-weight: 700;
     animation: blink 1s infinite;
   }
@@ -208,12 +159,12 @@ watch(() => props.content, () => {
   justify-content: space-between;
   align-items: center;
   padding: 8px 16px;
-  background: #2d2d3d;
-  border-top: 1px solid #3d3d4d;
+  background: var(--code-surface);
+  border-top: 1px solid var(--code-border);
 
   .char-count {
     font-size: 11px;
-    color: #6b7280;
+    color: var(--code-muted);
     font-family: 'JetBrains Mono', monospace;
   }
 
@@ -222,7 +173,7 @@ watch(() => props.content, () => {
     align-items: center;
     gap: 6px;
     font-size: 11px;
-    color: #60a5fa;
+    color: var(--color-primary);
 
     .loading-icon {
       width: 12px;

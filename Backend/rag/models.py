@@ -23,6 +23,7 @@ class VectorStore(models.Model):
     """Vector store configuration."""
 
     TYPE_CHOICES = [
+        ('memory', '内存存储'),
         ('qdrant', 'Qdrant'),
         ('milvus', 'Milvus'),
         ('chroma', 'Chroma'),
@@ -62,6 +63,16 @@ class VectorStore(models.Model):
         verbose_name='所有者'
     )
 
+    # Team sharing: when set, all members of this tenant can see/use this vector store
+    tenant = models.ForeignKey(
+        'tenants.Tenant',
+        on_delete=models.SET_NULL,
+        related_name='vector_stores',
+        null=True,
+        blank=True,
+        verbose_name='所属团队'
+    )
+
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='创建时间')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='更新时间')
@@ -71,6 +82,10 @@ class VectorStore(models.Model):
         verbose_name = '向量存储'
         verbose_name_plural = '向量存储'
         ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['tenant']),
+            models.Index(fields=['owner']),
+        ]
 
     def __str__(self):
         return f"{self.name} ({self.get_store_type_display()})"
@@ -113,6 +128,16 @@ class DocumentCollection(models.Model):
         verbose_name='所有者'
     )
 
+    # Team sharing: when set, all members of this tenant can see/use this collection
+    tenant = models.ForeignKey(
+        'tenants.Tenant',
+        on_delete=models.SET_NULL,
+        related_name='document_collections',
+        null=True,
+        blank=True,
+        verbose_name='所属团队'
+    )
+
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='创建时间')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='更新时间')
@@ -122,6 +147,10 @@ class DocumentCollection(models.Model):
         verbose_name = '文档集合'
         verbose_name_plural = '文档集合'
         ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['tenant']),
+            models.Index(fields=['owner']),
+        ]
 
     def __str__(self):
         return self.name

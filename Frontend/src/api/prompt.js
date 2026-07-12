@@ -61,7 +61,7 @@ export const promptApi = {
    * 获取分类列表
    */
   getCategories() {
-    return request.get('/prompts/templates/categories/')
+    return request.get('/prompts/categories/')
   },
 
   /**

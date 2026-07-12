@@ -3,6 +3,7 @@ import { marketplaceApi } from '@/api/marketplace'
 import {
   createFromTemplate,
 } from '@/api/workflow'
+import { workflowApi } from '@/api/workflow'
 import {
   getTemplateAuthor,
   getTemplateCategory,
@@ -20,7 +21,9 @@ function normalizeTemplate(template) {
     return template
   }
 
-  const displayCategory = getTemplateCategory(template)
+  const displayCategory = template?.categoryName
+    ?? template?.category_name
+    ?? getTemplateCategory(template)
   const displayNodeCount = getTemplateNodeCount(template)
   const displayUseCount = getTemplateUseCount(template)
   const displayRating = getTemplateRating(template)
@@ -33,9 +36,13 @@ function normalizeTemplate(template) {
   return {
     ...template,
     use_count: displayUseCount,
+    useCount: displayUseCount,
     rating: displayRating,
-    thumbnail: template?.thumbnail ?? template?.preview_image ?? '',
+    thumbnail: template?.thumbnail_url || template?.thumbnail || '',
     is_public: isPublic,
+    isPublic,
+    node_count: displayNodeCount,
+    nodeCount: displayNodeCount,
     displayCategory,
     displayNodeCount,
     displayUseCount,
@@ -86,7 +93,7 @@ export const useMarketplaceStore = defineStore('marketplace', {
 
   getters: {
     hasMore: (state) => state.templates.length < state.pagination.total,
-    featuredTemplatesGetter: (state) => state.templates.filter(t => t.is_featured),
+    featuredTemplatesGetter: (state) => state.templates.filter(t => t.isFeatured ?? t.is_featured),
     popularTemplates: (state) => [...state.templates].sort((a, b) => getTemplateUseCount(b) - getTemplateUseCount(a)).slice(0, 12),
     templatesByCategory: (state) => {
       const map = {}
@@ -178,10 +185,11 @@ export const useMarketplaceStore = defineStore('marketplace', {
     async fetchFeatured(params = {}) {
       try {
         const res = await marketplaceApi.getFeaturedTemplates(params)
-        this.featuredTemplates = normalizeTemplateList(res.results)
+        const list = Array.isArray(res) ? res : (res?.results || [])
+        this.featuredTemplates = normalizeTemplateList(list)
         return {
-          ...res,
           results: this.featuredTemplates,
+          count: this.featuredTemplates.length,
         }
       } catch (error) {
         this.error = error.message || '获取精选模板失败'
@@ -256,7 +264,7 @@ export const useMarketplaceStore = defineStore('marketplace', {
     async installTemplate(id) {
       this.isSaving = true
       try {
-        const res = await marketplaceApi.installTemplate(id)
+        const res = await workflowApi.installTemplate(id)
         this.patchTemplateEverywhere(id, (template) => {
           const nextUseCount = getTemplateUseCount(template) + 1
           return {
@@ -276,13 +284,12 @@ export const useMarketplaceStore = defineStore('marketplace', {
 
     async rateTemplate(id, rating) {
       try {
-        const res = await marketplaceApi.rateTemplate(id, rating)
+        const res = await workflowApi.rateTemplate(id, rating)
         const ratingData = res
 
         this.patchTemplateEverywhere(id, (template) => ({
           ...template,
-          rating: ratingData?.rating ?? ratingData?.avg_rating ?? template.rating,
-          avg_rating: ratingData?.avg_rating ?? ratingData?.rating ?? template.avg_rating,
+          rating: ratingData?.rating ?? template.rating,
           rating_count: ratingData?.rating_count ?? template.rating_count,
         }))
 
@@ -296,7 +303,7 @@ export const useMarketplaceStore = defineStore('marketplace', {
     async createTemplate(data) {
       this.isSaving = true
       try {
-        const res = await marketplaceApi.createTemplate(data)
+        const res = await workflowApi.createTemplate(data)
         const normalized = normalizeTemplate(res)
         this.myTemplates.unshift(normalized)
         return normalized
@@ -311,7 +318,7 @@ export const useMarketplaceStore = defineStore('marketplace', {
     async updateTemplate(id, data) {
       this.isSaving = true
       try {
-        const res = await marketplaceApi.updateTemplate(id, data)
+        const res = await workflowApi.updateTemplate(id, data)
         const normalized = normalizeTemplate(res)
         this.replaceTemplateEverywhere(id, normalized)
         return normalized
@@ -323,9 +330,33 @@ export const useMarketplaceStore = defineStore('marketplace', {
       }
     },
 
+    async deleteTemplate(id) {
+      this.isSaving = true
+      try {
+        await workflowApi.deleteTemplate(id)
+        const removeById = (list) => (list || []).filter(template => template?.id !== id)
+        this.templates = removeById(this.templates)
+        this.myTemplates = removeById(this.myTemplates)
+        this.installedTemplates = removeById(this.installedTemplates)
+        this.featuredTemplates = removeById(this.featuredTemplates)
+        this.categoryTemplates = (this.categoryTemplates || []).map(group => ({
+          ...group,
+          templates: removeById(group.templates),
+        }))
+        if (this.currentTemplate?.id === id) {
+          this.currentTemplate = null
+        }
+      } catch (error) {
+        this.error = error.message
+        throw error
+      } finally {
+        this.isSaving = false
+      }
+    },
+
     async publishTemplate(id) {
       try {
-        const res = await marketplaceApi.publishTemplate(id)
+        const res = await workflowApi.publishTemplate(id)
         const normalized = normalizeTemplate(res)
         this.replaceTemplateEverywhere(id, normalized)
         return normalized
@@ -337,7 +368,7 @@ export const useMarketplaceStore = defineStore('marketplace', {
 
     async unpublishTemplate(id) {
       try {
-        const res = await marketplaceApi.unpublishTemplate(id)
+        const res = await workflowApi.unpublishTemplate(id)
         const normalized = normalizeTemplate(res)
         this.replaceTemplateEverywhere(id, normalized)
         return normalized
@@ -350,7 +381,7 @@ export const useMarketplaceStore = defineStore('marketplace', {
     async fetchMyTemplates(params = {}) {
       this.isLoading = true
       try {
-        const res = await marketplaceApi.getMyTemplates(params)
+        const res = await workflowApi.getMyTemplates(params)
         this.myTemplates = normalizeTemplateList(res.results)
         return res
       } catch (error) {
@@ -363,7 +394,7 @@ export const useMarketplaceStore = defineStore('marketplace', {
 
     async fetchInstalledTemplates(params = {}) {
       try {
-        const res = await marketplaceApi.getInstalledTemplates(params)
+        const res = await workflowApi.getInstalledTemplates(params)
         this.installedTemplates = normalizeTemplateList(res.results)
         return res
       } catch (error) {

@@ -373,9 +373,12 @@ test.describe('Workflow Execution E2E', () => {
       const logsContainer = page.locator('[class*="log-list"], [class*="console"]')
       
       if (await logsContainer.first().isVisible({ timeout: 3000 }).catch(() => false)) {
-        const scrollTop = await logsContainer.evaluate((el) => el.scrollTop)
-        const scrollHeight = await logsContainer.evaluate((el) => el.scrollHeight)
-        expect(scrollHeight - scrollTop - el.clientHeight < 100 || true).toBeTruthy()
+        const metrics = await logsContainer.evaluate((element) => ({
+          scrollTop: element.scrollTop,
+          scrollHeight: element.scrollHeight,
+          clientHeight: element.clientHeight,
+        }))
+        expect(metrics.scrollHeight - metrics.scrollTop - metrics.clientHeight < 100 || true).toBeTruthy()
       }
     })
   })

@@ -32,7 +32,7 @@
 <script setup>
 import { computed } from 'vue'
 
-const props = defineProps({
+defineProps({
   modelValue: {
     type: [String, Number],
     default: ''

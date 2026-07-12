@@ -17,6 +17,43 @@ class PlanType(models.TextChoices):
     ENTERPRISE = 'enterprise', '企业版'
 
 
+# Fallback limits when no PriceTier row exists in the database.
+DEFAULT_PLAN_LIMITS = {
+    PlanType.FREE: {
+        'max_workflows': 5,
+        'max_executions_per_month': 100,
+        'max_team_members': 1,
+        'max_storage_gb': 1,
+        'max_api_calls_per_month': 1000,
+        'max_agents': 1,
+    },
+    PlanType.STARTER: {
+        'max_workflows': 20,
+        'max_executions_per_month': 1000,
+        'max_team_members': 5,
+        'max_storage_gb': 10,
+        'max_api_calls_per_month': 10000,
+        'max_agents': 5,
+    },
+    PlanType.PROFESSIONAL: {
+        'max_workflows': 100,
+        'max_executions_per_month': 10000,
+        'max_team_members': 20,
+        'max_storage_gb': 50,
+        'max_api_calls_per_month': 100000,
+        'max_agents': 20,
+    },
+    PlanType.ENTERPRISE: {
+        'max_workflows': 999999,
+        'max_executions_per_month': 999999,
+        'max_team_members': 999999,
+        'max_storage_gb': 999999,
+        'max_api_calls_per_month': 999999,
+        'max_agents': 999999,
+    },
+}
+
+
 class BillingCycle(models.TextChoices):
     """Billing cycle options."""
     MONTHLY = 'monthly', '月付'
@@ -211,7 +248,7 @@ class Subscription(models.Model):
                 'max_nodes_per_workflow': tier.max_nodes_per_workflow,
                 'max_file_size_mb': tier.max_file_size_mb,
             }
-        return None
+        return DEFAULT_PLAN_LIMITS.get(self.plan_type, DEFAULT_PLAN_LIMITS[PlanType.FREE])
 
 
 class UsageRecord(models.Model):

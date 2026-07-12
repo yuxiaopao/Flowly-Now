@@ -57,8 +57,8 @@ export function sendResetEmail(email) {
   return authApi.requestPasswordReset(email)
 }
 
-export function resetPassword({ token, password }) {
-  return authApi.resetPassword(null, null, password)
+export function resetPassword({ uid, token, password }) {
+  return authApi.resetPassword(uid, token, password)
 }
 
 export default authApi

@@ -170,7 +170,7 @@ const importedByNodes = computed(() => {
   return store.nodes.filter(n => props.node.imported_by.includes(n.id))
 })
 
-function getFileIcon(type) {
+function getFileIcon(_type) {
   return 'FileCodeIcon'
 }
 

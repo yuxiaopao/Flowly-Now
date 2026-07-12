@@ -1,0 +1,39 @@
+{
+  "domain": "工业安全",
+  "scenario": "安全帽佩戴检测",
+  "ui_tone": "industrial_warning",
+  "copy_hints": [
+    "上传现场照片",
+    "红框标注未佩戴区域",
+    "支持 JPG/PNG"
+  ],
+  "risk_notes": [
+    "低照度场景误检率可能升高",
+    "遮挡严重时建议人工复核"
+  ],
+  "recommended_template": "detection",
+  "class_display_names": {
+    "helmet": "已佩戴安全帽",
+    "vest": "vest"
+  },
+  "class_names": [
+    "helmet",
+    "vest"
+  ],
+  "model_path": "E:\\Flowly-now\\Backend\\outputs\\yolo_d5e1b601\\yolo_f65d074c-fb8f-4065-8c28-ed7b2b148757\\weights\\best.pt",
+  "website_type": "detection",
+  "sample_count": 0,
+  "metrics": {},
+  "page_sections": [
+    "hero",
+    "upload",
+    "detection_canvas",
+    "metrics_hint",
+    "disclaimer"
+  ],
+  "api_endpoints": [
+    "/health",
+    "/predict"
+  ],
+  "profiler_version": "1.1-rules"
+}

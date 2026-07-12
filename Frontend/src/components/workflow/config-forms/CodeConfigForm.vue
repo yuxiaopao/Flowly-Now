@@ -174,7 +174,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, watch } from 'vue'
+import { reactive, computed, watch } from 'vue'
 import { Wand2 } from 'lucide-vue-next'
 
 const props = defineProps({

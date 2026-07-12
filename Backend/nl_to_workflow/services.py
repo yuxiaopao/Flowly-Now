@@ -2,6 +2,7 @@
 NL to Workflow service for generating workflows from natural language.
 """
 
+import copy
 import json
 import re
 import logging
@@ -22,6 +23,10 @@ from .constants import (
     SUPPORTED_NODE_TYPES,
     SUGGESTION_TEMPLATES,
     MAX_SUGGESTIONS,
+    normalize_request_mode,
+    resolve_initial_stream_mode,
+    has_sufficient_workflow_detail,
+    is_generate_command,
 )
 from .output_parser import WorkflowOutputParser
 from .prompts import (
@@ -29,6 +34,48 @@ from .prompts import (
     get_workflow_generation_prompt,
     format_workflow_prompt,
     get_modification_prompt,
+    ConversationPrompt,
+)
+from .yolo_workflow import (
+    aggregate_conversation_text,
+    build_yolo_detection_workflow,
+    has_sufficient_yolo_detail,
+    is_yolo_detection_intent,
+    should_use_yolo_template,
+    yolo_chat_fallback_response,
+)
+from .emotion_workflow import (
+    build_emotion_detection_workflow,
+    emotion_chat_fallback_response,
+    has_sufficient_emotion_detail,
+    is_emotion_detection_intent,
+    should_use_emotion_template,
+)
+from .multimodal_workflow import (
+    build_multimodal_workflow,
+    build_video_translation_workflow,
+    is_multimodal_intent,
+    is_video_translation_intent,
+    multimodal_chat_fallback_response,
+    should_use_multimodal_template,
+    should_use_video_translation_template,
+    wire_multimodal_workflow,
+)
+from .workflow_layout import auto_layout_workflow, is_layout_intent
+from .web_scrape_email_workflow import (
+    build_web_scrape_email_workflow,
+    web_scrape_email_chat_fallback_response,
+    should_use_web_scrape_email_template,
+    is_web_scrape_email_intent,
+    has_sufficient_web_scrape_email_detail,
+)
+from .mobile_page_email_workflow import (
+    build_mobile_page_email_workflow,
+    mobile_page_email_chat_fallback_response,
+    should_use_mobile_page_email_template,
+    is_mobile_page_email_intent,
+    has_sufficient_mobile_page_email_detail,
+    extract_recipient_email,
 )
 
 logger = logging.getLogger(__name__)
@@ -233,19 +280,61 @@ FALLBACK_WORKFLOW_TEMPLATE = """
 # ---------------------------------------------------------------------------
 
 INTENT_KEYWORDS = {
-    'create': ['创建', '生成', '做一个', '帮我', '设计', 'build', 'create', 'generate', 'make'],
-    'modify': ['修改', '改一下', '把', '改成', '添加', '加上', '再加', '调整', '更新', 'edit', 'modify', 'change', 'update', 'add'],
-    'delete': ['删除', '移除', '不要', '去掉', 'delete', 'remove', 'drop'],
+    'create': ['创建', '生成', '做一个', '帮我', '设计', 'build', 'create', 'generate', 'make', '新做', '做一下'],
+    'modify': [
+        '修改', '改一下', '把', '改成', '添加', '加上', '再加', '调整', '更新',
+        'edit', 'modify', 'change', 'update', 'add',
+        '增加', '增多', '增设', '新增', '加上', '加一个', '加个', '增加一个',
+        '减少', '删掉', '删去', '删减', '去掉', '移除', '删除',
+        '简化', '精简', '压缩', '合并', '拆分',
+        '改成', '改称', '改为', '改成', '换个', '替换', '切换',
+        '换掉', '重命名', '重新命名', '改名',
+        '翻译成', '翻译成', '改成英文', '改成中文',
+        '调整', '改动', '优化', '精简',
+    ],
+    'delete': [
+        '删除', '移除', '不要', '去掉', 'delete', 'remove', 'drop',
+        '删掉', '删掉', '删去', '去掉', '拿掉', '撤销', '取消',
+        '清除', '清空', '丢弃',
+    ],
 }
 
-# Workflow subtype detection keywords
+# Workflow subtype detection keywords (emotion/yolo before qa_bot)
 WORKFLOW_SUBTYPE_KEYWORDS = {
-    'qa_bot': ['问答', '问答机器人', '客服', 'faq', 'q&a', 'question', 'answer', '问题', '回答', '机器人', 'qa bot'],
+    'emotion_detection': [
+        '情绪检测', '情绪识别', '情感检测', '情感识别', '面部表情', '表情识别',
+        '人脸情绪', 'emotion detection', 'facial emotion', 'fer', '情绪检测系统',
+    ],
+    'yolo_detection': [
+        'yolo', 'ultralytics', '目标检测', '物体检测', '识别项目',
+        'yolo训练', 'yolo 训练', 'yolo检测', 'yolo 检测', 'bounding box',
+        '计算机视觉', 'mlops', '识别网站', '检测模型',
+    ],
+    'qa_bot': ['问答', '问答机器人', 'faq', 'q&a', 'question', 'answer', '问题', '回答', 'qa bot'],
     'data_processing': ['数据', 'csv', 'excel', '处理', '清洗', '转换', 'etl', 'data', 'process', '文件处理'],
     'translation': ['翻译', 'translation', '多语言', 'language', '语言转换'],
     'moderation': ['审核', 'moderation', '过滤', 'content', '内容', '敏感', '检查', '合规'],
-    'article_generation': ['文章', 'article', '生成文章', '写作', '写文章', '内容生成', '创作'],
+    'article_generation': ['文章', 'article', '生成文章', '写作', '写文章', '内容生成', '创作', '博客', '文案'],
     'customer_service': ['客服', 'customer service', 'support', '售后', '服务', '客户'],
+    'email_sending': [
+        '发邮件', '发送邮件', '发送email', '发email', '寄邮件',
+        'send email', 'send a mail', 'email sending', '邮件发送',
+        '发一封邮件', '发送一封邮件', '给我发邮件', 'send me',
+        '邮件通知', '邮件提醒', '发送通知邮件', '自动发邮件',
+        'smtp', '发件人', '收件人', '邮件模板', 'email template',
+        'notification email', 'alert email', 'welcome email',
+        'activation email', 'verification email', '邮件', 'email alert',
+        '发邮箱', '发送邮箱',
+    ],
+    'web_scrape_email': [
+        '收集信息', '采集信息', '网站抓取', '网页抓取', '网站上', '从网站',
+        'web scrape', 'scrape', '排版', '排版好', '排版之后',
+    ],
+    'mobile_page_email': [
+        '手机网页', '移动端页面', '手机页面', 'h5页面', '响应式网页',
+        'mobile page', 'mobile web', '手机网页详细', '详细手机网页',
+        '手机端页面', '移动端网页',
+    ],
     'generic': [],
 }
 
@@ -261,10 +350,22 @@ def detect_workflow_subtype(message: str) -> str:
         message: User's message text
         
     Returns:
-        Subtype: 'qa_bot', 'data_processing', 'translation', 'moderation', 
-                 'article_generation', 'customer_service', or 'generic'
+        Subtype: 'yolo_detection', 'qa_bot', 'data_processing', 'translation',
+                 'moderation', 'article_generation', 'customer_service', or 'generic'
     """
     message_lower = message.lower()
+
+    if is_web_scrape_email_intent(message):
+        return 'web_scrape_email'
+
+    if is_mobile_page_email_intent(message):
+        return 'mobile_page_email'
+
+    if is_emotion_detection_intent(message_lower):
+        return 'emotion_detection'
+
+    if is_yolo_detection_intent(message_lower):
+        return 'yolo_detection'
     
     for subtype, keywords in WORKFLOW_SUBTYPE_KEYWORDS.items():
         if subtype == 'generic':
@@ -343,30 +444,13 @@ def analyze_intent(message: str) -> Dict[str, Any]:
 # Node Position Calculator
 # ---------------------------------------------------------------------------
 
-def calculate_node_positions(node_count: int, start_x: int = 100, start_y: int = 150, 
-                             spacing_x: int = 180, spacing_y: int = 120) -> List[Dict[str, int]]:
+def calculate_node_positions(node_count: int, start_x: int = 0, start_y: int = 0,
+                             spacing_x: int = 0, spacing_y: int = 0) -> List[Dict[str, int]]:
     """
-    Calculate positions for nodes in a grid layout.
-    
-    Args:
-        node_count: Number of nodes to position
-        start_x: Starting X position
-        start_y: Starting Y position
-        spacing_x: Horizontal spacing between nodes
-        spacing_y: Vertical spacing between nodes
-        
-    Returns:
-        List of {x, y} position dicts
+    Return placeholder positions for nodes without layout.
+    Frontend performs DAG auto-layout with collision avoidance.
     """
-    positions = []
-    for i in range(node_count):
-        row = i % 4
-        col = i // 4
-        positions.append({
-            'x': start_x + row * spacing_x,
-            'y': start_y + col * spacing_y
-        })
-    return positions
+    return [{'x': 0, 'y': 0} for _ in range(node_count)]
 
 
 class NLToWorkflowService:
@@ -416,29 +500,69 @@ class NLToWorkflowService:
 
     def _get_provider_for_model(self, model: str):
         """Find the appropriate provider for a given model."""
+        # Volcengine Ark / Doubao endpoint IDs (ep-xxxx) use OpenAI-compatible API
+        if model and model.startswith('ep-'):
+            openai_provider = self.registry.get('openai')
+            if openai_provider:
+                return openai_provider
+
         for name in self.registry.get_all():
             provider = self.registry.get(name)
             if provider and provider.supports_model(model):
                 return provider
         return None
 
+    @staticmethod
+    def _normalize_stream_chunk(chunk) -> Dict[str, Any]:
+        if isinstance(chunk, str):
+            return json.loads(chunk)
+        return chunk if isinstance(chunk, dict) else {}
+
+    @staticmethod
+    def _stream_chunk_error(chunk_data: Dict[str, Any]) -> Optional[str]:
+        if chunk_data.get('type') == 'error':
+            return chunk_data.get('error') or 'Unknown provider error'
+        if chunk_data.get('error'):
+            return chunk_data['error']
+        return None
+
+    @staticmethod
+    def _format_provider_error(error: str) -> str:
+        """Return user-friendly provider error with Volcengine hints when applicable."""
+        text = str(error or '')
+        lower = text.lower()
+        if 'authenticationerror' in lower or 'api key format is incorrect' in lower:
+            return (
+                f"{text} — 请检查 Backend/.env 中 OPENAI_API_KEY（或 VOLCENGINE_API_KEY）"
+                "是否为火山方舟「API Key 管理」中创建的密钥，且 endpoint 已在控制台开通。"
+            )
+        return text
+
     def _resolve_model(self) -> Optional[str]:
         """
         Resolve which model to use.
-        Priority: instance model > settings default > registry default.
+        Priority: instance model > settings default > first registry model with a live provider.
         """
+        candidates: List[str] = []
         if self.model:
-            return self.model
-
+            candidates.append(self.model)
         default_model = getattr(settings, 'NL_WORKFLOW_MODEL', None)
-        if default_model:
-            return default_model
+        if default_model and default_model not in candidates:
+            candidates.append(default_model)
 
-        available = self.registry.list_models()
-        if available:
-            return available[0].model_id
+        for model_id in candidates:
+            if self._get_provider_for_model(model_id):
+                return model_id
 
-        return None
+        try:
+            for entry in self.registry.list_models():
+                model_id = getattr(entry, 'model_id', None) or str(entry)
+                if model_id and self._get_provider_for_model(model_id):
+                    return model_id
+        except Exception:
+            pass
+
+        return candidates[0] if candidates else None
 
     @property
     def llm(self):
@@ -459,58 +583,159 @@ class NLToWorkflowService:
         provider_name = self.registry.find_provider_for_model(model)
         if provider_name:
             provider = self.registry.get(provider_name)
-            self._llm = provider
-            return provider
+            if provider:
+                self._llm = provider
+                return provider
+
+        # Last resort: first registered provider (Ollama local, etc.)
+        for name in self.registry.get_all():
+            provider = self.registry.get(name)
+            if provider:
+                logger.info("NL2WF using fallback provider %s (model %s unavailable)", name, model)
+                self._llm = provider
+                return provider
 
         return None
 
-    def _call_llm(self, messages: List[Dict[str, str]]) -> Dict[str, Any]:
+    def _prefer_llm_over_template(self) -> bool:
+        """
+        True when workflow should be designed by LLM autonomously.
+        Templates are offline/dev fallback only (NL_WORKFLOW_USE_TEMPLATES=true).
+        """
+        if getattr(settings, 'NL_WORKFLOW_USE_TEMPLATES', False):
+            return False
+        return bool(self.llm)
+
+    def _template_fallback_workflow(self, description: str) -> Optional[Dict[str, Any]]:
+        """Rule-based template fallback when LLM is unavailable or failed."""
+        workflow = None
+        if should_use_emotion_template(description):
+            workflow = self._build_emotion_workflow_from_description(description)
+        elif should_use_yolo_template(description):
+            workflow = self._build_yolo_workflow_from_description(description)
+        elif should_use_video_translation_template(description):
+            workflow = build_video_translation_workflow(description)
+        elif should_use_multimodal_template(description):
+            workflow = build_multimodal_workflow(description)
+        elif should_use_web_scrape_email_template(description):
+            workflow = build_web_scrape_email_workflow(description)
+        elif should_use_mobile_page_email_template(description):
+            workflow = build_mobile_page_email_workflow(description)
+        if workflow:
+            workflow.setdefault('_generation_mode', 'template')
+        return workflow
+
+    def _iter_llm_provider_models(self) -> List[Tuple[Any, str]]:
+        """Yield (provider, model_id) candidates — configured model first, then registry, Ollama last."""
+        seen: set = set()
+        candidates: List[Tuple[Any, str]] = []
+
+        def add(provider, model_id: str) -> None:
+            key = (getattr(provider, 'name', id(provider)), model_id)
+            if provider and model_id and key not in seen:
+                seen.add(key)
+                candidates.append((provider, model_id))
+
+        primary_model = self._resolve_model()
+        primary_provider = self.llm
+        if primary_provider and primary_model:
+            add(primary_provider, primary_model)
+
+        for name in self.registry.get_all():
+            if name == 'ollama':
+                continue
+            provider = self.registry.get(name)
+            if not provider:
+                continue
+            try:
+                for entry in provider.list_models():
+                    model_id = getattr(entry, 'model_id', None) or str(entry)
+                    if getattr(entry, 'model_type', 'chat') != 'chat':
+                        continue
+                    add(provider, model_id)
+            except Exception:
+                continue
+
+        ollama = self.registry.get('ollama')
+        if ollama:
+            try:
+                for entry in ollama.list_models():
+                    model_id = getattr(entry, 'model_id', None) or str(entry)
+                    add(ollama, model_id)
+            except Exception:
+                add(ollama, 'llama3.2:latest')
+
+        return candidates
+
+    def _call_llm(
+        self,
+        messages: List[Dict[str, str]],
+        mock_description: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """
         Call the LLM through the provider registry.
         Falls back to mock response in DEBUG mode when no provider is available.
 
         Returns a dict with 'content' (response text) or 'error'.
         """
-        provider = self.llm
-        model = self._resolve_model()
+        if not self.registry.get_all():
+            register_default_providers()
 
-        if not provider:
-            # Check if we're in debug mode and should use mock responses
+        candidates = self._iter_llm_provider_models()
+        if not candidates:
             debug_mode = getattr(settings, 'DEBUG', False)
             nl_debug_mode = getattr(settings, 'NL_WORKFLOW_USE_MOCK', False)
             use_mock = debug_mode or nl_debug_mode
 
             if use_mock:
-                # Extract user description from messages
-                user_description = ''
-                for msg in messages:
-                    if msg.get('role') == 'user':
-                        user_description = msg.get('content', '')
-                        break
+                user_description = (mock_description or '').strip()
+                if not user_description:
+                    for msg in messages:
+                        if msg.get('role') == 'user':
+                            user_description = msg.get('content', '')
+                            break
 
                 from .constants import get_mock_workflow
                 mock_workflow = get_mock_workflow(user_description)
+                mock_workflow.setdefault('_generation_mode', 'mock')
                 return {'content': json.dumps(mock_workflow)}
 
-            return {
-                'error': ERROR_MESSAGES['no_provider']
-            }
+            return {'error': ERROR_MESSAGES['no_provider']}
 
-        try:
-            response = provider.chat(
-                messages=messages,
-                model=model,
-                temperature=self.temperature,
-                max_tokens=self.max_tokens,
-            )
-            if response.error:
-                return {'error': f"Provider error: {response.error}"}
-            return {'content': response.content}
-        except Exception as e:
-            logger.exception(f"LLM call failed: {e}")
-            return {'error': ERROR_MESSAGES['llm_call_failed'].format(error=str(e))}
+        errors: List[str] = []
+        for provider, model in candidates:
+            try:
+                chat_kwargs: Dict[str, Any] = {}
+                if getattr(provider, 'provider_name', '') == 'ollama':
+                    chat_kwargs['num_ctx'] = 4096
+                response = provider.chat(
+                    messages=messages,
+                    model=model,
+                    temperature=self.temperature,
+                    max_tokens=min(self.max_tokens, 4096),
+                    **chat_kwargs,
+                )
+                if getattr(response, 'error', None):
+                    err = self._format_provider_error(response.error)
+                    errors.append(f'{model}: {err}')
+                    logger.warning('NL2WF LLM candidate failed (%s): %s', model, err)
+                    continue
+                content = getattr(response, 'content', None) or ''
+                if content.strip():
+                    logger.info('NL2WF LLM succeeded with model=%s provider=%s', model, type(provider).__name__)
+                    return {'content': content, '_llm_model': model}
+            except Exception as exc:
+                err = str(exc)
+                errors.append(f'{model}: {err}')
+                logger.warning('NL2WF LLM candidate exception (%s): %s', model, err)
 
-    def _stream_llm(self, messages: List[Dict[str, str]]) -> Generator[str, None, None]:
+        return {'error': ERROR_MESSAGES['llm_call_failed'].format(error='; '.join(errors[:3]))}
+
+    def _stream_llm(
+        self,
+        messages: List[Dict[str, str]],
+        mock_description: Optional[str] = None,
+    ) -> Generator[str, None, None]:
         """Stream LLM response through the provider registry."""
         provider = self.llm
         model = self._resolve_model()
@@ -522,11 +747,12 @@ class NLToWorkflowService:
 
             if use_mock:
                 from .constants import get_mock_workflow
-                user_description = ''
-                for msg in messages:
-                    if msg.get('role') == 'user':
-                        user_description = msg.get('content', '')
-                        break
+                user_description = (mock_description or '').strip()
+                if not user_description:
+                    for msg in messages:
+                        if msg.get('role') == 'user':
+                            user_description = msg.get('content', '')
+                            break
                 mock_workflow = get_mock_workflow(user_description)
                 yield json.dumps({'type': 'content', 'content': json.dumps(mock_workflow)})
                 return
@@ -541,7 +767,12 @@ class NLToWorkflowService:
                 temperature=self.temperature,
                 max_tokens=self.max_tokens,
             ):
-                yield json.dumps(chunk)
+                chunk_data = self._normalize_stream_chunk(chunk)
+                stream_error = self._stream_chunk_error(chunk_data)
+                if stream_error:
+                    yield json.dumps({'type': 'error', 'error': self._format_provider_error(stream_error)})
+                    return
+                yield json.dumps(chunk_data)
         except Exception as e:
             logger.exception(f"LLM stream failed: {e}")
             yield json.dumps({'error': str(e)})
@@ -549,8 +780,10 @@ class NLToWorkflowService:
     def list_available_models(self) -> List[Dict[str, Any]]:
         """List all models available for NL-to-workflow generation."""
         models = []
+        seen = set()
         for m in self.registry.list_models():
-            if m.model_type == 'chat':
+            if m.model_type == 'chat' and m.model_id not in seen:
+                seen.add(m.model_id)
                 models.append({
                     'model_id': m.model_id,
                     'name': m.name,
@@ -559,7 +792,76 @@ class NLToWorkflowService:
                     'supports_streaming': m.supports_streaming,
                     'context_window': m.context_window,
                 })
+
+        # Ensure Volcengine catalog appears when Ark is configured
+        base_url = getattr(settings, 'OPENAI_BASE_URL', '') or ''
+        if 'volces.com' in base_url and getattr(settings, 'OPENAI_API_KEY', ''):
+            from .constants import VOLCENGINE_ARK_CHAT_MODELS
+            for item in VOLCENGINE_ARK_CHAT_MODELS:
+                if item['model_id'] not in seen:
+                    seen.add(item['model_id'])
+                    models.insert(0, dict(item))
+
         return models
+
+    def _attach_workflow_guidance(self, workflow_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Attach email and node config guidance metadata to workflow."""
+        email_guidance = get_email_config_guidance(workflow_data)
+        if email_guidance:
+            workflow_data['_email_guidance'] = email_guidance
+        node_guidance = get_node_config_guidance(workflow_data)
+        if node_guidance:
+            workflow_data['_node_guidance'] = node_guidance
+        return workflow_data
+
+    def _build_yolo_workflow_from_description(
+        self,
+        description: str,
+        include_validation: bool = True,
+    ) -> Dict[str, Any]:
+        """Build and normalize a YOLO MLOps workflow from user description."""
+        workflow_data = build_yolo_detection_workflow(description)
+        workflow_data = self._normalize_workflow(workflow_data)
+        if include_validation:
+            workflow_data = self._validate_workflow(workflow_data)
+        return self._attach_workflow_guidance(workflow_data)
+
+    def _build_emotion_workflow_from_description(
+        self,
+        description: str,
+        include_validation: bool = True,
+    ) -> Dict[str, Any]:
+        """Build and normalize an emotion-detection MLOps workflow from user description."""
+        workflow_data = build_emotion_detection_workflow(description)
+        workflow_data = self._normalize_workflow(workflow_data)
+        if include_validation:
+            workflow_data = self._validate_workflow(workflow_data)
+        return self._attach_workflow_guidance(workflow_data)
+
+    def _build_web_scrape_email_workflow_from_description(
+        self,
+        description: str,
+        include_validation: bool = True,
+    ) -> Dict[str, Any]:
+        """Build website scrape → format → email workflow from user description."""
+        workflow_data = build_web_scrape_email_workflow(description)
+        workflow_data = self._normalize_workflow(workflow_data)
+        if include_validation:
+            workflow_data = self._validate_workflow(workflow_data)
+        return self._attach_workflow_guidance(workflow_data)
+
+    def _build_multimodal_workflow_from_description(
+        self,
+        description: str,
+        *,
+        include_validation: bool = True,
+    ) -> Dict[str, Any]:
+        """Build text/image/video pipeline with wired variable references."""
+        workflow_data = build_multimodal_workflow(description)
+        workflow_data = self._normalize_workflow(workflow_data)
+        if include_validation:
+            workflow_data = self._validate_workflow(workflow_data)
+        return self._attach_workflow_guidance(workflow_data)
 
     def generate_workflow(
         self,
@@ -578,11 +880,43 @@ class NLToWorkflowService:
         Returns:
             Dict containing workflow structure
         """
+        if should_use_web_scrape_email_template(description):
+            workflow_data = self._build_web_scrape_email_workflow_from_description(description)
+            workflow_data.setdefault('_generation_mode', 'template_web_scrape_email')
+            return workflow_data
+
+        if should_use_video_translation_template(description):
+            workflow_data = build_video_translation_workflow(description)
+            workflow_data = self._normalize_workflow(workflow_data)
+            if include_validation:
+                workflow_data = self._validate_workflow(workflow_data)
+            workflow_data.setdefault('_generation_mode', 'template_video_translation_split')
+            return self._attach_workflow_guidance(workflow_data)
+
+        if should_use_multimodal_template(description):
+            workflow_data = self._build_multimodal_workflow_from_description(description)
+            workflow_data.setdefault('_generation_mode', 'template_multimodal')
+            return workflow_data
+
+        if not self._prefer_llm_over_template():
+            fallback = self._template_fallback_workflow(description)
+            if fallback:
+                return fallback
+
         result = self._call_llm(
-            [{"role": "user", "content": self._create_workflow_generation_prompt(description, context)}]
+            [{"role": "user", "content": self._create_workflow_generation_prompt(description, context)}],
+            mock_description=description,
         )
 
         if 'error' in result:
+            if getattr(settings, 'NL_WORKFLOW_TEMPLATE_FALLBACK', True):
+                fallback = self._template_fallback_workflow(description)
+                if fallback:
+                    logger.warning(
+                        "LLM workflow generation failed (%s); using template fallback",
+                        result.get('error'),
+                    )
+                    return fallback
             return {
                 'error': result['error'],
                 'name': 'Generated Workflow',
@@ -594,10 +928,22 @@ class NLToWorkflowService:
         # Use structured output parser for type-safe parsing
         workflow_data = WorkflowOutputParser.parse_workflow(result['content'])
 
+        if 'error' in workflow_data:
+            if getattr(settings, 'NL_WORKFLOW_TEMPLATE_FALLBACK', True):
+                fallback = self._template_fallback_workflow(description)
+                if fallback:
+                    logger.warning(
+                        "LLM workflow parse failed; using template fallback",
+                    )
+                    return fallback
+
         if 'error' not in workflow_data and include_validation:
             workflow_data = WorkflowOutputParser.validate_workflow(workflow_data)
 
-        return workflow_data
+        workflow_data.setdefault('_generation_mode', 'llm')
+        if result.get('_llm_model'):
+            workflow_data['_llm_model'] = result['_llm_model']
+        return self._attach_workflow_guidance(workflow_data)
 
     def generate_workflow_streaming(
         self,
@@ -623,7 +969,85 @@ class NLToWorkflowService:
             'message': '正在理解您的需求...',
             'progress': 10
         })
-        
+
+        if should_use_web_scrape_email_template(description):
+            yield json.dumps({
+                'type': 'progress',
+                'stage': 'generating',
+                'message': '正在生成网站采集 → 排版 → 发邮件工作流...',
+                'progress': 60,
+            })
+            tpl_workflow = self._build_web_scrape_email_workflow_from_description(description)
+            tpl_workflow.setdefault('_generation_mode', 'template_web_scrape_email')
+            yield json.dumps({'type': 'workflow', 'workflow': tpl_workflow})
+            yield json.dumps({
+                'type': 'done',
+                'message': f"已生成工作流: {tpl_workflow.get('name', '未命名')}",
+                'workflow': tpl_workflow,
+                'progress': 100,
+            })
+            return
+
+        if should_use_video_translation_template(description):
+            yield json.dumps({
+                'type': 'progress',
+                'stage': 'generating',
+                'message': '正在生成视频翻译工作流（识别→翻译→配音→口型同步）...',
+                'progress': 60,
+            })
+            tpl_workflow = build_video_translation_workflow(description)
+            tpl_workflow = self._normalize_workflow(tpl_workflow)
+            tpl_workflow = self._validate_workflow(tpl_workflow)
+            tpl_workflow.setdefault('_generation_mode', 'template_video_translation')
+            yield json.dumps({'type': 'workflow', 'workflow': tpl_workflow})
+            yield json.dumps({
+                'type': 'done',
+                'message': f"已生成工作流: {tpl_workflow.get('name', '未命名')}",
+                'workflow': tpl_workflow,
+                'progress': 100,
+            })
+            return
+
+        if should_use_multimodal_template(description):
+            yield json.dumps({
+                'type': 'progress',
+                'stage': 'generating',
+                'message': 'LLM 不可用，正在使用规则模板生成...',
+                'progress': 40,
+            })
+            if should_use_emotion_template(description):
+                tpl_workflow = self._build_emotion_workflow_from_description(description)
+            elif should_use_yolo_template(description):
+                tpl_workflow = self._build_yolo_workflow_from_description(description)
+            elif should_use_video_translation_template(description):
+                tpl_workflow = build_video_translation_workflow(description)
+            elif should_use_multimodal_template(description):
+                tpl_workflow = build_multimodal_workflow(description)
+            elif should_use_web_scrape_email_template(description):
+                tpl_workflow = build_web_scrape_email_workflow(description)
+            elif should_use_mobile_page_email_template(description):
+                tpl_workflow = build_mobile_page_email_workflow(description)
+            else:
+                from .constants import get_mock_workflow
+                tpl_workflow = self._normalize_workflow(get_mock_workflow(description))
+                tpl_workflow = self._validate_workflow(tpl_workflow)
+            tpl_workflow.setdefault('_generation_mode', 'template')
+            yield json.dumps({'type': 'workflow', 'workflow': tpl_workflow})
+            yield json.dumps({
+                'type': 'done',
+                'message': f"已生成工作流: {tpl_workflow.get('name', '未命名')}",
+                'workflow': tpl_workflow,
+                'progress': 100,
+            })
+            return
+
+        yield json.dumps({
+            'type': 'progress',
+            'stage': 'generating',
+            'message': 'AI 正在自主设计工作流结构...',
+            'progress': 35,
+        })
+
         messages = [
             {"role": "user", "content": self._create_workflow_generation_prompt(description, context)}
         ]
@@ -650,6 +1074,7 @@ class NLToWorkflowService:
                 mock_workflow = get_mock_workflow(description)
                 mock_workflow = self._normalize_workflow(mock_workflow)
                 mock_workflow = self._validate_workflow(mock_workflow)
+                mock_workflow.setdefault('_generation_mode', 'mock')
                 
                 yield json.dumps({
                     'type': 'progress',
@@ -658,56 +1083,75 @@ class NLToWorkflowService:
                     'progress': 70
                 })
                 
+                email_guidance = get_email_config_guidance(mock_workflow)
+                if email_guidance:
+                    mock_workflow['_email_guidance'] = email_guidance
+
+                node_guidance = get_node_config_guidance(mock_workflow)
+                if node_guidance:
+                    mock_workflow['_node_guidance'] = node_guidance
+                
                 yield json.dumps({
                     'type': 'progress',
                     'stage': 'complete',
                     'message': '工作流生成完成',
                     'progress': 100
                 })
-                
+                yield json.dumps({'type': 'workflow', 'workflow': mock_workflow})
                 yield json.dumps({
-                    'type': 'workflow',
-                    'workflow': mock_workflow
+                    'type': 'done',
+                    'message': f"已生成工作流: {mock_workflow.get('name', '未命名')}",
+                    'workflow': mock_workflow,
+                    'progress': 100,
                 })
                 return
-            
-            yield json.dumps({
-                'type': 'error',
-                'error': ERROR_MESSAGES['no_provider']
-            })
-            return
-        
+
+            fallback = self._template_fallback_workflow(description)
+            if fallback:
+                fallback.setdefault('_generation_mode', 'template')
+                yield json.dumps({'type': 'workflow', 'workflow': fallback})
+                yield json.dumps({
+                    'type': 'done',
+                    'message': f"已生成工作流: {fallback.get('name', '未命名')}",
+                    'workflow': fallback,
+                    'progress': 100,
+                })
+                return
+
         try:
             full_content = ""
-            
+            generation_progress = 45
+
             yield json.dumps({
                 'type': 'progress',
                 'stage': 'generating',
-                'message': '正在生成节点和连线...',
+                'message': 'AI 正在生成节点和连线...',
                 'progress': 40
             })
-            
+
             for chunk in provider.stream_chat(
                 messages=messages,
                 model=model,
                 temperature=self.temperature,
                 max_tokens=self.max_tokens,
             ):
-                chunk_data = chunk if isinstance(chunk, dict) else json.loads(chunk) if isinstance(chunk, str) else {}
-                
-                if chunk_data.get('type') == 'error':
-                    yield json.dumps(chunk_data)
+                chunk_data = self._normalize_stream_chunk(chunk)
+
+                stream_error = self._stream_chunk_error(chunk_data)
+                if stream_error:
+                    yield json.dumps({'type': 'error', 'error': self._format_provider_error(stream_error)})
                     return
-                
+
                 content = chunk_data.get('content', '')
                 if content:
                     full_content += content
+                    generation_progress = min(88, generation_progress + 1)
                     yield json.dumps({
                         'type': 'token',
                         'content': content,
-                        'progress': 50
+                        'progress': generation_progress,
                     })
-                
+
                 if chunk_data.get('type') == 'done':
                     yield json.dumps({
                         'type': 'progress',
@@ -734,17 +1178,49 @@ class NLToWorkflowService:
             })
             
             workflow_data = WorkflowOutputParser.validate_workflow(workflow_data)
-            
+            workflow_data.setdefault('_generation_mode', 'llm')
+
+            # Attach email and node guidance to workflow data BEFORE yielding
+            # This ensures guidance is persisted when session.workflow_json is saved
+            email_guidance = get_email_config_guidance(workflow_data)
+            if email_guidance:
+                workflow_data['_email_guidance'] = email_guidance
+
+            node_guidance = get_node_config_guidance(workflow_data)
+            if node_guidance:
+                workflow_data['_node_guidance'] = node_guidance
+
             yield json.dumps({
                 'type': 'progress',
                 'stage': 'complete',
                 'message': '工作流生成完成',
                 'progress': 100
             })
-            
+
             yield json.dumps({
                 'type': 'workflow',
                 'workflow': workflow_data
+            })
+
+            # Yield email config guidance for UI (already in workflow_data)
+            if email_guidance:
+                yield json.dumps({
+                    'type': 'email_guidance',
+                    'email_guidance': email_guidance
+                })
+
+            # Yield general node config guidance for UI
+            if node_guidance:
+                yield json.dumps({
+                    'type': 'node_guidance',
+                    'node_guidance': node_guidance
+                })
+
+            yield json.dumps({
+                'type': 'done',
+                'message': f"已生成工作流: {workflow_data.get('name', '未命名')}",
+                'workflow': workflow_data,
+                'progress': 100
             })
             
         except Exception as e:
@@ -754,11 +1230,290 @@ class NLToWorkflowService:
                 'error': str(e)
             })
 
+    def _build_generation_description_from_messages(
+        self,
+        session_messages: List[Dict],
+        user_message: str,
+    ) -> str:
+        """Aggregate conversation into a single generation prompt."""
+        parts: List[str] = []
+        for msg in session_messages:
+            role = msg.get('role')
+            content = (msg.get('content') or '').strip()
+            if not content or role not in ('user', 'assistant'):
+                continue
+            prefix = '用户' if role == 'user' else '助手'
+            parts.append(f"{prefix}：{content}")
+        parts.append(f"用户：{user_message.strip()}")
+        joined = '\n'.join(parts)
+        return (
+            "请根据以下对话中确认的需求，生成完整的工作流 JSON。\n\n"
+            f"{joined}\n\n"
+            "请综合以上对话，生成满足用户最终需求的工作流。"
+        )
+
+    def _chat_suggestions(
+        self,
+        ready_to_generate: bool,
+        has_workflow: bool,
+        combined_text: str = '',
+    ) -> List[str]:
+        """Suggestions for conversational turns without workflow changes."""
+        if is_emotion_detection_intent(combined_text):
+            if ready_to_generate:
+                return list(SUGGESTION_TEMPLATES.get('chat_ready', []))[:MAX_SUGGESTIONS]
+            return list(SUGGESTION_TEMPLATES.get('chat_emotion', []))[:MAX_SUGGESTIONS]
+        if is_yolo_detection_intent(combined_text):
+            if ready_to_generate:
+                return list(SUGGESTION_TEMPLATES.get('chat_ready', []))[:MAX_SUGGESTIONS]
+            return list(SUGGESTION_TEMPLATES.get('chat_yolo', []))[:MAX_SUGGESTIONS]
+        if ready_to_generate:
+            return list(SUGGESTION_TEMPLATES.get('chat_ready', []))[:MAX_SUGGESTIONS]
+        if has_workflow:
+            return list(SUGGESTION_TEMPLATES.get('modify', []))[:MAX_SUGGESTIONS]
+        return list(SUGGESTION_TEMPLATES.get('chat_no_workflow', []))[:MAX_SUGGESTIONS]
+
+    @staticmethod
+    def _resolve_request_mode(mode: Optional[str], has_workflow: bool) -> str:
+        normalized = normalize_request_mode(mode)
+        if normalized:
+            return normalized
+        return 'editor' if has_workflow else 'chat'
+
+    def _handle_layout_intent(self, current_workflow: Dict[str, Any]) -> Dict[str, Any]:
+        laid_out = auto_layout_workflow(current_workflow)
+        return {
+            'message': '已按数据流方向自动排布节点，并应用到画布。',
+            'suggestions': self._generate_suggestions(laid_out),
+            'workflow': laid_out,
+            'changes': ['自动布局节点位置'],
+            'intent': 'modify',
+        }
+
+    def _try_editor_template_action(
+        self,
+        user_message: str,
+        current_workflow: Optional[Dict[str, Any]],
+    ) -> Optional[Dict[str, Any]]:
+        """Deterministic editor actions for known workflow templates."""
+        if not current_workflow or not current_workflow.get('nodes'):
+            return None
+
+        from nl_to_workflow.video_translation_workflow import (
+            append_language_chain_to_workflow,
+            apply_video_url_to_workflow,
+            detect_target_languages,
+            extract_url_from_message,
+            get_video_translation_config_guidance,
+            is_config_check_intent,
+            is_video_translation_workflow,
+            is_video_url_intent,
+        )
+
+        combined = user_message or ''
+        lower = combined.lower()
+
+        if is_video_translation_workflow(current_workflow):
+            if is_config_check_intent(combined):
+                summary, guidance_list, missing = get_video_translation_config_guidance(
+                    current_workflow
+                )
+                return {
+                    'message': summary,
+                    'suggestions': self._generate_suggestions(current_workflow),
+                    'workflow': current_workflow,
+                    'changes': [],
+                    'node_guidance': guidance_list or None,
+                    'intent': 'chat',
+                }
+
+            if is_video_url_intent(combined):
+                url = extract_url_from_message(combined)
+                updated = apply_video_url_to_workflow(current_workflow, url)
+                updated = self._validate_workflow(updated)
+                return {
+                    'message': f'已为「上传视频」节点设置公网 URL：{url}',
+                    'suggestions': self._generate_suggestions(updated),
+                    'workflow': updated,
+                    'changes': ['设置 video_upload 公网视频 URL'],
+                    'intent': 'modify',
+                }
+            add_lang_keywords = ('添加', '加上', '增加', '新增', '再来', '再加')
+            if any(k in combined for k in add_lang_keywords):
+                langs = detect_target_languages(combined)
+                if langs:
+                    updated = current_workflow
+                    changes = []
+                    for lang in langs:
+                        before_ids = {n.get('id') for n in updated.get('nodes', [])}
+                        updated = append_language_chain_to_workflow(
+                            updated, lang, description=combined
+                        )
+                        after_ids = {n.get('id') for n in updated.get('nodes', [])}
+                        if after_ids - before_ids:
+                            changes.append(f'添加 {lang} 语言处理链')
+                    if changes:
+                        updated = self._validate_workflow(updated)
+                        return {
+                            'message': f"已为工作流添加语言链路：{', '.join(langs)}，并自动排布节点。",
+                            'suggestions': self._generate_suggestions(updated),
+                            'workflow': updated,
+                            'changes': changes,
+                            'intent': 'modify',
+                        }
+
+        if 'optimize' in lower or '优化' in combined:
+            return None
+
+        return None
+
+    def _handle_chat_intent(
+        self,
+        session_messages: List[Dict],
+        user_message: str,
+        current_workflow: Optional[Dict] = None,
+        mode: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Run requirements-gathering conversation (non-streaming)."""
+        combined = aggregate_conversation_text(session_messages, user_message)
+
+        if is_emotion_detection_intent(combined) and not self.llm:
+            msg, ready, suggestions = emotion_chat_fallback_response(session_messages, user_message)
+            if msg:
+                return {
+                    "message": msg,
+                    "suggestions": suggestions,
+                    "workflow": current_workflow,
+                    "intent": 'chat',
+                    "ready_to_generate": ready or is_generate_command(user_message),
+                }
+
+        if is_yolo_detection_intent(combined) and not self.llm:
+            msg, ready, suggestions = yolo_chat_fallback_response(session_messages, user_message)
+            if msg:
+                return {
+                    "message": msg,
+                    "suggestions": suggestions,
+                    "workflow": current_workflow,
+                    "intent": 'chat',
+                    "ready_to_generate": ready or is_generate_command(user_message),
+                }
+
+        if is_web_scrape_email_intent(combined) and not self.llm:
+            msg, ready, suggestions = web_scrape_email_chat_fallback_response(
+                session_messages, user_message
+            )
+            if msg:
+                return {
+                    "message": msg,
+                    "suggestions": suggestions,
+                    "workflow": current_workflow,
+                    "intent": 'chat',
+                    "ready_to_generate": ready or is_generate_command(user_message),
+                }
+
+        if is_mobile_page_email_intent(combined) and not self.llm:
+            msg, ready, suggestions = mobile_page_email_chat_fallback_response(
+                session_messages, user_message
+            )
+            if msg:
+                return {
+                    "message": msg,
+                    "suggestions": suggestions,
+                    "workflow": current_workflow,
+                    "intent": 'chat',
+                    "ready_to_generate": ready or is_generate_command(user_message),
+                }
+
+        if is_video_translation_intent(combined) and not self.llm:
+            msg, ready, suggestions = multimodal_chat_fallback_response(
+                session_messages, user_message
+            )
+            if msg:
+                return {
+                    "message": msg,
+                    "suggestions": suggestions,
+                    "workflow": current_workflow,
+                    "intent": 'chat',
+                    "ready_to_generate": ready or is_generate_command(user_message),
+                }
+
+        if is_multimodal_intent(combined) and not self.llm and not is_video_translation_intent(combined):
+            msg, ready, suggestions = multimodal_chat_fallback_response(
+                session_messages, user_message
+            )
+            if msg:
+                return {
+                    "message": msg,
+                    "suggestions": suggestions,
+                    "workflow": current_workflow,
+                    "intent": 'chat',
+                    "ready_to_generate": ready or is_generate_command(user_message),
+                }
+
+        messages = ConversationPrompt.build_messages(
+            session_messages, user_message, current_workflow, mode=mode
+        )
+        result = self._call_llm(messages)
+
+        if 'error' in result:
+            if is_emotion_detection_intent(combined):
+                msg, ready, suggestions = emotion_chat_fallback_response(session_messages, user_message)
+                if msg:
+                    return {
+                        "message": msg,
+                        "suggestions": suggestions,
+                        "workflow": current_workflow,
+                        "intent": 'chat',
+                        "ready_to_generate": ready or is_generate_command(user_message),
+                    }
+            if is_yolo_detection_intent(combined):
+                msg, ready, suggestions = yolo_chat_fallback_response(session_messages, user_message)
+                if msg:
+                    return {
+                        "message": msg,
+                        "suggestions": suggestions,
+                        "workflow": current_workflow,
+                        "intent": 'chat',
+                        "ready_to_generate": ready or is_generate_command(user_message),
+                    }
+            return {
+                "message": f"处理失败: {result['error']}",
+                "suggestions": self._chat_suggestions(False, bool(current_workflow), combined),
+                "workflow": current_workflow,
+                "intent": 'chat',
+                "ready_to_generate": False,
+            }
+
+        raw_content = result.get('content', '')
+        cleaned, ready_marker = ConversationPrompt.strip_ready_marker(raw_content)
+        ready = (
+            ready_marker
+            or is_generate_command(user_message)
+            or has_sufficient_emotion_detail(combined)
+            or has_sufficient_yolo_detail(combined)
+            or has_sufficient_web_scrape_email_detail(combined)
+            or has_sufficient_mobile_page_email_detail(combined)
+        )
+
+        suggestions = self._extract_suggestions(cleaned)
+        if not suggestions:
+            suggestions = self._chat_suggestions(ready, bool(current_workflow), combined)
+
+        return {
+            "message": cleaned,
+            "suggestions": suggestions,
+            "workflow": current_workflow,
+            "intent": 'chat',
+            "ready_to_generate": ready,
+        }
+
     def continue_conversation(
         self,
         session_messages: List[Dict],
         user_message: str,
-        current_workflow: Optional[Dict] = None
+        current_workflow: Optional[Dict] = None,
+        mode: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Continue a conversation to refine or modify the workflow.
@@ -779,10 +1534,56 @@ class NLToWorkflowService:
         """
         intent_info = analyze_intent(user_message)
         intent = intent_info.get('intent', 'chat')
-        
-        logger.info(f"Continue conversation - intent: {intent}, details: {intent_info}")
-        
-        if intent == 'modify' and current_workflow:
+        has_workflow = bool(current_workflow and current_workflow.get('nodes'))
+        request_mode = self._resolve_request_mode(mode, has_workflow)
+
+        logger.info(
+            f"Continue conversation - intent: {intent}, mode: {request_mode}, details: {intent_info}"
+        )
+
+        # User explicitly selected「生成工作流」模式
+        if request_mode == 'generate':
+            if session_messages:
+                description = self._build_generation_description_from_messages(
+                    session_messages, user_message
+                )
+            else:
+                description = user_message.strip()
+            return self._handle_create_intent(description)
+
+        # 深度思考模式：对话优先；显式「生成工作流」指令则直接生成
+        if request_mode == 'chat':
+            if is_generate_command(user_message):
+                if session_messages:
+                    description = self._build_generation_description_from_messages(
+                        session_messages, user_message
+                    )
+                else:
+                    description = user_message.strip()
+                return self._handle_create_intent(description)
+            return self._handle_chat_intent(
+                session_messages, user_message, current_workflow, mode=mode
+            )
+
+        # 排布助手模式 — 实际修改画布
+        if request_mode == 'editor' and has_workflow:
+            if is_layout_intent(user_message):
+                return self._handle_layout_intent(current_workflow)
+
+            template_action = self._try_editor_template_action(user_message, current_workflow)
+            if template_action:
+                return template_action
+
+            if is_generate_command(user_message):
+                if session_messages:
+                    description = self._build_generation_description_from_messages(
+                        session_messages, user_message
+                    )
+                else:
+                    description = user_message.strip()
+                return self._handle_create_intent(description)
+
+        if request_mode != 'chat' and intent == 'modify' and current_workflow:
             # Handle workflow modification
             modification_prompt = self._create_modification_prompt(current_workflow, user_message)
             result = self._call_llm([{"role": "user", "content": modification_prompt}])
@@ -819,42 +1620,254 @@ class NLToWorkflowService:
                 "intent": intent
             }
         
-        elif intent == 'delete' and current_workflow:
+        elif intent == 'delete' and current_workflow and request_mode != 'chat':
             # Handle node/edge deletion
             return self._handle_delete_intent(user_message, current_workflow)
         
-        elif intent == 'create':
-            # Handle new workflow creation request
-            # Extract description from message
-            description = self._extract_workflow_description(user_message)
-            if description:
-                return self._handle_create_intent(description)
-            else:
-                return {
-                    "message": "请提供您想要创建的工作流描述",
-                    "suggestions": ["描述您想要的工作流功能"],
-                    "workflow": current_workflow,
-                    "intent": intent
-                }
-        
+        elif intent == 'create' and request_mode != 'chat':
+            description = self._extract_workflow_description(user_message) or user_message.strip()
+            return self._handle_create_intent(description)
+
+        elif request_mode == 'editor' and has_workflow:
+            return self._handle_chat_intent(
+                session_messages, user_message, current_workflow, mode='editor'
+            )
+
         else:
-            # General conversation (chat)
-            messages = session_messages + [{"role": "user", "content": user_message}]
-            result = self._call_llm(messages)
+            return self._handle_chat_intent(
+                session_messages, user_message, current_workflow, mode=mode
+            )
 
-            if 'error' in result:
-                return {
-                    "message": f"处理失败: {result['error']}",
-                    "suggestions": [],
-                    "intent": 'error'
-                }
+    def continue_conversation_streaming(
+        self,
+        session_messages: List[Dict],
+        user_message: str,
+        current_workflow: Optional[Dict] = None,
+        mode: Optional[str] = None,
+    ) -> Generator[str, None, None]:
+        """
+        Stream conversation / modification / generation events.
 
-            return {
-                "message": result['content'],
-                "suggestions": self._extract_suggestions(result['content']),
-                "workflow": current_workflow,
-                "intent": intent
-            }
+        Yields JSON-serialized SSE payload dicts.
+        """
+        has_workflow = bool(current_workflow and current_workflow.get('nodes'))
+        intent_info = analyze_intent(user_message)
+        intent = intent_info.get('intent', 'chat')
+        request_mode = self._resolve_request_mode(mode, has_workflow)
+
+        yield json.dumps({
+            'type': 'intent',
+            'intent': 'generate' if request_mode == 'generate' else intent,
+            'mode': request_mode,
+            'progress': 5,
+        })
+
+        # 用户选择「生成工作流」— 仅此时生成
+        if request_mode == 'generate':
+            if session_messages:
+                description = self._build_generation_description_from_messages(
+                    session_messages, user_message
+                )
+            else:
+                description = user_message.strip()
+            yield json.dumps({
+                'type': 'progress',
+                'stage': 'generating',
+                'message': '正在根据对话内容生成工作流...',
+                'progress': 20,
+            })
+            for chunk in self.generate_workflow_streaming(description):
+                yield chunk
+            return
+
+        # 排布助手：自动布局 / 模板化修改
+        if request_mode == 'editor' and has_workflow:
+            if is_layout_intent(user_message):
+                yield json.dumps({
+                    'type': 'progress',
+                    'stage': 'layout',
+                    'message': '正在自动排布节点...',
+                    'progress': 25,
+                })
+                response = self._handle_layout_intent(current_workflow)
+                workflow = response.get('workflow')
+                if workflow:
+                    yield json.dumps({'type': 'workflow', 'workflow': workflow, 'progress': 85})
+                yield json.dumps({
+                    'type': 'done',
+                    'message': response.get('message', ''),
+                    'workflow': workflow,
+                    'suggestions': response.get('suggestions', []),
+                    'changes': response.get('changes', []),
+                    'intent': 'modify',
+                    'progress': 100,
+                })
+                return
+
+            template_action = self._try_editor_template_action(user_message, current_workflow)
+            if template_action:
+                workflow = template_action.get('workflow')
+                if workflow:
+                    yield json.dumps({'type': 'workflow', 'workflow': workflow, 'progress': 85})
+                yield json.dumps({
+                    'type': 'done',
+                    'message': template_action.get('message', ''),
+                    'workflow': workflow,
+                    'suggestions': template_action.get('suggestions', []),
+                    'changes': template_action.get('changes', []),
+                    'intent': template_action.get('intent', 'modify'),
+                    'progress': 100,
+                })
+                return
+
+        # 排布助手 / 生成模式：modify/delete 直接改动画布
+        if request_mode != 'chat' and intent == 'modify' and has_workflow:
+            yield json.dumps({
+                'type': 'progress',
+                'stage': 'modifying',
+                'message': '正在修改工作流...',
+                'progress': 20,
+            })
+            response = self.continue_conversation(
+                session_messages, user_message, current_workflow, mode=mode
+            )
+            workflow = response.get('workflow')
+            if workflow:
+                yield json.dumps({'type': 'workflow', 'workflow': workflow, 'progress': 80})
+            yield json.dumps({
+                'type': 'done',
+                'message': response.get('message', ''),
+                'workflow': workflow,
+                'suggestions': response.get('suggestions', []),
+                'changes': response.get('changes', []),
+                'intent': response.get('intent', intent),
+                'ready_to_generate': response.get('ready_to_generate', False),
+                'progress': 100,
+            })
+            return
+
+        if request_mode != 'chat' and intent == 'delete' and has_workflow:
+            response = self.continue_conversation(
+                session_messages, user_message, current_workflow, mode=mode
+            )
+            workflow = response.get('workflow')
+            if workflow:
+                yield json.dumps({'type': 'workflow', 'workflow': workflow, 'progress': 80})
+            yield json.dumps({
+                'type': 'done',
+                'message': response.get('message', ''),
+                'workflow': workflow,
+                'suggestions': response.get('suggestions', []),
+                'intent': 'delete',
+                'progress': 100,
+            })
+            return
+
+        # 深度思考模式 + 显式「生成工作流」→ 根据对话内容生成
+        if request_mode == 'chat' and is_generate_command(user_message):
+            if session_messages:
+                description = self._build_generation_description_from_messages(
+                    session_messages, user_message
+                )
+            else:
+                description = user_message.strip()
+            yield json.dumps({
+                'type': 'progress',
+                'stage': 'generating',
+                'message': '正在根据对话内容生成工作流...',
+                'progress': 20,
+            })
+            for chunk in self.generate_workflow_streaming(description):
+                yield chunk
+            return
+
+        # 深度思考 / 排布助手对话 — 不自动改动画布（除非上方已处理）
+        yield json.dumps({
+            'type': 'progress',
+            'stage': 'thinking',
+            'message': '正在理解您的需求...',
+            'progress': 10,
+        })
+
+        messages = ConversationPrompt.build_messages(
+            session_messages, user_message, current_workflow, mode=request_mode
+        )
+
+        provider = self.llm
+        model = self._resolve_model()
+        full_content = ''
+
+        if not provider:
+            chat_response = self._handle_chat_intent(
+                session_messages, user_message, current_workflow, mode=request_mode
+            )
+            yield json.dumps({
+                'type': 'token',
+                'content': chat_response.get('message', ''),
+            })
+            yield json.dumps({
+                'type': 'done',
+                'message': chat_response.get('message', ''),
+                'suggestions': chat_response.get('suggestions', []),
+                'intent': 'chat',
+                'ready_to_generate': chat_response.get('ready_to_generate', False),
+                'progress': 100,
+            })
+            return
+
+        try:
+            token_progress = 15
+            if request_mode == 'editor':
+                chat_max_tokens = int(getattr(settings, 'NL_EDITOR_MAX_TOKENS', 1024))
+            else:
+                chat_max_tokens = int(getattr(settings, 'NL_CHAT_MAX_TOKENS', 512))
+            for chunk in provider.stream_chat(
+                messages=messages,
+                model=model,
+                temperature=self.temperature,
+                max_tokens=chat_max_tokens,
+            ):
+                chunk_data = self._normalize_stream_chunk(chunk)
+
+                stream_error = self._stream_chunk_error(chunk_data)
+                if stream_error:
+                    yield json.dumps({'type': 'error', 'error': self._format_provider_error(stream_error)})
+                    return
+
+                content_piece = chunk_data.get('content') or chunk_data.get('token') or ''
+                if content_piece:
+                    full_content += content_piece
+                    token_progress = min(92, token_progress + 2)
+                    yield json.dumps({
+                        'type': 'token',
+                        'content': content_piece,
+                        'progress': token_progress,
+                    })
+
+            cleaned, ready_marker = ConversationPrompt.strip_ready_marker(full_content)
+            combined = aggregate_conversation_text(session_messages, user_message)
+            ready = (
+                ready_marker
+                or is_generate_command(user_message)
+                or has_sufficient_yolo_detail(combined)
+                or has_sufficient_web_scrape_email_detail(combined)
+                or has_sufficient_mobile_page_email_detail(combined)
+            )
+            suggestions = self._extract_suggestions(cleaned)
+            if not suggestions:
+                suggestions = self._chat_suggestions(ready, has_workflow, combined)
+
+            yield json.dumps({
+                'type': 'done',
+                'message': cleaned,
+                'suggestions': suggestions,
+                'intent': 'chat',
+                'ready_to_generate': ready,
+                'progress': 100,
+            })
+        except Exception as e:
+            logger.exception(f"Streaming chat failed: {e}")
+            yield json.dumps({'type': 'error', 'error': str(e)})
 
     def _extract_workflow_description(self, message: str) -> str:
         """
@@ -978,9 +1991,25 @@ class NLToWorkflowService:
 
     def _create_workflow_generation_prompt(self, description: str, context: Optional[Dict] = None) -> str:
         """Create comprehensive prompt for workflow generation with diverse few-shot examples."""
-        # Use the new prompts module for structured prompt generation
         intent_info = analyze_intent(description)
-        workflow_type = WorkflowType(intent_info.get('subtype', 'generic'))
+        subtype = intent_info.get('subtype', 'generic')
+        subtype_map = {
+            'emotion_detection': WorkflowType.EMOTION_DETECTION,
+            'yolo_detection': WorkflowType.YOLO_DETECTION,
+            'qa_bot': WorkflowType.QA_BOT,
+            'data_processing': WorkflowType.DATA_PROCESSING,
+            'translation': WorkflowType.TRANSLATION,
+            'moderation': WorkflowType.MODERATION,
+            'article_generation': WorkflowType.ARTICLE_GENERATION,
+            'customer_service': WorkflowType.CUSTOMER_SERVICE,
+            'email_sending': WorkflowType.EMAIL_SENDING,
+            'web_scrape_email': WorkflowType.WEB_SCRAPE_EMAIL,
+            'mobile_page_email': WorkflowType.MOBILE_PAGE_EMAIL,
+        }
+        try:
+            workflow_type = WorkflowType(subtype)
+        except ValueError:
+            workflow_type = subtype_map.get(subtype, WorkflowType.GENERIC)
 
         prompt_data = format_workflow_prompt(
             description=description,
@@ -1083,6 +2112,75 @@ class NLToWorkflowService:
             "raw_response": response[:500] if len(response) > 500 else response
         }
 
+    def _normalize_email_node_config(self, config: Dict[str, Any]) -> Dict[str, Any]:
+        """Normalize email node config to the runtime shape expected by the executor."""
+        normalized = dict(config or {})
+
+        if not normalized.get('subject') and normalized.get('title'):
+            normalized['subject'] = normalized.get('title', '')
+        if not normalized.get('body') and normalized.get('content'):
+            normalized['body'] = normalized.get('content', '')
+        if not normalized.get('fromEmail') and normalized.get('from_email'):
+            normalized['fromEmail'] = normalized.get('from_email', '')
+        if normalized.get('is_html') is not None and normalized.get('isHtml') is None:
+            normalized['isHtml'] = bool(normalized.get('is_html'))
+
+        smtp_config = normalized.get('smtpConfig')
+        if not isinstance(smtp_config, dict):
+            smtp_config = {}
+
+        legacy_smtp = str(normalized.get('smtp', '') or '').strip()
+        if legacy_smtp and not smtp_config.get('server'):
+            smtp_parts = legacy_smtp.split(':')
+            smtp_config['server'] = smtp_parts[0].strip() if smtp_parts else ''
+            if len(smtp_parts) > 1:
+                try:
+                    smtp_config['port'] = int(smtp_parts[1])
+                except (TypeError, ValueError):
+                    smtp_config['port'] = 587
+
+        if 'smtpUsername' in normalized and not smtp_config.get('username'):
+            smtp_config['username'] = normalized.get('smtpUsername', '')
+        if 'smtpPassword' in normalized and not smtp_config.get('password'):
+            smtp_config['password'] = normalized.get('smtpPassword', '')
+
+        normalized['smtpConfig'] = {
+            'server': smtp_config.get('server', '') or '',
+            'port': int(smtp_config.get('port', 587) or 587),
+            'useTls': bool(smtp_config.get('useTls', True)),
+            'username': smtp_config.get('username', '') or '',
+            'password': smtp_config.get('password', '') or ''
+        }
+
+        return normalized
+
+    # Placeholder model names LLMs often hallucinate — not routable in Flowly
+    _PLACEHOLDER_LLM_MODELS = frozenset({
+        'llama3', 'llm3', 'llm', 'langchain', 'chatgpt', 'gpt', 'local',
+        'default', 'auto', 'model',
+    })
+
+    def _is_valid_llm_model(self, model: Optional[str]) -> bool:
+        """Return True if model is non-placeholder and supported by a registered provider."""
+        if not model or not str(model).strip():
+            return False
+        model_id = str(model).strip()
+        if model_id.lower() in self._PLACEHOLDER_LLM_MODELS:
+            return False
+        provider = self._get_provider_for_model(model_id)
+        return bool(provider and provider.supports_model(model_id))
+
+    def _normalize_llm_node_config(self, config: Dict[str, Any]) -> Dict[str, Any]:
+        """Ensure LLM nodes use a real, routable model (session/default), not LLM placeholders."""
+        normalized = dict(config or {})
+        model = str(normalized.get('model') or '').strip()
+        resolved = self._resolve_model()
+        if resolved and not self._is_valid_llm_model(model):
+            normalized['model'] = resolved
+        elif resolved and not model:
+            normalized['model'] = resolved
+        return normalized
+
     def _normalize_workflow(self, workflow: Dict) -> Dict[str, Any]:
         """Normalize workflow structure with required fields."""
         nodes = workflow.get('nodes', [])
@@ -1104,7 +2202,7 @@ class NLToWorkflowService:
             }
             normalized_edges.append(normalized_edge)
 
-        return {
+        normalized = {
             'name': workflow.get('name', 'Generated Workflow'),
             'description': workflow.get('description', ''),
             'nodes': [
@@ -1113,12 +2211,22 @@ class NLToWorkflowService:
                     'type': node.get('type', 'llm'),
                     'name': node.get('name', 'Node'),
                     'position': node.get('position', {'x': 0, 'y': 0}),
-                    'config': node.get('config', {})
+                    'config': (
+                        self._normalize_email_node_config(node.get('config', {}))
+                        if node.get('type') == 'email'
+                        else self._normalize_llm_node_config(node.get('config', {}))
+                        if node.get('type') in ('llm', 'prompt', 'openai')
+                        else node.get('config', {})
+                    )
                 }
                 for node in nodes
             ],
             'edges': normalized_edges
         }
+        for meta_key in ('_generation_mode', 'target_languages'):
+            if meta_key in workflow:
+                normalized[meta_key] = workflow[meta_key]
+        return wire_multimodal_workflow(normalized)
 
     def _has_cycle_detection(self, workflow: Dict) -> Tuple[bool, List[str]]:
         """
@@ -1444,6 +2552,14 @@ class NLToWorkflowService:
         if 'tool' not in node_types:
             suggestions.append('添加外部工具调用')
 
+        # Email-specific suggestions
+        if 'email' in node_types:
+            suggestions.extend(SUGGESTION_TEMPLATES.get('email', [
+                '配置 SMTP 服务器',
+                '设置多个收件人',
+                '添加 HTML 模板',
+            ]))
+
         suggestions.extend(SUGGESTION_TEMPLATES['general'])
         return suggestions[:MAX_SUGGESTIONS]
 
@@ -1461,6 +2577,9 @@ class NLToWorkflowService:
             suggestions.insert(0, '添加外部 API 调用')
         if any(k in desc_lower for k in ['输入', 'form', '表单', '用户']):
             suggestions.insert(0, '添加用户输入节点')
+        if any(k in desc_lower for k in ['邮件', 'email', '发邮件', 'send email', 'smtp']):
+            suggestions.insert(0, '配置 SMTP 服务器')
+            suggestions.insert(0, '设置多个收件人')
 
         return suggestions[:MAX_SUGGESTIONS]
 
@@ -1487,6 +2606,224 @@ def generate_suggestions(description: str) -> List[str]:
     """
     service = NLToWorkflowService()
     return service._generate_suggestions_from_description(description)
+
+
+# ---------------------------------------------------------------------------
+# Email Configuration Guidance
+# ---------------------------------------------------------------------------
+
+EMAIL_CONFIG_GUIDANCE: Dict[str, Any] = {
+    "type": "email_config",
+    "title": "邮件节点配置提醒",
+    "description": "您的邮件工作流已生成，在保存和使用前请完成以下配置：",
+    "items": [
+        {
+            "field": "收件人 (to)",
+            "required": True,
+            "tip": "请在邮件节点中填写实际收件人邮箱地址，支持多个收件人（逗号分隔）或变量插值如 {{{{input.email}}}}"
+        },
+        {
+            "field": "SMTP 服务器配置",
+            "required": False,
+            "tip": "如果不配置则使用系统默认 SMTP。常见配置：\n- Gmail: smtp.gmail.com:587 (TLS)\n- QQ邮箱: smtp.qq.com:587 (TLS)\n- 163邮箱: smtp.163.com:465 (SSL)\n- 企业邮箱: smtp.company.com:465 (SSL)"
+        },
+        {
+            "field": "发件人 (fromEmail)",
+            "required": False,
+            "tip": "默认使用系统配置的默认发件地址。如需自定义，请确保域名已通过 SMTP 服务商验证"
+        },
+        {
+            "field": "主题和正文变量",
+            "required": False,
+            "tip": "使用 {{{{变量名}}}} 语法引用上游节点的输出或输入数据，实现动态邮件内容"
+        }
+    ],
+    "quick_links": [
+        {"label": "配置 SMTP", "path": "/settings/credentials", "description": "设置邮件发送服务器"},
+        {"label": "邮件模板", "path": "/settings/branding", "description": "管理邮件模板和默认发件人"},
+        {"label": "查看帮助", "path": "/help/email-workflow", "description": "了解更多邮件工作流配置方法"}
+    ]
+}
+
+
+def get_email_config_guidance(workflow: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """
+    Return email configuration guidance if the workflow contains email nodes.
+
+    Args:
+        workflow: The generated workflow dict
+
+    Returns:
+        Email config guidance dict or None if no email nodes present
+    """
+    nodes = workflow.get('nodes', [])
+    email_nodes = [n for n in nodes if n.get('type') == 'email']
+
+    if not email_nodes:
+        return None
+
+    # Check which email nodes are missing required config
+    missing_config = []
+    for node in email_nodes:
+        config = node.get('config', {})
+        node_name = node.get('name', '邮件节点')
+        if not config.get('to'):
+            missing_config.append(f"「{node_name}」- 收件人为空")
+        if not config.get('subject'):
+            missing_config.append(f"「{node_name}」- 主题为空")
+        if not config.get('body'):
+            missing_config.append(f"「{node_name}」- 正文为空")
+        has_smtp = config.get('smtpConfig') and any([
+            config['smtpConfig'].get('server'),
+            config['smtpConfig'].get('username')
+        ])
+        if not has_smtp:
+            guidance = copy.deepcopy(EMAIL_CONFIG_GUIDANCE)
+            guidance['warning'] = f"「{node_name}」未配置 SMTP，将使用系统默认邮件服务器发送"
+            return guidance
+
+    if missing_config:
+        guidance = copy.deepcopy(EMAIL_CONFIG_GUIDANCE)
+        guidance['missing_fields'] = missing_config
+        guidance['description'] = f"您的邮件工作流包含 {len(email_nodes)} 个邮件节点，以下字段需要配置："
+        return guidance
+
+    return EMAIL_CONFIG_GUIDANCE
+
+
+def get_node_config_guidance(workflow: Dict[str, Any]) -> Optional[List[Dict[str, Any]]]:
+    """
+    Return node configuration guidance for all nodes that need config in the workflow.
+
+    Args:
+        workflow: The generated workflow dict
+
+    Returns:
+        List of guidance dicts for nodes that need configuration, or None if all nodes are configured
+    """
+    nodes = workflow.get('nodes', [])
+    guidance_list = []
+
+    for node in nodes:
+        node_type = node.get('type')
+        node_name = node.get('name', f'{node_type} 节点')
+        config = node.get('config', {}) or {}
+
+        guidance = _get_guidance_for_node_type(node_type, node_name, config)
+        if guidance:
+            guidance_list.append(guidance)
+
+    return guidance_list if guidance_list else None
+
+
+def _get_guidance_for_node_type(node_type: str, node_name: str, config: Dict) -> Optional[Dict[str, Any]]:
+    """Generate guidance for a specific node type."""
+    node_type_map = {
+        'llm': {
+            'items': [
+                {'field': '模型选择', 'required': True, 'tip': '选择要使用的 LLM 模型，如 qwen2.5-coder:7b', 'example': 'qwen2.5-coder:7b'},
+                {'field': '系统提示词', 'required': False, 'tip': '设置 AI 的角色和行为规则', 'example': '你是一个专业的客服助手'},
+                {'field': '温度参数', 'required': False, 'tip': '控制输出的随机性，0-1之间，较低更确定', 'example': '0.7'},
+                {'field': '最大令牌数', 'required': False, 'tip': '限制输出的最大长度', 'example': '2000'},
+            ],
+            'quick_links': [
+                {'label': '配置 API Keys', 'path': '/settings', 'description': '设置模型 API 密钥'},
+            ],
+        },
+        'code': {
+            'items': [
+                {'field': '代码语言', 'required': True, 'tip': '选择代码执行的语言', 'example': 'python'},
+                {'field': '代码内容', 'required': True, 'tip': '输入要执行的代码', 'example': 'print("Hello World")'},
+                {'field': '超时时间', 'required': False, 'tip': '代码执行的最大等待时间（秒）', 'example': '30'},
+            ],
+        },
+        'database': {
+            'items': [
+                {'field': '数据库类型', 'required': True, 'tip': '选择数据库类型：mysql, postgresql, mongodb', 'example': 'mysql'},
+                {'field': '连接信息', 'required': True, 'tip': '填写主机、端口、数据库名', 'example': 'host: localhost, port: 3306'},
+                {'field': '认证信息', 'required': True, 'tip': '用户名和密码', 'example': 'username: root'},
+                {'field': 'SQL 语句', 'required': False, 'tip': '执行的查询语句', 'example': 'SELECT * FROM users LIMIT 10'},
+            ],
+            'quick_links': [
+                {'label': '连接管理', 'path': '/settings', 'description': '管理数据库连接'},
+            ],
+        },
+        'webhook': {
+            'items': [
+                {'field': '请求 URL', 'required': True, 'tip': 'Webhook 目标地址', 'example': 'https://api.example.com/webhook'},
+                {'field': '请求方法', 'required': True, 'tip': 'HTTP 方法：GET, POST, PUT, DELETE', 'example': 'POST'},
+                {'field': '请求头', 'required': False, 'tip': 'HTTP 请求头（JSON 格式）', 'example': '{"Content-Type": "application/json"}'},
+                {'field': '认证方式', 'required': False, 'tip': 'Bearer Token, Basic Auth, API Key 等', 'example': 'Bearer eyJhbGc...'},
+            ],
+        },
+        'trigger': {
+            'items': [
+                {'field': '触发类型', 'required': True, 'tip': '选择触发方式：webhook, schedule, manual', 'example': 'webhook'},
+                {'field': '触发条件', 'required': True, 'tip': '设置触发条件或定时规则', 'example': 'cron: 0 9 * * * (每天9点)'},
+            ],
+        },
+        'schedule': {
+            'items': [
+                {'field': 'Cron 表达式', 'required': True, 'tip': '定时任务表达式', 'example': '0 9 * * * (每天9点)'},
+                {'field': '时区', 'required': False, 'tip': '定时任务的时区', 'example': 'Asia/Shanghai'},
+                {'field': '最大执行次数', 'required': False, 'tip': '限制总执行次数，留空表示无限', 'example': '10'},
+            ],
+        },
+        'tool': {
+            'items': [
+                {'field': '工具类型', 'required': True, 'tip': '选择工具类型：http_request, file_operation, data_transform', 'example': 'http_request'},
+                {'field': '工具配置', 'required': True, 'tip': '根据工具类型填写相应配置', 'example': '见各工具详细文档'},
+            ],
+        },
+        'input': {
+            'items': [
+                {'field': '输入类型', 'required': True, 'tip': '输入数据的类型：text, file, json', 'example': 'text'},
+                {'field': '参数名称', 'required': True, 'tip': '定义输入参数的名称', 'example': 'user_query'},
+                {'field': '默认值', 'required': False, 'tip': '设置默认输入值', 'example': '请输入您的问题'},
+            ],
+        },
+        'output': {
+            'items': [
+                {'field': '输出类型', 'required': True, 'tip': '输出数据类型：text, json, file', 'example': 'text'},
+                {'field': '输出格式', 'required': False, 'tip': '定义输出格式模板', 'example': '回答：{result}'},
+            ],
+        },
+    }
+
+    if node_type not in node_type_map:
+        return None
+
+    template = node_type_map[node_type]
+    missing = []
+
+    # Check for common missing fields
+    if node_type == 'llm':
+        if not config.get('model'):
+            missing.append(f"「{node_name}」- 未选择模型")
+    elif node_type == 'database':
+        if not config.get('host') and not config.get('connection_string'):
+            missing.append(f"「{node_name}」- 未配置数据库连接")
+    elif node_type == 'webhook':
+        if not config.get('url'):
+            missing.append(f"「{node_name}」- 未配置请求 URL")
+    elif node_type in ('trigger', 'schedule'):
+        if not config.get('trigger_type') and not config.get('schedule'):
+            missing.append(f"「{node_name}」- 未配置触发条件")
+    elif node_type == 'code':
+        if not config.get('code') and not config.get('language'):
+            missing.append(f"「{node_name}」- 未配置代码")
+
+    guidance = {
+        'node_type': node_type,
+        'node_name': node_name,
+        'description': f"「{node_name}」节点需要以下配置：",
+        'missing_fields': missing,
+        'items': template['items'],
+        'config': config,
+        'quick_links': template.get('quick_links', []),
+    }
+
+    return guidance
 
 
 nl_to_workflow_service = NLToWorkflowService()

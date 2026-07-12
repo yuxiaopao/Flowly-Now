@@ -1,7 +1,8 @@
-﻿<template>
+<template>
   <div
     class="condition-node"
     :class="{ selected, expanded: isExpanded, 'is-running': isRunning, 'is-completed': isCompleted, 'is-failed': isFailed }"
+    :style="{ '--node-accent': nodeColor }"
     @click.stop="handleSelect"
   >
     <Handle
@@ -11,10 +12,7 @@
 
     <!-- Header -->
     <div class="node-header">
-      <div class="node-type-badge">
-        <GitBranch class="badge-icon" />
-        <span>条件</span>
-      </div>
+      <NodeTypeBadge :node-type="NODE_TYPE" />
       <button
         class="action-btn"
         @click.stop="toggleExpand"
@@ -29,12 +27,14 @@
     <!-- Name -->
     <div class="node-name-section">
       <input
+        :id="id ? `node-label-${id}` : undefined"
         v-model="localName"
         class="node-name-input"
+        name="node-label"
         placeholder="条件节点..."
         @blur="handleChange"
         @keydown.enter="handleChange"
-        @click.stop
+        @click.stop="handleSelect"
       >
     </div>
 
@@ -233,12 +233,18 @@ import { ref, watch, computed } from 'vue'
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
 import { GitBranch, ChevronDown, Plus, X, Loader, Check } from 'lucide-vue-next'
 import { useExecutionStore } from '@/stores/execution'
+import NodeTypeBadge from '@/components/workflow/nodes/NodeTypeBadge.vue'
+import { useNodePresentation } from '@/composables/useNodePresentation'
+
 
 const props = defineProps({
   id: { type: String, default: '' },
   data: { type: Object, default: () => ({}) },
   selected: { type: Boolean, default: false }
 })
+
+const NODE_TYPE = 'condition'
+const { nodeIcon, nodeColor, nodeLabel } = useNodePresentation(NODE_TYPE)
 
 const emit = defineEmits(['select'])
 
@@ -269,6 +275,7 @@ watch(() => props.data, (d) => {
 }, { deep: true })
 
 function toggleExpand() {
+  handleSelect()
   isExpanded.value = !isExpanded.value
 }
 

@@ -16,6 +16,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 DEFAULT_LLM_MODEL = "qwen2.5-coder:7b"  # Default LLM model for OpenAI-compatible APIs
 DEFAULT_OLLAMA_MODEL = "qwen2.5-coder:7b"  # Default Ollama model
 DEFAULT_EMBEDDING_MODEL = "text-embedding-ada-002"  # Default embedding model
+DEFAULT_OLLAMA_EMBEDDING_MODEL = "nomic-embed-text"  # Default local Ollama embedding model
 
 # =============================================================================
 # Default LLM Parameters
@@ -45,6 +46,11 @@ OLLAMA_CHAT_TIMEOUT = 120  # Ollama chat request timeout in seconds
 OLLAMA_EMBEDDINGS_TIMEOUT = 30  # Ollama embeddings timeout in seconds
 OLLAMA_CONNECT_TIMEOUT = 5  # Ollama connection timeout
 OLLAMA_LIST_MODELS_TIMEOUT = 5  # Ollama list models timeout
+# Context window (tokens) requested from the Ollama server for chat calls. Many local
+# models default to very large context windows (e.g. 128k) which can exhaust host RAM
+# when allocating the KV cache; capping this keeps local inference usable on typical dev
+# machines. Override via OLLAMA_NUM_CTX env var for larger-memory hosts.
+OLLAMA_NUM_CTX = 4096
 
 # =============================================================================
 # Timeout (seconds)
@@ -111,6 +117,12 @@ class NodeType:
     AUDIO_GENERATION = "audio_generation"
     SUBTITLE_GENERATION = "subtitle_generation"
     IMAGE_EDITING = "image_editing"
+    VIDEO_TRANSLATION = "video_translation"
+    VIDEO_UPLOAD = "video_upload"
+    SUBTITLE_TRANSLATE = "subtitle_translate"
+    SEGMENT_DUBBING = "segment_dubbing"
+    LIP_SYNC = "lip_sync"
+    SUBTITLE_BURN = "subtitle_burn"
 
     # ML & Training
     DATASET_UPLOAD = "dataset_upload"
@@ -163,6 +175,12 @@ class NodeType:
         (AUDIO_GENERATION, "音频生成"),
         (SUBTITLE_GENERATION, "字幕生成"),
         (IMAGE_EDITING, "图像编辑"),
+        (VIDEO_TRANSLATION, "视频翻译"),
+        (VIDEO_UPLOAD, "视频上传"),
+        (SUBTITLE_TRANSLATE, "字幕翻译"),
+        (SEGMENT_DUBBING, "分段配音"),
+        (LIP_SYNC, "口型同步"),
+        (SUBTITLE_BURN, "字幕烧录"),
         (DATASET_UPLOAD, "数据集上传"),
         (DATA_ANNOTATION, "数据标注"),
         (DATA_AUGMENTATION, "数据增强"),
@@ -274,6 +292,7 @@ RATE_LIMIT_USER = "1000/minute"
 RATE_LIMIT_WORKFLOW_EXECUTE = "10/minute"
 RATE_LIMIT_NL_STREAM = "5/minute"
 RATE_LIMIT_NL_PREVIEW = "10/minute"
+RATE_LIMIT_NL_EDITOR_APPLY = "30/minute"
 RATE_LIMIT_LOGIN = "5/minute"  # Login attempt rate limit
 
 # =============================================================================
@@ -296,6 +315,16 @@ OLLAMA_MODEL_PREFIXES = [
     # Additional local model prefixes
     'vicuna', 'wizardcoder', 'codestral', 'phi4',
 ]
+
+# =============================================================================
+# Tenant (Team) Default Plan Limits
+# =============================================================================
+# Applied as the Tenant model's field defaults for newly created teams (free plan).
+# A max_users of 1 would make team invitations impossible, so this must stay >= 2.
+
+TENANT_DEFAULT_MAX_USERS = 5
+TENANT_DEFAULT_MAX_WORKFLOWS = 10
+TENANT_DEFAULT_MAX_EXECUTIONS_PER_MONTH = 100
 
 # =============================================================================
 # CORS Default Origins

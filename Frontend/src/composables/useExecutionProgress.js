@@ -98,7 +98,7 @@ export function useExecutionProgress(options = {}) {
     if (!wsInstance.value) return
 
     // 连接成功
-    wsInstance.value.on('connected', (data) => {
+    wsInstance.value.on('connected', (_data) => {
       isConnected.value = true
       isConnecting.value = false
       reconnectAttempts.value = 0

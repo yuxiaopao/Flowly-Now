@@ -3,7 +3,6 @@
  * Handles uncaught errors, unhandled promise rejections, and component errors.
  */
 
-import { createApp } from 'vue'
 
 // Error reporting function - replace with your monitoring service
 function reportError(error, context = {}) {

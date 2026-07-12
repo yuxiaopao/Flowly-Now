@@ -171,14 +171,16 @@ async function handleSubmit() {
   if (!valid) return
 
   const token = route.query.token
-  if (!token) {
-    appStore.error('重置链接无效')
+  const uid = route.query.uid || route.query.uidb64
+  if (!token || !uid) {
+    appStore.error('重置链接无效或缺少参数')
     return
   }
 
   submitting.value = true
   try {
     await resetPassword({
+      uid,
       token,
       password: formData.password
     })

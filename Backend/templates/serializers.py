@@ -60,8 +60,8 @@ class TemplateReviewSerializer(serializers.ModelSerializer):
 class WorkflowTemplateListSerializer(serializers.ModelSerializer):
     """Serializer for template list view."""
 
-    category_name = serializers.CharField(source='category.name', read_only=True)
-    creator_name = serializers.CharField(source='created_by.username', read_only=True)
+    category_name = serializers.SerializerMethodField()
+    creator_name = serializers.SerializerMethodField()
     is_favorited = serializers.SerializerMethodField()
 
     class Meta:
@@ -73,10 +73,16 @@ class WorkflowTemplateListSerializer(serializers.ModelSerializer):
             'is_favorited', 'created_at'
         ]
 
+    def get_category_name(self, obj):
+        return obj.category.name if obj.category else ''
+
+    def get_creator_name(self, obj):
+        return obj.created_by.username if obj.created_by else ''
+
     def get_is_favorited(self, obj):
         request = self.context.get('request')
-        if request and request.user.is_authenticated:
-            return obj.favorites.filter(user=request.user).exists()
+        if request and request.user.is_authenticated and hasattr(obj, 'likes'):
+            return obj.likes.filter(id=request.user.id).exists()
         return False
 
 
@@ -84,7 +90,10 @@ class WorkflowTemplateDetailSerializer(serializers.ModelSerializer):
     """Serializer for template detail view."""
 
     category = TemplateCategorySerializer(read_only=True)
-    creator_name = serializers.CharField(source='created_by.username', read_only=True)
+    creator_name = serializers.SerializerMethodField()
+
+    def get_creator_name(self, obj):
+        return obj.created_by.username if obj.created_by else ''
     creator_avatar = serializers.SerializerMethodField()
     is_favorited = serializers.SerializerMethodField()
     is_used = serializers.SerializerMethodField()
@@ -111,13 +120,13 @@ class WorkflowTemplateDetailSerializer(serializers.ModelSerializer):
 
     def get_is_favorited(self, obj):
         request = self.context.get('request')
-        if request and request.user.is_authenticated:
-            return obj.favorites.filter(user=request.user).exists()
+        if request and request.user.is_authenticated and hasattr(obj, 'likes'):
+            return obj.likes.filter(id=request.user.id).exists()
         return False
 
     def get_is_used(self, obj):
         request = self.context.get('request')
-        if request and request.user.is_authenticated:
+        if request and request.user.is_authenticated and hasattr(obj, 'usages'):
             return obj.usages.filter(user=request.user).exists()
         return False
 

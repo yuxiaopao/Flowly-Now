@@ -136,6 +136,21 @@ export const ragApi = {
     return request.get(`/rag/documents/${id}/chunks/`)
   },
 
+  /** @param {string|number} collectionId @param {FormData} formData */
+  uploadFile(collectionId, formData) {
+    return request.post(`/rag/collections/${collectionId}/upload_file/`, formData)
+  },
+
+  /** @param {string|number} collectionId @param {{ query?: string, top_k?: number }} params */
+  searchCollection(collectionId, params = {}) {
+    return request.get(`/rag/collections/${collectionId}/search/`, params)
+  },
+
+  /** @param {string|number} collectionId */
+  getCollectionStats(collectionId) {
+    return request.get(`/rag/collections/${collectionId}/stats/`)
+  },
+
   // RAG Pipelines
   /** @param {Object=} params @returns {Promise<{count:number, results: import('@/types/rag').RAGPipeline[]}>} */
   getPipelines(params = {}) {

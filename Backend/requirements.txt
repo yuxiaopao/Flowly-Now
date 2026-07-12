@@ -8,6 +8,8 @@ django-filter>=24.0,<26.0
 
 # Database
 mysqlclient>=2.2,<3.0
+psycopg2-binary>=2.9,<3.0
+pymongo>=4.6,<5.0
 django-redis>=5.4,<6.0
 
 # Async tasks
@@ -19,6 +21,7 @@ flower>=2.0,<3.0
 channels>=4.0,<5.0
 channels-redis>=4.1,<5.0
 daphne>=4.0,<5.0
+websockets>=12.0,<16.0
 
 # AI Integration
 anthropic>=0.18,<1.0
@@ -37,11 +40,20 @@ python-dotenv>=1.0,<2.0
 beautifulsoup4>=4.12,<5.0
 Pillow>=10.0,<12.0
 
+# Document parsing (RAG knowledge base file ingestion)
+pypdf>=5.0,<7.0
+python-docx>=1.1,<2.0
+
 # JWT Authentication
 PyJWT>=2.8,<3.0
 
-# Utilities
-PyYAML>=6.0,<7.0
+# Video translation (local ASR/TTS — no DashScope required)
+edge-tts>=6.1,<7.0
+faster-whisper>=1.0,<2.0
+pyttsx3>=2.90,<3.0
+gTTS>=2.5,<3.0
+
+psutil>=5.9,<7.0
 
 # Development tools
 pytest>=7.4,<9.0

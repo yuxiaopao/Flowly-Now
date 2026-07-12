@@ -21,15 +21,15 @@ export const useAnalyticsStore = defineStore('analytics', {
   getters: {
     totalExecutions: (state) => {
       if (!state.overview) return 0
-      return state.overview.total_executions || 0
+      return state.overview.totalExecutions || 0
     },
     successRate: (state) => {
       if (!state.overview) return 0
-      return state.overview.success_rate || 0
+      return state.overview.successRate || 0
     },
     avgExecutionTime: (state) => {
       if (!state.overview) return 0
-      return state.overview.avg_execution_time || 0
+      return state.overview.avgExecutionTime || 0
     }
   },
 

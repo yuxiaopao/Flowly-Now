@@ -1,5 +1,7 @@
 <template>
   <div
+    ref="rootEl"
+    :style="{ '--node-accent': nodeColor, ...resize.sizeStyle.value }"
     class="domain-node image-edit-node"
     :class="{ selected, expanded: isExpanded, 'is-running': isRunning, 'is-completed': isCompleted, 'is-failed': isFailed }"
     @click.stop="handleSelect"
@@ -10,16 +12,7 @@
     />
 
     <div class="node-header">
-      <div
-        class="node-type-badge"
-        :style="{ backgroundColor: nodeColor + '22', borderColor: nodeColor }"
-      >
-        <Image
-          class="badge-icon"
-          :style="{ color: nodeColor }"
-        />
-        <span :style="{ color: nodeColor }">图像编辑</span>
-      </div>
+      <NodeTypeBadge :node-type="NODE_TYPE" />
       <button
         class="action-btn"
         @click.stop="toggleExpand"
@@ -33,12 +26,14 @@
 
     <div class="node-name-section">
       <input
+        :id="id ? `node-label-${id}` : undefined"
+        name="node-label"
         v-model="localName"
         class="node-name-input"
         placeholder="节点名称..."
         @blur="handleChange"
         @keydown.enter="handleChange"
-        @click.stop
+        @click.stop="handleSelect"
       >
     </div>
 
@@ -51,10 +46,10 @@
         <span class="info-value">{{ localConfig.model || localConfig.provider || '-' }}</span>
       </div>
       <div
-        v-if="localConfig.prompt || localConfig.text"
+        v-if="localConfig.instruction || localConfig.prompt"
         class="preview-row"
       >
-        <span class="preview-text">{{ truncate(localConfig.prompt || localConfig.text, 35) }}</span>
+        <span class="preview-text">{{ truncate(localConfig.instruction || localConfig.prompt, 35) }}</span>
       </div>
       <div
         class="status-bar"
@@ -191,7 +186,7 @@
         <div class="config-section">
           <label class="config-label">编辑指令</label>
           <el-input
-            v-model="localConfig.prompt"
+            v-model="localConfig.instruction"
             type="textarea"
             :rows="3"
             size="small"
@@ -202,7 +197,7 @@
         <div class="config-section">
           <label class="config-label">输入图像</label>
           <el-input
-            v-model="localConfig.inputImage"
+            v-model="localConfig.image"
             size="small"
             placeholder="输入图像 URL 或路径"
             @change="handleChange"
@@ -224,6 +219,12 @@
       type="source"
       :position="Position.Right"
     />
+
+    <div
+      class="resize-handle"
+      title="拖动调整节点大小"
+      @pointerdown.stop="(e) => resize.startResize(e, rootEl?.offsetWidth, rootEl?.offsetHeight)"
+    />
   </div>
 </template>
 
@@ -232,6 +233,10 @@ import { ref, watch, computed } from 'vue'
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
 import { Image, ChevronDown, ImageIcon, ArrowLeft, ArrowRight, Loader, AlertCircle } from 'lucide-vue-next'
 import { useExecutionStore } from '@/stores/execution'
+import NodeTypeBadge from '@/components/workflow/nodes/NodeTypeBadge.vue'
+import { useNodePresentation } from '@/composables/useNodePresentation'
+import { useNodeResize } from '@/composables/useNodeResize'
+
 
 const props = defineProps({
   id: { type: String, default: '' },
@@ -239,20 +244,32 @@ const props = defineProps({
   selected: { type: Boolean, default: false }
 })
 
+const NODE_TYPE = 'image_editing'
+const { nodeIcon, nodeColor, nodeLabel } = useNodePresentation(NODE_TYPE)
+
 const emit = defineEmits(['select'])
 const { updateNodeData } = useVueFlow()
 const executionStore = useExecutionStore()
 
+const rootEl = ref(null)
+const resize = useNodeResize({
+  id: props.id,
+  initialWidth: props.data.uiSize?.width,
+  initialHeight: props.data.uiSize?.height,
+  minWidth: 280,
+  minHeight: 200,
+  maxWidth: 820,
+  maxHeight: 960,
+})
+
 const isExpanded = ref(false)
-const nodeColor = '#f43f5e'
 
 const localName = ref(props.data.label || '图像编辑')
 const localConfig = ref({
   model: props.data.config?.model || '',
   provider: props.data.config?.provider || '',
-  prompt: props.data.config?.prompt || '',
-  text: props.data.config?.text || '',
-  inputImage: props.data.config?.inputImage || '',
+  instruction: props.data.config?.instruction || props.data.config?.prompt || '',
+  image: props.data.config?.image || props.data.config?.inputImage || '',
   mask: props.data.config?.mask || ''
 })
 
@@ -263,7 +280,7 @@ const isCompleted = computed(() => nodeStatus.value === 'completed')
 const isFailed = computed(() => nodeStatus.value === 'failed')
 
 const inputImage = computed(() => {
-  return localConfig.value.inputImage || (nodeOutput.value && nodeOutput.value.input) || (nodeOutput.value && nodeOutput.value.inputImage)
+  return localConfig.value.image || (nodeOutput.value && nodeOutput.value.input) || (nodeOutput.value && nodeOutput.value.inputImage)
 })
 
 const previewImage = computed(() => {
@@ -286,11 +303,21 @@ function truncate(str, len) {
 watch(() => props.data, (d) => {
   if (d) {
     localName.value = d.label || '图像编辑'
-    localConfig.value = { model: d.config?.model || '', provider: d.config?.provider || '', prompt: d.config?.prompt || '', text: d.config?.text || '', inputImage: d.config?.inputImage || '', mask: d.config?.mask || '', ...d.config }
+    localConfig.value = {
+      model: d.config?.model || '',
+      provider: d.config?.provider || '',
+      instruction: d.config?.instruction || d.config?.prompt || '',
+      image: d.config?.image || d.config?.inputImage || '',
+      mask: d.config?.mask || '',
+      ...d.config
+    }
   }
 }, { deep: true })
 
-function toggleExpand() { isExpanded.value = !isExpanded.value }
+function toggleExpand() {
+  handleSelect()
+  isExpanded.value = !isExpanded.value
+}
 
 function handleChange() {
   if (props.id) updateNodeData(props.id, { label: localName.value, config: { ...localConfig.value } })
@@ -321,6 +348,23 @@ function handleSelect() {
   background: rgba(0, 0, 0, 0.2);
   overflow: hidden;
   transition: all 0.3s ease;
+  flex: 1 1 auto;
+  min-height: 120px;
+}
+
+.resize-handle {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 14px;
+  height: 14px;
+  border-right: 2px solid rgba(244, 63, 94, 0.55);
+  border-bottom: 2px solid rgba(244, 63, 94, 0.55);
+  cursor: nwse-resize;
+  opacity: 0.55;
+  z-index: 3;
+
+  &:hover { opacity: 1; }
 }
 
 .compare-error {
@@ -460,6 +504,9 @@ function handleSelect() {
 .status-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
 
 .domain-node {
+  position: relative;
+  display: flex;
+  flex-direction: column;
   background: var(--node-bg, rgba(20, 20, 30, 0.95));
   border: 2px solid var(--node-border, v-bind(nodeColor));
   border-radius: 12px;

@@ -119,10 +119,9 @@
           </div>
 
           <!-- Stream Content -->
-          <div
-            class="stream-content"
-            v-html="formattedContent"
-          />
+          <div class="stream-content">
+            {{ content }}
+          </div>
 
           <!-- Streaming Cursor -->
           <span
@@ -160,6 +159,7 @@
 
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import Cookies from 'js-cookie'
 import {
   Zap, ChevronDown, Loader, CheckCircle, XCircle, Circle,
   Brain, Copy
@@ -224,16 +224,6 @@ const statusTagType = computed(() => {
 
 const tokenCount = computed(() => {
   return content.value.split(/\s+/).filter(Boolean).length
-})
-
-const formattedContent = computed(() => {
-  // Format markdown-like content
-  let formatted = content.value
-    .replace(/\n/g, '<br>')
-    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*(.*?)\*/g, '<em>$1</em>')
-    .replace(/`(.*?)`/g, '<code>$1</code>')
-  return formatted
 })
 
 // Methods
@@ -535,8 +525,8 @@ defineExpose({
 
 <style scoped>
 .stream-execution-panel {
-  background: var(--bg-card, #fff);
-  border: 1px solid var(--border-color, #e5e7eb);
+  background: var(--card-bg);
+  border: 1px solid var(--border-primary);
   border-radius: 12px;
   overflow: hidden;
   transition: all 0.3s ease;
@@ -551,10 +541,15 @@ defineExpose({
   justify-content: space-between;
   align-items: center;
   padding: 14px 16px;
-  background: var(--bg-secondary, #f9fafb);
-  border-bottom: 1px solid var(--border-color, #e5e7eb);
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-primary);
   cursor: pointer;
   user-select: none;
+  transition: background-color 0.2s ease;
+}
+
+.panel-header:hover {
+  background: var(--bg-hover);
 }
 
 .header-left {
@@ -566,12 +561,13 @@ defineExpose({
 .header-icon {
   width: 18px;
   height: 18px;
-  color: var(--primary-color, #3b82f6);
+  color: var(--color-primary);
 }
 
 .header-title {
   font-weight: 600;
   font-size: 14px;
+  color: var(--text-primary);
 }
 
 .header-right {
@@ -582,14 +578,14 @@ defineExpose({
 
 .elapsed-time {
   font-size: 13px;
-  color: var(--text-secondary, #6b7280);
+  color: var(--text-secondary);
   font-family: monospace;
 }
 
 .collapse-icon {
   width: 18px;
   height: 18px;
-  color: var(--text-secondary, #6b7280);
+  color: var(--text-secondary);
   transition: transform 0.2s;
 }
 
@@ -614,20 +610,24 @@ defineExpose({
   padding: 8px 12px;
   border-radius: 8px;
   margin-bottom: 4px;
-  background: var(--bg-secondary, #f9fafb);
-  transition: all 0.2s;
+  background: var(--bg-secondary);
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.node-status-item:hover {
+  background: var(--bg-hover);
 }
 
 .node-status-item.running {
-  background: rgba(59, 130, 246, 0.1);
+  background: var(--info-bg);
 }
 
 .node-status-item.completed {
-  background: rgba(16, 185, 129, 0.1);
+  background: var(--success-bg);
 }
 
 .node-status-item.error {
-  background: rgba(239, 68, 68, 0.1);
+  background: var(--error-bg);
 }
 
 .node-status-indicator {
@@ -641,7 +641,7 @@ defineExpose({
 .node-status-indicator .spinner {
   width: 16px;
   height: 16px;
-  color: var(--primary-color, #3b82f6);
+  color: var(--color-primary);
   animation: spin 1s linear infinite;
 }
 
@@ -653,19 +653,19 @@ defineExpose({
 .icon-success {
   width: 16px;
   height: 16px;
-  color: #10b981;
+  color: var(--success);
 }
 
 .icon-error {
   width: 16px;
   height: 16px;
-  color: #ef4444;
+  color: var(--error);
 }
 
 .icon-pending {
   width: 16px;
   height: 16px;
-  color: #9ca3af;
+  color: var(--text-tertiary);
 }
 
 .node-status-info {
@@ -678,29 +678,30 @@ defineExpose({
 .node-name {
   font-size: 13px;
   font-weight: 500;
+  color: var(--text-primary);
 }
 
 .node-type {
   font-size: 11px;
-  color: var(--text-secondary, #6b7280);
+  color: var(--text-secondary);
 }
 
 .node-duration {
   font-size: 12px;
-  color: var(--text-secondary, #6b7280);
+  color: var(--text-secondary);
   font-family: monospace;
 }
 
 .empty-status {
   text-align: center;
   padding: 20px;
-  color: var(--text-secondary, #6b7280);
+  color: var(--text-secondary);
   font-size: 13px;
 }
 
 .token-output {
-  background: var(--bg-secondary, #f9fafb);
-  border: 1px solid var(--border-color, #e5e7eb);
+  background: var(--code-bg);
+  border: 1px solid var(--code-border);
   border-radius: 8px;
   overflow: hidden;
 }
@@ -710,18 +711,19 @@ defineExpose({
   justify-content: space-between;
   align-items: center;
   padding: 10px 12px;
-  background: var(--bg-primary, #fff);
-  border-bottom: 1px solid var(--border-color, #e5e7eb);
+  background: var(--code-surface);
+  border-bottom: 1px solid var(--code-border);
 }
 
 .output-title {
   font-size: 13px;
   font-weight: 600;
+  color: var(--code-text);
 }
 
 .token-count {
   font-size: 12px;
-  color: var(--text-secondary, #6b7280);
+  color: var(--code-muted);
 }
 
 .output-content {
@@ -730,13 +732,15 @@ defineExpose({
   overflow-y: auto;
   font-size: 13px;
   line-height: 1.6;
+  color: var(--code-text);
 }
 
 .thinking-section {
   margin-bottom: 12px;
   padding: 10px;
-  background: rgba(139, 92, 246, 0.1);
+  background: var(--surface-muted);
   border-radius: 6px;
+  transition: background-color 0.2s ease;
 }
 
 .thinking-header {
@@ -746,7 +750,7 @@ defineExpose({
   cursor: pointer;
   font-size: 12px;
   font-weight: 500;
-  color: #3b82f6;
+  color: var(--info);
 }
 
 .thinking-icon {
@@ -768,18 +772,19 @@ defineExpose({
 .thinking-content {
   margin-top: 8px;
   font-size: 12px;
-  color: #6b7280;
+  color: var(--text-secondary);
   white-space: pre-wrap;
 }
 
 .stream-content {
   word-wrap: break-word;
+  white-space: pre-wrap;
 }
 
 .streaming-cursor {
   display: inline-block;
   animation: blink 1s infinite;
-  color: var(--primary-color, #3b82f6);
+  color: var(--color-primary);
 }
 
 @keyframes blink {
@@ -792,16 +797,5 @@ defineExpose({
   gap: 8px;
   margin-top: 12px;
   justify-content: flex-end;
-}
-
-/* Dark mode support */
-@media (prefers-color-scheme: dark) {
-  .stream-execution-panel {
-    --bg-card: #1f2937;
-    --bg-secondary: #374151;
-    --bg-primary: #1f2937;
-    --border-color: #4b5563;
-    --text-secondary: #9ca3af;
-  }
 }
 </style>

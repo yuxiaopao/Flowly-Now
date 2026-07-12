@@ -3,6 +3,7 @@
  */
 
 import api from './index'
+import { getWebSocketUrl as buildWebSocketUrl } from '@/config'
 
 /**
  * 获取项目列表
@@ -110,9 +111,7 @@ export function invalidateCache(projectId) {
  * @param {number} projectId
  */
 export function getWebSocketUrl(projectId) {
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-  const host = window.location.host
-  return `${protocol}//${host}/api/v1/codegraph/ws/${projectId}/`
+  return buildWebSocketUrl(`/ws/${projectId}/`)
 }
 
 /**
@@ -120,9 +119,7 @@ export function getWebSocketUrl(projectId) {
  * @param {number} projectId
  */
 export function getFileWatchWebSocketUrl(projectId) {
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-  const host = window.location.host
-  return `${protocol}//${host}/api/v1/codegraph/ws/${projectId}/files/`
+  return buildWebSocketUrl(`/ws/${projectId}/files/`)
 }
 
 export default {

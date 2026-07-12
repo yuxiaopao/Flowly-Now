@@ -151,6 +151,21 @@
 
 **未达标不得终止优化。**
 
+### 7.5 修改后全面测试再验收约束
+- **凡修改代码，必须先自行完成全面测试，再向用户请求验收**
+- 不得在未测试或测试未通过的情况下，向用户汇报「已完成」或请用户验收
+- 测试范围须覆盖：
+  - 本次变更涉及的核心业务正向流程
+  - 相关异常与边界场景
+  - 可能受影响的关联功能（回归验证）
+- 测试手段须包括但不限于（按变更类型选用）：
+  - Lint / 类型检查 / 构建编译
+  - 单元测试、集成测试（项目已有则必须运行）
+  - 接口联调（后端变更或前后端交互变更）
+  - 浏览器功能验证（前端/UI 变更，须使用 chrome-devtools MCP，见 7.1）
+- 测试发现问题须先自行修复并复测通过，再提交验收
+- 向用户汇报时须附带**测试结果摘要**：测了什么、通过/失败情况、已知限制（如有）
+
 ---
 
 ## 八、冲突解决原则
@@ -170,11 +185,63 @@
 - [ ] 业务流程：数据流/状态流/跳转流是否打通？
 - [ ] 交互体验：加载/提示/校验是否完整？
 - [ ] 功能完整：正向/反向/异常/边界场景是否全覆盖？
-- [ ] 浏览器测试：是否使用了正确的 chrome-devtools MCP 而非 cursor-ide-browser？
+- [ ] 浏览器测试：是否使用了正确的 chrome-devtools MCP 而非 cursor-ide-browser？MCP 连接前是否已用独立 Profile 启动 Chrome 并确认调试端口 9222 监听？
+- [ ] 全面测试：是否已对本次代码变更完成全面测试并通过？是否已在汇报中附带测试结果摘要？
 - [ ] 客观分析：是否基于事实而非迎合？是否直接指出了所有问题？
 
 ---
 
-## 十、违规处理
+## 十、Chrome DevTools MCP 连接规范
+
+### 10.1 调试端口启动（Windows + 独立 Profile）
+
+Chrome DevTools MCP (`user-chrome-devtools`) 需要 Chrome 以 `--remote-debugging-port=9222` 启动。**必须使用独立 Profile 目录**，否则会被现有 Chrome 进程占用导致端口不监听。
+
+启动步骤：
+1. 终止所有 Chrome：`taskkill /F /IM chrome.exe`
+2. 创建独立目录（首次）：`New-Item -ItemType Directory -Force -Path "C:\Users\<user>\chrome-debug-profile"`
+3. 启动 Chrome 并指定调试端口和独立 Profile：
+   ```powershell
+   # 正确方式：用 PowerShell Start-Process 的 -ArgumentList 单字符串形式
+   Start-Process -FilePath "C:\Program Files\Google\Chrome\Application\chrome.exe" -ArgumentList "--remote-debugging-port=9222 --user-data-dir=`"C:\Users\<user>\chrome-debug-profile`""
+   ```
+4. 等待 5 秒后验证：`node -e "require('http').get('http://127.0.0.1:9222/json/version', r=>{let d='';r.on('data',c=>d+=c);r.on('end',()=>console.log(d.substring(0,100)))})"`
+
+> **关键教训**：`Start-Process -ArgumentList` 在 Windows 上必须用单字符串形式（参数连写），多参数数组形式会导致 Chrome launcher 丢弃所有参数。`cmd /c start` 也存在同样问题。正确写法即上面的单字符串形式。
+
+### 10.2 MCP 配置
+
+MCP 配置位于 `C:\Users\<user>\.cursor\mcp.json`，`chrome-devtools` 的 `browserUrl` 必须指向 `127.0.0.1` 而非 `localhost`（Windows 上 localhost 可能解析到 IPv6 导致连接失败）：
+
+```json
+"chrome-devtools": {
+  "command": "npx",
+  "args": ["-y", "chrome-devtools-mcp@latest", "--browserUrl=http://127.0.0.1:9222"]
+}
+```
+
+### 10.3 排查流程
+Start-Process -FilePath "C:\Program Files\Google\Chrome\Application\chrome.exe" -ArgumentList "--remote-debugging-port=9222 --user-data-dir=`"C:\Users\18984\chrome-debug-profile`""
+
+| 症状 | 排查命令 | 解决方案 |
+|------|---------|---------|
+| `Could not connect to Chrome` | `Get-NetTCPConnection -LocalPort 9222` | Chrome 未监听端口，用 `cmd /c start` 启动独立 Profile 实例 |
+| 端口监听但 MCP 连接超时 | `node -e "..."` 测试 HTTP | 去掉 MCP 中的 `--experimentalDevtools`，改用 `--browserUrl` |
+| PowerShell `Start-Process -ArgumentList` 不生效 | 检查 `Get-CimInstance Win32_Process` 命令行 | Chrome launcher 会丢弃参数，改用 `cmd /c start "" "path" --args` |
+| Chrome 闪退 | 检查进程退出码 | 加 `--no-sandbox --disable-gpu` 参数 |
+| 无法连接现有 Chrome（已有窗口） | `Get-CimInstance Win32_Process -Filter` 查看命令行 | 必须启动新的独立 Chrome 实例 |
+| `Protocol error (Target.getBrowserContexts): Not allowed` | 检查 WebSocket URL | MCP 应连接 `/devtools/browser/<id>` 而非 `/devtools/page/<id>` |
+| `Network.enable timed out` | 检查 MCP 参数 | 去掉 `--experimentalDevtools` 标志 |
+
+### 10.4 强制规则
+
+- **严禁**使用 `cursor-ide-browser` MCP 做浏览器自动化测试
+- 每次测试前必须确认：`chrome-devtools` MCP 已连接且 `navigate_page` 可用
+- 前端服务断线后先验证 `http://localhost:5200` 再继续测试
+- 后端断线后先验证 `http://127.0.0.1:8000/admin` 再继续测试
+
+---
+
+## 十一、违规处理
 
 若发现自身有违反上述原则的行为，必须立即纠正并补全被省略/删减/绕过的部分。

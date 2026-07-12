@@ -6,7 +6,6 @@ import { defineStore } from 'pinia'
 
 // Variable interpolation regex
 const VARIABLE_REGEX = /\{\{\s*([^}]+)\s*\}\}/g
-const JSON_PATH_REGEX = /\{\{\s*\$json\.([^}]+)\s*\}\}/g
 
 export const useVariableStore = defineStore('variable', {
   state: () => ({

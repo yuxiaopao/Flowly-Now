@@ -6,6 +6,7 @@ import os
 import logging
 import zipfile
 import io
+from django.db.models import Q
 from django.http import FileResponse, HttpResponse
 from django.utils import timezone
 from rest_framework import viewsets, status
@@ -21,8 +22,25 @@ from .generators.classification import ClassificationGenerator
 from .generators.regression import RegressionGenerator
 from .generators.detection import DetectionGenerator
 from .generators.nlp import NLPGGenerator
+from tenants.access import get_accessible_tenant_ids
 
 logger = logging.getLogger(__name__)
+
+
+def register_site_codegraph(site):
+    """Register generated site output dir in CodeGraph PROJECT_CONFIGS."""
+    from codegraph.views import PROJECT_CONFIGS
+    if not site.output_dir or not os.path.isdir(site.output_dir):
+        return None
+    next_id = max(PROJECT_CONFIGS.keys(), default=0) + 1
+    PROJECT_CONFIGS[next_id] = {
+        'name': site.name,
+        'path': site.output_dir,
+        'generated_site_id': str(site.id),
+    }
+    site.codegraph_project_id = next_id
+    site.save(update_fields=['codegraph_project_id'])
+    return next_id
 
 
 class GeneratedSiteViewSet(viewsets.ModelViewSet):
@@ -33,7 +51,24 @@ class GeneratedSiteViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return GeneratedSite.objects.all()
+        user = self.request.user
+        qs = GeneratedSite.objects.all()
+        if user and user.is_authenticated:
+            tenant_ids = get_accessible_tenant_ids(user)
+            if tenant_ids:
+                qs = qs.filter(Q(created_by=user) | Q(tenant_id__in=tenant_ids))
+            else:
+                qs = qs.filter(created_by=user)
+
+        show_in_nav = self.request.query_params.get('show_in_nav')
+        if show_in_nav in ('true', '1'):
+            qs = qs.filter(show_in_nav=True)
+
+        status_filter = self.request.query_params.get('status')
+        if status_filter:
+            qs = qs.filter(status=status_filter)
+
+        return qs.order_by('-created_at')
 
     def get_serializer_class(self):
         if self.action == 'create':
@@ -43,9 +78,11 @@ class GeneratedSiteViewSet(viewsets.ModelViewSet):
         return GeneratedSiteSerializer
 
     def _get_tenant(self, request):
-        if hasattr(request.user, 'current_tenant'):
-            return request.user.current_tenant
-        return None
+        ids = get_accessible_tenant_ids(request.user)
+        if not ids:
+            return None
+        from tenants.models import Tenant
+        return Tenant.objects.filter(id=ids[0]).first()
 
     @action(detail=False, methods=['post'])
     def generate(self, request):
@@ -64,14 +101,8 @@ class GeneratedSiteViewSet(viewsets.ModelViewSet):
 
         def run_generation():
             try:
-                generator_map = {
-                    'classification': ClassificationGenerator,
-                    'regression': RegressionGenerator,
-                    'detection': DetectionGenerator,
-                    'nlp_classification': NLPGGenerator,
-                }
-                generator_cls = generator_map.get(site.website_type, ClassificationGenerator)
-                generator = generator_cls({
+                from website_generator.generators import get_generator
+                generator = get_generator(site.website_type, {
                     'output_dir': site.output_dir,
                     'model_path': site.model_path,
                     'model_type': site.model_type,
@@ -92,6 +123,11 @@ class GeneratedSiteViewSet(viewsets.ModelViewSet):
                 site.inference_endpoint = f"http://localhost:{site.port}/predict"
                 site.completed_at = timezone.now()
                 site.save()
+
+                try:
+                    register_site_codegraph(site)
+                except Exception as cg_err:
+                    logger.warning(f"CodeGraph registration skipped for site {site.id}: {cg_err}")
 
             except Exception as e:
                 logger.exception(f"Website generation failed for site {site.id}")
@@ -165,3 +201,28 @@ class GeneratedSiteViewSet(viewsets.ModelViewSet):
             'message': 'Deployment started',
             'endpoint': site.inference_endpoint,
         })
+
+    @action(detail=True, methods=['post'], url_path='agent/message')
+    def agent_message(self, request, pk=None):
+        """Project Agent: apply user edit request + mandatory QA."""
+        site = self.get_object()
+        content = (request.data.get('content') or request.data.get('message') or '').strip()
+        if not content:
+            return Response({'error': 'content 不能为空'}, status=status.HTTP_400_BAD_REQUEST)
+
+        from .site_factory.project_agent import run_agent_for_site
+
+        result = run_agent_for_site(
+            site,
+            content,
+            qa_profile=request.data.get('qaProfile') or 'default',
+            auto_qa=request.data.get('autoQaAfterEdit', True),
+            confirm_core_edit=bool(request.data.get('confirmCoreEdit', False)),
+            user=request.user,
+            agent_mode=request.data.get('agentMode') or 'auto',
+        )
+
+        if not result.get('success'):
+            return Response(result, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response(result)

@@ -622,21 +622,19 @@ class DockerSandbox:
                 stderr=True,
             )
             
-            # Capture output with timeout
             timeout_buffer = 5
             start_wait = time.time()
+            output = api.exec_start(exec_result['Id'], stream=False)
             
             while True:
                 inspect = api.exec_inspect(exec_result['Id'])
                 if not inspect.get('Running', False):
                     break
                 if time.time() - start_wait > self.config.timeout_seconds + timeout_buffer:
-                    api.exec_start(exec_result['Id'])  # Consume output
                     raise SandboxTimeout(f"Execution timeout ({self.config.timeout_seconds}s)")
                 time.sleep(0.1)
             
-            output = api.exec_start(exec_result['Id'], stream=False)
-            exit_code = inspect.get('ExitCode', 0)
+            exit_code = inspect.get('ExitCode', 1)
             
             duration_ms = int((time.time() - start_time) * 1000)
             
@@ -658,7 +656,19 @@ class DockerSandbox:
                         container_id=container_id[:12],
                     )
             else:
-                error_msg = output.decode('utf-8', errors='replace')
+                raw_out = output.decode('utf-8', errors='replace')
+                try:
+                    parsed = json.loads(raw_out)
+                    if isinstance(parsed, dict) and 'output' in parsed:
+                        return ExecutionResult(
+                            success=True,
+                            output=parsed.get('output', {}),
+                            duration_ms=duration_ms,
+                            container_id=container_id[:12],
+                        )
+                except json.JSONDecodeError:
+                    pass
+                error_msg = raw_out
                 if len(error_msg) > 500:
                     error_msg = error_msg[:500] + '...'
                 return ExecutionResult(
@@ -684,15 +694,15 @@ class DockerSandbox:
     
     def _build_container_script(self, code: str, input_data: Dict[str, Any]) -> str:
         """Build execution script for container."""
-        # Escape the code and data for embedding in Python string
         escaped_code = code.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n')
-        escaped_data = json.dumps(input_data, ensure_ascii=False)
+        # Embed JSON as a string literal — raw json.dumps() uses null/true/false which are invalid Python.
+        input_json_literal = json.dumps(json.dumps(input_data, ensure_ascii=False))
         
         return f'''
 import json
 import sys
 
-input_data = {escaped_data}
+input_data = json.loads({input_json_literal})
 code = "{escaped_code}"
 
 # Safe modules for container execution

@@ -6,6 +6,7 @@ from rest_framework import serializers
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate
 from django.contrib.auth.password_validation import validate_password
+from django.db.models import Q
 from .models import User
 
 
@@ -17,11 +18,13 @@ class UserSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'username', 'email', 'first_name', 'last_name',
             'avatar', 'role', 'phone', 'bio',
+            'is_staff', 'is_superuser',
             'default_model', 'total_executions', 'monthly_executions',
             'execution_limit', 'created_at', 'last_login_at'
         ]
         read_only_fields = [
-            'id', 'total_executions', 'monthly_executions',
+            'id', 'is_staff', 'is_superuser',
+            'total_executions', 'monthly_executions',
             'execution_limit', 'created_at', 'last_login_at'
         ]
 
@@ -76,10 +79,20 @@ class LoginSerializer(serializers.Serializer):
         password = attrs.get('password')
 
         # Support both username and email login
+        auth_kwargs = {'password': password}
+        if '@' in username:
+            # Input looks like an email, find the user by email first
+            try:
+                user_obj = User.objects.get(email=username)
+                auth_kwargs['username'] = user_obj.username
+            except User.DoesNotExist:
+                auth_kwargs['username'] = username
+        else:
+            auth_kwargs['username'] = username
+
         user = authenticate(
             request=self.context.get('request'),
-            username=username,
-            password=password
+            **auth_kwargs
         )
 
         if not user:

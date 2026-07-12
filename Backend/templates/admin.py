@@ -15,19 +15,20 @@ class TemplateCategoryAdmin(admin.ModelAdmin):
 @admin.register(WorkflowTemplate)
 class WorkflowTemplateAdmin(admin.ModelAdmin):
     list_display = ('name', 'category', 'created_by', 'status', 'use_count', 'rating', 'created_at')
-    list_filter = ('category', 'status', 'access')
-    search_fields = ('name', 'description')
-    readonly_fields = ('use_count', 'rating', 'created_at', 'updated_at')
+    list_filter = ('category', 'status', 'access', 'is_verified')
+    search_fields = ('name', 'description', 'created_by__username')
+    readonly_fields = (
+        'view_count', 'use_count', 'like_count', 'rating', 'rating_count',
+        'verified_at', 'published_at', 'created_at', 'updated_at',
+    )
+    filter_horizontal = ('likes',)
 
     fieldsets = (
         ('基本信息', {
-            'fields': ('name', 'slug', 'description', 'category', 'created_by')
+            'fields': ('name', 'description', 'category', 'created_by', 'tenant')
         }),
         ('模板内容', {
-            'fields': ('template_data', 'nodes', 'edges')
-        }),
-        ('变量', {
-            'fields': ('variables',)
+            'fields': ('workflow_data', 'nodes', 'edges', 'variables')
         }),
         ('分类标签', {
             'fields': ('tags',)
@@ -39,7 +40,7 @@ class WorkflowTemplateAdmin(admin.ModelAdmin):
             'fields': ('status', 'access', 'source_workflow', 'config')
         }),
         ('统计', {
-            'fields': ('view_count', 'use_count', 'like_count', 'rating', 'rating_count')
+            'fields': ('view_count', 'use_count', 'like_count', 'likes', 'rating', 'rating_count')
         }),
         ('认证', {
             'fields': ('is_verified', 'verified_at')

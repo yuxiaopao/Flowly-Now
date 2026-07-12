@@ -1,111 +1,61 @@
-﻿<template>
-  <div class="monitoring-page">
-    <!-- Page Header -->
-    <div class="page-header">
-      <div class="header-left">
-        <h1>执行监控</h1>
-        <p class="subtitle">
-          实时监控工作流执行状态和系统健康度
-        </p>
-      </div>
-    </div>
+<template>
+  <PageShell width="wide">
+    <PageHeader
+      title="执行监控"
+      subtitle="实时监控工作流执行状态和系统健康度"
+    />
 
-    <!-- Stats Overview Cards -->
-    <div class="stats-row">
-      <el-card
-        shadow="never"
-        class="stat-card"
+    <StatGrid>
+      <StatCard
+        label="总执行次数"
+        :value="stats.totalExecutions"
+        :icon="Activity"
+        tone="neutral"
+      />
+      <StatCard
+        label="成功率"
+        :value="`${stats.successRate}%`"
+        :icon="CheckCircle"
+        tone="success"
       >
-        <div class="stat-icon-wrapper total">
-          <Activity class="stat-icon" />
-        </div>
-        <div class="stat-content">
-          <div class="stat-value">
-            {{ stats.totalExecutions }}
-          </div>
-          <div class="stat-label">
-            总执行次数
-          </div>
-        </div>
-      </el-card>
-
-      <el-card
-        shadow="never"
-        class="stat-card"
-      >
-        <div class="stat-icon-wrapper success">
-          <CheckCircle class="stat-icon" />
-        </div>
-        <div class="stat-content">
-          <div class="stat-value">
-            {{ stats.successRate }}%
-          </div>
-          <div class="stat-label">
-            成功率
-          </div>
+        <template #extra>
           <el-tag
             size="small"
             type="success"
-            class="stat-trend"
           >
             <TrendingUp class="trend-icon" /> +{{ stats.successTrend }}%
           </el-tag>
-        </div>
-      </el-card>
-
-      <el-card
-        shadow="never"
-        class="stat-card"
-      >
-        <div class="stat-icon-wrapper time">
-          <Clock class="stat-icon" />
-        </div>
-        <div class="stat-content">
-          <div class="stat-value">
-            {{ stats.avgDuration }}ms
-          </div>
-          <div class="stat-label">
-            平均执行时间
-          </div>
-        </div>
-      </el-card>
-
-      <el-card
-        shadow="never"
-        class="stat-card"
-      >
-        <div class="stat-icon-wrapper active">
-          <Zap class="stat-icon" />
-        </div>
-        <div class="stat-content">
-          <div class="stat-value">
-            {{ stats.activeWorkflows }}
-          </div>
-          <div class="stat-label">
-            活跃工作流
-          </div>
-        </div>
-      </el-card>
-    </div>
+        </template>
+      </StatCard>
+      <StatCard
+        label="平均执行时间"
+        :value="`${stats.avgDuration}ms`"
+        :icon="Clock"
+        tone="info"
+      />
+      <StatCard
+        label="活跃工作流"
+        :value="stats.activeWorkflows"
+        :icon="Zap"
+        tone="warning"
+      />
+    </StatGrid>
 
     <!-- Main Content Grid -->
     <div class="dashboard-grid">
       <!-- Real-time Execution Monitor -->
-      <el-card
-        shadow="never"
-        class="monitor-card full-width"
+      <SectionCard
+        title="实时执行"
+        class="monitor-section monitor-section--full"
       >
-        <template #header>
-          <div class="card-header">
-            <span>实时执行</span>
-            <el-tag
-              size="small"
-              type="danger"
-              class="live-indicator"
-            >
-              <span class="pulse-dot" /> LIVE
-            </el-tag>
-          </div>
+        <template #actions>
+          <el-tag
+            size="small"
+            type="danger"
+            class="live-indicator"
+          >
+            <span class="pulse-dot" /> LIVE
+          </el-tag>
         </template>
 
         <el-table 
@@ -181,32 +131,29 @@
         >
           <span>暂无正在执行的流程</span>
         </div>
-      </el-card>
+      </SectionCard>
 
       <!-- Execution Trend Chart -->
-      <el-card
-        shadow="never"
-        class="monitor-card chart-card"
+      <SectionCard
+        title="执行趋势"
+        class="monitor-section monitor-section--chart"
       >
-        <template #header>
-          <div class="card-header">
-            <span>执行趋势</span>
-            <el-radio-group
-              v-model="trendPeriod"
-              size="small"
-              @change="loadTrendData"
-            >
-              <el-radio-button value="day">
-                今天
-              </el-radio-button>
-              <el-radio-button value="week">
-                7天
-              </el-radio-button>
-              <el-radio-button value="month">
-                30天
-              </el-radio-button>
-            </el-radio-group>
-          </div>
+        <template #actions>
+          <el-radio-group
+            v-model="trendPeriod"
+            size="small"
+            @change="loadTrendData"
+          >
+            <el-radio-button value="day">
+              今天
+            </el-radio-button>
+            <el-radio-button value="week">
+              7天
+            </el-radio-button>
+            <el-radio-button value="month">
+              30天
+            </el-radio-button>
+          </el-radio-group>
         </template>
         
         <div
@@ -215,17 +162,13 @@
           class="trend-chart"
           style="height: 280px;"
         />
-      </el-card>
+      </SectionCard>
 
       <!-- Workflow Health -->
-      <el-card
-        shadow="never"
-        class="monitor-card health-card"
+      <SectionCard
+        title="工作流健康度"
+        class="monitor-section monitor-section--health"
       >
-        <template #header>
-          <span>工作流健康度</span>
-        </template>
-
         <div
           v-loading="isLoadingHealth"
           class="health-grid"
@@ -233,7 +176,7 @@
           <div 
             v-for="workflow in workflowHealth" 
             :key="workflow.id" 
-            class="health-card"
+            class="health-item"
           >
             <div class="health-header">
               <span class="workflow-name">{{ workflow.name }}</span>
@@ -263,24 +206,21 @@
             <span>暂无工作流数据</span>
           </div>
         </div>
-      </el-card>
+      </SectionCard>
 
       <!-- Alert Rules -->
-      <el-card
-        shadow="never"
-        class="monitor-card full-width"
+      <SectionCard
+        title="告警规则"
+        class="monitor-section monitor-section--full"
       >
-        <template #header>
-          <div class="card-header">
-            <span>告警规则</span>
-            <el-button
-              type="primary"
-              size="small"
-              @click="showAlertDialog = true"
-            >
-              <Plus class="icon" /> 添加规则
-            </el-button>
-          </div>
+        <template #actions>
+          <el-button
+            type="primary"
+            size="small"
+            @click="showAlertDialog = true"
+          >
+            <Plus class="icon" /> 添加规则
+          </el-button>
         </template>
 
         <el-table
@@ -299,7 +239,7 @@
           >
             <template #default="{ row }">
               <el-tag size="small">
-                {{ getAlertTypeLabel(row.type) }}
+                {{ getAlertTypeLabel(row.condition || row.type) }}
               </el-tag>
             </template>
           </el-table-column>
@@ -363,7 +303,7 @@
         >
           <span>暂无告警规则</span>
         </div>
-      </el-card>
+      </SectionCard>
     </div>
 
     <!-- Alert Rule Dialog -->
@@ -471,21 +411,29 @@
         </el-button>
       </template>
     </el-dialog>
-  </div>
+  </PageShell>
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useMonitoringStore } from '@/stores/monitoring'
 import { useAppStore } from '@/stores/app'
 import { monitoringApi } from '@/api/monitoring'
+import { pauseExecution as pauseWorkflowExecution } from '@/api/workflow'
 import { useWebSocket } from '@/composables/useWebSocket'
+import { getWebSocketUrl } from '@/config'
 import * as echarts from 'echarts'
 import {
-  Plus, Activity, CheckCircle, Clock, Zap, TrendingUp,
-  AlertTriangle, AlertCircle, Shield
+  Plus, Activity, CheckCircle, Clock, Zap, TrendingUp
 } from 'lucide-vue-next'
 import { ElMessage } from 'element-plus'
+import PageShell from '@/components/layout/PageShell.vue'
+import PageHeader from '@/components/layout/PageHeader.vue'
+import StatGrid from '@/components/layout/StatGrid.vue'
+import StatCard from '@/components/layout/StatCard.vue'
+import SectionCard from '@/components/layout/SectionCard.vue'
+import { getEchartsTheme } from '@/utils/chartTheme'
+import { useThemeChartRefresh } from '@/composables/useThemeChartRefresh'
 
 const monitoringStore = useMonitoringStore()
 const appStore = useAppStore()
@@ -550,28 +498,42 @@ const alertRules2 = {
 let trendChart = null
 
 // WebSocket connection
-const { connect, disconnect, isConnected } = useWebSocket()
+const { connect, disconnect } = useWebSocket()
 
 // Load stats
+function emptyStats() {
+  return {
+    totalExecutions: 0,
+    successRate: 0,
+    successTrend: 0,
+    avgDuration: 0,
+    activeWorkflows: 0
+  }
+}
+
+function mapTrendPeriod(period) {
+  const mapping = {
+    week: '7d',
+    month: '30d',
+    day: '1d',
+  }
+  return mapping[period] || period
+}
+
 async function loadStats() {
   try {
     const response = await monitoringApi.getExecutionStats()
     stats.value = {
-      totalExecutions: response.totalExecutions || 0,
-      successRate: response.successRate || 0,
-      successTrend: response.successTrend || 0,
-      avgDuration: response.avgDuration || 0,
-      activeWorkflows: response.activeWorkflows || 0
+      totalExecutions: response.totalExecutions ?? response.total_executions ?? 0,
+      successRate: response.successRate ?? response.success_rate ?? 0,
+      successTrend: response.successTrend ?? response.success_trend ?? 0,
+      avgDuration: response.avgDurationMs ?? response.avg_duration_ms ?? response.avgDuration ?? response.avg_duration ?? 0,
+      activeWorkflows: response.activeWorkflows ?? response.active_workflows ?? 0
     }
   } catch (err) {
-    // Use mock data fallback
-    stats.value = {
-      totalExecutions: 12580,
-      successRate: 94.5,
-      successTrend: 2.3,
-      avgDuration: 1250,
-      activeWorkflows: 8
-    }
+    stats.value = emptyStats()
+    appStore.error('加载执行统计失败')
+    console.error('loadStats failed:', err)
   }
 }
 
@@ -582,25 +544,9 @@ async function loadActiveExecutions() {
     const response = await monitoringApi.getActiveExecutions()
     activeExecutions.value = response.results || response || []
   } catch (err) {
-    // Mock data fallback
-    activeExecutions.value = [
-      {
-        id: 1,
-        workflowName: '用户数据同步',
-        currentNodeId: 'process_data',
-        progress: 65,
-        duration: 3500,
-        status: 'running'
-      },
-      {
-        id: 2,
-        workflowName: '订单处理流程',
-        currentNodeId: 'validate_order',
-        progress: 30,
-        duration: 1200,
-        status: 'running'
-      }
-    ]
+    activeExecutions.value = []
+    appStore.error('加载活跃执行失败')
+    console.error('loadActiveExecutions failed:', err)
   } finally {
     isLoadingActive.value = false
   }
@@ -610,7 +556,7 @@ async function loadActiveExecutions() {
 async function loadTrendData() {
   isLoadingTrend.value = true
   try {
-    const response = await monitoringApi.getExecutionTrend({ period: trendPeriod.value })
+    const response = await monitoringApi.getExecutionTrend({ period: mapTrendPeriod(trendPeriod.value) })
     trendData.value = {
       dates: response.dates || [],
       counts: response.counts || [],
@@ -618,23 +564,9 @@ async function loadTrendData() {
       durations: response.durations || []
     }
   } catch (err) {
-    // Mock data fallback
-    const now = new Date()
-    const dates = []
-    const counts = []
-    const successRates = []
-    const durations = []
-
-    for (let i = 6; i >= 0; i--) {
-      const date = new Date(now)
-      date.setDate(date.getDate() - i)
-      dates.push(`${date.getMonth() + 1}/${date.getDate()}`)
-      counts.push(Math.floor(Math.random() * 500) + 200)
-      successRates.push(Math.floor(Math.random() * 10) + 90)
-      durations.push(Math.floor(Math.random() * 500) + 800)
-    }
-
-    trendData.value = { dates, counts, successRates, durations }
+    trendData.value = { dates: [], counts: [], successRates: [], durations: [] }
+    appStore.error('加载执行趋势失败')
+    console.error('loadTrendData failed:', err)
   } finally {
     isLoadingTrend.value = false
     await nextTick()
@@ -647,17 +579,39 @@ async function loadWorkflowHealth() {
   isLoadingHealth.value = true
   try {
     const response = await monitoringApi.getResourceUsage()
-    workflowHealth.value = response.workflows || []
+    workflowHealth.value = (response.workflows || []).map(w => ({
+      ...w,
+      healthScore: w.healthScore ?? w.health_score ?? 0,
+      successRate: w.successRate ?? w.success_rate ?? 0,
+      avgDuration: w.avgDurationMs ?? w.avg_duration_ms ?? w.avgDuration ?? w.avg_duration ?? 0,
+    }))
   } catch (err) {
-    // Mock data fallback
-    workflowHealth.value = [
-      { id: 1, name: '用户数据同步', healthScore: 95, successRate: 98, avgDuration: 850 },
-      { id: 2, name: '订单处理流程', healthScore: 88, successRate: 94, avgDuration: 1200 },
-      { id: 3, name: '库存管理系统', healthScore: 72, successRate: 85, avgDuration: 2300 },
-      { id: 4, name: '日志收集服务', healthScore: 60, successRate: 78, avgDuration: 450 }
-    ]
+    workflowHealth.value = []
+    appStore.error('加载工作流健康度失败')
+    console.error('loadWorkflowHealth failed:', err)
   } finally {
     isLoadingHealth.value = false
+  }
+}
+
+function normalizeAlertRule(rule) {
+  if (!rule || typeof rule !== 'object') return rule
+  return {
+    ...rule,
+    type: rule.type || rule.condition,
+    condition: rule.condition || rule.type,
+    enabled: rule.enabled ?? rule.isActive ?? rule.is_active ?? true,
+  }
+}
+
+function buildAlertRulePayload(form) {
+  return {
+    name: form.name,
+    description: form.description || '',
+    condition: form.type || form.condition,
+    severity: form.severity,
+    threshold: form.threshold,
+    enabled: form.enabled ?? true,
   }
 }
 
@@ -666,16 +620,101 @@ async function loadAlertRules() {
   isLoadingRules.value = true
   try {
     const response = await monitoringApi.getAlertRules()
-    alertRules.value = response.results || response || []
+    const rows = response.results || response || []
+    alertRules.value = rows.map(normalizeAlertRule)
   } catch (err) {
-    // Use existing store rules as fallback
-    alertRules.value = monitoringStore.alertRules
+    alertRules.value = (monitoringStore.alertRules || []).map(normalizeAlertRule)
   } finally {
     isLoadingRules.value = false
   }
 }
 
 // Initialize trend chart
+function buildTrendChartOption() {
+  const theme = getEchartsTheme()
+
+  return {
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'cross' },
+      backgroundColor: theme.surface,
+      borderColor: theme.axis,
+      textStyle: { color: theme.foreground },
+    },
+    legend: {
+      data: ['执行次数', '成功率', '平均耗时'],
+      bottom: 0,
+      textStyle: { color: theme.text },
+    },
+    grid: { left: '3%', right: '4%', bottom: '15%', containLabel: true, top: '10%' },
+    xAxis: {
+      type: 'category',
+      data: trendData.value.dates,
+      boundaryGap: false,
+      axisLabel: { color: theme.text },
+      axisLine: { lineStyle: { color: theme.axis } },
+    },
+    yAxis: [
+      {
+        type: 'value',
+        name: '执行次数',
+        position: 'left',
+        nameTextStyle: { color: theme.text },
+        axisLabel: { color: theme.text },
+        axisLine: { lineStyle: { color: theme.axis } },
+        splitLine: { lineStyle: { color: theme.splitLine } },
+      },
+      {
+        type: 'value',
+        name: '成功率 %',
+        position: 'right',
+        min: 0,
+        max: 100,
+        nameTextStyle: { color: theme.text },
+        axisLabel: { color: theme.text },
+        axisLine: { lineStyle: { color: theme.axis } },
+        splitLine: { show: false },
+      },
+      {
+        type: 'value',
+        name: '耗时 ms',
+        position: 'right',
+        offset: 60,
+        nameTextStyle: { color: theme.text },
+        axisLabel: { color: theme.text },
+        axisLine: { lineStyle: { color: theme.axis } },
+        splitLine: { show: false },
+      },
+    ],
+    series: [
+      {
+        name: '执行次数',
+        type: 'bar',
+        data: trendData.value.counts,
+        itemStyle: { color: theme.primary },
+      },
+      {
+        name: '成功率',
+        type: 'line',
+        yAxisIndex: 1,
+        data: trendData.value.successRates,
+        itemStyle: { color: theme.success },
+        lineStyle: { color: theme.success },
+        smooth: true,
+      },
+      {
+        name: '平均耗时',
+        type: 'line',
+        yAxisIndex: 2,
+        data: trendData.value.durations,
+        itemStyle: { color: theme.warning },
+        lineStyle: { color: theme.warning },
+        smooth: true,
+      },
+    ],
+  }
+}
+
 function initTrendChart() {
   if (!trendChartRef.value) return
 
@@ -683,53 +722,12 @@ function initTrendChart() {
     trendChart = echarts.init(trendChartRef.value)
   }
 
-  const option = {
-    tooltip: {
-      trigger: 'axis',
-      axisPointer: { type: 'cross' }
-    },
-    legend: {
-      data: ['执行次数', '成功率', '平均耗时'],
-      bottom: 0
-    },
-    grid: { left: '3%', right: '4%', bottom: '15%', containLabel: true, top: '10%' },
-    xAxis: {
-      type: 'category',
-      data: trendData.value.dates,
-      boundaryGap: false
-    },
-    yAxis: [
-      { type: 'value', name: '执行次数', position: 'left' },
-      { type: 'value', name: '成功率 %', position: 'right', min: 0, max: 100 },
-      { type: 'value', name: '耗时 ms', position: 'right', offset: 60 }
-    ],
-    series: [
-      {
-        name: '执行次数',
-        type: 'bar',
-        data: trendData.value.counts,
-        itemStyle: { color: '#6366f1' }
-      },
-      {
-        name: '成功率',
-        type: 'line',
-        yAxisIndex: 1,
-        data: trendData.value.successRates,
-        itemStyle: { color: '#10b981' },
-        smooth: true
-      },
-      {
-        name: '平均耗时',
-        type: 'line',
-        yAxisIndex: 2,
-        data: trendData.value.durations,
-        itemStyle: { color: '#f59e0b' },
-        smooth: true
-      }
-    ]
-  }
+  trendChart.setOption(buildTrendChartOption(), true)
+}
 
-  trendChart.setOption(option)
+function refreshTrendChartTheme() {
+  if (!trendChart) return
+  initTrendChart()
 }
 
 // Handle execution event from WebSocket
@@ -758,7 +756,7 @@ function handleExecutionEvent(event) {
       stats.value.activeWorkflows = Math.max(0, stats.value.activeWorkflows - 1)
       break
 
-    case 'execution_error':
+    case 'execution_error': {
       const errorExecution = activeExecutions.value.find(
         e => e.id === event.data.execution_id
       )
@@ -768,8 +766,9 @@ function handleExecutionEvent(event) {
       }
       stats.value.activeWorkflows = Math.max(0, stats.value.activeWorkflows - 1)
       break
+    }
 
-    case 'execution_progress':
+    case 'execution_progress': {
       const progressExecution = activeExecutions.value.find(
         e => e.id === event.data.execution_id
       )
@@ -779,6 +778,7 @@ function handleExecutionEvent(event) {
         progressExecution.duration = event.data.duration
       }
       break
+    }
   }
 }
 
@@ -791,10 +791,12 @@ function calculateSuccessRate() {
 // Pause execution
 async function pauseExecution(executionId) {
   try {
-    // API call would go here
+    await pauseWorkflowExecution(executionId)
     ElMessage.success('执行已暂停')
+    await loadActiveExecutions()
   } catch (err) {
-    appStore.error('操作失败')
+    appStore.error('暂停失败')
+    console.error('pauseExecution failed:', err)
   }
 }
 
@@ -811,13 +813,14 @@ async function toggleAlert(rule) {
 
 // Edit alert
 function editAlert(rule) {
-  editingAlert.value = rule
+  const normalized = normalizeAlertRule(rule)
+  editingAlert.value = normalized
   Object.assign(alertForm, {
-    name: rule.name,
-    type: rule.type,
-    severity: rule.severity,
-    threshold: rule.threshold,
-    description: rule.description || ''
+    name: normalized.name,
+    type: normalized.type,
+    severity: normalized.severity,
+    threshold: normalized.threshold,
+    description: normalized.description || ''
   })
   showAlertDialog.value = true
 }
@@ -840,16 +843,18 @@ async function handleSaveAlert() {
 
   isSaving.value = true
   try {
+    const payload = buildAlertRulePayload(alertForm)
     if (editingAlert.value) {
-      const response = await monitoringApi.updateAlertRule(editingAlert.value.id, alertForm)
+      const response = await monitoringApi.updateAlertRule(editingAlert.value.id, payload)
+      const normalized = normalizeAlertRule(response)
       const index = alertRules.value.findIndex(r => r.id === editingAlert.value.id)
       if (index !== -1) {
-        alertRules.value[index] = { ...alertRules.value[index], ...response }
+        alertRules.value[index] = { ...alertRules.value[index], ...normalized }
       }
       ElMessage.success('规则已更新')
     } else {
-      const response = await monitoringApi.createAlertRule(alertForm)
-      alertRules.value.unshift(response)
+      const response = await monitoringApi.createAlertRule(payload)
+      alertRules.value.unshift(normalizeAlertRule(response))
       ElMessage.success('规则已创建')
     }
     showAlertDialog.value = false
@@ -948,10 +953,7 @@ onMounted(async () => {
   ])
 
   // Connect WebSocket for real-time updates
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-  const host = window.location.host
-
-  connect(`${protocol}//${host}/ws/executions/`, {
+  connect(getWebSocketUrl('/ws/monitoring/'), {
     onMessage: (data) => {
       handleExecutionEvent(data)
     },
@@ -966,6 +968,8 @@ onMounted(async () => {
   // Handle window resize for chart
   window.addEventListener('resize', handleResize)
 })
+
+useThemeChartRefresh(refreshTrendChartTheme)
 
 onUnmounted(() => {
   disconnect()
@@ -991,119 +995,11 @@ function handleResize() {
 <style lang="scss" scoped>
 @use '@/assets/styles/variables.scss' as *;
 
-.monitoring-page {
-  padding: $spacing-6;
-  max-width: 1600px;
-  margin: 0 auto;
-}
-
-.page-header {
-  margin-bottom: $spacing-6;
-
-  h1 {
-    font-size: $font-size-2xl;
-    font-weight: $font-weight-bold;
-    margin: 0;
-  }
-
-  .subtitle {
-    font-size: $font-size-sm;
-    color: var(--text-secondary);
-    margin: $spacing-1 0 0;
-  }
-}
-
-// Stats Row
-.stats-row {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: $spacing-4;
-  margin-bottom: $spacing-6;
-
-  @media (max-width: $breakpoint-xl) {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  @media (max-width: $breakpoint-md) {
-    grid-template-columns: 1fr;
-  }
-}
-
-.stat-card {
-  display: flex;
-  align-items: center;
-  gap: $spacing-4;
-  padding: $spacing-5;
-  border-radius: $radius-xl;
-  transition: transform 0.2s, box-shadow 0.2s;
-
-  &:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-  }
-
-  .stat-icon-wrapper {
-    width: 56px;
-    height: 56px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: $radius-lg;
-
-    &.total {
-      background: rgba(#6366f1, 0.15);
-      color: #6366f1;
-    }
-
-    &.success {
-      background: rgba(#10b981, 0.15);
-      color: #10b981;
-    }
-
-    &.time {
-      background: rgba(#f59e0b, 0.15);
-      color: #f59e0b;
-    }
-
-    &.active {
-      background: rgba(#ef4444, 0.15);
-      color: #ef4444;
-    }
-
-    .stat-icon {
-      width: 28px;
-      height: 28px;
-    }
-  }
-
-  .stat-content {
-    flex: 1;
-
-    .stat-value {
-      font-size: $font-size-2xl;
-      font-weight: $font-weight-bold;
-      line-height: 1.2;
-    }
-
-    .stat-label {
-      font-size: $font-size-sm;
-      color: var(--text-secondary);
-      margin-top: $spacing-1;
-    }
-
-    .stat-trend {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      margin-top: $spacing-2;
-      font-size: $font-size-xs;
-
-      .trend-icon {
-        width: 12px;
-        height: 12px;
-      }
-    }
-  }
+.trend-icon {
+  width: 12px;
+  height: 12px;
+  margin-right: 2px;
+  vertical-align: -2px;
 }
 
 // Dashboard Grid
@@ -1117,43 +1013,35 @@ function handleResize() {
   }
 }
 
-.monitor-card {
-  border-radius: $radius-xl;
-
-  &.full-width {
+.monitor-section {
+  &.monitor-section--full {
     grid-column: 1 / -1;
   }
 
-  &.chart-card,
-  &.health-card {
+  &.monitor-section--chart,
+  &.monitor-section--health {
     min-height: 360px;
   }
 
-  .card-header {
+  .live-indicator {
     display: flex;
-    justify-content: space-between;
     align-items: center;
+    gap: 6px;
+    font-weight: $font-weight-semibold;
 
-    .live-indicator {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      font-weight: $font-weight-semibold;
-
-      .pulse-dot {
-        width: 8px;
-        height: 8px;
-        background: #ef4444;
-        border-radius: 50%;
-        animation: pulse 1.5s infinite;
-      }
+    .pulse-dot {
+      width: 8px;
+      height: 8px;
+      background: var(--color-danger);
+      border-radius: 50%;
+      animation: pulse 1.5s infinite;
     }
+  }
 
-    .icon {
-      width: 14px;
-      height: 14px;
-      margin-right: 4px;
-    }
+  .icon {
+    width: 14px;
+    height: 14px;
+    margin-right: 4px;
   }
 }
 
@@ -1183,7 +1071,7 @@ function handleResize() {
   gap: $spacing-4;
 }
 
-.health-card {
+.health-item {
   padding: $spacing-4;
   background: var(--bg-secondary);
   border-radius: $radius-lg;

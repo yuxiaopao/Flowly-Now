@@ -18,6 +18,9 @@ from config.constants import (
     DEFAULT_CONTEXT_WINDOW,
 )
 
+# DesktopAgent lives in models_desktop.py for separation of concerns
+from .models_desktop import DesktopAgent  # noqa: F401
+
 
 class Agent(models.Model):
     """AI Agent model."""
@@ -69,6 +72,14 @@ class Agent(models.Model):
     memory_enabled = models.BooleanField(default=True, verbose_name='启用记忆')
     context_window = models.IntegerField(default=DEFAULT_CONTEXT_WINDOW, verbose_name='上下文窗口数')
 
+    # Knowledge base binding: list of rag.DocumentCollection UUID strings this
+    # agent may search via the 'knowledge_base' tool (requires 'knowledge_base'
+    # to also be present in `tools`).
+    knowledge_collections = models.JSONField(default=list, verbose_name='关联知识库集合')
+
+    # Marketplace: publish this agent as a public, cloneable template
+    is_public = models.BooleanField(default=False, verbose_name='已发布到市场')
+
     # Status
     is_active = models.BooleanField(default=True, verbose_name='是否启用')
     settings = models.JSONField(default=dict, verbose_name='其他设置')
@@ -86,6 +97,7 @@ class Agent(models.Model):
             models.Index(fields=['owner']),
             models.Index(fields=['agent_type']),
             models.Index(fields=['is_active']),
+            models.Index(fields=['is_public']),
         ]
 
     def __str__(self):
@@ -152,6 +164,10 @@ class AgentConversation(models.Model):
         verbose_name = 'Agent对话'
         verbose_name_plural = 'Agent对话'
         ordering = ['-updated_at']
+        unique_together = [['agent', 'user']]
+        indexes = [
+            models.Index(fields=['-updated_at']),
+        ]
 
     def __str__(self):
         return f"{self.agent.name} - {self.user.username}"
@@ -211,3 +227,66 @@ class AgentExecution(models.Model):
 
     def __str__(self):
         return f"{self.agent.name} - {self.get_status_display()}"
+
+
+class AgentCollaborationRun(models.Model):
+    """A multi-agent collaboration run (Planner/Executor/Critic/Reporter)."""
+
+    STATUS_CHOICES = [
+        ('pending', _('Pending')),
+        ('running', _('Running')),
+        ('completed', _('Completed')),
+        ('failed', _('Failed')),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    tenant = models.ForeignKey(
+        'tenants.Tenant',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='agent_collaboration_runs',
+        verbose_name='所属团队'
+    )
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='agent_collaboration_runs',
+        verbose_name='发起人'
+    )
+
+    task = models.TextField(verbose_name='任务描述')
+
+    # roles_config: list of {role, agent_id (optional), name, system_prompt, model}
+    roles_config = models.JSONField(default=list, verbose_name='角色配置')
+
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='pending',
+        verbose_name='状态',
+        db_index=True
+    )
+
+    # trace: ordered list of {phase, role, agent, content, timestamp} step records
+    trace = models.JSONField(default=list, verbose_name='执行轨迹')
+    final_report = models.TextField(blank=True, verbose_name='最终报告')
+    error_message = models.TextField(blank=True, verbose_name='错误信息')
+
+    started_at = models.DateTimeField(auto_now_add=True, verbose_name='开始时间')
+    completed_at = models.DateTimeField(null=True, blank=True, verbose_name='完成时间')
+
+    class Meta:
+        db_table = 'agent_collaboration_runs'
+        verbose_name = 'AI协作任务'
+        verbose_name_plural = 'AI协作任务'
+        ordering = ['-started_at']
+        indexes = [
+            models.Index(fields=['tenant']),
+            models.Index(fields=['created_by']),
+            models.Index(fields=['status']),
+        ]
+
+    def __str__(self):
+        return f"Collaboration[{self.id}] - {self.get_status_display()}"

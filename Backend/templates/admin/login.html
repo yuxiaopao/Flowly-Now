@@ -2,125 +2,182 @@
 {% load static %}
 
 {% block extrahead %}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 :root {
-    --flowly-primary: #6366f1;
-    --flowly-primary-hover: #4f46e5;
-    --flowly-gradient: linear-gradient(135deg, #6366f1 0%, #818cf8 100%);
+    --flowly-primary: #1d4ed8;
+    --flowly-primary-hover: #1e40af;
+    --flowly-primary-light: #2563eb;
+    --flowly-navy-950: #0a1628;
+    --flowly-navy-900: #0f2847;
+    --flowly-gradient: linear-gradient(135deg, #0f2847 0%, #1d4ed8 100%);
 }
 
+body.login-page,
 body {
-    background: linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #1e1b4b 100%) !important;
+    background: linear-gradient(135deg, #0a1628 0%, #0f2847 45%, #1e3a5f 100%) !important;
     min-height: 100vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
 }
 
+body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background:
+        radial-gradient(ellipse 80% 50% at 20% 20%, rgba(29,78,216,0.18), transparent),
+        radial-gradient(ellipse 60% 40% at 80% 80%, rgba(37,99,235,0.12), transparent);
+    pointer-events: none;
+    z-index: 0;
+}
+
+.login-box {
+    position: relative;
+    z-index: 1;
+    margin: 40px auto !important;
+}
+
+.login-box .card,
 .login-card {
-    border-radius: 20px !important;
+    border-radius: 24px !important;
     overflow: hidden;
-    border: none !important;
-    box-shadow: 0 25px 50px rgba(0, 0, 0, 0.4) !important;
+    border: 1px solid rgba(255,255,255,0.1) !important;
+    box-shadow: 0 25px 60px rgba(10, 22, 40, 0.5), 0 0 0 1px rgba(255,255,255,0.05) !important;
     max-width: 420px;
     width: 90%;
     margin: 0 auto;
+    background: #ffffff !important;
 }
 
-.login-logo {
+.login-logo,
+.login-box-msg {
     text-align: center;
-    padding: 30px 24px 10px;
-    background: linear-gradient(135deg, rgba(99,102,241,0.08), rgba(129,140,248,0.04));
+    padding: 36px 24px 12px !important;
+    background: linear-gradient(180deg, rgba(29,78,216,0.06) 0%, transparent 100%);
+    border-bottom: none !important;
 }
 
-.login-logo h1 {
-    font-size: 1.8rem;
-    font-weight: 800;
-    background: linear-gradient(135deg, #6366f1, #818cf8, #a5b4fc);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    margin: 12px 0 4px;
+.login-logo a,
+.login-box-msg a {
+    text-decoration: none !important;
 }
 
-.login-logo p {
-    color: rgba(255,255,255,0.6);
-    font-size: 0.85rem;
+.login-logo img,
+.login-box .login-logo img,
+.login-logo picture img {
+    width: auto !important;
+    height: 72px !important;
+    max-width: 220px !important;
+    object-fit: contain !important;
+    margin-bottom: 12px;
+    filter: drop-shadow(0 4px 12px rgba(29,78,216,0.3));
 }
 
-.login-card-body {
-    padding: 30px 24px !important;
-    background: #fff;
+.login-logo h1,
+.login-box .login-logo h1 {
+    margin: 0 !important;
+    padding: 0 !important;
 }
 
-.form-control {
-    border: 1.5px solid #e2e8f0 !important;
-    border-radius: 10px !important;
-    padding: 10px 14px !important;
-    font-size: 0.9rem !important;
-    transition: all 0.2s !important;
+.login-logo b,
+.login-box-msg b {
+    display: none !important;
 }
 
-.form-control:focus {
-    border-color: var(--flowly-primary) !important;
-    box-shadow: 0 0 0 3px rgba(99,102,241,0.12) !important;
+.login-logo::after,
+.login-box-msg::after {
+    content: '{{ site_name|default:"Flowly"|escapejs }}';
+    display: block;
+    font-size: 0.82rem;
+    color: #64748b;
+    font-weight: 500;
+    margin-top: 8px;
 }
 
-label {
+.login-card-body,
+.login-box .card-body {
+    padding: 28px 28px 32px !important;
+    background: #fff !important;
+}
+
+.form-group label {
     font-weight: 600 !important;
-    color: #374151 !important;
+    color: #334155 !important;
     font-size: 0.85rem !important;
     margin-bottom: 6px !important;
 }
 
-.btn-block {
+.form-control {
+    border: 1.5px solid rgba(15,40,71,0.12) !important;
+    border-radius: 12px !important;
+    padding: 11px 14px !important;
+    font-size: 0.9rem !important;
+    transition: all 0.2s !important;
+    background: #f8fafc !important;
+}
+
+.form-control:focus {
+    border-color: var(--flowly-primary) !important;
+    box-shadow: 0 0 0 4px rgba(29,78,216,0.12) !important;
+    background: #fff !important;
+}
+
+.btn-primary,
+.btn-block.btn-primary,
+input[type="submit"].btn-primary {
     background: var(--flowly-gradient) !important;
     border: none !important;
-    border-radius: 10px !important;
-    padding: 12px !important;
+    border-radius: 12px !important;
+    padding: 13px !important;
     font-weight: 700 !important;
     font-size: 0.95rem !important;
     transition: all 0.25s !important;
     color: #fff !important;
-    box-shadow: 0 4px 12px rgba(99,102,241,0.35) !important;
+    box-shadow: 0 4px 16px rgba(29,78,216,0.4) !important;
+    width: 100%;
 }
 
-.btn-block:hover {
+.btn-primary:hover,
+.btn-block.btn-primary:hover {
     transform: translateY(-2px) !important;
-    box-shadow: 0 6px 20px rgba(99,102,241,0.5) !important;
-    background: linear-gradient(135deg, #4f46e5, #6366f1) !important;
+    box-shadow: 0 8px 24px rgba(29,78,216,0.5) !important;
+    background: linear-gradient(135deg, #1e40af, #1d4ed8) !important;
 }
 
-a {
+.login-box a,
+.login-box-footer a {
     color: var(--flowly-primary) !important;
     font-weight: 600 !important;
     font-size: 0.85rem !important;
 }
 
-a:hover {
+.login-box a:hover {
     color: var(--flowly-primary-hover) !important;
 }
 
+.errornote,
+.alert-danger,
 .errors {
     background: rgba(239,68,68,0.08) !important;
     border-left: 4px solid #ef4444 !important;
-    border-radius: 8px !important;
-    padding: 12px !important;
+    border-radius: 10px !important;
+    padding: 12px 14px !important;
     font-size: 0.85rem !important;
     color: #dc2626 !important;
+    border-top: none !important;
+    border-right: none !important;
+    border-bottom: none !important;
 }
 
-.errors li {
-    color: #dc2626 !important;
-}
+#header, .main-header { display: none !important; }
 
-.submit-row {
-    padding: 16px 0 0 !important;
-}
-
-#header {
-    display: none !important;
+.login-box-footer {
+    text-align: center;
+    padding: 0 24px 24px;
+    font-size: 0.75rem;
+    color: #94a3b8;
 }
 </style>
 {% endblock %}

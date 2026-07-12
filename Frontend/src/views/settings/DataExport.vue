@@ -1,13 +1,10 @@
 <template>
   <div class="data-export-page">
-    <div class="page-header">
-      <div class="header-left">
-        <h1>数据管理</h1>
-        <p class="subtitle">
-          导出、备份和管理您的数据
-        </p>
-      </div>
-    </div>
+    <PageHeader
+      compact
+      title="数据管理"
+      subtitle="导出、备份和管理您的数据"
+    />
 
     <!-- Export Section -->
     <div class="section">
@@ -44,6 +41,7 @@
     <div class="section">
       <h2>导出历史</h2>
       <el-table
+        v-loading="loadingHistory"
         :data="exportHistory"
         stripe
       >
@@ -316,12 +314,16 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { Download, Database, FileText, Activity, AlertTriangle } from 'lucide-vue-next'
 import { ElMessageBox } from 'element-plus'
 import { useAppStore } from '@/stores/app'
+import { dataExportApi } from '@/api/dataExport'
+import { formatDateTime } from '@/utils/formatters'
+import PageHeader from '@/components/layout/PageHeader.vue'
 
 const appStore = useAppStore()
+const BACKUP_SETTINGS_KEY = 'flowly_backup_settings'
 
 const showExportDialog = ref(false)
 const showDeleteDialog = ref(false)
@@ -330,6 +332,7 @@ const exportDateRange = ref([])
 const exportFormat = ref('json')
 const isExporting = ref(false)
 const deleteConfirmText = ref('')
+const loadingHistory = ref(false)
 
 const exportTypes = ref([
   {
@@ -362,45 +365,73 @@ const exportTypes = ref([
   }
 ])
 
-const exportHistory = ref([
-  {
-    id: 1,
-    type: 'workflows',
-    fileName: 'workflows_2024-01-15.json',
-    fileSize: '2.3 MB',
-    status: 'completed',
-    createdAt: '2024-01-15 14:30'
-  },
-  {
-    id: 2,
-    type: 'full',
-    fileName: 'full_backup_2024-01-10.zip',
-    fileSize: '15.7 MB',
-    status: 'completed',
-    createdAt: '2024-01-10 09:00'
-  }
-])
+const exportHistory = ref([])
 
 const backupSettings = ref({
-  enabled: true,
+  enabled: false,
   frequency: 'daily',
   keepCount: 7
 })
 
-const backupHistory = ref([
-  { id: 1, createdAt: '2024-01-15 08:00', fileSize: '12.5 MB' },
-  { id: 2, createdAt: '2024-01-14 08:00', fileSize: '12.4 MB' },
-  { id: 3, createdAt: '2024-01-13 08:00', fileSize: '12.3 MB' }
-])
+const backupHistory = ref([])
+
+function loadBackupSettings() {
+  try {
+    const raw = localStorage.getItem(BACKUP_SETTINGS_KEY)
+    if (raw) {
+      backupSettings.value = { ...backupSettings.value, ...JSON.parse(raw) }
+    }
+  } catch {
+    // ignore invalid localStorage
+  }
+}
+
+watch(backupSettings, (val) => {
+  localStorage.setItem(BACKUP_SETTINGS_KEY, JSON.stringify(val))
+}, { deep: true })
+
+function mapExportRow(row) {
+  return {
+    id: row.id,
+    type: row.exportType || row.export_type,
+    fileName: row.fileName || row.file_name || '-',
+    fileSize: row.fileSize || row.file_size || '-',
+    status: row.status,
+    createdAt: formatDateTime(row.createdAt || row.created_at),
+    raw: row,
+  }
+}
+
+async function loadExportHistory() {
+  loadingHistory.value = true
+  try {
+    const response = await dataExportApi.list()
+    const rows = response.results || response || []
+    exportHistory.value = rows.map(mapExportRow)
+    backupHistory.value = exportHistory.value
+      .filter(item => item.type === 'full' && item.status === 'completed')
+      .slice(0, 10)
+  } catch (error) {
+    console.error('Failed to load export history:', error)
+    appStore.error('加载导出历史失败')
+  } finally {
+    loadingHistory.value = false
+  }
+}
+
+onMounted(() => {
+  loadBackupSettings()
+  loadExportHistory()
+})
 
 const getTypeTag = (type) => {
   const types = {
-    workflows: '',
+    workflows: 'primary',
     executions: 'success',
     agents: 'warning',
     full: 'info'
   }
-  return types[type] || ''
+  return types[type] || 'info'
 }
 
 const getTypeName = (type) => {
@@ -439,63 +470,75 @@ const startExport = (exportType) => {
 }
 
 const confirmExport = async () => {
+  if (!currentExportType.value) return
   isExporting.value = true
-
-  // Simulate export process
-  setTimeout(() => {
-    isExporting.value = false
-    showExportDialog.value = false
-
-    exportHistory.value.unshift({
-      id: Date.now(),
-      type: currentExportType.value.type,
-      fileName: `${currentExportType.value.type}_${new Date().toISOString().split('T')[0]}.${exportFormat.value}`,
-      fileSize: '0 KB',
-      status: 'completed',
-      createdAt: new Date().toLocaleString('zh-CN')
-    })
-
-    appStore.success('导出任务已创建')
-    currentExportType.value = null
-  }, 2000)
-}
-
-const downloadExport = (row) => {
-  appStore.success(`正在下载 ${row.fileName}`)
-}
-
-const restoreBackup = (backup) => {
-  ElMessageBox.confirm(
-    '确定要恢复此备份吗？当前数据将被覆盖。',
-    '恢复备份',
-    {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      type: 'warning'
+  try {
+    const extra = {}
+    if (exportDateRange.value?.length === 2) {
+      extra.date_from = exportDateRange.value[0]
+      extra.date_to = exportDateRange.value[1]
     }
-  ).then(() => {
-    appStore.success('备份已恢复')
-  })
+    const created = await dataExportApi.requestExport(
+      currentExportType.value.type,
+      exportFormat.value,
+      extra
+    )
+    exportHistory.value.unshift(mapExportRow(created))
+    appStore.success('导出任务已创建')
+    showExportDialog.value = false
+    currentExportType.value = null
+    exportDateRange.value = []
+    await loadExportHistory()
+  } catch (error) {
+    console.error('Export failed:', error)
+    appStore.error('创建导出任务失败')
+  } finally {
+    isExporting.value = false
+  }
 }
 
-const downloadBackup = (backup) => {
-  appStore.success(`正在下载 ${backup.createdAt} 的备份`)
+const downloadExport = async (row) => {
+  try {
+    const blob = await dataExportApi.download(row.id)
+    const filename = row.fileName || row.file_name || `export_${row.id}.json`
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = filename
+    link.click()
+    URL.revokeObjectURL(url)
+    appStore.success(`正在下载 ${filename}`)
+  } catch (error) {
+    console.error('Download export failed:', error)
+    appStore.error('下载失败')
+  }
+}
+
+const restoreBackup = async (_backup) => {
+  appStore.warning('恢复备份功能尚未开放，请使用完整导出文件手动恢复')
+}
+
+const downloadBackup = async (backup) => {
+  await downloadExport(backup)
 }
 
 const deleteAllData = async () => {
-  ElMessageBox.confirm(
-    '此操作不可撤销，请确保您已备份所有重要数据。',
-    '确认删除',
-    {
-      confirmButtonText: '确认删除',
-      cancelButtonText: '取消',
-      type: 'error'
-    }
-    ).then(() => {
-    appStore.success('所有数据已删除')
+  try {
+    await ElMessageBox.confirm(
+      '此操作不可撤销，请确保您已备份所有重要数据。',
+      '确认删除',
+      {
+        confirmButtonText: '确认删除',
+        cancelButtonText: '取消',
+        type: 'error'
+      }
+    )
+    appStore.error('删除所有数据需要管理员权限，请联系系统管理员')
     showDeleteDialog.value = false
     deleteConfirmText.value = ''
-  })
+  } catch {
+    // user cancelled
+  }
 }
 </script>
 
@@ -504,21 +547,6 @@ const deleteAllData = async () => {
   padding: 24px;
   max-width: 1000px;
   margin: 0 auto;
-}
-
-.page-header {
-  margin-bottom: 32px;
-
-  h1 {
-    margin: 0;
-    font-size: 28px;
-    font-weight: 600;
-  }
-
-  .subtitle {
-    margin: 8px 0 0;
-    color: var(--el-text-color-secondary);
-  }
 }
 
 .section {

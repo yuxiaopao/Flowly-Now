@@ -9,6 +9,7 @@ module.exports = {
     'eslint:recommended',
     'plugin:vue/vue3-recommended',
   ],
+  plugins: ['unused-imports'],
   parserOptions: {
     ecmaVersion: 'latest',
     sourceType: 'module',
@@ -26,13 +27,26 @@ module.exports = {
       },
     },
     {
-      files: ['tests/e2e/**/*.js', 'tests/**/*.test.js', 'tests/mocks/**/*.js', 'playwright.config.js'],
+      files: [
+        'tests/**/*.js',
+        'tests/**/*.vue',
+        'tests/e2e/**/*.js',
+        'tests/**/*.test.js',
+        'tests/mocks/**/*.js',
+        'playwright.config.js',
+      ],
       env: {
         node: true,
       },
       parserOptions: {
         ecmaVersion: 'latest',
         sourceType: 'module',
+      },
+      rules: {
+        'no-unused-vars': 'off',
+        'unused-imports/no-unused-vars': 'off',
+        'unused-imports/no-unused-imports': 'off',
+        'no-undef': 'off',
       },
     },
   ],
@@ -43,5 +57,16 @@ module.exports = {
   ],
   rules: {
     'vue/multi-word-component-names': 'off',
+    'vue/require-default-prop': 'off',
+    'no-unused-vars': 'off',
+    'unused-imports/no-unused-imports': 'error',
+    'unused-imports/no-unused-vars': ['error', {
+      vars: 'all',
+      varsIgnorePattern: '^_',
+      args: 'after-used',
+      argsIgnorePattern: '^_',
+      ignoreRestSiblings: true,
+      caughtErrors: 'none',
+    }],
   },
 }

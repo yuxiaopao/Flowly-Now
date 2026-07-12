@@ -1,0 +1,53 @@
+// 产品区页面布局 Token（PageShell 体系）
+:root {
+  --page-max-width: 1280px;
+  --page-max-width-wide: 1440px;
+  --page-max-width-narrow: 1200px;
+  --page-padding-y: 0;
+  --page-padding-x: 0;
+  --page-section-gap: 1.5rem;
+  --page-header-gap: 2rem;
+}
+
+.page-shell {
+  width: 100%;
+  margin-inline: auto;
+  padding: var(--page-padding-y) var(--page-padding-x);
+
+  &--default {
+    max-width: var(--page-max-width);
+  }
+
+  &--wide {
+    max-width: var(--page-max-width-wide);
+  }
+
+  &--narrow {
+    max-width: var(--page-max-width-narrow);
+  }
+
+  &--full {
+    max-width: none;
+  }
+}
+
+.page-shell__section {
+  margin-bottom: var(--page-section-gap);
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+}
+
+.page-shell__grid {
+  display: grid;
+  gap: var(--page-section-gap);
+
+  &--2-1 {
+    grid-template-columns: 2fr 1fr;
+
+    @media (max-width: 1024px) {
+      grid-template-columns: 1fr;
+    }
+  }
+}

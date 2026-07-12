@@ -16,9 +16,9 @@ export const useIntegrationsStore = defineStore('integrations', {
   }),
 
   getters: {
-    activeWebhooks: (state) => state.webhooks.filter(w => w.is_active),
-    connectedIntegrations: (state) => state.integrations.filter(i => i.is_connected),
-    featuredTemplates: (state) => state.templates.filter(t => t.is_featured)
+    activeWebhooks: (state) => state.webhooks.filter(w => w.isActive ?? w.is_active),
+    connectedIntegrations: (state) => state.integrations.filter(i => i.isConnected ?? i.is_connected),
+    featuredTemplates: (state) => state.templates.filter(t => t.isFeatured ?? t.is_featured)
   },
 
   actions: {
@@ -128,6 +128,7 @@ export const useIntegrationsStore = defineStore('integrations', {
         const res = await integrationsApi.connectIntegration(id)
         const index = this.integrations.findIndex(i => i.id === id)
         if (index !== -1) {
+          this.integrations[index].isConnected = true
           this.integrations[index].is_connected = true
         }
         return res
@@ -142,6 +143,7 @@ export const useIntegrationsStore = defineStore('integrations', {
         const res = await integrationsApi.disconnectIntegration(id)
         const index = this.integrations.findIndex(i => i.id === id)
         if (index !== -1) {
+          this.integrations[index].isConnected = false
           this.integrations[index].is_connected = false
         }
         return res

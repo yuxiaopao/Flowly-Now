@@ -57,24 +57,20 @@ class WebhookDeliveryAdmin(admin.ModelAdmin):
 
 @admin.register(Integration)
 class IntegrationAdmin(admin.ModelAdmin):
-    list_display = ('name', 'integration_type', 'is_active', 'created_at')
-    list_filter = ('integration_type', 'is_active')
-    search_fields = ('name', 'description')
-    readonly_fields = ('created_at', 'updated_at', 'last_sync_at')
+    list_display = ('name', 'user', 'integration_type', 'is_active', 'is_connected', 'created_at')
+    list_filter = ('integration_type', 'is_active', 'is_connected')
+    search_fields = ('name', 'user__username', 'user__email')
+    readonly_fields = ('created_at', 'updated_at', 'last_sync_at', 'total_syncs', 'failed_syncs')
 
     fieldsets = (
         ('基本信息', {
-            'fields': ('name', 'description', 'integration_type')
+            'fields': ('name', 'user', 'integration_type')
         }),
         ('配置', {
-            'fields': ('is_active', 'config')
-        }),
-        ('OAuth', {
-            'fields': ('oauth_client_id', 'oauth_scopes'),
-            'classes': ('collapse',)
+            'fields': ('is_active', 'is_connected', 'config', 'credentials')
         }),
         ('同步状态', {
-            'fields': ('last_sync_at', 'sync_status'),
+            'fields': ('last_sync_at', 'sync_status', 'total_syncs', 'failed_syncs'),
             'classes': ('collapse',)
         }),
         ('时间', {
@@ -86,23 +82,26 @@ class IntegrationAdmin(admin.ModelAdmin):
 
 @admin.register(IntegrationTemplate)
 class IntegrationTemplateAdmin(admin.ModelAdmin):
-    list_display = ('name', 'integration_type', 'is_active', 'created_at')
-    list_filter = ('integration_type', 'is_active')
-    search_fields = ('name', 'description')
-    readonly_fields = ('created_at',)
+    list_display = ('name', 'integration_type', 'category', 'is_active', 'is_featured', 'usage_count', 'created_at')
+    list_filter = ('integration_type', 'is_active', 'is_featured', 'category')
+    search_fields = ('name', 'description', 'category')
+    readonly_fields = ('created_at', 'updated_at', 'usage_count')
 
     fieldsets = (
         ('基本信息', {
-            'fields': ('name', 'description', 'integration_type')
+            'fields': ('name', 'description', 'integration_type', 'category')
+        }),
+        ('展示', {
+            'fields': ('icon', 'color', 'is_active', 'is_featured')
         }),
         ('配置模板', {
-            'fields': ('config_schema', 'auth_flow_instructions')
+            'fields': ('config_template', 'required_config', 'optional_config')
         }),
-        ('图标', {
-            'fields': ('icon_svg',)
+        ('能力与文档', {
+            'fields': ('trigger_events', 'supported_actions', 'documentation_url', 'setup_guide')
         }),
-        ('状态', {
-            'fields': ('is_active', 'created_at'),
+        ('统计', {
+            'fields': ('usage_count', 'created_at', 'updated_at'),
             'classes': ('collapse',)
         }),
     )

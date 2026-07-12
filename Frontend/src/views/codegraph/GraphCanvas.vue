@@ -129,6 +129,7 @@
 /**
  * GraphCanvas - 基于 D3 的代码依赖图可视化组件
  * 支持三种布局：力导向图、树形图、层次图
+ * 支持文件节点 + 函数节点两层渲染
  */
 
 import { ref, watch, onMounted, onUnmounted, nextTick } from 'vue'
@@ -160,7 +161,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['node-click', 'node-hover', 'zoom-change', 'fit-view'])
+const emit = defineEmits(['node-click', 'node-hover', 'zoom-change', 'fit-view', 'layout-change'])
 
 const chartContainer = ref(null)
 const svgRef = ref(null)
@@ -170,6 +171,7 @@ const width = ref(800)
 const height = ref(600)
 const zoom = ref(1)
 const hoveredNodeId = ref(null)
+// 初始化时使用传入的 layout，后续由 handleLayoutChange 同步更新
 const currentLayoutType = ref(props.layout)
 
 // D3 相关
@@ -177,6 +179,51 @@ let simulation = null
 let svg = null
 let mainGroup = null
 let zoomBehavior = null
+
+// 节点位置 Map — { nodeId: { x, y } }，覆盖文件节点和函数节点
+const nodePositionMap = new Map()
+
+// 当前可见节点 ID Set（由过滤条件决定）
+const visibleNodeIds = ref(new Set())
+
+// 根据过滤条件计算可见边（两端节点都在 visibleNodeIds 中才可见）
+function getVisibleEdges() {
+  if (visibleNodeIds.value.size === 0 || visibleNodeIds.value.size === props.nodes.length) {
+    return props.edges
+  }
+  return props.edges.filter(e =>
+    visibleNodeIds.value.has(e.source) && visibleNodeIds.value.has(e.target)
+  )
+}
+
+// 分离文件节点和函数节点（受 visibleNodeIds 过滤条件约束）
+function getVisibleNodes() {
+  const allNodes = visibleNodeIds.value.size === 0 || visibleNodeIds.value.size === props.nodes.length
+    ? props.nodes
+    : props.nodes.filter(n => visibleNodeIds.value.has(n.id))
+  return {
+    fileNodes: allNodes.filter(n => n.type !== 'function'),
+    funcNodes: allNodes.filter(n => n.type === 'function'),
+  }
+}
+
+// 计算函数节点的位置：挂靠在所属文件的右侧
+function positionFuncNodes(fileNodes, nodePositionMap) {
+  const allFuncNodes = props.nodes.filter(n => n.type === 'function')
+  fileNodes.forEach(fileNode => {
+    const filePos = nodePositionMap.get(fileNode.id)
+    if (!filePos) return
+
+    // 找到该文件下的所有函数（id 前缀匹配 fileNode.id::）
+    const funcsInFile = allFuncNodes.filter(fn => fn.id.startsWith(fileNode.id + '::'))
+    funcsInFile.forEach((fn, i) => {
+      nodePositionMap.set(fn.id, {
+        x: filePos.x + 80,
+        y: filePos.y + (i - funcsInFile.length / 2) * 40,
+      })
+    })
+  })
+}
 
 // 节点类型到颜色的映射
 const typeColors = {
@@ -201,45 +248,33 @@ function isEdgeHighlighted(edge) {
 }
 
 function getEdgePath(edge) {
-  // 支持 source/target 为对象或 ID
   const sourceId = typeof edge.source === 'object' ? edge.source.id : edge.source
   const targetId = typeof edge.target === 'object' ? edge.target.id : edge.target
-  
-  const sourceNode = props.nodes.find(n => n.id === sourceId)
-  const targetNode = props.nodes.find(n => n.id === targetId)
-  if (!sourceNode || !targetNode) return ''
 
-  const sx = sourceNode.x || 0
-  const sy = sourceNode.y || 0
-  const tx = targetNode.x || 0
-  const ty = targetNode.y || 0
+  const sourcePos = nodePositionMap.get(sourceId)
+  const targetPos = nodePositionMap.get(targetId)
+  if (!sourcePos || !targetPos) return ''
 
-  const dx = tx - sx
-  const dy = ty - sy
+  const dx = targetPos.x - sourcePos.x
+  const dy = targetPos.y - sourcePos.y
   const dr = Math.sqrt(dx * dx + dy * dy) * 0.5
 
-  return `M${sx},${sy} A${dr},${dr} 0 0,1 ${tx},${ty}`
+  return `M${sourcePos.x},${sourcePos.y} A${dr},${dr} 0 0,1 ${targetPos.x},${targetPos.y}`
 }
 
 function getStraightEdgePath(edge) {
-  // 支持 source/target 为对象或 ID
   const sourceId = typeof edge.source === 'object' ? edge.source.id : edge.source
   const targetId = typeof edge.target === 'object' ? edge.target.id : edge.target
-  
-  const sourceNode = props.nodes.find(n => n.id === sourceId)
-  const targetNode = props.nodes.find(n => n.id === targetId)
-  if (!sourceNode || !targetNode) return ''
 
-  const sx = sourceNode.x || 0
-  const sy = sourceNode.y || 0
-  const tx = targetNode.x || 0
-  const ty = targetNode.y || 0
+  const sourcePos = nodePositionMap.get(sourceId)
+  const targetPos = nodePositionMap.get(targetId)
+  if (!sourcePos || !targetPos) return ''
 
-  return `M${sx},${sy} L${tx},${ty}`
+  return `M${sourcePos.x},${sourcePos.y} L${targetPos.x},${targetPos.y}`
 }
 
 function getNodeColor(node) {
-  return typeColors[node.type] || '#999'
+  return typeColors[node.type] || typeColors[node.type?.replace(/^file:/, '').split('.').pop()] || '#999'
 }
 
 // ==================== 布局算法 ====================
@@ -247,7 +282,7 @@ function getNodeColor(node) {
 function applyForceLayout() {
   if (!props.nodes.length) return
 
-  // 初始化节点位置
+  // 初始化节点位置（力导向图只处理文件节点）
   props.nodes.forEach((node) => {
     if (!node.x) node.x = width.value / 2 + (Math.random() - 0.5) * 200
     if (!node.y) node.y = height.value / 2 + (Math.random() - 0.5) * 200
@@ -266,6 +301,8 @@ function applyForceLayout() {
     .force('center', d3.forceCenter(width.value / 2, height.value / 2))
     .force('collision', d3.forceCollide().radius(d => getNodeRadius(d) + 10))
     .on('tick', () => {
+      // 同步位置到 Map（力导向图只驱动文件节点）
+      props.nodes.forEach(n => nodePositionMap.set(n.id, { x: n.x, y: n.y }))
       renderGraph()
     })
 
@@ -320,12 +357,13 @@ function applyTreeLayout() {
 
   treeLayout(hierarchy)
 
-  // 更新节点位置
+  // 更新节点位置并同步到 Map
   hierarchy.descendants().forEach((d) => {
     const node = props.nodes.find(n => n.id === d.data.id)
     if (node) {
       node.x = d.y + 100
       node.y = d.x + height.value / 2
+      nodePositionMap.set(node.id, { x: node.x, y: node.y })
     }
   })
 
@@ -371,13 +409,14 @@ function applyDagreLayout() {
   // 运行 dagre 布局
   dagre.layout(g)
 
-  // 更新节点位置
+  // 更新节点位置并同步到 Map
   g.nodes().forEach(nodeId => {
     const nodeData = g.node(nodeId)
     const node = props.nodes.find(n => n.id === nodeId)
     if (node && nodeData) {
       node.x = nodeData.x
       node.y = nodeData.y
+      nodePositionMap.set(node.id, { x: node.x, y: node.y })
     }
   })
 
@@ -404,31 +443,33 @@ function applyLayout(layoutType) {
 // ==================== 渲染 ====================
 
 function renderGraph() {
-  console.log('[GraphCanvas] renderGraph called - svg:', !!svg, 'mainGroup:', !!mainGroup)
-  if (!svg || !mainGroup) {
-    console.log('[GraphCanvas] renderGraph early return')
-    return
-  }
+  if (!svg || !mainGroup) return
 
   // 清空主组
   mainGroup.selectAll('*').remove()
 
-  // 渲染边
+  const { fileNodes, funcNodes } = getVisibleNodes()
+
+  // 先给函数节点分配位置（基于文件节点位置）
+  positionFuncNodes(fileNodes, nodePositionMap)
+
+  // 渲染边（使用 getVisibleEdges 支持函数间边）
+  const visibleEdges = getVisibleEdges()
   const edgeGroup = mainGroup.append('g').attr('class', 'edges')
   edgeGroup.selectAll('.edge-group')
-    .data(props.edges)
+    .data(visibleEdges)
     .enter()
     .append('g')
     .attr('class', d => `edge-group ${isEdgeHighlighted(d) ? 'highlighted' : ''}`)
     .append('path')
-    .attr('class', 'edge-path')
+    .attr('class', d => d.type === 'function' ? 'edge-path func-edge' : 'edge-path')
     .attr('d', d => currentLayoutType.value === 'force' ? getEdgePath(d) : getStraightEdgePath(d))
     .attr('marker-end', d => isEdgeHighlighted(d) ? 'url(#arrowhead-selected)' : 'url(#arrowhead)')
 
-  // 渲染节点
-  const nodeGroup = mainGroup.append('g').attr('class', 'nodes')
-  const nodeSelection = nodeGroup.selectAll('.node-group')
-    .data(props.nodes)
+  // 渲染文件节点
+  const fileNodeGroup = mainGroup.append('g').attr('class', 'file-nodes')
+  fileNodeGroup.selectAll('.node-group')
+    .data(fileNodes)
     .enter()
     .append('g')
     .attr('class', d => {
@@ -437,7 +478,10 @@ function renderGraph() {
       if (d.id === hoveredNodeId.value) classes += ' hovered'
       return classes
     })
-    .attr('transform', d => `translate(${d.x || 0}, ${d.y || 0})`)
+    .attr('transform', d => {
+      const pos = nodePositionMap.get(d.id)
+      return `translate(${pos ? pos.x : 0}, ${pos ? pos.y : 0})`
+    })
     .on('click', (event, d) => {
       event.stopPropagation()
       handleNodeClick(d)
@@ -450,34 +494,77 @@ function renderGraph() {
       hoveredNodeId.value = null
       emit('node-hover', null)
     })
+    .each(function(d) {
+      const g = d3.select(this)
+      g.append('circle')
+        .attr('class', 'node-circle')
+        .attr('r', getNodeRadius(d))
+        .style('stroke', getNodeColor(d))
+      g.append('text')
+        .attr('class', 'node-label')
+        .attr('dy', '0.35em')
+        .attr('x', getNodeRadius(d) + 5)
+        .text(d.name)
+    })
 
-  // 节点圆形
-  nodeSelection.append('circle')
-    .attr('class', 'node-circle')
-    .attr('r', d => getNodeRadius(d))
-    .style('stroke', d => getNodeColor(d))
-
-  // 节点标签
-  nodeSelection.append('text')
-    .attr('class', 'node-label')
-    .attr('dy', '0.35em')
-    .attr('x', d => getNodeRadius(d) + 5)
-    .text(d => d.name)
+  // 渲染函数节点（矩形，挂在文件节点旁边）
+  const funcNodeGroup = mainGroup.append('g').attr('class', 'func-nodes')
+  funcNodeGroup.selectAll('.node-group')
+    .data(funcNodes)
+    .enter()
+    .append('g')
+    .attr('class', d => {
+      let classes = `node-group type-function`
+      if (d.id === props.selectedNode?.id) classes += ' selected'
+      if (d.id === hoveredNodeId.value) classes += ' hovered'
+      return classes
+    })
+    .attr('transform', d => {
+      const pos = nodePositionMap.get(d.id)
+      return `translate(${pos ? pos.x : 0}, ${pos ? pos.y : 0})`
+    })
+    .on('click', (event, d) => {
+      event.stopPropagation()
+      handleNodeClick(d)
+    })
+    .on('mouseenter', (event, d) => {
+      hoveredNodeId.value = d.id
+      emit('node-hover', d)
+    })
+    .on('mouseleave', () => {
+      hoveredNodeId.value = null
+      emit('node-hover', null)
+    })
+    .each(function(d) {
+      const g = d3.select(this)
+      g.append('rect')
+        .attr('class', 'node-rect')
+        .attr('x', -35)
+        .attr('y', -9)
+        .attr('width', 70)
+        .attr('height', 18)
+        .attr('rx', 4)
+        .style('fill', 'var(--bg-secondary)')
+        .style('stroke', 'var(--color-primary)')
+        .style('stroke-width', 1.5)
+      g.append('text')
+        .attr('class', 'node-label')
+        .attr('dy', '0.35em')
+        .attr('text-anchor', 'middle')
+        .style('font-size', '10px')
+        .style('fill', 'var(--text-primary)')
+        .text(d.name.length > 8 ? d.name.substring(0, 7) + '..' : d.name)
+    })
 }
 
 // ==================== 初始化 ====================
 
 function initSvg() {
-  console.log('[GraphCanvas] initSvg called')
-  if (!svgRef.value || !chartContainer.value) {
-    console.log('[GraphCanvas] initSvg early return - svgRef:', !!svgRef.value, 'chartContainer:', !!chartContainer.value)
-    return
-  }
+  if (!svgRef.value || !chartContainer.value) return
 
   const container = chartContainer.value
   width.value = container.clientWidth || 800
   height.value = container.clientHeight || 600
-  console.log('[GraphCanvas] container size:', width.value, height.value)
 
   svg = d3.select(svgRef.value)
 
@@ -491,7 +578,6 @@ function initSvg() {
 
   // 创建主容器组 (用于缩放变换)
   mainGroup = svg.append('g').attr('class', 'main-group')
-  console.log('[GraphCanvas] mainGroup created:', !!mainGroup)
 
   // 设置缩放行为
   zoomBehavior = d3.zoom()
@@ -515,6 +601,7 @@ function handleNodeClick(node) {
 }
 
 function handleLayoutChange(newLayout) {
+  emit('layout-change', newLayout)
   applyLayout(newLayout)
 }
 
@@ -579,6 +666,8 @@ function handleResize() {
 // ==================== 监听 ====================
 
 watch(() => props.nodes, () => {
+  // 更新可见节点集合（后端返回的 nodes 既包含文件节点也包含函数节点）
+  visibleNodeIds.value = new Set(props.nodes.map(n => n.id))
   if (props.nodes.length > 0) {
     applyLayout(props.layout)
   }
@@ -594,9 +683,7 @@ watch(() => props.edges, () => {
 }, { deep: true })
 
 watch(() => props.layout, (newLayout) => {
-  if (newLayout !== currentLayoutType.value) {
-    applyLayout(newLayout)
-  }
+  applyLayout(newLayout)
 })
 
 watch(() => props.selectedNode, () => {
@@ -610,17 +697,10 @@ watch(hoveredNodeId, () => {
 // ==================== 生命周期 ====================
 
 onMounted(() => {
-  console.log('[GraphCanvas] onMounted called')
-  console.log('[GraphCanvas] props.nodes:', props.nodes?.length)
-  console.log('[GraphCanvas] props.layout:', props.layout)
   nextTick(() => {
-    console.log('[GraphCanvas] nextTick - svgRef:', !!svgRef.value)
-    console.log('[GraphCanvas] nextTick - chartContainer:', !!chartContainer.value)
     initSvg()
-    console.log('[GraphCanvas] after initSvg - svg:', !!svg)
-    console.log('[GraphCanvas] after initSvg - mainGroup:', !!mainGroup)
     if (props.nodes.length > 0) {
-      console.log('[GraphCanvas] applying layout:', props.layout)
+      visibleNodeIds.value = new Set(props.nodes.map(n => n.id))
       applyLayout(props.layout)
     }
   })
@@ -763,6 +843,41 @@ defineExpose({
   stroke: var(--color-primary);
   stroke-width: 2;
   opacity: 1;
+}
+
+// 函数节点样式
+:deep(.func-nodes .node-rect) {
+  fill: var(--bg-secondary);
+  stroke: var(--color-primary);
+  stroke-width: 1.5;
+  transition: all 0.2s ease;
+}
+
+:deep(.func-nodes .node-group.hovered .node-rect),
+:deep(.func-nodes .node-group.selected .node-rect) {
+  stroke-width: 2.5;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
+}
+
+:deep(.func-nodes .node-group.selected .node-rect) {
+  fill: var(--color-primary);
+}
+
+:deep(.func-nodes .node-group.selected .node-label) {
+  fill: white;
+}
+
+// 函数调用边样式（蓝色虚线，区分于文件依赖边）
+:deep(.func-edge) {
+  stroke: #8b5cf6;
+  stroke-dasharray: 4 2;
+  opacity: 0.7;
+}
+
+:deep(.edge-group.highlighted .func-edge) {
+  stroke: #8b5cf6;
+  opacity: 1;
+  stroke-width: 2;
 }
 
 .minimap {

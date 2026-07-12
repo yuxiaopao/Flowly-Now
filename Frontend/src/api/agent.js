@@ -78,11 +78,18 @@ export const agentApi = {
   // ==================== 工具管理 ====================
 
   /**
-   * 获取 Agent ��用工具列表
+   * 获取 Agent 已启用工具列表（需要已存在的 Agent）
    * @param {number|string} agentId
    */
   getAvailableTools(agentId) {
     return request.get(`/agents/${agentId}/tools/`)
+  },
+
+  /**
+   * 获取平台支持的全部工具类型（含说明），创建 Agent 时使用，无需已存在的 Agent
+   */
+  getAvailableToolTypes() {
+    return request.get('/agents/tools/available/')
   },
 
   /**
@@ -239,7 +246,92 @@ export const agentApi = {
    */
   getExecutionDetail(executionId) {
     return request.get(`/agents/executions/${executionId}/`)
-  }
+  },
+
+  // ==================== Desktop Agent ====================
+
+  /**
+   * 获取在线且支持 YOLO 训练的桌面端 Agent 列表
+   */
+  getAvailableDesktopAgents() {
+    return request.get('/agents/desktop/available/')
+  },
+
+  /**
+   * 向桌面端下发训练任务
+   * @param {Object} data - { agent_id, job_config }
+   */
+  dispatchDesktopTraining(data) {
+    return request.post('/agents/desktop/dispatch_training/', data)
+  },
+
+  // ==================== 多智能体协作 ====================
+
+  /**
+   * 获取协作历史列表
+   * @param {Object} params - { tenant }
+   */
+  getCollaborationList(params = {}) {
+    return request.get('/agents/collaborations/', params)
+  },
+
+  /**
+   * 获取协作详情
+   * @param {string} runId
+   */
+  getCollaborationDetail(runId) {
+    return request.get(`/agents/collaborations/${runId}/`)
+  },
+
+  /**
+   * 发起一次多智能体协作任务
+   * @param {Object} data - { task, tenant, roles: [{role, agent_id, name, system_prompt, model}] }
+   */
+  runCollaboration(data) {
+    return request.post('/agents/collaborations/run/', data)
+  },
+
+  /**
+   * 删除协作记录
+   * @param {string} runId
+   */
+  deleteCollaboration(runId) {
+    return request.delete(`/agents/collaborations/${runId}/`)
+  },
+
+  // ==================== Agent 市场 ====================
+
+  /**
+   * 浏览已发布到市场的公开 Agent
+   * @param {Object} params - { search, agent_type, page, page_size }
+   */
+  getMarketplace(params = {}) {
+    return request.get('/agents/marketplace/', params)
+  },
+
+  /**
+   * 将自己的 Agent 发布到市场
+   * @param {number|string} agentId
+   */
+  publishAgent(agentId) {
+    return request.post(`/agents/${agentId}/publish/`)
+  },
+
+  /**
+   * 从市场下架自己的 Agent
+   * @param {number|string} agentId
+   */
+  unpublishAgent(agentId) {
+    return request.post(`/agents/${agentId}/unpublish/`)
+  },
+
+  /**
+   * 克隆市场中的公开 Agent 到我的 Agent
+   * @param {number|string} agentId
+   */
+  cloneAgent(agentId) {
+    return request.post(`/agents/${agentId}/clone/`)
+  },
 }
 
 export default agentApi

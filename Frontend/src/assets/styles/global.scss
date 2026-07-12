@@ -72,6 +72,32 @@ img, svg {
   height: auto;
 }
 
+// 空状态：svg 为 block 时 text-align 无法居中，需 flex + align-items
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  width: 100%;
+  box-sizing: border-box;
+
+  > svg,
+  > .empty-icon,
+  .empty-icon {
+    flex-shrink: 0;
+    margin-inline: auto;
+  }
+
+  .empty-icon-wrapper {
+    flex-shrink: 0;
+    margin-inline: auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+}
+
 video, canvas {
   display: block;
 }
@@ -271,11 +297,11 @@ ul, ol {
 .bg-transparent { background-color: transparent; }
 
 // 边框
-.border { border: 1px solid var(--border-color, #e4e4e7); }
-.border-t { border-top: 1px solid var(--border-color, #e4e4e7); }
-.border-b { border-bottom: 1px solid var(--border-color, #e4e4e7); }
-.border-l { border-left: 1px solid var(--border-color, #e4e4e7); }
-.border-r { border-right: 1px solid var(--border-color, #e4e4e7); }
+.border { border: 1px solid var(--border-primary); }
+.border-t { border-top: 1px solid var(--border-primary); }
+.border-b { border-bottom: 1px solid var(--border-primary); }
+.border-l { border-left: 1px solid var(--border-primary); }
+.border-r { border-right: 1px solid var(--border-primary); }
 
 // 过渡
 .transition { transition: all $transition-normal; }

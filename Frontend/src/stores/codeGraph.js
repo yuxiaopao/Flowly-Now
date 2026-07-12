@@ -86,6 +86,12 @@ export const useCodeGraphStore = defineStore('codegraph', () => {
 
   // ============ Actions ============
 
+  function unwrapList(response) {
+    if (Array.isArray(response)) return response
+    if (Array.isArray(response?.results)) return response.results
+    return []
+  }
+
   /**
    * 获取项目列表
    */
@@ -94,7 +100,7 @@ export const useCodeGraphStore = defineStore('codegraph', () => {
     error.value = null
     try {
       const response = await codegraphApi.getProjects()
-      projects.value = response.projects || response.data?.projects || []
+      projects.value = response.projects || unwrapList(response)
     } catch (err) {
       error.value = err.message || '获取项目列表失败'
       console.error('Failed to fetch projects:', err)
@@ -375,6 +381,15 @@ export const useCodeGraphStore = defineStore('codegraph', () => {
 
       case 'pong':
         // 心跳响应
+        break
+
+      case 'connected':
+      case 'subscribed':
+      case 'subscription_confirmed':
+        break
+
+      case 'error':
+        console.error('CodeGraph WS error:', data.message || data)
         break
 
       default:

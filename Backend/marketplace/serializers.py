@@ -30,10 +30,6 @@ class WorkflowTemplateSerializer(serializers.ModelSerializer):
     author_name = serializers.CharField(source='created_by.username', read_only=True)
     author_avatar = serializers.SerializerMethodField()
     is_installed = serializers.SerializerMethodField()
-    use_count = serializers.IntegerField(source='install_count', read_only=True)
-    rating = serializers.FloatField(source='avg_rating', read_only=True)
-    thumbnail = serializers.CharField(source='preview_image', read_only=True)
-    is_public = serializers.BooleanField(source='is_published', read_only=True)
     node_count = serializers.SerializerMethodField()
 
     class Meta:
@@ -41,8 +37,8 @@ class WorkflowTemplateSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'slug', 'description', 'category', 'category_name',
             'category_slug', 'tags', 'workflow_data', 'nodes', 'edges', 'node_count',
-            'use_count', 'view_count', 'rating', 'report_count', 'rating_count',
-            'thumbnail', 'is_public', 'is_featured', 'is_verified',
+            'install_count', 'view_count', 'avg_rating', 'report_count',
+            'preview_image', 'is_published', 'is_featured', 'is_verified',
             'created_by', 'author_name', 'author_avatar', 'is_installed',
             'created_at', 'updated_at'
         ]
@@ -69,14 +65,20 @@ class WorkflowTemplateSerializer(serializers.ModelSerializer):
 class TemplateCreateSerializer(serializers.ModelSerializer):
     """Serializer for creating workflow templates."""
 
-    thumbnail = serializers.CharField(source='preview_image', required=False, allow_blank=True)
-    is_public = serializers.BooleanField(source='is_published', required=False)
+    thumbnail = serializers.URLField(
+        source='preview_image',
+        required=False,
+        allow_blank=True,
+    )
+    is_published = serializers.BooleanField(
+        required=False,
+    )
 
     class Meta:
         model = WorkflowTemplate
         fields = [
             'name', 'slug', 'description', 'category', 'tags',
-            'workflow_data', 'nodes', 'edges', 'thumbnail', 'is_public'
+            'workflow_data', 'nodes', 'edges', 'thumbnail', 'is_published'
         ]
 
     def validate_slug(self, value):

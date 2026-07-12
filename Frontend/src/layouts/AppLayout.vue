@@ -44,13 +44,15 @@
             :key="item.path"
             :to="item.path"
             class="nav-item"
-            :class="{ active: isActiveRoute(item.path) }"
+            :class="[`nav-item--${item.accent}`, { active: isActiveRoute(item.path) }]"
             @click="mobileMenuOpen = false"
           >
-            <component
-              :is="item.icon"
-              class="nav-icon"
-            />
+            <span class="nav-icon-wrap">
+              <component
+                :is="item.icon"
+                class="nav-icon"
+              />
+            </span>
             <span class="nav-label">{{ item.label }}</span>
           </router-link>
         </div>
@@ -62,14 +64,36 @@
             :key="item.path"
             :to="item.path"
             class="nav-item"
-            :class="{ active: isActiveRoute(item.path) }"
+            :class="[`nav-item--${item.accent}`, { active: isActiveRoute(item.path) }]"
             @click="mobileMenuOpen = false"
           >
-            <component
-              :is="item.icon"
-              class="nav-icon"
-            />
+            <span class="nav-icon-wrap">
+              <component
+                :is="item.icon"
+                class="nav-icon"
+              />
+            </span>
             <span class="nav-label">{{ item.label }}</span>
+          </router-link>
+        </div>
+
+        <div
+          v-if="generatedSiteNavItems.length"
+          class="nav-section"
+        >
+          <span class="nav-section-title">识别项目</span>
+          <router-link
+            v-for="site in generatedSiteNavItems"
+            :key="site.id"
+            :to="siteNavPath(site)"
+            class="nav-item nav-item--emerald"
+            :class="{ active: isActiveRoute(siteNavPath(site)) }"
+            @click="mobileMenuOpen = false"
+          >
+            <span class="nav-icon-wrap">
+              <Globe class="nav-icon" />
+            </span>
+            <span class="nav-label">{{ site.name }}</span>
           </router-link>
         </div>
 
@@ -77,11 +101,13 @@
           <span class="nav-section-title">工作流</span>
           <router-link
             :to="'/workflows/new'"
-            class="nav-item"
+            class="nav-item nav-item--amber"
             :class="{ active: isActiveRoute('/workflows/new') }"
             @click="mobileMenuOpen = false"
           >
-            <Plus class="nav-icon" />
+            <span class="nav-icon-wrap">
+              <Plus class="nav-icon" />
+            </span>
             <span class="nav-label">新建工作流</span>
           </router-link>
         </div>
@@ -91,12 +117,14 @@
       <div class="sidebar-footer">
         <router-link
           to="/settings"
-          class="nav-item"
+          class="nav-item nav-item--rose"
           :class="{ active: isActiveRoute('/settings') }"
           @click="mobileMenuOpen = false"
         >
-          <Settings class="nav-icon" />
-          <span class="nav-label">设置</span>
+          <span class="nav-icon-wrap">
+            <Settings class="nav-icon" />
+          </span>
+          <span class="nav-label">个人中心</span>
         </router-link>
       </div>
     </aside>
@@ -180,7 +208,7 @@
                   <User class="dropdown-icon" /> 个人资料
                 </el-dropdown-item>
                 <el-dropdown-item command="settings">
-                  <Settings class="dropdown-icon" /> 设置
+                  <Settings class="dropdown-icon" /> 个人中心
                 </el-dropdown-item>
                 <el-dropdown-item
                   divided
@@ -196,24 +224,24 @@
 
       <!-- 页面内容 -->
       <main class="main-content">
-        <router-view v-slot="{ Component }">
-          <transition
-            name="fade"
-            mode="out-in"
+        <transition
+          name="page"
+          mode="out-in"
+        >
+          <div
+            :key="route.path"
+            class="main-content__page"
           >
-            <component :is="Component" />
-          </transition>
-        </router-view>
+            <slot />
+          </div>
+        </transition>
       </main>
     </div>
-
-    <!-- Toast 容器 -->
-    <ToastContainer />
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useAppStore } from '@/stores/app'
@@ -224,7 +252,6 @@ import {
   MessageSquare,
   Database,
   Users,
-  Bell,
   BarChart2,
   Settings,
   Search,
@@ -237,12 +264,22 @@ import {
   Plus,
   FileText,
   BookOpen,
-  Layers,
-  Network
+  Network,
+  Cpu,
+  HardDrive,
+  Terminal,
+  Store,
+  History,
+  Compass,
+  Star,
+  GitCompare,
+  Globe,
+  Workflow,
 } from 'lucide-vue-next'
-import ToastContainer from '@/components/common/ToastContainer.vue'
 import ThemeSwitcher from '@/components/common/ThemeSwitcher.vue'
 import ThemeLogo from '@/components/common/ThemeLogo.vue'
+import { excludePersonalCenterModules } from '@/config/userNavigation'
+import { websiteGeneratorApi } from '@/api/websiteGenerator'
 
 const router = useRouter()
 const route = useRoute()
@@ -250,6 +287,25 @@ const authStore = useAuthStore()
 const appStore = useAppStore()
 const mobileMenuOpen = ref(false)
 const isMobile = ref(false)
+const generatedSiteNavItems = ref([])
+
+function siteNavPath(site) {
+  return `/projects/${site.id}`
+}
+
+async function loadGeneratedSiteNav() {
+  if (!authStore.isAuthenticated) {
+    generatedSiteNavItems.value = []
+    return
+  }
+  try {
+    const res = await websiteGeneratorApi.list({ show_in_nav: true, status: 'completed' })
+    const items = Array.isArray(res) ? res : (res?.results || [])
+    generatedSiteNavItems.value = items.filter((s) => s.showInNav !== false)
+  } catch {
+    generatedSiteNavItems.value = []
+  }
+}
 
 const checkMobile = () => {
   isMobile.value = window.innerWidth < 768
@@ -261,6 +317,7 @@ const checkMobile = () => {
 onMounted(() => {
   checkMobile()
   window.addEventListener('resize', checkMobile)
+  loadGeneratedSiteNav()
 })
 
 onUnmounted(() => {
@@ -268,21 +325,30 @@ onUnmounted(() => {
 })
 
 const mainNavItems = [
-  { path: '/home', label: '仪表盘', icon: Home },
-  { path: '/workflows', label: '工作流', icon: GitBranch },
-  { path: '/agents', label: 'Agent', icon: Bot },
-  { path: '/knowledge', label: '知识库', icon: Database },
-  { path: '/team', label: '团队', icon: Users }
+  { path: '/home', label: '仪表盘', icon: Home, accent: 'blue' },
+  { path: '/workflows', label: '工作流', icon: GitBranch, accent: 'emerald' },
+  { path: '/agents', label: 'Agent', icon: Bot, accent: 'amber' },
+  { path: '/knowledge', label: '知识库', icon: Database, accent: 'rose' },
+  { path: '/team', label: '团队', icon: Users, accent: 'blue' },
 ]
 
-const toolNavItems = [
-  { path: '/nl-create', label: 'NL 创建', icon: MessageSquare },
-  { path: '/codegraph', label: '代码图谱', icon: Network },
-  { path: '/monitoring', label: '监控中心', icon: BarChart2 },
-  { path: '/prompts', label: '模板', icon: FileText },
-  { path: '/dataset-recommend', label: '数据集推荐', icon: BookOpen },
-  { path: '/augmentations', label: '数据增强', icon: Layers }
-]
+const toolNavItems = excludePersonalCenterModules([
+  { path: '/agents/collaborate', label: '多智能体协作', icon: Workflow, accent: 'rose' },
+  { path: '/agents/marketplace', label: 'Agent 市场', icon: Store, accent: 'amber' },
+  { path: '/nl-create', label: 'NL 创建', icon: MessageSquare, accent: 'blue' },
+  { path: '/executions', label: '执行历史', icon: History, accent: 'emerald' },
+  { path: '/datasets', label: '数据集', icon: BookOpen, accent: 'amber' },
+  { path: '/dataset-recommend', label: '数据集推荐', icon: Compass, accent: 'rose' },
+  { path: '/prompts', label: '模板', icon: FileText, accent: 'blue' },
+  { path: '/marketplace', label: '模板市场', icon: Store, accent: 'emerald' },
+  { path: '/my-templates', label: '我的模板', icon: Star, accent: 'amber' },
+  { path: '/codegraph', label: '代码图谱', icon: Network, accent: 'rose' },
+  { path: '/models', label: '模型管理', icon: Cpu, accent: 'blue' },
+  { path: '/vector-stores', label: '向量存储', icon: HardDrive, accent: 'emerald' },
+  { path: '/analytics', label: '数据分析', icon: BarChart2, accent: 'amber' },
+  { path: '/api-explorer', label: 'API 测试', icon: Terminal, accent: 'rose' },
+  { path: '/workflows/diff', label: '工作流对比', icon: GitCompare, accent: 'blue' },
+])
 
 function isActiveRoute(path) {
   if (path === '/home') {
@@ -323,11 +389,14 @@ function handleUserCommand(command) {
   position: fixed;
   left: 0;
   top: 0;
-  background-color: var(--bg-secondary);
-  border-right: 1px solid var(--border-primary);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border-right: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
   display: flex;
   flex-direction: column;
-  transition: width $transition-normal, background-color 0.3s ease;
+  transition: width $transition-normal, background-color 0.3s ease, backdrop-filter 0.3s ease;
   z-index: $z-sticky;
 
   .sidebar-collapsed & {
@@ -378,15 +447,35 @@ function handleUserCommand(command) {
   margin-bottom: $spacing-6;
 }
 
+.nav-section:nth-child(1) .nav-section-title {
+  color: var(--accent-blue);
+  opacity: 0.85;
+}
+
+.nav-section:nth-child(2) .nav-section-title {
+  color: var(--accent-emerald);
+  opacity: 0.85;
+}
+
+.nav-section:nth-child(3) .nav-section-title {
+  color: var(--accent-amber);
+  opacity: 0.85;
+}
+
+.nav-section:nth-child(4) .nav-section-title {
+  color: var(--accent-rose);
+  opacity: 0.85;
+}
+
 .nav-section-title {
   display: block;
   padding: 0 $spacing-4;
   margin-bottom: $spacing-2;
   font-size: $font-size-xs;
-  font-weight: $font-weight-medium;
+  font-weight: $font-weight-semibold;
   color: var(--text-tertiary);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.06em;
 
   .sidebar-collapsed & {
     opacity: 0;
@@ -402,29 +491,32 @@ function handleUserCommand(command) {
   gap: $spacing-3;
   padding: $spacing-3 $spacing-4;
   margin: 0 $spacing-2;
+  border: 1px solid transparent;
   border-radius: $radius-lg;
   color: var(--text-secondary);
   text-decoration: none;
-  transition: all $transition-fast;
+  transition: background-color $transition-fast, color $transition-fast, border-color $transition-fast, transform $transition-fast;
   cursor: pointer;
 
   &:hover {
     background-color: var(--bg-hover);
     color: var(--text-primary);
+    transform: translateX(2px);
   }
 
   &.active {
-    background-color: var(--accent-muted);
-    color: var(--accent-primary);
-
-    .nav-icon {
-      color: var(--accent-primary);
-    }
+    color: var(--text-primary);
+    box-shadow: inset 3px 0 0 var(--item-accent, var(--color-primary));
   }
 
   .sidebar-collapsed & {
     justify-content: center;
     padding: $spacing-3;
+
+    .nav-label,
+    .nav-icon-wrap {
+      // icon wrap stays visible when collapsed
+    }
 
     .nav-label {
       display: none;
@@ -432,10 +524,14 @@ function handleUserCommand(command) {
   }
 }
 
-.nav-icon {
-  width: 20px;
-  height: 20px;
-  flex-shrink: 0;
+// 无 accent 类的 nav-item 保持默认图标尺寸
+.nav-item:not([class*='nav-item--']) {
+  .nav-icon {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+    transition: transform $transition-fast, color $transition-fast;
+  }
 }
 
 .sidebar-footer {
@@ -475,12 +571,15 @@ function handleUserCommand(command) {
   display: flex;
   align-items: center;
   gap: $spacing-4;
-  background-color: var(--bg-secondary);
-  border-bottom: 1px solid var(--border-primary);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border-bottom: 1px solid var(--glass-border);
+  box-shadow: 0 1px 0 var(--glass-border), 0 4px 24px var(--topbar-edge-glow, transparent);
   position: sticky;
   top: 0;
   z-index: $z-sticky;
-  transition: background-color 0.3s ease;
+  transition: background-color 0.3s ease, backdrop-filter 0.3s ease;
 }
 
 .sidebar-toggle {
@@ -574,17 +673,26 @@ function handleUserCommand(command) {
   flex: 1;
   padding: $spacing-6;
   overflow-x: hidden;
-}
+  position: relative;
 
-// 路由切换动画
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.2s ease;
-}
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background-image:
+      linear-gradient(var(--hero-grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--hero-grid) 1px, transparent 1px);
+    background-size: 48px 48px;
+    mask-image: radial-gradient(ellipse 85% 60% at 50% 0%, black 15%, transparent 70%);
+    opacity: 0.65;
+  }
 
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
+  &__page {
+    min-height: 0;
+    position: relative;
+    z-index: 1;
+  }
 }
 
 // 移动端响应式

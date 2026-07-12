@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Robot Admin — 登录预览</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #181818;
+      --primary: #1859e9;
+      --primary-hover: #2464f0;
+      --panel-bg: rgba(255, 255, 255, 0.1);
+      --panel-border: rgba(255, 255, 255, 0.18);
+      --text-primary: rgba(255, 255, 255, 0.95);
+      --text-secondary: rgba(255, 255, 255, 0.55);
+      --text-hint: rgba(255, 255, 255, 0.45);
+      --underline: rgba(255, 255, 255, 0.25);
+      --underline-hover: rgba(255, 255, 255, 0.5);
+      --underline-focus: rgba(24, 89, 233, 0.85);
+      --panel-width: 370px;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+        'Microsoft YaHei', sans-serif;
+      background: var(--bg);
+      color: var(--text-primary);
+    }
+
+    /* ── 页面容器 ── */
+    .page {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      padding-left: 10%;
+      overflow: hidden;
+    }
+
+    /* ── Spline 3D 机器人背景 ── */
+    .spline-bg {
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+    }
+    .spline-bg canvas {
+      display: block;
+      width: 100% !important;
+      height: 100% !important;
+    }
+
+    /* ── 左上角 Logo ── */
+    .brand-logo {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      z-index: 10;
+      cursor: default;
+      user-select: none;
+      line-height: 1;
+    }
+    .brand-logo__title {
+      font-size: 28px;
+      font-weight: 800;
+      letter-spacing: 2px;
+      font-style: italic;
+    }
+    .brand-logo__title .cyan { color: #00e5ff; }
+    .brand-logo__title .white { color: #fff; }
+    .brand-logo__sub {
+      margin-top: 6px;
+      font-size: 11px;
+      letter-spacing: 3px;
+      color: rgba(255, 255, 255, 0.75);
+      font-weight: 500;
+    }
+
+    /* ── 登录面板 ── */
+    .login-wrapper {
+      position: relative;
+      z-index: 2;
+      margin-top: 5%;
+    }
+
+    .login-panel {
+      width: var(--panel-width);
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-border);
+      border-radius: 16px;
+      padding: 32px 26px 26px;
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      box-shadow: 0 8px 32px rgba(0, 10, 60, 0.12), 0 2px 8px rgba(0, 10, 40, 0.06);
+      overflow: hidden;
+      position: relative;
+    }
+    .login-panel::before {
+      content: '';
+      position: absolute;
+      top: 0; left: -50%;
+      width: 200%; height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.45), transparent);
+      pointer-events: none;
+    }
+    .login-panel::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, rgba(255,255,255,0.12) 0%, rgba(24,89,233,0.04) 100%);
+      border-radius: inherit;
+      pointer-events: none;
+      z-index: 0;
+    }
+    .login-panel > * { position: relative; z-index: 1; }
+
+    .login-header {
+      text-align: center;
+      margin-bottom: 18px;
+    }
+    .login-title {
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 6px;
+    }
+    .login-subtitle {
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    /* ── 输入框 ── */
+    .form-item { margin-bottom: 10px; }
+
+    .input-wrap {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border-bottom: 1px solid var(--underline);
+      padding: 8px 2px;
+      transition: border-color 0.25s;
+    }
+    .input-wrap:hover { border-color: var(--underline-hover); }
+    .input-wrap:focus-within { border-color: var(--underline-focus); }
+
+    .input-icon {
+      flex-shrink: 0;
+      width: 18px;
+      height: 18px;
+      color: rgba(255, 255, 255, 0.6);
+    }
+
+    .input-field {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--text-primary);
+      font-size: 14px;
+      line-height: 1.4;
+      min-width: 0;
+    }
+    .input-field::placeholder { color: var(--text-hint); }
+    .input-field.phone-value { color: #4a9eff; }
+
+    .input-clear {
+      flex-shrink: 0;
+      width: 18px;
+      height: 18px;
+      border: none;
+      background: transparent;
+      color: rgba(255, 255, 255, 0.4);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      transition: color 0.2s;
+    }
+    .input-clear:hover { color: rgba(255, 255, 255, 0.8); }
+    .input-clear svg { width: 14px; height: 14px; }
+
+    /* ── 验证码行 ── */
+    .code-row {
+      display: flex;
+      gap: 10px;
+      align-items: flex-end;
+    }
+    .code-row .input-wrap { flex: 1; }
+
+    .send-code-btn {
+      flex-shrink: 0;
+      height: 36px;
+      padding: 0 12px;
+      border-radius: 6px;
+      border: 1px solid var(--underline);
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text-secondary);
+      font-size: 13px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.25s;
+    }
+    .send-code-btn:not(:disabled):hover {
+      background: rgba(255, 255, 255, 0.16);
+      color: var(--text-primary);
+    }
+    .send-code-btn:disabled {
+      cursor: not-allowed;
+      opacity: 0.7;
+    }
+
+    /* ── 按钮 ── */
+    .btn-login {
+      width: 100%;
+      height: 38px;
+      margin-top: 16px;
+      border: none;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #1859e9, #1040a0);
+      color: #fff;
+      font-size: 14px;
+      font-weight: 500;
+      letter-spacing: 1.5px;
+      cursor: pointer;
+      box-shadow: 0 4px 15px rgba(24, 89, 233, 0.3);
+      transition: all 0.3s;
+      position: relative;
+      overflow: hidden;
+    }
+    .btn-login::before {
+      content: '';
+      position: absolute;
+      top: 0; left: -100%;
+      width: 50%; height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.25), transparent);
+      transform: skewX(-25deg);
+      transition: left 0.6s;
+    }
+    .btn-login:hover {
+      background: linear-gradient(135deg, #2464f0, #1545ad);
+      transform: translateY(-1px);
+      box-shadow: 0 6px 20px rgba(24, 89, 233, 0.4);
+    }
+    .btn-login:hover::before { left: 150%; }
+
+    .btn-back {
+      width: 100%;
+      height: 38px;
+      margin-top: 10px;
+      border-radius: 10px;
+      border: 1px solid var(--underline);
+      background: transparent;
+      color: var(--text-secondary);
+      font-size: 14px;
+      letter-spacing: 2px;
+      cursor: pointer;
+      transition: all 0.25s;
+    }
+    .btn-back:hover {
+      background: rgba(255, 255, 255, 0.06);
+      border-color: var(--underline-hover);
+      color: var(--text-primary);
+    }
+
+    /* ── 加载提示 ── */
+    .loading-tip {
+      position: absolute;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 5;
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.35);
+      pointer-events: none;
+      transition: opacity 0.5s;
+    }
+    .loading-tip.hidden { opacity: 0; }
+
+    /* ── 响应式 ── */
+    @media (max-width: 768px) {
+      .page {
+        padding-left: 0;
+        justify-content: center;
+      }
+      .login-wrapper {
+        margin-top: 0;
+        padding: 16px;
+      }
+      .login-panel {
+        width: min(90vw, var(--panel-width));
+      }
+      .brand-logo {
+        top: 10px; left: 10px;
+      }
+      .brand-logo__title { font-size: 20px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <!-- Spline 3D 机器人 -->
+    <div class="spline-bg">
+      <canvas id="spline-canvas"></canvas>
+    </div>
+
+    <!-- 品牌 Logo -->
+    <div class="brand-logo">
+      <div class="brand-logo__title">
+      </div>
+      <div class="brand-logo__sub">个人微信:China-Li0526</div>
+    </div>
+
+    <!-- 登录框 -->
+    <div class="login-wrapper">
+      <div class="login-panel">
+        <div class="login-header">
+          <h1 class="login-title">Mr.Li</h1>
+          <p class="login-subtitle">请登录您的账号</p>
+        </div>
+
+        <form id="login-form" onsubmit="return false;">
+          <div class="form-item">
+            <div class="input-wrap">
+              <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/>
+                <line x1="12" y1="18" x2="12.01" y2="18"/>
+              </svg>
+              <input
+                id="phone-input"
+                class="input-field phone-value"
+                type="tel"
+                value="13390597430"
+                placeholder="请输入手机号"
+                autocomplete="tel"
+              />
+              <button type="button" class="input-clear" id="clear-phone" title="清除">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="form-item">
+            <div class="code-row">
+              <div class="input-wrap">
+                <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                </svg>
+                <input
+                  id="code-input"
+                  class="input-field"
+                  type="text"
+                  placeholder="请输入验证码"
+                  maxlength="6"
+                  autocomplete="one-time-code"
+                />
+              </div>
+              <button type="button" class="send-code-btn" id="send-code-btn">获取验证码</button>
+            </div>
+          </div>
+
+          <button type="button" class="btn-login" id="btn-login">登 录</button>
+          <button type="button" class="btn-back" id="btn-back">返 回</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="loading-tip" id="loading-tip">正在加载 3D 机器人…</div>
+  </div>
+
+  <script type="module">
+    import { Application } from 'https://unpkg.com/@splinetool/runtime@1.12.68/build/runtime.js';
+
+    const SCENE_URL = 'https://prod.spline.design/kZDDjO5HuC9GJUM2/scene.splinecode';
+    const canvas = document.getElementById('spline-canvas');
+    const loadingTip = document.getElementById('loading-tip');
+    let splineApp = null;
+
+    async function initSpline() {
+      try {
+        splineApp = new Application(canvas, { renderOnDemand: true });
+        try {
+          await splineApp.load(SCENE_URL);
+        } catch {
+          const retry = SCENE_URL + (SCENE_URL.includes('?') ? '&' : '?') + 't=' + Date.now();
+          await splineApp.load(retry);
+        }
+        loadingTip.classList.add('hidden');
+      } catch (err) {
+        console.error('Spline 加载失败:', err);
+        loadingTip.textContent = '3D 机器人加载失败，请检查网络后刷新页面';
+      }
+    }
+
+    document.addEventListener('visibilitychange', () => {
+      if (!splineApp) return;
+      document.hidden ? splineApp.stop() : splineApp.play();
+    });
+
+    initSpline();
+
+    // ── 登录框交互 ──
+    const phoneInput = document.getElementById('phone-input');
+    const clearBtn = document.getElementById('clear-phone');
+    const sendCodeBtn = document.getElementById('send-code-btn');
+    const btnLogin = document.getElementById('btn-login');
+    const btnBack = document.getElementById('btn-back');
+
+    let countdown = 0;
+    let timer = null;
+
+    clearBtn.addEventListener('click', () => {
+      phoneInput.value = '';
+      phoneInput.classList.remove('phone-value');
+      phoneInput.focus();
+    });
+
+    phoneInput.addEventListener('input', () => {
+      phoneInput.classList.toggle('phone-value', phoneInput.value.length > 0);
+      clearBtn.style.display = phoneInput.value ? 'flex' : 'none';
+    });
+    clearBtn.style.display = phoneInput.value ? 'flex' : 'none';
+
+    function startCountdown(sec = 60) {
+      countdown = sec;
+      sendCodeBtn.disabled = true;
+      sendCodeBtn.textContent = `${countdown}s 后重发`;
+      timer = setInterval(() => {
+        countdown--;
+        if (countdown <= 0) {
+          clearInterval(timer);
+          sendCodeBtn.disabled = false;
+          sendCodeBtn.textContent = '获取验证码';
+        } else {
+          sendCodeBtn.textContent = `${countdown}s 后重发`;
+        }
+      }, 1000);
+    }
+
+    sendCodeBtn.addEventListener('click', () => {
+      if (!phoneInput.value.trim()) {
+        phoneInput.focus();
+        return;
+      }
+      startCountdown(60);
+    });
+
+    btnLogin.addEventListener('click', () => {
+      const phone = phoneInput.value.trim();
+      const code = document.getElementById('code-input').value.trim();
+      if (!phone) { phoneInput.focus(); return; }
+      if (!code) { document.getElementById('code-input').focus(); return; }
+      alert(`登录预览\n手机号：${phone}\n验证码：${code}`);
+    });
+
+    btnBack.addEventListener('click', () => {
+      history.length > 1 ? history.back() : alert('返回');
+    });
+  </script>
+</body>
+</html>

@@ -72,6 +72,9 @@
               <el-dropdown-item command="csv">
                 CSV 格式
               </el-dropdown-item>
+              <el-dropdown-item command="image_text_pairs">
+                图文对 JSONL（CLIP 检索）
+              </el-dropdown-item>
             </el-dropdown-menu>
           </template>
         </el-dropdown>
@@ -374,7 +377,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
@@ -737,17 +740,22 @@ async function handleAutoLabel() {
 
 async function handleExport(format) {
   try {
-    ElMessage.info(`正在导出 ${format.toUpperCase()} 格式...`)
+    const label = format === 'image_text_pairs' ? '图文对 JSONL' : format.toUpperCase()
+    ElMessage.info(`正在导出 ${label}...`)
 
     const response = await annotationApi.export(projectId.value, format)
 
-    const blob = new Blob([response], {
-      type: format === 'csv' ? 'text/csv' : 'application/json'
-    })
+    const mime = format === 'csv'
+      ? 'text/csv'
+      : format === 'image_text_pairs'
+        ? 'application/x-ndjson'
+        : 'application/json'
+    const ext = format === 'image_text_pairs' ? 'jsonl' : format
+    const blob = new Blob([response], { type: mime })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = `annotations_${projectId.value}.${format}`
+    link.download = `annotations_${projectId.value}.${ext}`
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
