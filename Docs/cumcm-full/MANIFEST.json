@@ -1,0 +1,410 @@
+{
+  "pack_name": "cumcm-full",
+  "built_at": "2026-08-31T13:01:44.844180+00:00",
+  "modex_version": "v1.7.3",
+  "source_root": "e:\\Modex\\Modex-MH-Agent",
+  "encryption_note": "SKILL.md 均为 SKILL.md.enc；解密需 Modex license dk_hex + skill_crypto.decrypt_skills_to_workspace()",
+  "readable_count": 16,
+  "encrypted_count": 41,
+  "files": [
+    {
+      "path": "prompts/academic_docx_traps.md",
+      "sha256": "7b96cefff2d6b94b88ed814d61008f31ab33c006ab1dba1b197c77873d65adc1",
+      "size_bytes": 6031,
+      "source": "e:\\Modex\\Flowly-Agent\\packages\\cumcm-full\\prompts\\academic_docx_traps.md",
+      "note": "Modex backend/services/prompts 原样"
+    },
+    {
+      "path": "prompts/course_docx_drawio_png.md",
+      "sha256": "48273ef07f5fb5fab411927f8fb20cc9f998ca39f6aecea8d8138b9e85c6c186",
+      "size_bytes": 3946,
+      "source": "e:\\Modex\\Flowly-Agent\\packages\\cumcm-full\\prompts\\course_docx_drawio_png.md",
+      "note": "Modex backend/services/prompts 原样"
+    },
+    {
+      "path": "prompts/course_docx_png_only.md",
+      "sha256": "7e989bebd7591572648ee3bb5d71e235f1ee4a616d646802f24c231a2e536ece",
+      "size_bytes": 2958,
+      "source": "e:\\Modex\\Flowly-Agent\\packages\\cumcm-full\\prompts\\course_docx_png_only.md",
+      "note": "Modex backend/services/prompts 原样"
+    },
+    {
+      "path": "prompts/course_docx_table_md.md",
+      "sha256": "e38863571dd4be41af1fa7ca4422272c783c7c74e201f69ebbb5faa6fef44c4b",
+      "size_bytes": 2625,
+      "source": "e:\\Modex\\Flowly-Agent\\packages\\cumcm-full\\prompts\\course_docx_table_md.md",
+      "note": "Modex backend/services/prompts 原样"
+    },
+    {
+      "path": "prompts/docx_write_markdown.md",
+      "sha256": "df3679f826a45a4b90fe84e77ca543291bac0feeeef5d9eb06ef119516abb5c1",
+      "size_bytes": 5759,
+      "source": "e:\\Modex\\Flowly-Agent\\packages\\cumcm-full\\prompts\\docx_write_markdown.md",
+      "note": "Modex backend/services/prompts 原样"
+    },
+    {
+      "path": "prompts/nature_figure_lang.md",
+      "sha256": "41a1793b3f41c56b307c727f5a3b3ddf5b3f82e78d4b4f9723a957359a879906",
+      "size_bytes": 429,
+      "source": "e:\\Modex\\Flowly-Agent\\packages\\cumcm-full\\prompts\\nature_figure_lang.md",
+      "note": "Modex backend/services/prompts 原样"
+    },
+    {
+      "path": "prompts/paper_figure_lang_zh.md",
+      "sha256": "ef8849a12755407cedbe64b3d337ce00c881c5539974f0577617554b9d4b43c4",
+      "size_bytes": 787,
+      "source": "e:\\Modex\\Flowly-Agent\\packages\\cumcm-full\\prompts\\paper_figure_lang_zh.md",
+      "note": "Modex backend/services/prompts 原样"
+    },
+    {
+      "path": "prompts/user_template_latex.md",
+      "sha256": "f3fe2cb35bda3a8c6bde52936aa571c044a6fe57067c8df89b35ed70746e9387",
+      "size_bytes": 512,
+      "source": "e:\\Modex\\Flowly-Agent\\packages\\cumcm-full\\prompts\\user_template_latex.md",
+      "note": "Modex backend/services/prompts 原样"
+    },
+    {
+      "path": "style-profiles/competition_zh.json",
+      "sha256": "0420a0549a1bb6bacabf203be4882143ec688d98b0135d606a7de935f878f707",
+      "size_bytes": 1819,
+      "source": "e:\\Modex\\Flowly-Agent\\packages\\cumcm-full\\style-profiles\\competition_zh.json",
+      "note": "Modex docx_style_profiles 原样"
+    },
+    {
+      "path": "style-profiles/covers/cumcm.json",
+      "sha256": "b80ce90635a4172c07811398edf5596416b465384758510f50ebc053065df776",
+      "size_bytes": 2136,
+      "source": "e:\\Modex\\Flowly-Agent\\packages\\cumcm-full\\style-profiles\\covers\\cumcm.json",
+      "note": "Modex docx_style_profiles 原样"
+    },
+    {
+      "path": "format-reference/reference_structure_comp_cumcm.md",
+      "sha256": "38c9d8fa11c9f7696105911a73ffa70787796026b065cc3e73cfbb8ae6e9e303",
+      "size_bytes": 4166,
+      "source": "e:\\Modex\\Flowly-Agent\\packages\\cumcm-full\\format-reference\\reference_structure_comp_cumcm.md",
+      "note": "自 generate_format_reference 反汇编骨架+profile 生成"
+    },
+    {
+      "path": "templates/cumcm/cumcmthesis.cls",
+      "sha256": "1f2bb129ef5765699273dce876c7ce56a93733792ef69f76103879b2103d1f8d",
+      "size_bytes": 26321,
+      "source": "e:\\Modex\\Flowly-Agent\\packages\\cumcm-full\\templates\\cumcm\\cumcmthesis.cls",
+      "note": "comp-paper-zh 可读模板"
+    },
+    {
+      "path": "templates/cumcm/simkai.ttf",
+      "sha256": "9dd76f7ab430edd091db24c3f18e71410325c1414141aad5fe67947873ffba06",
+      "size_bytes": 11787328,
+      "source": "e:\\Modex\\Flowly-Agent\\packages\\cumcm-full\\templates\\cumcm\\simkai.ttf",
+      "note": "comp-paper-zh 可读模板"
+    },
+    {
+      "path": "templates/cumcm/simsun.ttc",
+      "sha256": "05068fa1acae212120dcc7e98c884b174a6eca252a636b4b64030235473ec27e",
+      "size_bytes": 18008680,
+      "source": "e:\\Modex\\Flowly-Agent\\packages\\cumcm-full\\templates\\cumcm\\simsun.ttc",
+      "note": "comp-paper-zh 可读模板"
+    },
+    {
+      "path": "skills-encrypted/comp-prob-analysis/SKILL.md.enc",
+      "sha256": "02972a7800c3bba498bfb13749af40a6f3d76b65effab700312c425fb654f9af",
+      "size_bytes": 77993,
+      "source": "e:\\Modex\\Flowly-Agent\\packages\\cumcm-full\\skills-encrypted\\comp-prob-analysis\\SKILL.md.enc",
+      "note": "Modex 原始 .enc（需 license dk_hex 解密）"
+    },
+    {
+      "path": "skills-encrypted/comp-modeling/references/methods_table.md.enc",
+      "sha256": "bfee3967bf7805e7a7b2bf27929bbabf926e590c55e4fa2ac6e2228862493b40",
+      "size_bytes": 960,
+      "source": "e:\\Modex\\Flowly-Agent\\packages\\cumcm-full\\skills-encrypted\\comp-modeling\\references\\methods_table.md.enc",
+      "note": "Modex 原始 .enc（需 license dk_hex 解密）"
+    },
+    {
+      "path": "skills-encrypted/comp-modeling/SKILL.md.enc",
+      "sha256": "c505ae5b41d93e2b5adac20625db3dbde242689ea57adde92544accf3230b794",
+      "size_bytes": 41137,
+      "source": "e:\\Modex\\Flowly-Agent\\packages\\cumcm-full\\skills-encrypted\\comp-modeling\\SKILL.md.enc",
+      "note": "Modex 原始 .enc（需 license dk_hex 解密）"
+    },
+    {
+      "path": "skills-encrypted/comp-code/references/checks/_index.md.enc",
+      "sha256": "8d53e2cbe9274fbbf221aa8ae65cc1fa46c7e46d4bcaa1a0845894d534e6033a",
+      "size_bytes": 1784,
+      "source": "e:\\Modex\\Flowly-Agent\\packages\\cumcm-full\\skills-encrypted\\comp-code\\references\\checks\\_index.md.enc",
+      "note": "Modex 原始 .enc（需 license dk_hex 解密）"
+    },
+    {
+      "path": "skills-encrypted/comp-code/references/checks/consistency.md.enc",
+      "sha256": "30d83e9a8d739f1b5983b724988d8e419891ecee028d4c4b618813ad97d0598c",
+      "size_bytes": 8643,
+      "source": "e:\\Modex\\Flowly-Agent\\packages\\cumcm-full\\skills-encrypted\\comp-code\\references\\checks\\consistency.md.enc",
+      "note": "Modex 原始 .enc（需 license dk_hex 解密）"
+    },
+    {
+      "path": "skills-encrypted/comp-code/references/checks/evaluation.md.enc",
+      "sha256": "8c1d6c84f1f50a5ee95be8299f13c39be6281e69f1858c3ba170f0f337a27f4a",
+      "size_bytes": 1948,
+      "source": "e:\\Modex\\Flowly-Agent\\packages\\cumcm-full\\skills-encrypted\\comp-code\\references\\checks\\evaluation.md.enc",
+      "note": "Modex 原始 .enc（需 license dk_hex 解密）"
+    },
+    {
+      "path": "skills-encrypted/comp-code/references/checks/optimization.md.enc",
+      "sha256": "050a2b6bbe675fabdbb4843c17ee829df067d35ce6508fc7a39e7f58a4b23880",
+      "size_bytes": 15096,
+      "source": "e:\\Modex\\Flowly-Agent\\packages\\cumcm-full\\skills-encrypted\\comp-code\\references\\checks\\optimization.md.enc",
+      "note": "Modex 原始 .enc（需 license dk_hex 解密）"
+    },
+    {
+      "path": "skills-encrypted/comp-code/references/checks/physical.md.enc",
+      "sha256": "6e7b8558f3482591c571ec4585844894dc5696d7db0049ea6653187f324a141e",
+      "size_bytes": 5250,
+      "source": "e:\\Modex\\Flowly-Agent\\packages\\cumcm-full\\skills-encrypted\\comp-code\\references\\checks\\physical.md.enc",
+      "note": "Modex 原始 .enc（需 license dk_hex 解密）"
+    },
+    {
+      "path": "skills-encrypted/comp-code/references/checks/prediction.md.enc",
+      "sha256": "d1e38725bff57e30361870ed98168b33023431798f3fb72f5844c4c656ec7f6c",
+      "size_bytes": 2393,
+      "source": "e:\\Modex\\Flowly-Agent\\packages\\cumcm-full\\skills-encrypted\\comp-code\\references\\checks\\prediction.md.enc",
+      "note": "Modex 原始 .enc（需 license dk_hex 解密）"
+    },
+    {
+      "path": "skills-encrypted/comp-code/references/checks/sanity_check.md.enc",
+      "sha256": "cd995b2b2bef4c567f8957f86f8337fd714b8c13d9549be84b2913e2bc145dca",
+      "size_bytes": 20830,
+      "source": "e:\\Modex\\Flowly-Agent\\packages\\cumcm-full\\skills-encrypted\\comp-code\\references\\checks\\sanity_check.md.enc",
+      "note": "Modex 原始 .enc（需 license dk_hex 解密）"
+    },
+    {
+      "path": "skills-encrypted/comp-code/references/error_prevention_code.md.enc",
+      "sha256": "c6d5405978b0c089c2541368fc66f0125ca1bb62d40fb64018d9683fd57888d7",
+      "size_bytes": 11285,
+      "source": "e:\\Modex\\Flowly-Agent\\packages\\cumcm-full\\skills-encrypted\\comp-code\\references\\error_prevention_code.md.enc",
+      "note": "Modex 原始 .enc（需 license dk_hex 解密）"
+    },
+    {
+      "path": "skills-encrypted/comp-code/SKILL.md.enc",
+      "sha256": "6519b71ac1ef93fe1e1b1619ec71c2088c0fbb1c8a18e604d025ca6787ce0f37",
+      "size_bytes": 59759,
+      "source": "e:\\Modex\\Flowly-Agent\\packages\\cumcm-full\\skills-encrypted\\comp-code\\SKILL.md.enc",
+      "note": "Modex 原始 .enc（需 license dk_hex 解密）"
+    },
+    {
+      "path": "skills-encrypted/comp-paper-zh/SKILL.md.enc",
+      "sha256": "ebfd4f16468b6f700b13d6afad84620df811fde64207b34df0b2af6bd5b4f54c",
+      "size_bytes": 112924,
+      "source": "e:\\Modex\\Flowly-Agent\\packages\\cumcm-full\\skills-encrypted\\comp-paper-zh\\SKILL.md.enc",
+      "note": "Modex 原始 .enc（需 license dk_hex 解密）"
+    },
+    {
+      "path": "skills-encrypted/comp-paper-zh/templates/apmcm/main.tex.enc",
+      "sha256": "de0a1239cbb2d8d69ba9406d2713a724f09119afc1cb42987792ca6fe59d0521",
+      "size_bytes": 1446,
+      "source": "e:\\Modex\\Flowly-Agent\\packages\\cumcm-full\\skills-encrypted\\comp-paper-zh\\templates\\apmcm\\main.tex.enc",
+      "note": "Modex 原始 .enc（需 license dk_hex 解密）"
+    },
+    {
+      "path": "skills-encrypted/comp-paper-zh/templates/apmcm_zh/main.tex.enc",
+      "sha256": "f8ef9d877e9aeb642cc34ed572aa2c03e3c288da12aab0c956ce9cf71324a6ff",
+      "size_bytes": 753,
+      "source": "e:\\Modex\\Flowly-Agent\\packages\\cumcm-full\\skills-encrypted\\comp-paper-zh\\templates\\apmcm_zh\\main.tex.enc",
+      "note": "Modex 原始 .enc（需 license dk_hex 解密）"
+    },
+    {
+      "path": "skills-encrypted/comp-paper-zh/templates/changsanjiao/main.tex.enc",
+      "sha256": "3ff0d3052352c77109c92d6516c1dbb1c1252545b1b3c703b1eb9fa0479c15d2",
+      "size_bytes": 1628,
+      "source": "e:\\Modex\\Flowly-Agent\\packages\\cumcm-full\\skills-encrypted\\comp-paper-zh\\templates\\changsanjiao\\main.tex.enc",
+      "note": "Modex 原始 .enc（需 license dk_hex 解密）"
+    },
+    {
+      "path": "skills-encrypted/comp-paper-zh/templates/cumcm/main.tex.enc",
+      "sha256": "90b1c7c09524cc86317c68585d80d58d24328aef112d93334febd3925a192720",
+      "size_bytes": 3309,
+      "source": "e:\\Modex\\Flowly-Agent\\packages\\cumcm-full\\skills-encrypted\\comp-paper-zh\\templates\\cumcm\\main.tex.enc",
+      "note": "Modex 原始 .enc（需 license dk_hex 解密）"
+    },
+    {
+      "path": "skills-encrypted/comp-paper-zh/templates/default/main.tex.enc",
+      "sha256": "04f7cecb427e94ea3644fbcd83671e5fb332677cc9052711ecd142c92fbf5531",
+      "size_bytes": 2791,
+      "source": "e:\\Modex\\Flowly-Agent\\packages\\cumcm-full\\skills-encrypted\\comp-paper-zh\\templates\\default\\main.tex.enc",
+      "note": "Modex 原始 .enc（需 license dk_hex 解密）"
+    },
+    {
+      "path": "skills-encrypted/comp-paper-zh/templates/diangongbei/main.tex.enc",
+      "sha256": "7c15f39268eedf6ddc5e6cf48f59d803ef7205f984f096a777ca375d1b841b33",
+      "size_bytes": 1571,
+      "source": "e:\\Modex\\Flowly-Agent\\packages\\cumcm-full\\skills-encrypted\\comp-paper-zh\\templates\\diangongbei\\main.tex.enc",
+      "note": "Modex 原始 .enc（需 license dk_hex 解密）"
+    },
+    {
+      "path": "skills-encrypted/comp-paper-zh/templates/dongsansheng/main.tex.enc",
+      "sha256": "02afa20ade449719f96c71b001124acd31b2d01899102ed4f8bfa85220a37f53",
+      "size_bytes": 1299,
+      "source": "e:\\Modex\\Flowly-Agent\\packages\\cumcm-full\\skills-encrypted\\comp-paper-zh\\templates\\dongsansheng\\main.tex.enc",
+      "note": "Modex 原始 .enc（需 license dk_hex 解密）"
+    },
+    {
+      "path": "skills-encrypted/comp-paper-zh/templates/dongsansheng/refs.bib.enc",
+      "sha256": "f81a8cfd05e73fd4c205e9677032d0e696c511a71613749c44267635d28c67bb",
+      "size_bytes": 823,
+      "source": "e:\\Modex\\Flowly-Agent\\packages\\cumcm-full\\skills-encrypted\\comp-paper-zh\\templates\\dongsansheng\\refs.bib.enc",
+      "note": "Modex 原始 .enc（需 license dk_hex 解密）"
+    },
+    {
+      "path": "skills-encrypted/comp-paper-zh/templates/huashubei/main.tex.enc",
+      "sha256": "b894f0493367210ecb149c7d7994e6807d6bc830f73d4618755dfe0e718b8701",
+      "size_bytes": 1819,
+      "source": "e:\\Modex\\Flowly-Agent\\packages\\cumcm-full\\skills-encrypted\\comp-paper-zh\\templates\\huashubei\\main.tex.enc",
+      "note": "Modex 原始 .enc（需 license dk_hex 解密）"
+    },
+    {
+      "path": "skills-encrypted/comp-paper-zh/templates/huawei/main.tex.enc",
+      "sha256": "4896736a1e16203c8501bdf4cd7de81db76874d5ffb5c78634e117b973a111bd",
+      "size_bytes": 2051,
+      "source": "e:\\Modex\\Flowly-Agent\\packages\\cumcm-full\\skills-encrypted\\comp-paper-zh\\templates\\huawei\\main.tex.enc",
+      "note": "Modex 原始 .enc（需 license dk_hex 解密）"
+    },
+    {
+      "path": "skills-encrypted/comp-paper-zh/templates/huazhong/main.tex.enc",
+      "sha256": "622f7bcffa1f41e3673efbe5a2212d7c9a72861561fe2059a5f1d7778e544489",
+      "size_bytes": 2518,
+      "source": "e:\\Modex\\Flowly-Agent\\packages\\cumcm-full\\skills-encrypted\\comp-paper-zh\\templates\\huazhong\\main.tex.enc",
+      "note": "Modex 原始 .enc（需 license dk_hex 解密）"
+    },
+    {
+      "path": "skills-encrypted/comp-paper-zh/templates/mathorcup/main.tex.enc",
+      "sha256": "9667a4ee8453c7a94f16d2ee8e5a93d3829322da19ec8fb2160333fa31e3e2bf",
+      "size_bytes": 1531,
+      "source": "e:\\Modex\\Flowly-Agent\\packages\\cumcm-full\\skills-encrypted\\comp-paper-zh\\templates\\mathorcup\\main.tex.enc",
+      "note": "Modex 原始 .enc（需 license dk_hex 解密）"
+    },
+    {
+      "path": "skills-encrypted/comp-paper-zh/templates/mcm/main.tex.enc",
+      "sha256": "c00994da6191ba2d18f7a608ba50ca98351853b0a359e2d274c83b07ca3cc5fd",
+      "size_bytes": 1338,
+      "source": "e:\\Modex\\Flowly-Agent\\packages\\cumcm-full\\skills-encrypted\\comp-paper-zh\\templates\\mcm\\main.tex.enc",
+      "note": "Modex 原始 .enc（需 license dk_hex 解密）"
+    },
+    {
+      "path": "skills-encrypted/comp-paper-zh/templates/mcm/mcmthesis-demo.tex.enc",
+      "sha256": "f8cc1609a85fa4e03c4fb0b2524116a12e16efe698dc121a38e66368aef6e86e",
+      "size_bytes": 7473,
+      "source": "e:\\Modex\\Flowly-Agent\\packages\\cumcm-full\\skills-encrypted\\comp-paper-zh\\templates\\mcm\\mcmthesis-demo.tex.enc",
+      "note": "Modex 原始 .enc（需 license dk_hex 解密）"
+    },
+    {
+      "path": "skills-encrypted/comp-paper-zh/templates/shuweibei/Abstract.tex.enc",
+      "sha256": "3adc0587a4fd92554e82d9c120547ac61e1beded5c7f24186d03cc7a9f5d874f",
+      "size_bytes": 2010,
+      "source": "e:\\Modex\\Flowly-Agent\\packages\\cumcm-full\\skills-encrypted\\comp-paper-zh\\templates\\shuweibei\\Abstract.tex.enc",
+      "note": "Modex 原始 .enc（需 license dk_hex 解密）"
+    },
+    {
+      "path": "skills-encrypted/comp-paper-zh/templates/shuweibei/Appendices1.tex.enc",
+      "sha256": "68d368e687e6876c004b2796a59fb3c20ef2dc627f4de71aeea95ac96ae0c6ed",
+      "size_bytes": 6526,
+      "source": "e:\\Modex\\Flowly-Agent\\packages\\cumcm-full\\skills-encrypted\\comp-paper-zh\\templates\\shuweibei\\Appendices1.tex.enc",
+      "note": "Modex 原始 .enc（需 license dk_hex 解密）"
+    },
+    {
+      "path": "skills-encrypted/comp-paper-zh/templates/shuweibei/Introduction.tex.enc",
+      "sha256": "1e111ddfe3798e4558abded7ba9970f53f869a71dc1d990209137890e26f19d2",
+      "size_bytes": 341,
+      "source": "e:\\Modex\\Flowly-Agent\\packages\\cumcm-full\\skills-encrypted\\comp-paper-zh\\templates\\shuweibei\\Introduction.tex.enc",
+      "note": "Modex 原始 .enc（需 license dk_hex 解密）"
+    },
+    {
+      "path": "skills-encrypted/comp-paper-zh/templates/shuweibei/main.tex.enc",
+      "sha256": "eb964474210877beb954766bccb997b0114a93fa77b8f42f89f7a2fb430da81a",
+      "size_bytes": 23590,
+      "source": "e:\\Modex\\Flowly-Agent\\packages\\cumcm-full\\skills-encrypted\\comp-paper-zh\\templates\\shuweibei\\main.tex.enc",
+      "note": "Modex 原始 .enc（需 license dk_hex 解密）"
+    },
+    {
+      "path": "skills-encrypted/comp-paper-zh/templates/shuweibei/MathCapmain.tex.enc",
+      "sha256": "18913915df8d697995afe73d6eca2169f3f4dee9322780c2ca97edcfad8e4d96",
+      "size_bytes": 23298,
+      "source": "e:\\Modex\\Flowly-Agent\\packages\\cumcm-full\\skills-encrypted\\comp-paper-zh\\templates\\shuweibei\\MathCapmain.tex.enc",
+      "note": "Modex 原始 .enc（需 license dk_hex 解密）"
+    },
+    {
+      "path": "skills-encrypted/comp-paper-zh/templates/stats/cankao.bib.enc",
+      "sha256": "7a4975fa69c56bcfdd3dadd370c179b9c6b91d0a1f2e60eacdd0590608d8e756",
+      "size_bytes": 5991,
+      "source": "e:\\Modex\\Flowly-Agent\\packages\\cumcm-full\\skills-encrypted\\comp-paper-zh\\templates\\stats\\cankao.bib.enc",
+      "note": "Modex 原始 .enc（需 license dk_hex 解密）"
+    },
+    {
+      "path": "skills-encrypted/comp-paper-zh/templates/stats/cover station.tex.enc",
+      "sha256": "6d84f83434286d9e11664342cd006806baa118c234a3deb0b1c0f52b178556b6",
+      "size_bytes": 26144,
+      "source": "e:\\Modex\\Flowly-Agent\\packages\\cumcm-full\\skills-encrypted\\comp-paper-zh\\templates\\stats\\cover station.tex.enc",
+      "note": "Modex 原始 .enc（需 license dk_hex 解密）"
+    },
+    {
+      "path": "skills-encrypted/comp-paper-zh/templates/stats/main.tex.enc",
+      "sha256": "b9ab73523ef0b4088e0ce2590423246c3a4d2d6dce5a14c68566d9a583cf5435",
+      "size_bytes": 6736,
+      "source": "e:\\Modex\\Flowly-Agent\\packages\\cumcm-full\\skills-encrypted\\comp-paper-zh\\templates\\stats\\main.tex.enc",
+      "note": "Modex 原始 .enc（需 license dk_hex 解密）"
+    },
+    {
+      "path": "skills-encrypted/comp-paper-zh/templates/wuyi/main.tex.enc",
+      "sha256": "90002d60912871b7bde407b12fe29c657bf773218d27ce1aeedc25bf380e868c",
+      "size_bytes": 5210,
+      "source": "e:\\Modex\\Flowly-Agent\\packages\\cumcm-full\\skills-encrypted\\comp-paper-zh\\templates\\wuyi\\main.tex.enc",
+      "note": "Modex 原始 .enc（需 license dk_hex 解密）"
+    },
+    {
+      "path": "skills-encrypted/comp-compile-zh/SKILL.md.enc",
+      "sha256": "3d2baa7e1807984cc9fabbddd57a81132cd4fbb7784387869a3d48352e19ed39",
+      "size_bytes": 44150,
+      "source": "e:\\Modex\\Flowly-Agent\\packages\\cumcm-full\\skills-encrypted\\comp-compile-zh\\SKILL.md.enc",
+      "note": "Modex 原始 .enc（需 license dk_hex 解密）"
+    },
+    {
+      "path": "skills-encrypted/comp-review/SKILL.md.enc",
+      "sha256": "21c1a8b4c7474dcc1e0607e5c11762ac9b6d1700daa6f6808c6c4ad29c5c030c",
+      "size_bytes": 6381,
+      "source": "e:\\Modex\\Flowly-Agent\\packages\\cumcm-full\\skills-encrypted\\comp-review\\SKILL.md.enc",
+      "note": "Modex 原始 .enc（需 license dk_hex 解密）"
+    },
+    {
+      "path": "skills-encrypted/comp-paper-zh-docx/SKILL.md.enc",
+      "sha256": "2352c94ea15ddc1fa7f3b503ffe3d09355c180b727af268761df7007655f6895",
+      "size_bytes": 66637,
+      "source": "e:\\Modex\\Flowly-Agent\\packages\\cumcm-full\\skills-encrypted\\comp-paper-zh-docx\\SKILL.md.enc",
+      "note": "Modex 原始 .enc（需 license dk_hex 解密）"
+    },
+    {
+      "path": "skills-encrypted/paper-figure/SKILL.md.enc",
+      "sha256": "1c454aba4009a20d5af93d62d74a61271e2166beead32b3dfda23a8293496e76",
+      "size_bytes": 85334,
+      "source": "e:\\Modex\\Flowly-Agent\\packages\\cumcm-full\\skills-encrypted\\paper-figure\\SKILL.md.enc",
+      "note": "Modex 原始 .enc（需 license dk_hex 解密）"
+    },
+    {
+      "path": "skills-encrypted/docx-format-check/SKILL.md.enc",
+      "sha256": "f62fa65d32ae169058f874aca98a050ba78bbcdae685765742eca19766c115ef",
+      "size_bytes": 23232,
+      "source": "e:\\Modex\\Flowly-Agent\\packages\\cumcm-full\\skills-encrypted\\docx-format-check\\SKILL.md.enc",
+      "note": "Modex 原始 .enc（需 license dk_hex 解密）"
+    },
+    {
+      "path": "workflows/comp_cumcm.yaml",
+      "sha256": "08c80344ac139c4d96d59bcfb40e8c1ae37a06eb0882eb83dd1f59b160bcde37",
+      "size_bytes": 652,
+      "source": "e:\\Modex\\Flowly-Agent\\packages\\cumcm-full\\workflows\\comp_cumcm.yaml",
+      "note": "逆向 workflow_pipelines"
+    },
+    {
+      "path": "workflows/comp_cumcm_docx.yaml",
+      "sha256": "4640a1ab05b34969efcc9a7b276809f964c5b3ff3e1148b53b543c155afa0a6b",
+      "size_bytes": 826,
+      "source": "e:\\Modex\\Flowly-Agent\\packages\\cumcm-full\\workflows\\comp_cumcm_docx.yaml",
+      "note": "逆向 workflow_pipelines"
+    }
+  ]
+}

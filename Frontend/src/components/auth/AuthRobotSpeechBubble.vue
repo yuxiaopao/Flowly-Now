@@ -7,7 +7,10 @@
       aria-live="polite"
     >
       <div class="robot-speech-bubble__avatar">
-        <Bot class="robot-speech-bubble__icon" />
+        <FlowlyBot
+          :state="loading ? 'thinking' : 'replying'"
+          :size="BOT_AVATAR.size"
+        />
       </div>
       <div class="robot-speech-bubble__body">
         <span class="robot-speech-bubble__label">小流</span>
@@ -31,7 +34,8 @@
 
 <script setup>
 import { computed } from 'vue'
-import { Bot } from 'lucide-vue-next'
+import FlowlyBot from '@/components/common/FlowlyBot.vue'
+import { BOT_AVATAR } from '@/config/botAvatar'
 
 const props = defineProps({
   text: {
@@ -69,14 +73,6 @@ const displayText = computed(() => props.text || (props.loading ? ' ' : ''))
     display: flex;
     align-items: center;
     justify-content: center;
-    background: var(--accent-primary);
-    color: var(--text-inverse);
-    box-shadow: 0 4px 14px color-mix(in srgb, var(--accent-primary) 35%, transparent);
-  }
-
-  &__icon {
-    width: 18px;
-    height: 18px;
   }
 
   &__body {

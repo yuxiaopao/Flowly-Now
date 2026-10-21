@@ -6,6 +6,7 @@ import os
 import logging
 import zipfile
 import io
+from pathlib import Path
 from django.db.models import Q
 from django.http import FileResponse, HttpResponse
 from django.utils import timezone
@@ -94,7 +95,7 @@ class GeneratedSiteViewSet(viewsets.ModelViewSet):
         serializer = GeneratedSiteCreateSerializer(data=request.data, context={'request': request})
         serializer.is_valid(raise_exception=True)
         site = serializer.save(
-            status='generating',
+            status='profiling',
             created_by=request.user,
             tenant=self._get_tenant(request)
         )
@@ -102,6 +103,26 @@ class GeneratedSiteViewSet(viewsets.ModelViewSet):
         def run_generation():
             try:
                 from website_generator.generators import get_generator
+                if not site.output_dir:
+                    default_dir = Path('Backend') / 'data' / 'generated_sites' / str(site.id)
+                    site.output_dir = str(default_dir.resolve())
+                    site.save(update_fields=['output_dir'])
+
+                site.status = 'environment_ready'
+                site.progress = 15
+                site.save(update_fields=['status', 'progress'])
+
+                environment_config = dict(site.environment_config or {})
+                theme_profile = dict(site.theme_profile or {})
+                site_brief = dict(site.site_brief or {})
+                wizard = dict(site_brief.get('wizard') or {})
+                if theme_profile:
+                    wizard.update(theme_profile)
+                if site.description and not wizard.get('usageDescription'):
+                    wizard['usageDescription'] = site.description
+                if site.name and not wizard.get('siteName'):
+                    wizard['siteName'] = site.name
+
                 generator = get_generator(site.website_type, {
                     'output_dir': site.output_dir,
                     'model_path': site.model_path,
@@ -114,13 +135,30 @@ class GeneratedSiteViewSet(viewsets.ModelViewSet):
                     'port': site.port,
                     'name': site.name,
                     'description': site.description,
+                    'model_artifact_manifest': site.model_artifact_manifest,
+                    'required_features': site.required_features,
+                    'site_brief': site_brief,
+                    'theme_profile': theme_profile,
+                    'environment_config': environment_config,
+                    'dbEngine': environment_config.get('dbEngine') or 'mysql',
+                    'profile': site_brief.get('profile') or {},
+                    'wizard': wizard,
+                    'agent_memory_enabled': site.agent_memory_enabled,
                 })
 
+                site.status = 'backend_ready'
+                site.progress = 35
+                site.save(update_fields=['status', 'progress'])
                 result = generator.generate()
+                if not result.get('success'):
+                    raise RuntimeError(result.get('error') or 'Website generator returned an unsuccessful result')
 
                 site.generated_files = result.get('generated_files', [])
-                site.status = 'completed'
+                site.status = 'preview_ready'
+                site.progress = 90
                 site.inference_endpoint = f"http://localhost:{site.port}/predict"
+                site.last_preview_url = f"http://localhost:{site.port}/"
+                site.preview_status = 'stale'
                 site.completed_at = timezone.now()
                 site.save()
 
@@ -129,9 +167,13 @@ class GeneratedSiteViewSet(viewsets.ModelViewSet):
                 except Exception as cg_err:
                     logger.warning(f"CodeGraph registration skipped for site {site.id}: {cg_err}")
 
+                site.status = 'completed'
+                site.progress = 100
+                site.save(update_fields=['status', 'progress'])
+
             except Exception as e:
                 logger.exception(f"Website generation failed for site {site.id}")
-                site.status = 'failed'
+                site.status = 'failed_with_report'
                 site.error_message = str(e)
                 site.completed_at = timezone.now()
                 site.save()

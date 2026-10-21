@@ -1,6 +1,11 @@
 <template>
   <div class="clip-cls-wizard">
-    <el-steps :active="step" finish-status="success" align-center class="wizard-steps">
+    <el-steps
+      :active="step"
+      finish-status="success"
+      align-center
+      class="wizard-steps"
+    >
       <el-step title="数据" />
       <el-step title="模式" />
       <el-step title="类名" />
@@ -9,13 +14,24 @@
     </el-steps>
 
     <div class="wizard-body">
-      <div v-show="step === 0" class="step-panel">
-        <el-alert type="info" :closable="false" show-icon title="数据来源" />
+      <div
+        v-show="step === 0"
+        class="step-panel"
+      >
+        <el-alert
+          type="info"
+          :closable="false"
+          show-icon
+          title="数据来源"
+        />
         <p class="hint">
           零样本：仅需类别名称，无需训练集。<br>
           微调：请连接上游 <code>dataset_upload</code>（format=classification_folders）。
         </p>
-        <el-form label-position="top" size="small">
+        <el-form
+          label-position="top"
+          size="small"
+        >
           <el-form-item label="数据集路径（微调必填）">
             <el-input
               :model-value="local.datasetPath"
@@ -26,20 +42,42 @@
         </el-form>
       </div>
 
-      <div v-show="step === 1" class="step-panel">
-        <el-form label-position="top" size="small">
+      <div
+        v-show="step === 1"
+        class="step-panel"
+      >
+        <el-form
+          label-position="top"
+          size="small"
+        >
           <el-form-item label="分类模式">
-            <el-radio-group :model-value="local.mode" @update:model-value="patch('mode', $event)">
-              <el-radio-button value="zero_shot">零样本</el-radio-button>
-              <el-radio-button value="finetune">微调</el-radio-button>
+            <el-radio-group
+              :model-value="local.mode"
+              @update:model-value="patch('mode', $event)"
+            >
+              <el-radio-button value="zero_shot">
+                零样本
+              </el-radio-button>
+              <el-radio-button value="finetune">
+                微调
+              </el-radio-button>
             </el-radio-group>
           </el-form-item>
         </el-form>
       </div>
 
-      <div v-show="step === 2" class="step-panel">
-        <el-form label-position="top" size="small">
-          <el-form-item label="类别名称" required>
+      <div
+        v-show="step === 2"
+        class="step-panel"
+      >
+        <el-form
+          label-position="top"
+          size="small"
+        >
+          <el-form-item
+            label="类别名称"
+            required
+          >
             <el-select
               :model-value="classNames"
               multiple
@@ -54,30 +92,63 @@
         </el-form>
       </div>
 
-      <div v-show="step === 3" class="step-panel">
-        <el-form label-position="top" size="small">
+      <div
+        v-show="step === 3"
+        class="step-panel"
+      >
+        <el-form
+          label-position="top"
+          size="small"
+        >
           <el-form-item label="CLIP 基座">
-            <el-select :model-value="local.baseModel || 'ViT-B/32'" @update:model-value="patch('baseModel', $event)">
-              <el-option label="ViT-B/32" value="ViT-B/32" />
-              <el-option label="ViT-B/16" value="ViT-B/16" />
+            <el-select
+              :model-value="local.baseModel || 'ViT-B/32'"
+              @update:model-value="patch('baseModel', $event)"
+            >
+              <el-option
+                label="ViT-B/32"
+                value="ViT-B/32"
+              />
+              <el-option
+                label="ViT-B/16"
+                value="ViT-B/16"
+              />
             </el-select>
           </el-form-item>
           <template v-if="local.mode === 'finetune'">
             <el-form-item label="训练轮次">
-              <el-input-number :model-value="local.epochs || 10" :min="1" :max="200" @update:model-value="patch('epochs', $event)" />
+              <el-input-number
+                :model-value="local.epochs || 10"
+                :min="1"
+                :max="200"
+                @update:model-value="patch('epochs', $event)"
+              />
             </el-form-item>
             <el-form-item label="训练方式">
-              <el-radio-group :model-value="local.trainingMode || 'local'" @update:model-value="patch('trainingMode', $event)">
-                <el-radio-button value="local">本地</el-radio-button>
-                <el-radio-button value="cloud">同步</el-radio-button>
+              <el-radio-group
+                :model-value="local.trainingMode || 'local'"
+                @update:model-value="patch('trainingMode', $event)"
+              >
+                <el-radio-button value="local">
+                  本地
+                </el-radio-button>
+                <el-radio-button value="cloud">
+                  同步
+                </el-radio-button>
               </el-radio-group>
             </el-form-item>
           </template>
         </el-form>
       </div>
 
-      <div v-show="step === 4" class="step-panel">
-        <el-form label-position="top" size="small">
+      <div
+        v-show="step === 4"
+        class="step-panel"
+      >
+        <el-form
+          label-position="top"
+          size="small"
+        >
           <el-form-item label="输出目录">
             <el-input
               :model-value="local.outputDir || ''"
@@ -94,11 +165,35 @@
     </div>
 
     <div class="wizard-footer">
-      <el-button :disabled="step === 0" @click="prev">上一步</el-button>
-      <el-button v-if="step < 4" type="primary" :disabled="!canNext" @click="next">下一步</el-button>
-      <el-button v-else type="primary" :disabled="!canFinish" @click="finish">完成向导</el-button>
+      <el-button
+        :disabled="step === 0"
+        @click="prev"
+      >
+        上一步
+      </el-button>
+      <el-button
+        v-if="step < 4"
+        type="primary"
+        :disabled="!canNext"
+        @click="next"
+      >
+        下一步
+      </el-button>
+      <el-button
+        v-else
+        type="primary"
+        :disabled="!canFinish"
+        @click="finish"
+      >
+        完成向导
+      </el-button>
     </div>
-    <p v-if="validationError" class="validation-error">{{ validationError }}</p>
+    <p
+      v-if="validationError"
+      class="validation-error"
+    >
+      {{ validationError }}
+    </p>
   </div>
 </template>
 

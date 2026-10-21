@@ -1,5 +1,8 @@
 <template>
-  <div class="template-detail-page">
+  <PageShell
+    width="wide"
+    class="template-detail-page"
+  >
     <!-- Loading State -->
     <div
       v-if="loading"
@@ -325,10 +328,11 @@
         </div>
       </div>
     </Teleport>
-  </div>
+  </PageShell>
 </template>
 
 <script setup>
+import PageShell from '@/components/layout/PageShell.vue'
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { 

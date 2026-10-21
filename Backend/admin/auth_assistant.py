@@ -15,7 +15,13 @@ from rest_framework.views import APIView
 try:
     from ratelimit.decorators import ratelimit
 except ImportError:
-    from django_ratelimit.decorators import ratelimit
+    try:
+        from django_ratelimit.decorators import ratelimit
+    except ImportError:
+        def ratelimit(*_args, **_kwargs):
+            def _decorator(fn):
+                return fn
+            return _decorator
 
 from gateway.gateway_service import GatewayService
 

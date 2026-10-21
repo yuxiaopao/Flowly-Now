@@ -1,8 +1,8 @@
 import api from './index'
 import { APP_CONFIG } from '@/config'
 
-export function getSiteConfig() {
-  return api.get('/public/site-config/')
+export function getSiteConfig({ reportError = true } = {}) {
+  return api.get('/public/site-config/', { skipErrorToast: !reportError })
 }
 
 /**

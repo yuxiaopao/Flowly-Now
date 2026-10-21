@@ -272,7 +272,7 @@ class TestNLWorkflowNameGeneration:
 
         validated = service._validate_workflow(workflow)
         assert validated['name'] == 'My Custom Workflow'
-        assert len(validated['validation']['errors']) == 0
+        assert any('没有节点' in error for error in validated['validation']['errors'])
 
     def test_generate_workflow_name_direct(self):
         """Test _generate_workflow_name method directly."""

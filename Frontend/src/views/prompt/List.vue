@@ -1,13 +1,13 @@
 <template>
-  <div class="prompt-list">
-    <div class="page-header">
-      <div class="header-left">
-        <h1>Prompt 模板</h1>
-        <p class="subtitle">
-          管理和使用 Prompt 模板
-        </p>
-      </div>
-      <div class="header-actions">
+  <PageShell
+    width="wide"
+    class="prompt-list"
+  >
+    <PageHeader
+      title="Prompt 模板"
+      subtitle="管理和使用 Prompt 模板"
+    >
+      <template #actions>
         <el-button
           type="primary"
           @click="showCreateDialog = true"
@@ -15,52 +15,51 @@
           <Plus class="btn-icon" />
           创建模板
         </el-button>
-      </div>
-    </div>
+      </template>
+    </PageHeader>
 
     <!-- 筛选和搜索 -->
-    <div class="filters-bar">
-      <div class="search-box">
-        <el-input
-          v-model="searchQuery"
-          placeholder="搜索模板..."
-          :prefix-icon="Search"
-          clearable
-          @input="handleSearch"
+    <PageToolbar>
+      <el-input
+        v-model="searchQuery"
+        placeholder="搜索模板..."
+        :prefix-icon="Search"
+        clearable
+        @input="handleSearch"
+      />
+      
+      
+      <el-select
+        v-model="selectedCategory"
+        placeholder="全部分类"
+        clearable
+        @change="handleFilter"
+      >
+        <el-option
+          v-for="cat in categories"
+          :key="cat.value"
+          :label="cat.label"
+          :value="cat.value"
         />
-      </div>
-      <div class="category-filter">
-        <el-select
-          v-model="selectedCategory"
-          placeholder="全部分类"
-          clearable
-          @change="handleFilter"
-        >
-          <el-option
-            v-for="cat in categories"
-            :key="cat.value"
-            :label="cat.label"
-            :value="cat.value"
-          />
-        </el-select>
-      </div>
+      </el-select>
+      
       <div class="filter-tabs">
         <el-radio-group
           v-model="viewFilter"
           @change="handleFilter"
         >
-          <el-radio-button label="all">
+          <el-radio-button value="all">
             全部
           </el-radio-button>
-          <el-radio-button label="public">
+          <el-radio-button value="public">
             公开
           </el-radio-button>
-          <el-radio-button label="me">
+          <el-radio-button value="me">
             我的
           </el-radio-button>
         </el-radio-group>
       </div>
-    </div>
+    </PageToolbar>
 
     <!-- 热门模板 -->
     <div
@@ -122,19 +121,20 @@
         />
       </div>
 
-      <div
+      <PageEmptyState
         v-else-if="filteredTemplates.length === 0"
-        class="empty-state"
+        :icon="FileText"
+        title="暂无模板"
       >
-        <FileText class="empty-icon" />
-        <p>暂无模板</p>
-        <el-button
-          type="primary"
-          @click="showCreateDialog = true"
-        >
-          创建第一个模板
-        </el-button>
-      </div>
+        <template #actions>
+          <el-button
+            type="primary"
+            @click="showCreateDialog = true"
+          >
+            创建第一个模板
+          </el-button>
+        </template>
+      </PageEmptyState>
 
       <div
         v-else
@@ -160,6 +160,8 @@
               <el-button
                 text
                 size="small"
+                :aria-label="`${template.name}的更多操作`"
+              
                 @click.stop
               >
                 <MoreVertical />
@@ -449,10 +451,14 @@
         </el-tabs>
       </div>
     </el-dialog>
-  </div>
+  </PageShell>
 </template>
 
 <script setup>
+import PageEmptyState from '@/components/layout/PageEmptyState.vue'
+import PageToolbar from '@/components/layout/PageToolbar.vue'
+import PageHeader from '@/components/layout/PageHeader.vue'
+import PageShell from '@/components/layout/PageShell.vue'
 import { ref, computed, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { usePromptStore } from '@/stores/prompt'
@@ -691,46 +697,9 @@ onMounted(async () => {
 <style lang="scss" scoped>
 @use '@/assets/styles/variables.scss' as *;
 
-.prompt-list {
-  padding: $spacing-6;
-}
-
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: $spacing-6;
-
-  h1 {
-    font-size: $font-size-2xl;
-    font-weight: $font-weight-bold;
-    color: var(--text-primary);
-    margin: 0;
-  }
-
-  .subtitle {
-    font-size: $font-size-sm;
-    color: var(--text-secondary);
-    margin: $spacing-1 0 0;
-  }
-}
-
 .btn-icon {
   width: 16px;
   height: 16px;
-}
-
-.filters-bar {
-  display: flex;
-  gap: $spacing-4;
-  margin-bottom: $spacing-6;
-  padding: $spacing-4;
-  background-color: var(--bg-secondary);
-  border-radius: $radius-lg;
-
-  .search-box {
-    width: 300px;
-  }
 }
 
 .featured-section {
@@ -753,15 +722,15 @@ onMounted(async () => {
 .featured-grid,
 .templates-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--content-card-min-width)), 1fr));
   gap: $spacing-4;
 }
 
 .template-card {
   background-color: var(--bg-secondary);
   border: 1px solid var(--border-primary);
-  border-radius: $radius-xl;
-  padding: $spacing-4;
+  border-radius: var(--content-card-radius);
+  padding: var(--content-card-padding);
   cursor: pointer;
   transition: all $transition-fast;
 
@@ -847,22 +816,7 @@ onMounted(async () => {
   }
 }
 
-.empty-state {
-  text-align: center;
-  padding: $spacing-12;
 
-  .empty-icon {
-    width: 64px;
-    height: 64px;
-    color: var(--text-tertiary);
-    margin-bottom: $spacing-4;
-  }
-
-  p {
-    color: var(--text-secondary);
-    margin-bottom: $spacing-4;
-  }
-}
 
 .loading-state {
   padding: $spacing-6;
@@ -902,7 +856,7 @@ onMounted(async () => {
   .detail-header {
     display: flex;
     justify-content: space-between;
-    margin-bottom: $spacing-6;
+    margin-bottom: var(--page-section-gap);
   }
 
   .detail-desc {
@@ -991,6 +945,4 @@ onMounted(async () => {
   }
 }
 </style>
-
-
 

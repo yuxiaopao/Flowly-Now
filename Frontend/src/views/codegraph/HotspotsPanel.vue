@@ -8,10 +8,12 @@
     </div>
 
     <div class="hotspots-list">
-      <div
+      <button
         v-for="(hotspot, index) in hotspots"
         :key="hotspot.id"
         class="hotspot-item"
+        type="button"
+        :title="hotspot.path"
         @click="$emit('select', getNodeFromHotspot(hotspot))"
       >
         <span
@@ -25,7 +27,7 @@
         <div class="hotspot-score">
           <span class="score-value">{{ (hotspot.score * 100).toFixed(0) }}%</span>
         </div>
-      </div>
+      </button>
     </div>
   </div>
 </template>
@@ -46,14 +48,14 @@ defineEmits(['select'])
 const store = useCodeGraphStore()
 
 function getNodeFromHotspot(hotspot) {
-  return store.nodes.find(n => n.id === hotspot.id)
+  return store.nodes.find(n => n.id === hotspot.id || n.path === hotspot.path)
+    || { ...hotspot, name: hotspot.name, path: hotspot.path }
 }
 </script>
 
 <style lang="scss" scoped>
 .hotspots-panel {
-  padding: 12px;
-  border-top: 1px solid var(--border-color);
+  padding: 12px 14px 14px;
 }
 
 .panel-header {
@@ -65,13 +67,13 @@ function getNodeFromHotspot(hotspot) {
   align-items: center;
   gap: 6px;
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text-primary);
 
   .title-icon {
     width: 16px;
     height: 16px;
-    color: #f97316;
+    color: #fb923c;
   }
 }
 
@@ -82,44 +84,50 @@ function getNodeFromHotspot(hotspot) {
 }
 
 .hotspot-item {
+  width: 100%;
+  text-align: left;
+  font: inherit;
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px;
-  background: var(--bg-hover);
-  border-radius: 6px;
+  padding: 9px 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.25s cubic-bezier(0.22, 1, 0.36, 1);
 
-  &:hover {
-    background: var(--color-primary-light-9);
+  &:hover,
+  &:focus-visible {
+    background: var(--bg-hover);
+    border-color: var(--border-secondary);
   }
 }
 
 .hotspot-rank {
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 50%;
   font-size: 11px;
-  font-weight: 600;
-  background: var(--bg-secondary);
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.06);
   color: var(--text-secondary);
 
   &.rank-1 {
     background: #fbbf24;
-    color: #000;
+    color: #111;
   }
 
   &.rank-2 {
-    background: #9ca3af;
-    color: #000;
+    background: #94a3b8;
+    color: #111;
   }
 
   &.rank-3 {
-    background: #d97706;
+    background: #ea580c;
     color: #fff;
   }
 }
@@ -152,8 +160,8 @@ function getNodeFromHotspot(hotspot) {
 .hotspot-score {
   .score-value {
     font-size: 12px;
-    font-weight: 600;
-    color: var(--color-primary);
+    font-weight: 700;
+    color: #fb923c;
   }
 }
 </style>

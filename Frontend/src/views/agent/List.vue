@@ -1,72 +1,75 @@
 <template>
   <PageShell width="wide">
     <PageHeader
-      title="AI Agents"
-      :meta="`${filteredAgents.length} 个 Agent`"
+      title="智能体"
+      :meta="`${filteredAgents.length} 个智能体`"
     >
       <template #actions>
-        <el-input
-          v-model="searchQuery"
-          placeholder="搜索 Agent 名称..."
-          :prefix-icon="Search"
-          clearable
-          class="search-input"
-          @input="handleSearch"
-        />
-        <el-select
-          v-model="typeFilter"
-          placeholder="类型"
-          clearable
-          class="type-select"
-        >
-          <el-option
-            label="对话型"
-            value="conversational"
-          />
-          <el-option
-            label="任务型"
-            value="task"
-          />
-          <el-option
-            label="研究型"
-            value="research"
-          />
-          <el-option
-            label="编程型"
-            value="coding"
-          />
-        </el-select>
-        <el-select
-          v-model="teamFilter"
-          placeholder="按团队筛选"
-          clearable
-          class="type-select"
-        >
-          <el-option
-            label="仅我个人"
-            value="mine"
-          />
-          <el-option
-            v-for="t in tenantStore.tenants"
-            :key="t.id"
-            :label="t.name"
-            :value="String(t.id)"
-          />
-        </el-select>
         <router-link to="/agents/marketplace">
           <AppButton variant="secondary">
             <Store class="btn-icon" />
-            Agent 市场
+            智能体市场
           </AppButton>
         </router-link>
         <router-link to="/agents/new">
           <AppButton variant="primary">
             <Plus class="btn-icon" />
-            新建 Agent
+            新建智能体
           </AppButton>
         </router-link>
       </template>
     </PageHeader>
+
+    <PageToolbar>
+      <el-input
+        v-model="searchQuery"
+        placeholder="搜索 智能体名称..."
+        :prefix-icon="Search"
+        clearable
+        class="search-input"
+        @input="handleSearch"
+      />
+      <el-select
+        v-model="typeFilter"
+        placeholder="类型"
+        clearable
+        class="type-select"
+      >
+        <el-option
+          label="对话型"
+          value="conversational"
+        />
+        <el-option
+          label="任务型"
+          value="task"
+        />
+        <el-option
+          label="研究型"
+          value="research"
+        />
+        <el-option
+          label="编程型"
+          value="coding"
+        />
+      </el-select>
+      <el-select
+        v-model="teamFilter"
+        placeholder="按团队筛选"
+        clearable
+        class="type-select"
+      >
+        <el-option
+          label="仅我个人"
+          value="mine"
+        />
+        <el-option
+          v-for="t in tenantStore.tenants"
+          :key="t.id"
+          :label="t.name"
+          :value="String(t.id)"
+        />
+      </el-select>
+    </PageToolbar>
 
     <div
       v-if="isLoading"
@@ -81,13 +84,13 @@
     <PageEmptyState
       v-else-if="filteredAgents.length === 0"
       :icon="Bot"
-      title="暂无 Agent"
-      description="创建您的第一个 AI Agent，用于对话、任务或自动化编排。"
+      title="暂无智能体"
+      description="创建您的第一个 AI 智能体，用于对话、任务或自动化编排。"
     >
       <template #actions>
         <router-link to="/agents/new">
           <AppButton variant="primary">
-            创建 Agent
+            创建智能体
           </AppButton>
         </router-link>
       </template>
@@ -101,6 +104,10 @@
         v-for="agent in filteredAgents"
         :key="agent.id"
         class="agent-card"
+        tabindex="0"
+        role="link"
+        :aria-label="`编辑智能体：${agent.name}`"
+        @keydown.enter.self="goToAgent(agent.id)"
         @click="goToAgent(agent.id)"
       >
         <div class="card-header">
@@ -115,6 +122,7 @@
             <el-button
               text
               circle
+              :aria-label="`${agent.name}的更多操作`"
               @click.stop
             >
               <MoreVertical />
@@ -217,6 +225,7 @@
 </template>
 
 <script setup>
+import PageToolbar from '@/components/layout/PageToolbar.vue'
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAgentStore } from '@/stores/agent'
@@ -244,10 +253,22 @@ const teamFilter = ref('')
 const currentPage = ref(1)
 const pageSize = ref(12)
 
-const agents = computed(() => agentStore.agents)
+const agents = computed(() => agentStore.agents.map(agent => ({
+  ...agent,
+  agent_type: agent.agentType ?? agent.agent_type,
+  is_active: agent.isActive ?? agent.is_active,
+  is_public: agent.isPublic ?? agent.is_public,
+  tenant_name: agent.tenantName ?? agent.tenant_name,
+  knowledge_collections: agent.knowledgeCollections ?? agent.knowledge_collections,
+  updated_at: agent.updatedAt ?? agent.updated_at,
+  system_prompt: agent.systemPrompt ?? agent.system_prompt,
+  max_tokens: agent.maxTokens ?? agent.max_tokens,
+  memory_enabled: agent.memoryEnabled ?? agent.memory_enabled,
+  context_window: agent.contextWindow ?? agent.context_window
+})))
 const isLoading = computed(() => agentStore.isLoading)
-const totalCount = computed(() => agents.value.length)
-const totalPages = computed(() => Math.ceil(totalCount.value / pageSize.value))
+const totalCount = computed(() => agentStore.listPagination.count || agents.value.length)
+const totalPages = computed(() => Math.max(1, agentStore.listPagination.totalPages || Math.ceil(totalCount.value / pageSize.value)))
 
 const filteredAgents = computed(() => {
   let result = agents.value
@@ -280,11 +301,27 @@ onMounted(() => {
 
 async function fetchAgents() {
   try {
-    await agentStore.fetchAgents({
+    const response = await agentStore.fetchAgents({
       page: currentPage.value,
       page_size: pageSize.value
     })
+    const nextTotalPages = response.totalPages ?? response.total_pages ?? totalPages.value
+    if (currentPage.value > nextTotalPages) {
+      currentPage.value = Math.max(1, nextTotalPages)
+      await agentStore.fetchAgents({
+        page: currentPage.value,
+        page_size: pageSize.value
+      })
+    }
   } catch (err) {
+    if (err?.response?.status === 404 && currentPage.value > 1) {
+      currentPage.value = 1
+      await agentStore.fetchAgents({
+        page: currentPage.value,
+        page_size: pageSize.value
+      })
+      return
+    }
     appStore.error('获取 Agent 列表失败')
   }
 }
@@ -329,7 +366,7 @@ async function togglePublish(agent, publish) {
   try {
     if (publish) {
       await agentApi.publishAgent(agent.id)
-      appStore.success('已发布到 Agent 市场')
+      appStore.success('已发布到 智能体市场')
     } else {
       await agentApi.unpublishAgent(agent.id)
       appStore.success('已从市场下架')
@@ -415,14 +452,6 @@ function formatDate(date) {
 <style lang="scss" scoped>
 @use '@/assets/styles/variables.scss' as *;
 
-.search-input {
-  width: 280px;
-}
-
-.type-select {
-  width: 120px;
-}
-
 .btn-icon {
   width: 18px;
   height: 18px;
@@ -434,89 +463,37 @@ function formatDate(date) {
 
 .agent-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: $spacing-5;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--content-card-min-width)), 1fr));
+  gap: $spacing-4;
 }
 
 .agent-card {
-  position: relative;
-  background-color: var(--bg-secondary);
+  min-width: 0;
+  background: var(--bg-secondary);
   border: 1px solid var(--border-primary);
-  border-radius: $radius-xl;
-  padding: $spacing-5;
+  border-radius: var(--content-card-radius);
+  padding: var(--content-card-padding);
   cursor: pointer;
-  transition: border-color 0.25s ease, box-shadow 0.25s ease, transform 0.25s cubic-bezier(0.22, 1, 0.36, 1);
-  overflow: hidden;
-
-  // 顶部全宽暖色渐变描边，hover 时显现（Agent 主题色为琥珀橙）
-  &::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 2px;
-    background: var(--border-gradient-warm);
-    opacity: 0;
-    transition: opacity 0.3s ease;
-  }
-
-  &:hover {
-    border-color: var(--accent-amber-soft);
-    transform: translateY(-3px);
-    box-shadow: var(--shadow-lg);
-
-    &::after {
-      opacity: 1;
-    }
-  }
+  transition: border-color $transition-fast;
+  &:hover { border-color: var(--border-hover); }
 }
-
 .card-header {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: $spacing-4;
+  align-items: center;
+  margin-bottom: $spacing-3;
 }
-
 .agent-avatar {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
-  background: linear-gradient(145deg, var(--agent-icon-from), var(--agent-icon-to));
-  border-radius: $radius-xl;
-  box-shadow:
-    0 0 0 1px var(--agent-icon-shadow),
-    0 4px 14px var(--agent-icon-shadow);
-  position: relative;
-  overflow: hidden;
-
-  &::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.22) 0%, transparent 55%);
-    border-radius: inherit;
-    pointer-events: none;
-  }
-
-  svg {
-    width: 22px;
-    height: 22px;
-    color: #ffffff;
-    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.25));
-    position: relative;
-    z-index: 1;
-  }
-}
-
-.agent-card:hover .agent-avatar {
-  transform: scale(1.06) rotate(3deg);
-  box-shadow:
-    0 0 0 1px var(--agent-icon-shadow),
-    0 8px 24px var(--agent-icon-shadow);
+  width: 36px;
+  height: 36px;
+  border-radius: $radius-md;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-primary);
+  color: var(--text-secondary);
+  svg { width: 20px; height: 20px; }
 }
 
 .card-body {
@@ -592,7 +569,4 @@ function formatDate(date) {
   margin-top: $spacing-8;
 }
 </style>
-
-
-
 

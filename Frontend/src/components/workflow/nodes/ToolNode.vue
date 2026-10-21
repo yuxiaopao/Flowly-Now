@@ -24,8 +24,8 @@
     <div class="node-name-section">
       <input
         :id="id ? `node-label-${id}` : undefined"
-        name="node-label"
         v-model="localName"
+        name="node-label"
         class="node-name-input"
         placeholder="工具节点..."
         @blur="handleChange"
@@ -39,7 +39,7 @@
       class="compact-view"
     >
       <div class="tool-display">
-        <span class="tool-label">{{ localConfig.tool || '选择工具' }}</span>
+        <span class="tool-label">{{ getToolLabel(localConfig.tool) || '选择工具' }}</span>
       </div>
     </div>
 
@@ -57,6 +57,10 @@
             filterable
             @change="handleChange"
           >
+            <el-option
+              :label="getToolLabel('embroidery_3d')"
+              value="embroidery_3d"
+            />
             <el-option
               label="计算器"
               value="calculator"
@@ -86,7 +90,7 @@
         <div class="config-section">
           <label class="config-label">参数 (JSON)</label>
           <el-input
-            v-model="localConfig.parameters"
+            v-model="parametersText"
             type="textarea"
             :rows="3"
             size="small"
@@ -121,7 +125,7 @@
         class="result-summary"
       >
         <Check class="result-icon" />
-        <span>{{ localConfig.tool }}: {{ truncate(String(nodeOutput?.result || '完成'), 15) }}</span>
+        <span>{{ getToolLabel(localConfig.tool) }}: {{ truncateText(String(nodeOutput?.result || '完成'), 15) }}</span>
       </div>
       <div
         v-else-if="isFailed"
@@ -137,10 +141,11 @@
 <script setup>
 import { ref, watch, computed } from 'vue'
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
-import { Hammer, ChevronDown, Loader, Check, X } from 'lucide-vue-next'
+import { ChevronDown, Loader, Check, X } from 'lucide-vue-next'
 import { useExecutionStore } from '@/stores/execution'
 import NodeTypeBadge from '@/components/workflow/nodes/NodeTypeBadge.vue'
-import { useNodePresentation } from '@/composables/useNodePresentation'
+import { truncateText } from '@/composables/useNodeResultDisplay'
+import { getToolLabel } from '@/config/toolConfig'
 
 
 const props = defineProps({
@@ -150,7 +155,6 @@ const props = defineProps({
 })
 
 const NODE_TYPE = 'tool'
-const { nodeIcon, nodeColor, nodeLabel } = useNodePresentation(NODE_TYPE)
 
 const emit = defineEmits(['select'])
 const { updateNodeData } = useVueFlow()
@@ -165,23 +169,32 @@ const isFailed = computed(() => nodeStatus.value === 'failed')
 const isExpanded = ref(false)
 const localName = ref(props.data.label || '工具')
 const localConfig = ref({
+  ...props.data.config,
   tool: props.data.config?.tool || 'calculator',
   parameters: props.data.config?.parameters || '{}',
+})
+const parametersText = computed({
+  get: () => typeof localConfig.value.parameters === 'string'
+    ? localConfig.value.parameters
+    : JSON.stringify(localConfig.value.parameters || {}, null, 2),
+  set: (value) => { localConfig.value.parameters = value }
 })
 
 watch(() => props.data, (d) => {
   if (d) {
     localName.value = d.label || '工具'
     localConfig.value = {
-      tool: d.data?.tool || 'calculator',
-      parameters: d.data?.parameters || '{}',
+      ...d.config,
+      tool: d.config?.tool || 'calculator',
+      parameters: d.config?.parameters || '{}',
     }
   }
 }, { deep: true })
 
 function toggleExpand() {
-  handleSelect()
-  isExpanded.value = !isExpanded.value
+  const expanded = !isExpanded.value
+  emit('select')
+  isExpanded.value = expanded
 }
 
 function handleChange() {

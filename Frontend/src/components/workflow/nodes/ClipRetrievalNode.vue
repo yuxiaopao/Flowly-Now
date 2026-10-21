@@ -6,28 +6,60 @@
     node-type="clip_retrieval"
   >
     <template #expanded>
-      <div v-if="isRunning" class="progress-zone">
+      <div
+        v-if="isRunning"
+        class="progress-zone"
+      >
         <Loader class="spin-icon" />
         <span>{{ progressLabel }}</span>
         <div class="progress-bar">
-          <div class="progress-fill" :style="{ width: displayProgress + '%' }" />
+          <div
+            class="progress-fill"
+            :style="{ width: displayProgress + '%' }"
+          />
         </div>
         <span class="progress-pct">{{ displayProgress }}%</span>
-        <p v-if="gpuLabel" class="gpu-hint">{{ gpuLabel }}</p>
+        <p
+          v-if="gpuLabel"
+          class="gpu-hint"
+        >
+          {{ gpuLabel }}
+        </p>
       </div>
-      <div v-if="metrics.r_at_5 != null" class="metrics-card">
+      <div
+        v-if="metrics.r_at_5 != null"
+        class="metrics-card"
+      >
         <p>R@1 {{ pct(metrics.r_at_1) }} · R@5 {{ pct(metrics.r_at_5) }} · R@10 {{ pct(metrics.r_at_10) }}</p>
-        <p v-if="encoderLabel">编码器：{{ encoderLabel }}</p>
-        <p v-if="indexDir">索引：{{ indexDir }}</p>
+        <p v-if="encoderLabel">
+          编码器：{{ encoderLabel }}
+        </p>
+        <p v-if="indexDir">
+          索引：{{ indexDir }}
+        </p>
       </div>
 
-      <div v-if="isDesktop && indexMode === 'desktop'" class="desktop-panel">
-        <el-tag size="small" type="success">Desktop GPU</el-tag>
-        <div v-if="desktopRunning" class="progress-zone">
+      <div
+        v-if="isDesktop && indexMode === 'desktop'"
+        class="desktop-panel"
+      >
+        <el-tag
+          size="small"
+          type="success"
+        >
+          Desktop GPU
+        </el-tag>
+        <div
+          v-if="desktopRunning"
+          class="progress-zone"
+        >
           <Loader class="spin-icon" />
           <span>本地索引 {{ desktopProgress }}%</span>
           <div class="progress-bar">
-            <div class="progress-fill" :style="{ width: desktopProgress + '%' }" />
+            <div
+              class="progress-fill"
+              :style="{ width: desktopProgress + '%' }"
+            />
           </div>
         </div>
         <div class="panel-actions">
@@ -39,9 +71,20 @@
           >
             本地 GPU 构建
           </el-button>
-          <el-button v-if="desktopRunning" size="small" @click.stop="stopLocalIndex">停止</el-button>
+          <el-button
+            v-if="desktopRunning"
+            size="small"
+            @click.stop="stopLocalIndex"
+          >
+            停止
+          </el-button>
         </div>
-        <p v-if="desktopError" class="error">{{ desktopError }}</p>
+        <p
+          v-if="desktopError"
+          class="error"
+        >
+          {{ desktopError }}
+        </p>
       </div>
     </template>
   </SiteFactoryNodeShell>
@@ -49,7 +92,7 @@
 
 <script setup>
 import { ref, computed, watch, onUnmounted } from 'vue'
-import { Search, Loader } from 'lucide-vue-next'
+import { Loader } from 'lucide-vue-next'
 import SiteFactoryNodeShell from './SiteFactoryNodeShell.vue'
 import trainingApi from '@/api/training'
 import { useClipIndexDesktop } from '@/composables/useClipIndexDesktop'

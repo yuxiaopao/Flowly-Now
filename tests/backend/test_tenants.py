@@ -38,7 +38,7 @@ class TestTenantAPI:
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data['name'] == 'New Tenant'
 
-    def test_tenant_member_added_on_create(self, authenticated_client):
+    def test_tenant_member_added_on_create(self, authenticated_client, user):
         """Test that owner is added as member on tenant creation."""
         data = {
             'name': 'Tenant with Member',
@@ -51,7 +51,7 @@ class TestTenantAPI:
         from tenants.models import TenantMembership
         membership = TenantMembership.objects.filter(
             tenant_id=tenant_id,
-            user=authenticated_client.user
+            user=user
         ).first()
         assert membership is not None
         assert membership.role == 'owner'

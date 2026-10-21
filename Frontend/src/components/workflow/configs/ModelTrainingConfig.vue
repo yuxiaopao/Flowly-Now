@@ -629,7 +629,7 @@
 import { ref, reactive, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Tag, X, Search, Loader, Check, Upload, Database, ExternalLink, Monitor, AlertTriangle } from 'lucide-vue-next'
+import { Tag, X, Search, Loader, Check, Upload, Database, ExternalLink, Monitor, AlertTriangle, RefreshCw as Refresh } from 'lucide-vue-next'
 import { annotationApi } from '@/api/annotation'
 import trainingApi from '@/api/training'
 import datasetApi from '@/api/dataset'

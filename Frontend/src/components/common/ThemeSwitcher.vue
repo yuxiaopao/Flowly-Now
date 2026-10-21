@@ -290,22 +290,19 @@ function handleCommand(themeId) {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 38px;
-  height: 38px;
+  width: var(--control-height);
+  height: var(--control-height);
   padding: 0;
   background: transparent;
   border: none;
   border-radius: $radius-lg;
   cursor: pointer;
-  transition: background-color $transition-fast, transform $transition-fast;
+  transition: background-color $transition-fast;
 
   &:hover {
     background: var(--bg-hover);
   }
 
-  &:active {
-    transform: scale(0.94);
-  }
 }
 
 .icon-backing {
@@ -316,41 +313,18 @@ function handleCommand(themeId) {
   height: 30px;
   border-radius: 999px;
   flex-shrink: 0;
-  transition:
-    background-color $transition-normal,
-    color $transition-normal,
-    box-shadow $transition-normal,
-    transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-primary);
 
-  &--menu {
-    width: 34px;
-    height: 34px;
-  }
-
-  &--dark,
-  &--pure-bw {
-    background: #050505;
-    color: #fafafa;
-    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08) inset;
-  }
-
-  &--light,
-  &--high-contrast {
-    background: #fafafa;
-    color: #050505;
-    box-shadow: 0 0 0 1px rgba(5, 5, 5, 0.18) inset;
-  }
-
-  &--high-contrast {
-    box-shadow: 0 0 0 2px #050505 inset;
-  }
+  &--menu { width: 32px; height: 32px; }
+  &--high-contrast { border: 2px solid currentColor; }
 }
 
 .theme-svg,
 .item-svg {
   width: 18px;
   height: 18px;
-  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .item-svg {
@@ -358,9 +332,6 @@ function handleCommand(themeId) {
   height: 19px;
 }
 
-.theme-trigger:hover .icon-backing {
-  transform: rotate(12deg) scale(1.06);
-}
 
 .theme-menu {
   min-width: 268px !important;
@@ -376,8 +347,6 @@ function handleCommand(themeId) {
   font-size: $font-size-xs;
   font-weight: $font-weight-medium;
   color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
   border-bottom: 1px solid var(--border-primary);
   margin-bottom: $spacing-1;
 }
@@ -394,12 +363,10 @@ function handleCommand(themeId) {
   justify-content: space-between !important;
   cursor: pointer;
   transition:
-    background-color $transition-fast,
-    transform $transition-fast;
+    background-color $transition-fast;
 
   &:hover {
     background: var(--bg-hover) !important;
-    transform: translateX(2px);
   }
 
   &.active {
@@ -445,4 +412,5 @@ function handleCommand(themeId) {
   width: 15px;
   height: 15px;
 }
+@media (max-width: 768px) { .theme-trigger { width: var(--control-height-large); height: var(--control-height-large); } }
 </style>

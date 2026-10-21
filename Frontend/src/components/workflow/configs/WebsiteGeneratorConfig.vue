@@ -1,7 +1,7 @@
 <template>
   <div class="config-form website-generator-config-form">
     <TrainingSiteWizard
-      v-model="wizardData"
+      :model-value="wizardData"
       :profile="upstreamProfile"
       @change="onWizardChange"
       @pick-training="selectFromTrainingNode"
@@ -341,6 +341,12 @@ const localData = reactive({
   backendFramework: 'flask',
   port: 5000,
   trainingRunId: '',
+  trainingJobId: '',
+  modelArtifactManifest: {},
+  requiredFeatures: ['imageRecognition', 'videoRecognition', 'factRecognition', 'historyRecords'],
+  themeProfile: {},
+  environmentConfig: { dbEngine: 'mysql' },
+  agentMemoryEnabled: true,
   indexDir: '',
   wizard: {},
   profile: {},
@@ -357,10 +363,16 @@ watch(() => props.modelValue, (newVal) => {
       labels: newVal.labels || '',
       framework: newVal.framework || 'pytorch',
       outputDir: newVal.outputDir || '',
-      frontendFramework: newVal.frontendFramework || 'vue',
-      backendFramework: newVal.backendFramework || 'flask',
+      frontendFramework: 'vue',
+      backendFramework: 'flask',
       port: newVal.port || 5000,
       trainingRunId: newVal.trainingRunId || '',
+      trainingJobId: newVal.trainingJobId || newVal.training_run_id || '',
+      modelArtifactManifest: newVal.modelArtifactManifest || newVal.model_artifact_manifest || {},
+      requiredFeatures: newVal.requiredFeatures || newVal.required_features || localData.requiredFeatures,
+      themeProfile: newVal.themeProfile || newVal.theme_profile || {},
+      environmentConfig: { ...(newVal.environmentConfig || newVal.environment_config || {}), dbEngine: 'mysql' },
+      agentMemoryEnabled: newVal.agentMemoryEnabled ?? newVal.agent_memory_enabled ?? true,
       indexDir: newVal.indexDir || '',
       qaProfile: newVal.qaProfile || 'default',
       profile: newVal.profile || upstreamProfile.value || {},
@@ -411,8 +423,36 @@ function buildPayload() {
     modelPath: wizard.modelPath || localData.modelPath,
     labels: wizard.labels || localData.labels,
     websiteType: wizard.websiteType || localData.websiteType,
+    frontendFramework: 'vue',
+    backendFramework: 'flask',
     indexDir: localData.indexDir,
     description: wizard.usageDescription || localData.description,
+    siteBrief: {
+      domain: wizard.domain,
+      scenario: wizard.scenario,
+      usageDescription: wizard.usageDescription,
+      profile: localData.profile || upstreamProfile.value || {},
+      wizard,
+    },
+    requiredFeatures: localData.requiredFeatures,
+    themeProfile: {
+      uiTone: wizard.uiTone,
+      primaryColor: wizard.primaryColor,
+      logoUrl: wizard.logoUrl,
+      contactEmail: wizard.contactEmail,
+    },
+    environmentConfig: {
+      ...localData.environmentConfig,
+      dbEngine: 'mysql',
+      mysqlHost: wizard.mysqlHost,
+      mysqlPort: wizard.mysqlPort,
+      mysqlUser: wizard.mysqlUser,
+      mysqlDatabase: wizard.mysqlDatabase,
+      outputDir: wizard.outputDir || localData.outputDir,
+      modelPath: wizard.modelPath || localData.modelPath,
+    },
+    agentMemoryEnabled: localData.agentMemoryEnabled,
+    modelArtifactManifest: localData.modelArtifactManifest,
     wizard,
     profile: localData.profile || upstreamProfile.value || {},
   }
@@ -434,6 +474,9 @@ const onWizardChange = (w) => {
   localData.modelPath = w.modelPath || localData.modelPath
   localData.labels = w.labels || localData.labels
   localData.websiteType = w.websiteType || localData.websiteType
+  localData.environmentConfig = { ...localData.environmentConfig, dbEngine: 'mysql' }
+  localData.requiredFeatures = w.requiredFeatures || localData.requiredFeatures
+  localData.agentMemoryEnabled = w.agentMemoryEnabled ?? localData.agentMemoryEnabled
   syncEmit()
 }
 
@@ -481,12 +524,15 @@ const onNodeSelected = (node) => {
   const config = node.data?.config || {}
   const output = node.data?.output || node.data?.result || {}
   const nodeType = node.type || node.data?.type
+  const manifest = output.modelArtifactManifest || output.model_artifact_manifest || config.modelArtifactManifest || config.model_artifact_manifest || {}
 
   if (nodeType === 'clip_retrieval') {
     localData.indexDir = output.indexDir || output.index_dir || config.outputDir || ''
     localData.websiteType = 'clip_retrieval'
     wizardData.websiteType = 'clip_retrieval'
     localData.trainingRunId = output.trainingRunId || output.training_run_id || ''
+    localData.trainingJobId = localData.trainingRunId
+    localData.modelArtifactManifest = manifest
     if (!wizardData.siteName) {
       wizardData.siteName = 'CLIP 图文检索'
     }
@@ -497,17 +543,20 @@ const onNodeSelected = (node) => {
   const isYolo = nodeType === 'yolo_training'
   const isClipCls = nodeType === 'clip_classification'
 
-  localData.modelPath = output.bestWeightPath || output.best_weight_path || output.modelPath || output.model_path || config.modelPath || config.outputDir || ''
+  localData.modelArtifactManifest = manifest
+  localData.modelPath = manifest.bestWeightPath || manifest.modelPath || output.bestWeightPath || output.best_weight_path || output.modelPath || output.model_path || config.modelPath || config.outputDir || ''
   wizardData.modelPath = localData.modelPath
-  const labelStr = Array.isArray(output.classNames || output.class_names)
-    ? (output.classNames || output.class_names).join(', ')
+  const labels = manifest.labels || manifest.classNames || output.classNames || output.class_names
+  const labelStr = Array.isArray(labels)
+    ? labels.join(', ')
     : (config.labels || config.classNames || '')
   localData.labels = labelStr
   wizardData.labels = labelStr
   localData.framework = isYolo ? 'ultralytics' : (isClipCls ? 'clip' : (config.framework || 'pytorch'))
   localData.websiteType = isYolo ? 'detection' : (isClipCls ? 'classification' : (config.websiteType || 'classification'))
   wizardData.websiteType = localData.websiteType
-  localData.trainingRunId = output.trainingRunId || output.training_run_id || ''
+  localData.trainingRunId = manifest.trainingJobId || output.trainingRunId || output.training_run_id || ''
+  localData.trainingJobId = localData.trainingRunId
   if (localData.modelPath && !wizardData.siteName) {
     const name = localData.modelPath.split('/').pop().replace(/\.[^.]+$/, '')
     wizardData.siteName = `${name}识别系统`

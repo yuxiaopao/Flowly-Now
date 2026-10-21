@@ -520,12 +520,14 @@ watch(showHistory, (val) => {
 
 .collab-layout {
   display: grid;
-  grid-template-columns: 380px 1fr;
+  grid-template-columns: minmax(0, 380px) minmax(0, 1fr);
   gap: $spacing-6;
   align-items: start;
+  @media (max-width: $breakpoint-lg) { grid-template-columns: minmax(0, 1fr); }
 }
 
 .config-panel {
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: $spacing-5;
@@ -616,6 +618,7 @@ watch(showHistory, (val) => {
 }
 
 .trace-panel {
+  min-width: 0;
   min-height: 400px;
   background-color: var(--bg-secondary);
   border: 1px solid var(--border-primary);

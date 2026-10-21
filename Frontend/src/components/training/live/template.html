@@ -1,0 +1,84 @@
+  <header class="app-bar">
+    <strong id="node-context">YOLO 训练节点</strong>
+    <div class="toolbar">
+      <span id="connection" class="connection" role="status">等待训练数据</span>
+      <button id="refresh" aria-label="立即刷新训练数据">刷新</button>
+    </div>
+  </header>
+  <main>
+    <div id="error" class="error" role="alert" hidden></div>
+    <section id="empty" class="empty">
+      <h2>正在读取此节点的训练记录</h2>
+      <p>训练数据与当前工作流、节点和训练任务关联。</p>
+    </section>
+    <div id="workspace" hidden>
+      <section class="run-heading">
+        <div><span class="eyebrow">TRAINING RUN</span><h1 id="run-name"></h1><p id="project-path" class="path"></p></div>
+        <div class="run-state"><span id="stage" class="state"></span><span id="updated" class="muted"></span></div>
+      </section>
+      <div class="tabs" role="tablist" aria-label="训练详情">
+        <button id="tab-overview" role="tab" aria-selected="true" aria-controls="overview" data-tab="overview">实时概览</button>
+        <button id="tab-network" role="tab" aria-selected="false" aria-controls="network" data-tab="network">网络与参数</button>
+        <button id="tab-classes" role="tab" aria-selected="false" aria-controls="classes" data-tab="classes">分类与数据</button>
+        <button id="tab-exports" role="tab" aria-selected="false" aria-controls="exports" data-tab="exports">评估与导出</button>
+        <button id="tab-logs" role="tab" aria-selected="false" aria-controls="logs" data-tab="logs">实时日志</button>
+      </div>
+      <section id="overview" class="panel" role="tabpanel" aria-labelledby="tab-overview">
+        <div class="overview-grid">
+          <div class="main-column">
+            <section class="progress-section">
+              <div class="section-heading"><h2>训练进度</h2><span id="batch" class="muted"></span></div>
+              <div class="progress-numbers"><div><strong id="epoch">—</strong><span id="epoch-total"></span></div><span id="percent"></span></div>
+              <progress id="progress" max="100" value="0" aria-label="训练进度"></progress>
+              <div class="progress-footer"><span id="timing"></span><span id="eta"></span></div>
+            </section>
+            <div class="metrics" id="metrics"></div>
+            <section class="chart-section">
+              <div class="section-heading"><h2>损失曲线</h2><div class="legend"><span class="train">训练损失</span><span class="val">验证损失</span></div></div>
+              <div id="loss-chart" class="chart" aria-label="按轮次变化的训练与验证损失"></div>
+            </section>
+            <section class="chart-section">
+              <div class="section-heading"><h2>验证准确率</h2><div class="legend"><span class="train">Top-1</span><span class="val">Top-5</span></div></div>
+              <div id="accuracy-chart" class="chart" aria-label="按轮次变化的验证准确率"></div>
+              <p class="caption">曲线仅显示已经完成的验证结果，测试集在训练结束后独立评估。</p>
+            </section>
+          </div>
+          <aside>
+            <section class="side-section"><div class="section-heading"><h2>计算设备</h2><span class="tag">实时</span></div><div id="hardware"></div></section>
+            <section class="side-section"><h2>本次训练</h2><dl id="quick-config"></dl></section>
+            <section class="side-section"><h2>数据划分</h2><div id="dataset-summary"></div></section>
+            <p class="caption">窗口每 2 秒读取一次；每轮验证结束后，准确率和损失曲线同步更新。预估时间会随实际速度变化。</p>
+          </aside>
+        </div>
+        <details class="history-details"><summary>逐轮训练记录</summary><div id="history-table" class="table-wrap"></div></details>
+      </section>
+      <section id="network" class="panel" role="tabpanel" aria-labelledby="tab-network" hidden>
+        <div class="section-heading"><div><h2>一个模型，完整迁移骨干网络</h2><p class="muted">网络模块、参数量和张量形状来自实际检查点。</p></div></div>
+        <div id="network-summary" class="network-summary"></div>
+        <div id="network-flow" class="network-flow"></div>
+        <div id="network-table" class="table-wrap"></div>
+        <section class="config-section"><h2>完整训练参数</h2><dl id="all-config" class="config-grid"></dl></section>
+        <section class="config-section"><h2>权重与运行环境</h2><dl id="environment" class="config-grid"></dl></section>
+      </section>
+      <section id="classes" class="panel" role="tabpanel" aria-labelledby="tab-classes" hidden>
+        <div class="section-heading"><div><h2 id="class-summary">分类说明</h2><p class="muted">每一类对应“作物 + 病害或健康状态”。分类针对整张叶片图片。</p></div><span id="leakage" class="tag"></span></div>
+        <div class="filters"><label>作物<select id="crop-filter"><option value="">全部作物</option></select></label><label class="search-label">搜索类别<input id="class-search" type="search" placeholder="搜索病害、作物或英文类名"></label><span id="class-count" class="muted"></span></div>
+        <div id="class-table" class="table-wrap"></div>
+        <p class="caption">这些类别来自 PlantVillage 数据集，不覆盖所有作物病害。数据集中“健康”只表示该类别的标签。</p>
+      </section>
+      <section id="exports" class="panel" role="tabpanel" aria-labelledby="tab-exports" hidden>
+        <div class="section-heading"><div><h2>评估结果与模型产物</h2><p class="muted">训练检查点、最终候选模型和系统启用状态分别展示。</p></div><div class="toolbar"><button id="export-csv">导出曲线 CSV</button><button id="export-json" class="primary">导出完整记录 JSON</button></div></div>
+        <div id="evaluation-summary" class="evaluation-summary"></div>
+        <div id="artifacts" class="artifact-list"></div>
+        <section class="config-section"><h2>最终导出参数</h2><div id="export-parameters"></div></section>
+        <section class="config-section"><div class="section-heading"><h2>逐类评估</h2><label>评估集合 <select id="evaluation-split"><option value="test">独立测试集</option><option value="validation">验证集</option></select></label></div><div id="evaluation-table" class="table-wrap"></div></section>
+      </section>
+      <section id="logs" class="panel" role="tabpanel" aria-labelledby="tab-logs" hidden>
+        <div class="section-heading"><div><h2>训练输出</h2><p class="muted">显示最近的真实输出，包含批次、验证和导出信息。</p></div><label><input id="follow-log" type="checkbox" checked> 跟随最新日志</label></div>
+        <pre id="log-output" class="log" tabindex="0"></pre>
+        <h2>错误输出</h2><pre id="error-output" class="log error-log" tabindex="0"></pre>
+      </section>
+      <footer><span>Flowly Desktop · 本地训练观测</span><span id="footer-status"></span></footer>
+    </div>
+    <div id="toast" class="toast" role="status" hidden></div>
+  </main>

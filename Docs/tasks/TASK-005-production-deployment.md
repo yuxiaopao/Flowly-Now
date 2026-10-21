@@ -475,8 +475,8 @@ ALLOWED_HOSTS=your-domain.com,www.your-domain.com
 CORS_ALLOWED_ORIGINS=https://your-domain.com,https://app.your-domain.com
 
 # ============== API Keys ==============
-OPENAI_API_KEY=sk-your-openai-api-key
-ANTHROPIC_API_KEY=sk-ant-your-anthropic-api-key
+OPENAI_API_KEY=<your-openai-api-key>
+ANTHROPIC_API_KEY=<your-anthropic-api-key>
 
 # ============== 向量数据库 ==============
 QDRANT_HOST=qdrant

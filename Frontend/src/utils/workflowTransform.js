@@ -1,4 +1,18 @@
-import { applyWorkflowLayout } from '@/utils/workflowLayout'
+import { applyWorkflowLayout, pickLayoutDirection } from '@/utils/workflowLayout'
+import { wireWorkflowVariableRefs } from '@/utils/nodeVariableWiring'
+
+const BACKEND_RENDER_TYPES = {
+  data_transform: 'transform',
+  http_request: 'http',
+  trigger: 'manual',
+  template: 'text_template',
+}
+
+export function getBackendNodeType(node) {
+  const original = node.data?.nodeType
+  if (original && (BACKEND_RENDER_TYPES[original] || original) === node.type) return original
+  return node.type === 'transform' ? 'data_transform' : node.type === 'http' ? 'http_request' : node.type
+}
 
 /**
  * 工作流数据格式转换工具
@@ -88,6 +102,17 @@ function remapEdgesWithIdMap(edges = [], idMap = {}) {
   }))
 }
 
+function hasFiniteCanvasPosition(position) {
+  return Number.isFinite(Number(position?.x)) && Number.isFinite(Number(position?.y))
+}
+
+function normalizeCanvasPosition(position) {
+  return {
+    x: Number(Number(position?.x).toFixed(2)),
+    y: Number(Number(position?.y).toFixed(2)),
+  }
+}
+
 export function syncCanvasAfterSave(oldNodes = [], oldEdges = [], savedWorkflow = {}) {
   const converted = backendWorkflowToFrontend(savedWorkflow)
   const newNodes = converted.nodes || []
@@ -108,7 +133,9 @@ export function syncCanvasAfterSave(oldNodes = [], oldEdges = [], savedWorkflow 
     return {
       ...newNode,
       type: oldNode.type || newNode.type,
-      position: oldNode.position || newNode.position,
+      position: hasFiniteCanvasPosition(oldNode.position)
+        ? normalizeCanvasPosition(oldNode.position)
+        : newNode.position,
       data: {
         ...newNode.data,
         label: oldNode.data?.label ?? newNode.data?.label,
@@ -150,23 +177,47 @@ export function ensureMultimodalChainEdges(nodes = [], edges = []) {
   }
 
   const byType = {}
+  const typeCounts = {}
   ;(nodes || []).forEach((node) => {
     const nodeType = getType(node)
+    typeCounts[nodeType] = (typeCounts[nodeType] || 0) + 1
     if (nodeType && !byType[nodeType]) {
       byType[nodeType] = node
     }
   })
 
+  // A template cannot infer which media branch belongs to which output.
+  // Preserve authored multi-shot graphs instead of connecting their first nodes.
+  if (MULTIMODAL_CHAIN_EDGE_TYPES.some(([source, target]) =>
+    typeCounts[source] > 1 || typeCounts[target] > 1)) {
+    return { nodes, edges, patched: false }
+  }
+
   const nextEdges = [...(edges || [])]
   const existing = new Set(nextEdges.map((edge) => `${edge.source}->${edge.target}`))
   let patched = false
+
+  const hasPath = (source, target) => {
+    const queue = [source]
+    const visited = new Set()
+    for (let index = 0; index < queue.length; index++) {
+      const current = queue[index]
+      if (current === target) return true
+      if (visited.has(current)) continue
+      visited.add(current)
+      nextEdges.forEach((edge) => {
+        if (edge.source === current && !visited.has(edge.target)) queue.push(edge.target)
+      })
+    }
+    return false
+  }
 
   MULTIMODAL_CHAIN_EDGE_TYPES.forEach(([sourceType, targetType]) => {
     const sourceNode = byType[sourceType]
     const targetNode = byType[targetType]
     if (!sourceNode?.id || !targetNode?.id) return
     const key = `${sourceNode.id}->${targetNode.id}`
-    if (existing.has(key)) return
+    if (existing.has(key) || hasPath(sourceNode.id, targetNode.id)) return
     nextEdges.push(createEdgeFromConnection({ source: sourceNode.id, target: targetNode.id }))
     existing.add(key)
     patched = true
@@ -214,8 +265,11 @@ function getUpstreamNodes(nodeId, edges, nodeById, sourceTypes = []) {
  * 自动补齐多模态链路配置：输入 → 文生图 → 图生视频 → 输出
  */
 export function ensureMultimodalChainConfig(nodes = [], edges = []) {
+  // 通用按边传参（空字段才填），再叠加多模态 provider / 标签特例
+  const wired = wireWorkflowVariableRefs(nodes, edges)
+  nodes = wired.nodes
   const nodeById = Object.fromEntries((nodes || []).map((node) => [node.id, node]))
-  let patched = false
+  let patched = wired.patched
 
   ;(nodes || []).forEach((node) => {
     const nodeType = getNodeType(node)
@@ -224,8 +278,12 @@ export function ensureMultimodalChainConfig(nodes = [], edges = []) {
     let changed = false
 
     if (nodeType === 'image_generation' && hasUpstreamType(node.id, edges, nodeById, ['input'])) {
+      // 交给 wireWorkflowVariableRefs；这里仅在仍为空时按上游 input 变量名兜底
       if (!config.prompt && !config.text) {
-        config.prompt = '{prompt}'
+        const inputNodes = getUpstreamNodes(node.id, edges, nodeById, ['input'])
+        const inputCfg = inputNodes[0]?.data?.config || {}
+        const varName = inputCfg.input_name || inputCfg.variable_name || inputCfg.variableName || 'prompt'
+        config.prompt = `{${varName}}`
         changed = true
       }
     }
@@ -236,13 +294,26 @@ export function ensureMultimodalChainConfig(nodes = [], edges = []) {
       nodeById,
       ['image_generation', 'image_editing'],
     )) {
-      if (!config.inputImage && !config.input_image) {
+      // 图边只补图片槽；文案槽仅在确有 input/llm 上游时再填，避免图连线乱填 prompt
+      if (!config.inputImage && !config.input_image && !config.image) {
         config.inputImage = '{images.0.url}'
-        config.input_image = '{images.0.url}'
         changed = true
       }
-      if (!config.prompt && !config.text) {
-        config.prompt = '{prompt}'
+      const hasTextUpstream = hasUpstreamType(
+        node.id,
+        edges,
+        nodeById,
+        ['input', 'llm', 'prompt'],
+      )
+      if (hasTextUpstream && !config.prompt && !config.text) {
+        if (hasUpstreamType(node.id, edges, nodeById, ['llm', 'prompt'])) {
+          config.prompt = '{text}'
+        } else {
+          const inputNodes = getUpstreamNodes(node.id, edges, nodeById, ['input'])
+          const inputCfg = inputNodes[0]?.data?.config || {}
+          const varName = inputCfg.input_name || inputCfg.variable_name || inputCfg.variableName || 'prompt'
+          config.prompt = `{${varName}}`
+        }
         changed = true
       }
       const upstreamImageNodes = getUpstreamNodes(
@@ -303,20 +374,15 @@ export function ensureMultimodalChainConfig(nodes = [], edges = []) {
 export function backendNodeToVueFlow(node) {
   // 后端 node_type -> 前端 VueFlow type 的反向映射
   // constants.py 中 DATA_TRANSFORM = "data_transform"，但前端注册为 "transform"
-  const REVERSE_TYPE_MAP = {
-    data_transform: 'transform',
-    csv_transform: 'transform',
-    json_transform: 'transform',
-  }
   const rawType = node.nodeType || node.node_type
-  const type = REVERSE_TYPE_MAP[rawType] || rawType
+  const type = BACKEND_RENDER_TYPES[rawType] || rawType
 
   return {
     id: String(node.id),
     type,
     position: {
-      x: Number(node.positionX) || Number(node.position_x) || Number(node.position?.x) || 0,
-      y: Number(node.positionY) || Number(node.position_y) || Number(node.position?.y) || 0
+      x: Number(node.positionX ?? node.position_x ?? node.position?.x ?? 0),
+      y: Number(node.positionY ?? node.position_y ?? node.position?.y ?? 0)
     },
     data: {
       id: node.id,
@@ -349,11 +415,11 @@ export function vueFlowNodeToBackend(node, workflowId) {
   return {
     id: node.id,
     workflow: workflowId,
-    node_type: node.type,
-    name: node.data?.label || node.data?.name || 'Node',
+    node_type: getBackendNodeType(node),
+    name: node.data?.label || node.data?.name || '节点',
     description: node.data?.description || '',
-    position_x: node.position?.x || 0,
-    position_y: node.position?.y || 0,
+    position_x: hasFiniteCanvasPosition(node.position) ? normalizeCanvasPosition(node.position).x : 0,
+    position_y: hasFiniteCanvasPosition(node.position) ? normalizeCanvasPosition(node.position).y : 0,
     sort_order: node.data?.sortOrder || node.sortOrder || 0,
     config: normalizeNodeConfig(node.data?.config || {}, node.type),
     style: {
@@ -506,10 +572,7 @@ export function vueFlowToNlWorkflow(nodes = [], edges = [], meta = {}) {
       id: n.id,
       type: n.type,
       name: n.data?.label || n.data?.name || n.type,
-      position: {
-        x: Number(n.position?.x) || 0,
-        y: Number(n.position?.y) || 0
-      },
+      position: hasFiniteCanvasPosition(n.position) ? normalizeCanvasPosition(n.position) : { x: 0, y: 0 },
       config: n.data?.config || {}
     })),
     edges: edges.map((e) => ({
@@ -535,29 +598,46 @@ export function nlWorkflowToVueFlow(workflow, options = {}) {
     return { nodes: [], edges: [] }
   }
 
-  const nodes = rawNodes.map((n, idx) => ({
-    id: n.id || `node_${idx}`,
-    type: n.type || 'llm',
-    position: {
-      x: Number(n.position?.x) || 0,
-      y: Number(n.position?.y) || 0
-    },
-    data: {
-      label: n.name || n.label || n.type,
-      nodeType: n.type,
-      config: n.config || {},
-      description: n.description || ''
+  const nodes = rawNodes.map((n, idx) => {
+    const nested = (n.data && typeof n.data === 'object') ? n.data : {}
+    const ntype = n.type || nested.type || 'llm'
+    const cfg = (n.config && Object.keys(n.config).length)
+      ? n.config
+      : (nested.config || {})
+    return {
+      id: n.id || `node_${idx}`,
+      type: ntype,
+      position: hasFiniteCanvasPosition(n.position) ? normalizeCanvasPosition(n.position) : null,
+      data: {
+        label: n.name || n.label || nested.label || ntype,
+        nodeType: ntype,
+        config: cfg || {},
+        description: n.description || nested.description || ''
+      }
     }
-  }))
+  })
+
+  // 宽扇出工作流：同类节点横排（vertical direction）。
+  // 短剧模板已自带「上中下三行」坐标，保留不覆盖。
+  const genMode = String(workflow?._generation_mode || '')
+  const keepCustomGrid = genMode.includes('short_drama') || options.preserveLayout === true
+  const autoDirection = pickLayoutDirection(nodes, rawEdges)
+  if (!keepCustomGrid && autoDirection === 'vertical') {
+    nodes.forEach((node) => {
+      node.position = null
+    })
+  }
 
   const layoutOptions = {
-    direction: options.direction === 'auto' || !options.direction ? undefined : options.direction
+    direction: options.direction === 'auto' || !options.direction
+      ? (keepCustomGrid ? undefined : autoDirection)
+      : options.direction
   }
 
   const layoutedNodes = applyWorkflowLayout(
     nodes,
     rawEdges,
-    options.preserveNodes || [],
+    keepCustomGrid ? (options.preserveNodes || []) : [],
     layoutOptions
   )
 

@@ -1,5 +1,8 @@
 <template>
-  <div class="generated-site-page">
+  <PageShell
+    width="wide"
+    class="generated-site-page"
+  >
     <div class="page-header">
       <div>
         <h1>{{ site?.name || '识别项目' }}</h1>
@@ -106,7 +109,9 @@
         class="agent-section"
       >
         <h3>最近 Agent 回复</h3>
-        <p class="agent-reply">{{ site.lastAgentReply.reply }}</p>
+        <p class="agent-reply">
+          {{ site.lastAgentReply.reply }}
+        </p>
         <p
           v-if="site.lastAgentReply.files_changed?.length"
           class="agent-meta"
@@ -118,7 +123,9 @@
       <div class="rag-section">
         <h3>项目记忆（RAG）</h3>
         <template v-if="site.ragCollectionId">
-          <p class="rag-status synced">对话已同步至知识库集合</p>
+          <p class="rag-status synced">
+            对话已同步至知识库集合
+          </p>
           <el-button
             size="small"
             @click="openRagCollection"
@@ -127,7 +134,9 @@
           </el-button>
         </template>
         <template v-else>
-          <p class="rag-status missing">尚未创建项目记忆集合</p>
+          <p class="rag-status missing">
+            尚未创建项目记忆集合
+          </p>
           <el-button
             size="small"
             type="primary"
@@ -154,10 +163,11 @@
         </ul>
       </div>
     </template>
-  </div>
+  </PageShell>
 </template>
 
 <script setup>
+import PageShell from '@/components/layout/PageShell.vue'
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -262,11 +272,6 @@ onUnmounted(() => {
 </script>
 
 <style lang="scss" scoped>
-.generated-site-page {
-  max-width: 960px;
-  margin: 0 auto;
-  padding: 24px;
-}
 
 .page-header {
   display: flex;

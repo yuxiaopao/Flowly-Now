@@ -23,16 +23,39 @@
         </p>
       </div>
 
+      <el-alert
+        v-if="!validLink || formError"
+        :title="formError || '重置链接无效或缺少参数，请重新申请。'"
+        type="error"
+        :closable="false"
+        show-icon
+        role="alert"
+      />
+      <router-link
+        v-if="!validLink || formError"
+        to="/forgot-password"
+        class="link"
+      >
+        重新申请重置链接
+      </router-link>
       <el-form
+        v-if="validLink"
         ref="formRef"
         :model="formData"
         :rules="formRules"
+        novalidate
         @submit.prevent="handleSubmit"
       >
-        <el-form-item prop="password">
+        <el-form-item
+          prop="password"
+          label="新密码"
+          label-position="top"
+        >
           <el-input
             v-model="formData.password"
             type="password"
+            aria-label="新密码"
+            autocomplete="new-password"
             placeholder="输入新密码"
             size="large"
             show-password
@@ -40,10 +63,16 @@
           />
         </el-form-item>
 
-        <el-form-item prop="confirmPassword">
+        <el-form-item
+          prop="confirmPassword"
+          label="确认新密码"
+          label-position="top"
+        >
           <el-input
             v-model="formData.confirmPassword"
             type="password"
+            aria-label="确认新密码"
+            autocomplete="new-password"
             placeholder="再次确认新密码"
             size="large"
             show-password
@@ -99,19 +128,29 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Lock } from 'lucide-vue-next'
 import ThemeLogo from '@/components/common/ThemeLogo.vue'
 import { resetPassword } from '@/api/auth'
 import { useAppStore } from '@/stores/app'
+import { useSiteConfigStore } from '@/stores/siteConfig'
+import { clearAuthSession } from '@/utils/authSession'
+import { getSettingsError } from '@/utils/personalCenter'
+import { AUTH } from '@/config/auth'
 
 const route = useRoute()
 const router = useRouter()
 const appStore = useAppStore()
+const siteConfigStore = useSiteConfigStore()
+const minimumLength = computed(() => siteConfigStore.auth.passwordMinLength || AUTH.passwordMinLength)
+const resetUid = computed(() => route.query.uid || route.query.uidb64)
+const validLink = computed(() => typeof route.query.token === 'string' && !!route.query.token && typeof resetUid.value === 'string' && !!resetUid.value)
 
 const formRef = ref(null)
 const submitting = ref(false)
+const formError = ref('')
+onMounted(() => { if (!siteConfigStore.loaded) siteConfigStore.fetchPublicConfig() })
 
 const formData = reactive({
   password: '',
@@ -155,39 +194,34 @@ const passwordStrength = computed(() => {
   return { score: Math.min(score, 4), level, text }
 })
 
-const formRules = {
+const formRules = computed(() => ({
   password: [
     { required: true, message: '请输入新密码' },
-    { min: 8, message: '密码至少需要 8 个字符' }
+    { min: minimumLength.value, message: `密码至少需要 ${minimumLength.value} 个字符` }
   ],
   confirmPassword: [
     { required: true, message: '请再次确认密码' },
     { validator: validateConfirmPassword, trigger: 'blur' }
   ]
-}
+}))
 
 async function handleSubmit() {
-  const valid = await formRef.value.validate().catch(() => false)
-  if (!valid) return
-
-  const token = route.query.token
-  const uid = route.query.uid || route.query.uidb64
-  if (!token || !uid) {
-    appStore.error('重置链接无效或缺少参数')
-    return
-  }
-
+  if (submitting.value || !validLink.value) return
   submitting.value = true
+  formError.value = ''
   try {
+    const valid = await formRef.value.validate().catch(() => false)
+    if (!valid) return
     await resetPassword({
-      uid,
-      token,
+      uid: resetUid.value,
+      token: route.query.token,
       password: formData.password
     })
     appStore.success('密码已更新，请重新登录。')
-    router.push('/login')
+    clearAuthSession()
+    await router.replace(AUTH.routes.login)
   } catch (error) {
-    appStore.error(error.response?.data?.message || '重置密码失败')
+    formError.value = getSettingsError(error, '重置失败，请检查网络后重试')
   } finally {
     submitting.value = false
   }

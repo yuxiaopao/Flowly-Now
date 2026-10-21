@@ -12,3 +12,6 @@ class RagConfig(AppConfig):
     name = 'rag'
     verbose_name = 'RAG'
     path = os.path.dirname(os.path.abspath(__file__))
+
+    def ready(self):
+        from . import signals  # noqa: F401

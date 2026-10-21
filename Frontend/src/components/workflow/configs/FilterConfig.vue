@@ -35,10 +35,10 @@
             v-model="localData.combinator"
             @change="handleChange"
           >
-            <el-radio label="and">
+            <el-radio value="and">
               满足所有条件 (AND)
             </el-radio>
-            <el-radio label="or">
+            <el-radio value="or">
               满足任一条件 (OR)
             </el-radio>
           </el-radio-group>

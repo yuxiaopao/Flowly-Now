@@ -1,25 +1,55 @@
 <template>
   <div class="config-form">
-    <el-form :model="localData" label-position="top" size="small">
+    <el-form
+      :model="localData"
+      label-position="top"
+      size="small"
+    >
       <el-form-item label="节点名称">
-        <el-input v-model="localData.label" @change="syncEmit" />
+        <el-input
+          v-model="localData.label"
+          @change="syncEmit"
+        />
       </el-form-item>
       <el-form-item label="目标语言">
-        <el-select v-model="localData.target_language" @change="syncEmit">
-          <el-option v-for="o in langs" :key="o.v" :label="o.l" :value="o.v" />
+        <el-select
+          v-model="localData.target_language"
+          @change="syncEmit"
+        >
+          <el-option
+            v-for="o in langs"
+            :key="o.v"
+            :label="o.l"
+            :value="o.v"
+          />
         </el-select>
       </el-form-item>
       <el-form-item label="源视频绑定">
-        <el-input v-model="localData.video_input" placeholder="{source_video_url}" @change="syncEmit" />
+        <el-input
+          v-model="localData.video_input"
+          placeholder="{source_video_url}"
+          @change="syncEmit"
+        />
       </el-form-item>
       <el-form-item label="配音音频绑定">
-        <el-input v-model="localData.audio_input" placeholder="{dubbed_audio_url}" @change="syncEmit" />
+        <el-input
+          v-model="localData.audio_input"
+          placeholder="{dubbed_audio_url}"
+          @change="syncEmit"
+        />
       </el-form-item>
       <el-form-item label="启用 VideoRetalk">
-        <el-switch v-model="localData.lip_sync" @change="syncEmit" />
+        <el-switch
+          v-model="localData.lip_sync"
+          @change="syncEmit"
+        />
       </el-form-item>
       <el-form-item label="人脸参考图 URL">
-        <el-input v-model="localData.face_ref_image_url" placeholder="可选" @change="syncEmit" />
+        <el-input
+          v-model="localData.face_ref_image_url"
+          placeholder="可选"
+          @change="syncEmit"
+        />
       </el-form-item>
     </el-form>
   </div>

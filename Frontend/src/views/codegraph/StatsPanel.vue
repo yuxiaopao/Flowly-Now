@@ -87,6 +87,7 @@
 
 <script setup>
 import { computed } from 'vue'
+import { getTypeColor } from './graphColors'
 
 const props = defineProps({
   stats: {
@@ -109,24 +110,6 @@ const topModules = computed(() => {
     entries.sort((a, b) => b[1] - a[1]).slice(0, 5)
   )
 })
-
-const typeColors = {
-  vue: '#42b883',
-  js: '#f7df1e',
-  ts: '#3178c6',
-  jsx: '#61dafb',
-  tsx: '#61dafb',
-  py: '#3776ab',
-  json: '#cbcb41',
-  md: '#083fa1',
-  css: '#264de4',
-  scss: '#cc6698',
-  html: '#e34f26',
-}
-
-function getTypeColor(type) {
-  return typeColors[type] || '#999'
-}
 
 function formatNumber(num) {
   if (num >= 1000000) {
@@ -154,7 +137,7 @@ function formatSize(bytes) {
 
 <style lang="scss" scoped>
 .stats-panel {
-  padding: 12px;
+  padding: 12px 14px 14px;
 }
 
 .panel-header {
@@ -163,20 +146,20 @@ function formatSize(bytes) {
 
 .panel-title {
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text-primary);
 }
 
 .stats-content {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
 }
 
 .stats-overview {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
+  gap: 10px;
 }
 
 .stat-item {
@@ -184,12 +167,19 @@ function formatSize(bytes) {
   flex-direction: column;
   align-items: center;
   padding: 12px 8px;
-  background: var(--bg-hover);
-  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  transition: border-color 0.15s ease;
+
+  &:hover {
+    border-color: var(--border-secondary);
+  }
 
   .stat-value {
     font-size: 18px;
-    font-weight: 600;
+    font-weight: 700;
+    letter-spacing: -0.02em;
     color: var(--text-primary);
   }
 
@@ -231,6 +221,7 @@ function formatSize(bytes) {
     width: 8px;
     height: 8px;
     border-radius: 50%;
+    box-shadow: 0 0 8px currentColor;
   }
 
   .type-name {
@@ -254,15 +245,15 @@ function formatSize(bytes) {
 
   .type-bar {
     flex: 1;
-    height: 4px;
-    background: var(--bg-hover);
-    border-radius: 2px;
+    height: 5px;
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 999px;
     overflow: hidden;
 
     .type-bar-fill {
       height: 100%;
-      border-radius: 2px;
-      transition: width 0.3s ease;
+      border-radius: 999px;
+      transition: width 0.25s ease;
     }
   }
 }
@@ -277,10 +268,16 @@ function formatSize(bytes) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 6px 10px;
-  background: var(--bg-hover);
-  border-radius: 6px;
+  padding: 7px 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
   font-size: 12px;
+  transition: border-color 0.2s ease;
+
+  &:hover {
+    border-color: rgba(34, 211, 238, 0.25);
+  }
 
   .module-name {
     color: var(--text-primary);
@@ -290,8 +287,8 @@ function formatSize(bytes) {
   }
 
   .module-count {
-    color: var(--text-secondary);
-    font-weight: 500;
+    color: #67e8f9;
+    font-weight: 600;
   }
 }
 </style>

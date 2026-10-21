@@ -7,32 +7,28 @@
 .llm-node,
 .condition-node,
 .delay-node {
-  --node-bg: rgba(20, 20, 30, 0.95);
-  --node-border: var(--node-accent, #6366f1);
-  --node-text: #e5e5e5;
+  --node-bg: var(--bg-secondary);
+  --node-border: var(--node-accent, var(--color-primary));
+  --node-text: var(--text-primary);
 
   background: var(--node-bg);
   border: 2px solid var(--node-border);
   border-radius: 12px;
   min-width: 160px;
   max-width: 280px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  box-shadow: var(--shadow-sm);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
   cursor: pointer;
   overflow: hidden;
   position: relative;
 
   &.selected {
     border-color: var(--node-border);
-    box-shadow:
-      0 8px 32px color-mix(in srgb, var(--node-accent) 30%, transparent),
-      0 0 0 2px color-mix(in srgb, var(--node-accent) 30%, transparent);
-    transform: translateY(-2px);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--node-accent) 35%, transparent), 0 0 24px color-mix(in srgb, var(--node-accent) 14%, transparent);
   }
 
   &:hover:not(.selected) {
-    box-shadow: 0 6px 24px color-mix(in srgb, var(--node-accent) 20%, transparent);
-    transform: translateY(-1px);
+    box-shadow: var(--shadow-md);
   }
 
   &.is-running {
@@ -52,8 +48,8 @@
     align-items: center;
     justify-content: space-between;
     padding: 10px 12px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-    background: rgba(255, 255, 255, 0.02);
+    border-bottom: 1px solid var(--border-primary);
+    background: var(--surface-muted);
   }
 
   .node-name-section {
@@ -62,8 +58,8 @@
 
   .node-name-input {
     width: 100%;
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-secondary);
     border-radius: 6px;
     padding: 6px 10px;
     font-size: 13px;
@@ -73,7 +69,7 @@
     transition: all 0.15s ease;
 
     &::placeholder {
-      color: rgba(255, 255, 255, 0.3);
+      color: var(--text-tertiary);
     }
 
     &:focus {
@@ -96,19 +92,19 @@
 
     .info-label {
       font-size: 10px;
-      color: rgba(255, 255, 255, 0.4);
+      color: var(--text-tertiary);
     }
 
     .info-value {
       font-size: 11px;
-      color: rgba(255, 255, 255, 0.7);
-      font-family: 'JetBrains Mono', monospace;
+      color: var(--text-secondary);
+      font-family: var(--font-family-mono);
     }
   }
 
   .preview-row .preview-text {
     font-size: 10px;
-    color: rgba(255, 255, 255, 0.6);
+    color: var(--text-secondary);
     line-height: 1.3;
     display: -webkit-box;
     -webkit-line-clamp: 2;
@@ -123,16 +119,16 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: var(--surface-muted);
+    border: 1px solid var(--border-secondary);
     border-radius: 6px;
     cursor: pointer;
-    color: rgba(255, 255, 255, 0.5);
+    color: var(--text-secondary);
     transition: all 0.15s ease;
 
     &:hover {
-      background: rgba(255, 255, 255, 0.1);
-      color: rgba(255, 255, 255, 0.9);
+      background: var(--bg-hover);
+      color: var(--text-primary);
     }
 
     .action-icon {
@@ -149,7 +145,7 @@
   .vue-flow__handle {
     width: 10px;
     height: 10px;
-    background: rgba(10, 10, 18, 0.95);
+    background: var(--bg-secondary);
     border: 2px solid var(--node-accent);
     border-radius: 50%;
 
@@ -157,17 +153,6 @@
       background: var(--node-accent);
       transform: scale(1.3);
     }
-  }
-}
-
-:global(.light) {
-  .domain-node,
-  .site-factory-node,
-  .llm-node,
-  .condition-node,
-  .delay-node {
-    --node-bg: #fff;
-    --node-text: #1e1e2e;
   }
 }
 

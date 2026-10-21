@@ -18,6 +18,7 @@ class TestWorkflowExecutor:
         workflow.id = 1
         workflow.name = 'Test Workflow'
         workflow.edges.all.return_value = []
+        workflow.edges.select_related.return_value = workflow.edges
         workflow.nodes.all.return_value = []
         return workflow
 
@@ -127,6 +128,9 @@ class TestWorkflowExecutorIntegration:
         edge2.target_node_id = 3
         edge2.source_node = llm_node
         edge2.target_node = end_node
+        start_node.outgoing_edges.all.return_value = [edge1]
+        llm_node.outgoing_edges.all.return_value = [edge2]
+        end_node.outgoing_edges.all.return_value = []
 
         # Setup workflow mock
         workflow = MagicMock()
@@ -134,6 +138,7 @@ class TestWorkflowExecutorIntegration:
         workflow.name = 'Test Workflow'
         workflow.nodes.all.return_value = [start_node, llm_node, end_node]
         workflow.edges.all.return_value = [edge1, edge2]
+        workflow.edges.select_related.return_value = workflow.edges
 
         return workflow, start_node, llm_node, end_node
 
@@ -158,7 +163,7 @@ class TestWorkflowExecutorIntegration:
         # Check reverse graph
         assert 2 in executor.reverse_graph
         assert 1 in executor.reverse_graph[2]
-        assert 3 in executor.reverse_graph[2]
+        assert 2 in executor.reverse_graph[3]
 
     def test_find_start_nodes(self, mock_workflow_with_nodes):
         """Test finding start nodes."""
@@ -237,8 +242,7 @@ class TestWorkflowExecutorErrorHandling:
         executor.build_graph()
         
         # Mock the langchain service to raise an error
-        with patch('workflows.services.workflow_executor.langchain_service') as mock_service:
-            mock_service.execute_node.side_effect = Exception("API Error")
+        with patch.object(executor.langchain_service, 'execute_node', side_effect=Exception('API Error')):
             
             # This should not raise, it should return skipped result
             # because error_handling is 'skip'
@@ -261,8 +265,7 @@ class TestWorkflowExecutorErrorHandling:
         executor.build_graph()
         
         # Mock the langchain service to return failure
-        with patch('workflows.services.workflow_executor.langchain_service') as mock_service:
-            mock_service.execute_node.return_value = {'success': False, 'error': 'API Error'}
+        with patch.object(executor.langchain_service, 'execute_node', return_value={'success': False, 'error': 'API Error'}):
             
             node.error_handling = 'fallback'
             node.fallback_value = {'result': 'fallback'}
@@ -273,7 +276,7 @@ class TestWorkflowExecutorErrorHandling:
             assert result.get('output') == {'result': 'fallback'}
 
     def test_execute_node_with_stop_strategy(self, mock_workflow_with_error_node):
-        """Test executing node with stop error handling raises error."""
+        """A returned failure must reach the workflow caller, which stops the graph."""
         workflow, node = mock_workflow_with_error_node
         
         execution = MagicMock()
@@ -286,10 +289,10 @@ class TestWorkflowExecutorErrorHandling:
         executor.build_graph()
         
         # Mock the langchain service to return failure
-        with patch('workflows.services.workflow_executor.langchain_service') as mock_service:
-            mock_service.execute_node.return_value = {'success': False, 'error': 'API Error'}
+        with patch.object(executor.langchain_service, 'execute_node', return_value={'success': False, 'error': 'API Error'}):
             
             node.error_handling = 'stop'
             
-            with pytest.raises(Exception):
-                executor.execute_node(node)
+            result = executor.execute_node(node)
+            assert result['success'] is False
+            assert result['error'] == 'API Error'

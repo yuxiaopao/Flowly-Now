@@ -425,28 +425,82 @@ export const useExecutionStore = defineStore('execution', () => {
    * 重试执行
    * @param {number|string} executionId - 执行ID（可选，默认使用当前执行）
    */
-  async function retryExecution(executionId = null) {
+  async function retryExecution(executionId = null, data = {}) {
     const id = executionId || currentExecution.value?.id
     if (!id) return
     
     try {
-      const response = await workflowApi.retryExecution(id)
+      const response = await workflowApi.retryExecution(id, data)
       currentExecution.value = response
-      executionStatus.value = 'pending'
-      executionProgress.value = 0
-      nodeStatusMap.value = {}
-      executionLogs.value = []
-      outputData.value = null
-      errorMessage.value = null
+      executionStatus.value = response.status || 'pending'
+      executionProgress.value = response.progress || 0
+      if (!response.partial) {
+        nodeStatusMap.value = {}
+        executionLogs.value = []
+        outputData.value = null
+        errorMessage.value = null
+      }
       
-      appStore.success('重试已启动')
+      appStore.success(response.message || '重试已启动')
       
       // 连接 WebSocket 获取实时更新
-      await connectWebSocket(response.id || id)
+      await connectWebSocket(response.execution_id || response.id || id)
       
       return response
     } catch (error) {
       appStore.error('重试执行失败')
+      throw error
+    }
+  }
+
+  /**
+   * 局部重试失败节点（保留成功产物）
+   */
+  async function retryFailedExecution(executionId = null, data = {}) {
+    const id = executionId || currentExecution.value?.id
+    if (!id) return
+    try {
+      const response = await workflowApi.retryFailedExecution(id, data)
+      currentExecution.value = {
+        ...(currentExecution.value || {}),
+        ...response,
+        id: response.execution_id || id,
+        status: response.status || 'interrupted',
+      }
+      executionStatus.value = response.status || 'interrupted'
+      appStore.success(response.message || '局部补跑已启动')
+      await connectWebSocket(response.execution_id || id)
+      return response
+    } catch (error) {
+      appStore.error(error?.message || '局部补跑失败')
+      throw error
+    }
+  }
+
+  /**
+   * 智能继续：失败点补跑 / 未完成续跑
+   */
+  async function continueExecution(executionId = null, data = {}) {
+    const id = executionId || currentExecution.value?.id
+    if (!id) return
+    try {
+      const response = await workflowApi.continueExecution(id, {
+        mode: 'auto',
+        include_downstream: true,
+        ...data,
+      })
+      currentExecution.value = {
+        ...(currentExecution.value || {}),
+        ...response,
+        id: response.execution_id || id,
+        status: response.status || 'interrupted',
+      }
+      executionStatus.value = response.status || 'interrupted'
+      appStore.success(response.message || '继续执行已启动')
+      await connectWebSocket(response.execution_id || id)
+      return response
+    } catch (error) {
+      appStore.error(error?.message || '继续执行失败')
       throw error
     }
   }
@@ -898,8 +952,17 @@ export const useExecutionStore = defineStore('execution', () => {
    * 处理执行错误
    */
   function handleExecutionError(error) {
+    const details = error.response?.data?.data
+    const executionId = details?.executionId || details?.execution_id
+    if (executionId) {
+      currentExecution.value = {
+        id: executionId, executionId, status: details.status || 'failed',
+        outputData: details.outputData ?? details.output_data,
+        errorMessage: details.error || details.errorMessage || details.error_message,
+      }
+    }
     executionStatus.value = 'failed'
-    errorMessage.value = error.message || '执行失败'
+    errorMessage.value = details?.error || error.message || '执行失败'
     isStreaming.value = false
     appStore.error(errorMessage.value)
   }
@@ -1014,6 +1077,8 @@ export const useExecutionStore = defineStore('execution', () => {
     pauseExecution,
     resumeExecution,
     retryExecution,
+    retryFailedExecution,
+    continueExecution,
     fetchExecutionDetails,
     fetchExecutionStatus,
     fetchExecutionLogs,

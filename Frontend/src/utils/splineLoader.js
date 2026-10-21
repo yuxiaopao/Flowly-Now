@@ -142,8 +142,13 @@ export async function createSplineApplication(canvas, container, sceneUrl = SPLI
     app.setUIWasmUrl(SPLINE_UI_WASM_URL)
   }
 
-  await loadSceneWithRetry(app, sceneUrl)
-  return app
+  try {
+    await loadSceneWithRetry(app, sceneUrl)
+    return app
+  } catch (error) {
+    disposeSplineApplication(app)
+    throw error
+  }
 }
 
 export function bindSplineResize(app, canvas, container) {
@@ -184,6 +189,8 @@ export function disposeSplineApplication(app) {
   try {
     app.stop?.()
   } catch {
-    // ignore
+    // Disposal must still run if a partially loaded scene cannot be paused.
+  } finally {
+    app.dispose()
   }
 }

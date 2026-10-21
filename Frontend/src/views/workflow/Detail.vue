@@ -1,5 +1,8 @@
 <template>
-  <div class="workflow-detail">
+  <PageShell
+    width="wide"
+    class="workflow-detail"
+  >
     <div
       v-if="workflow"
       class="detail-container"
@@ -324,10 +327,11 @@
         animated
       />
     </div>
-  </div>
+  </PageShell>
 </template>
 
 <script setup>
+import PageShell from '@/components/layout/PageShell.vue'
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { VueFlow } from '@vue-flow/core'
@@ -420,7 +424,7 @@ function goToEdit() {
 }
 
 function goToExecute() {
-  router.push(`/workflows/${workflowId.value}/execute`)
+  router.push(`/workflows/${workflowId.value}/edit`)
 }
 
 async function handleDuplicate() {
@@ -467,7 +471,7 @@ async function refreshHistory() {
 }
 
 function viewExecution(execution) {
-  router.push(`/workflows/${workflowId.value}/execute?execution=${execution.id}`)
+  router.push(`/executions/${execution.id}`)
 }
 
 async function retryExecution(_execution) {
@@ -585,16 +589,8 @@ function formatDuration(seconds) {
 
 <style lang="scss" scoped>
 @use '@/assets/styles/variables.scss' as *;
-@import '@/styles/workflow-domain-node.scss';
+@use '@/styles/workflow-domain-node.scss';
 
-.workflow-detail {
-  max-width: 1400px;
-  margin: 0 auto;
-}
-
-.detail-container {
-  padding: $spacing-6;
-}
 
 .detail-header {
   display: flex;

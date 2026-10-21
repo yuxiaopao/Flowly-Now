@@ -5,7 +5,14 @@ Serializers for RAG app.
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from tenants.models import Tenant
+from tenants.access import get_accessible_tenant_ids
+from django.db.models import Q
 from .models import VectorStore, DocumentCollection, Document, Chunk, RAGPipeline
+from .constants import VECTOR_PORT_MIN, VECTOR_PORT_MAX, VECTOR_DIMENSION_MIN, CHUNK_SIZE_MIN, CHUNK_OVERLAP_MIN
+from .constants import MAX_CHUNK_SIZE, MAX_TOP_K, DEFAULT_MAX_QUERY_CHARS, DEFAULT_MAX_TEXT_CHARS
+from .access import accessible_collections
+from django.conf import settings
+import math
 
 User = get_user_model()
 
@@ -20,7 +27,7 @@ class VectorStoreSerializer(serializers.ModelSerializer):
         model = VectorStore
         fields = [
             'id', 'name', 'store_type', 'store_type_display',
-            'host', 'port', 'collection', 'dimension', 'metric',
+            'host', 'port', 'collection', 'dimension', 'metric', 'path',
             'is_default', 'tenant', 'tenant_name', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
@@ -29,20 +36,33 @@ class VectorStoreSerializer(serializers.ModelSerializer):
 class VectorStoreCreateSerializer(serializers.ModelSerializer):
     """Serializer for creating VectorStore."""
 
+    port = serializers.IntegerField(min_value=VECTOR_PORT_MIN, max_value=VECTOR_PORT_MAX, required=False)
+    dimension = serializers.IntegerField(min_value=VECTOR_DIMENSION_MIN, required=False)
+    api_key = serializers.CharField(write_only=True, required=False, allow_blank=True, max_length=500)
+
+    def validate(self, attrs):
+        if self.instance and not attrs.get('api_key'):
+            attrs.pop('api_key', None)
+        return attrs
+
     class Meta:
         model = VectorStore
         fields = [
-            'name', 'store_type', 'host', 'port', 'collection',
+            'id', 'name', 'store_type', 'host', 'port', 'collection',
             'api_key', 'path', 'dimension', 'metric', 'is_default', 'tenant'
         ]
+        read_only_fields = ['id']
 
 
 class ChunkSerializer(serializers.ModelSerializer):
     """Serializer for Chunk."""
 
+    document_id = serializers.UUIDField(read_only=True)
+    document_title = serializers.CharField(source='document.title', read_only=True)
+
     class Meta:
         model = Chunk
-        fields = ['id', 'content', 'chunk_index', 'metadata', 'created_at']
+        fields = ['id', 'content', 'chunk_index', 'metadata', 'created_at', 'document_id', 'document_title']
 
 
 class DocumentSerializer(serializers.ModelSerializer):
@@ -50,17 +70,18 @@ class DocumentSerializer(serializers.ModelSerializer):
 
     chunks = ChunkSerializer(many=True, read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
+    metadata = serializers.DictField(required=False)
 
     class Meta:
         model = Document
         fields = [
             'id', 'title', 'source_type', 'source_url',
-            'content', 'metadata', 'status', 'status_display',
+            'content', 'metadata', 'status', 'status_display', 'error_message',
             'chunk_count', 'token_count',
             'created_at', 'updated_at', 'processed_at',
             'chunks'
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at', 'status', 'source_type', 'source_url', 'error_message', 'chunk_count', 'token_count', 'processed_at']
 
 
 class DocumentListSerializer(serializers.ModelSerializer):
@@ -72,7 +93,7 @@ class DocumentListSerializer(serializers.ModelSerializer):
         model = Document
         fields = [
             'id', 'title', 'source_type', 'status', 'status_display',
-            'chunk_count', 'token_count', 'created_at', 'processed_at'
+            'chunk_count', 'token_count', 'created_at', 'processed_at', 'error_message', 'source_url'
         ]
 
 
@@ -80,8 +101,8 @@ class DocumentCreateSerializer(serializers.Serializer):
     """Serializer for creating Document."""
 
     title = serializers.CharField(max_length=500)
-    content = serializers.CharField()
-    metadata = serializers.JSONField(required=False, default=dict)
+    content = serializers.CharField(max_length=getattr(settings, 'RAG_MAX_TEXT_CHARS', DEFAULT_MAX_TEXT_CHARS))
+    metadata = serializers.DictField(required=False, default=dict)
 
 
 class DocumentURLSerializer(serializers.Serializer):
@@ -103,7 +124,7 @@ class DocumentCollectionSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'description',
             'vector_store', 'vector_store_name',
-            'embedding_model', 'chunk_size', 'chunk_overlap',
+            'embedding_model', 'chunk_size', 'chunk_overlap', 'chunk_strategy', 'retrieval_mode',
             'document_count', 'chunk_count',
             'tenant', 'tenant_name', 'owner',
             'created_at', 'updated_at',
@@ -125,6 +146,7 @@ class DocumentCollectionListSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'description',
             'vector_store', 'vector_store_name',
+            'embedding_model', 'chunk_size', 'chunk_overlap', 'chunk_strategy', 'retrieval_mode',
             'document_count', 'chunk_count',
             'tenant', 'tenant_name', 'owner',
             'created_at'
@@ -146,6 +168,29 @@ class DocumentCollectionListSerializer(serializers.ModelSerializer):
 class DocumentCollectionCreateSerializer(serializers.ModelSerializer):
     """Serializer for creating DocumentCollection."""
 
+    chunk_size = serializers.IntegerField(min_value=CHUNK_SIZE_MIN, max_value=MAX_CHUNK_SIZE, required=False)
+    chunk_overlap = serializers.IntegerField(min_value=CHUNK_OVERLAP_MIN, required=False)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            self.fields['vector_store'].queryset = VectorStore.objects.filter(
+                Q(owner=request.user) | Q(owner__isnull=True) |
+                Q(tenant_id__in=get_accessible_tenant_ids(request.user))
+            ).distinct()
+
+    def validate(self, attrs):
+        if self.instance and attrs.get('vector_store', self.instance.vector_store) is None:
+            attrs.pop('vector_store', None)
+        size = attrs.get('chunk_size', self.instance.chunk_size if self.instance else DocumentCollection._meta.get_field('chunk_size').get_default())
+        overlap = attrs.get('chunk_overlap', self.instance.chunk_overlap if self.instance else DocumentCollection._meta.get_field('chunk_overlap').get_default())
+        if overlap >= size:
+            raise serializers.ValidationError({'chunk_overlap': '分块重叠必须小于分块大小。'})
+        if self.instance and 'vector_store' in attrs and attrs['vector_store'] != self.instance.vector_store and self.instance.documents.exists():
+            raise serializers.ValidationError({'vector_store': '已有文档时不能直接切换存储，请新建知识库并重新导入。'})
+        return attrs
+
     # Make vector_store optional since it will be auto-assigned
     vector_store = serializers.PrimaryKeyRelatedField(
         queryset=VectorStore.objects.all(),
@@ -162,7 +207,7 @@ class DocumentCollectionCreateSerializer(serializers.ModelSerializer):
         model = DocumentCollection
         fields = [
             'id', 'name', 'description', 'vector_store', 'tenant',
-            'embedding_model', 'chunk_size', 'chunk_overlap'
+            'embedding_model', 'chunk_size', 'chunk_overlap', 'chunk_strategy', 'retrieval_mode'
         ]
         read_only_fields = ['id']
 
@@ -191,6 +236,18 @@ class RAGPipelineCreateSerializer(serializers.ModelSerializer):
     """Serializer for creating RAGPipeline."""
 
     id = serializers.UUIDField(read_only=True)
+    top_k = serializers.IntegerField(min_value=1, max_value=MAX_TOP_K, required=False)
+    min_similarity = serializers.FloatField(min_value=0, max_value=1, required=False)
+
+    def validate_min_similarity(self, value):
+        if not math.isfinite(value):
+            raise serializers.ValidationError('最低相关度必须是有限数值。')
+        return value
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        request = self.context.get('request')
+        self.fields['collection'].queryset = accessible_collections(request.user if request else None)
 
     class Meta:
         model = RAGPipeline
@@ -204,14 +261,9 @@ class RAGPipelineCreateSerializer(serializers.ModelSerializer):
 class RAGQuerySerializer(serializers.Serializer):
     """Serializer for RAG query."""
 
-    query = serializers.CharField(required=True)
-    filters = serializers.JSONField(required=False, default=dict)
+    query = serializers.CharField(required=True, max_length=getattr(settings, 'RAG_MAX_QUERY_CHARS', DEFAULT_MAX_QUERY_CHARS))
+    filters = serializers.DictField(required=False, default=dict)
+    top_k = serializers.IntegerField(min_value=1, max_value=MAX_TOP_K, required=False)
+    min_similarity = serializers.FloatField(min_value=0, max_value=1, required=False)
 
 
-class RAGResponseSerializer(serializers.Serializer):
-    """Serializer for RAG response."""
-
-    response = serializers.CharField()
-    sources = serializers.ListField()
-    query = serializers.CharField()
-    retrieved_count = serializers.IntegerField()

@@ -1,13 +1,13 @@
 <template>
-  <div class="team-page">
-    <div class="page-header">
-      <div class="header-left">
-        <h1>团队管理</h1>
-        <p class="subtitle">
-          管理团队成员、技能分工与任务协作
-        </p>
-      </div>
-      <div class="header-actions">
+  <PageShell
+    width="wide"
+    class="team-page"
+  >
+    <PageHeader
+      title="团队管理"
+      subtitle="管理团队成员、技能分工与任务协作"
+    >
+      <template #actions>
         <el-button
           type="primary"
           @click="openCreateDialog"
@@ -15,8 +15,8 @@
           <Plus class="btn-icon" />
           创建团队
         </el-button>
-      </div>
-    </div>
+      </template>
+    </PageHeader>
 
     <!-- Pending Invitations Banner -->
     <div
@@ -82,6 +82,8 @@
               <el-button
                 text
                 size="small"
+              
+                :aria-label="`${tenant.name}的更多操作`"
               >
                 <MoreVertical />
               </el-button>
@@ -504,6 +506,8 @@
                     <el-button
                       text
                       size="small"
+                    
+                      :aria-label="`${skill.name}的更多操作`"
                     >
                       <MoreVertical />
                     </el-button>
@@ -732,6 +736,8 @@
                     <el-button
                       text
                       size="small"
+                    
+                      :aria-label="`${task.title || task.name}的更多操作`"
                     >
                       <MoreVertical />
                     </el-button>
@@ -1422,10 +1428,12 @@
         </el-button>
       </template>
     </el-dialog>
-  </div>
+  </PageShell>
 </template>
 
 <script setup>
+import PageHeader from '@/components/layout/PageHeader.vue'
+import PageShell from '@/components/layout/PageShell.vue'
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useTenantStore } from '@/stores/tenant'
@@ -2003,16 +2011,6 @@ onMounted(async () => {
 <style lang="scss" scoped>
 @use '@/assets/styles/variables.scss' as *;
 
-.team-page { padding: $spacing-6; }
-
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: $spacing-6;
-  h1 { font-size: $font-size-2xl; font-weight: $font-weight-bold; margin: 0; }
-  .subtitle { font-size: $font-size-sm; color: var(--text-secondary); margin: $spacing-1 0 0; }
-}
 .btn-icon { width: 16px; height: 16px; }
 .btn-icon-sm { width: 14px; height: 14px; }
 
@@ -2020,17 +2018,17 @@ onMounted(async () => {
   display: flex; justify-content: space-between; align-items: center;
   padding: $spacing-4; background: rgba($color-warning, 0.1);
   border: 1px solid rgba($color-warning, 0.3); border-radius: $radius-lg;
-  margin-bottom: $spacing-6;
+  margin-bottom: var(--page-section-gap);
   .banner-content { display: flex; align-items: center; gap: $spacing-3; color: $color-warning; }
   .banner-icon { width: 20px; height: 20px; }
 }
 
 .tenants-grid {
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: $spacing-4;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--content-card-min-width)), 1fr)); gap: $spacing-4;
 }
 .tenant-card {
   background: var(--bg-secondary); border: 1px solid var(--border-primary);
-  border-radius: $radius-xl; padding: $spacing-4; cursor: pointer;
+  border-radius: var(--content-card-radius); padding: var(--content-card-padding); cursor: pointer;
   transition: all $transition-fast;
   &:hover { border-color: $color-primary; }
   &.active { border-color: $color-primary; box-shadow: 0 0 0 2px rgba($color-primary, 0.2); }
@@ -2086,7 +2084,7 @@ onMounted(async () => {
 .remove-icon { width: 14px; height: 14px; }
 
 // Team Knowledge / Agents (shared resource cards)
-.resource-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: $spacing-4; }
+.resource-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--content-card-min-width)), 1fr)); gap: $spacing-4; }
 .resource-card {
   display: flex; gap: $spacing-3; background: var(--bg-tertiary);
   border: 1px solid var(--border-primary); border-radius: $radius-lg; padding: $spacing-4;
@@ -2131,7 +2129,7 @@ onMounted(async () => {
 
 // Skills
 .skills-filter { margin-bottom: $spacing-4; }
-.skills-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: $spacing-4; }
+.skills-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--content-card-min-width)), 1fr)); gap: $spacing-4; }
 .skill-card {
   background: var(--bg-tertiary); border: 1px solid var(--border-primary);
   border-radius: $radius-lg; padding: $spacing-4; transition: all $transition-fast;
@@ -2176,7 +2174,7 @@ onMounted(async () => {
 .task-actions { display: flex; align-items: center; gap: $spacing-2; padding: $spacing-3; flex-shrink: 0; }
 
 // Usage
-.usage-grid { display: flex; flex-direction: column; gap: $spacing-5; }
+.usage-grid { display: flex; flex-direction: column; gap: var(--content-gap); }
 .usage-item {
   .usage-label { font-size: $font-size-sm; color: var(--text-secondary); margin-bottom: $spacing-2; display: block; }
   .usage-value { font-size: $font-size-xs; color: var(--text-tertiary); margin-top: $spacing-1; display: block; }

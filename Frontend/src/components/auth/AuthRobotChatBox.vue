@@ -1,7 +1,10 @@
 <template>
   <div class="auth-robot-chat">
     <div class="auth-robot-chat__header">
-      <MessageCircle class="auth-robot-chat__header-icon" />
+      <FlowlyBot
+        :state="loading ? 'thinking' : 'idle'"
+        :size="BOT_AVATAR.sizes.md"
+      />
       <span>与小流对话</span>
     </div>
 
@@ -44,7 +47,9 @@
 
 <script setup>
 import { ref } from 'vue'
-import { MessageCircle, Send, Loader2 } from 'lucide-vue-next'
+import { Send, Loader2 } from 'lucide-vue-next'
+import FlowlyBot from '@/components/common/FlowlyBot.vue'
+import { BOT_AVATAR } from '@/config/botAvatar'
 
 defineProps({
   loading: {
@@ -90,12 +95,6 @@ defineExpose({
     font-size: $font-size-sm;
     font-weight: $font-weight-medium;
     color: var(--text-secondary);
-  }
-
-  &__header-icon {
-    width: 16px;
-    height: 16px;
-    color: var(--accent-primary);
   }
 
   &__form {

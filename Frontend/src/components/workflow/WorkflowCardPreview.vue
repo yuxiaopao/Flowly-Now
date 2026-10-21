@@ -1,7 +1,7 @@
 <template>
   <div
     class="workflow-card-preview"
-    :class="{ 'is-empty': !hasScreenshot && (!nodes || nodes.length === 0) }"
+    :class="{ 'is-empty': !hasScreenshot && !hasNodes }"
   >
     <img
       v-if="hasScreenshot"
@@ -10,17 +10,11 @@
       class="preview-screenshot"
       loading="lazy"
     >
-    <div
-      v-else-if="nodes && nodes.length > 0"
-      class="preview-fallback-wrap"
-    >
-      <MiniWorkflowPreview
-        :nodes="nodes"
-        :edges="edges"
-        class="preview-fallback"
-      />
-      <span class="preview-fallback-hint">保存后将显示编辑界面截图</span>
-    </div>
+    <MiniWorkflowPreview
+      v-else-if="hasNodes"
+      :nodes="nodes"
+      :edges="edges"
+    />
     <div
       v-else
       class="preview-empty"
@@ -55,6 +49,8 @@ const hasScreenshot = computed(() => (
   typeof props.canvasPreview === 'string'
   && props.canvasPreview.startsWith('data:image')
 ))
+
+const hasNodes = computed(() => Array.isArray(props.nodes) && props.nodes.length > 0)
 </script>
 
 <style lang="scss" scoped>
@@ -74,30 +70,7 @@ const hasScreenshot = computed(() => (
   object-fit: contain;
   object-position: center;
   display: block;
-  background: #0a0a14;
-}
-
-.preview-fallback-wrap {
-  position: relative;
-  width: 100%;
-  height: 100%;
-}
-
-.preview-fallback {
-  width: 100%;
-  height: 100%;
-  opacity: 0.85;
-}
-
-.preview-fallback-hint {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 6px;
-  text-align: center;
-  font-size: 10px;
-  color: var(--text-tertiary);
-  pointer-events: none;
+  background: var(--canvas-bg);
 }
 
 .preview-empty {
@@ -109,12 +82,12 @@ const hasScreenshot = computed(() => (
   width: 100%;
   height: 100%;
   color: var(--text-tertiary);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .preview-empty-icon {
-  width: 20px;
-  height: 20px;
-  opacity: 0.5;
+  width: 22px;
+  height: 22px;
+  opacity: 0.55;
 }
 </style>

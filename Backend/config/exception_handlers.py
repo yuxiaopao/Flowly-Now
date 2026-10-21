@@ -4,6 +4,7 @@ DRF 全局异常处理器
 """
 
 import logging
+from django_ratelimit.exceptions import Ratelimited
 from rest_framework.views import exception_handler
 from rest_framework import status
 from rest_framework.response import Response
@@ -45,6 +46,14 @@ def custom_exception_handler(exc, context):
     所有 DRF 异常都会被此函数处理，返回统一格式的 JSON 响应。
     格式: {code, data, message, errors}
     """
+    if isinstance(exc, Ratelimited):
+        return Response({
+            'code': status.HTTP_429_TOO_MANY_REQUESTS,
+            'message': '请求过于频繁，请稍后再试',
+            'data': None,
+            'errors': None,
+        }, status=status.HTTP_429_TOO_MANY_REQUESTS)
+
     response = exception_handler(exc, context)
     request = context.get('request')
 

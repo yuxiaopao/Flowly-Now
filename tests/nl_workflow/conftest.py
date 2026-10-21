@@ -1,58 +1,5 @@
-# -*- coding: utf-8 -*-
-"""
-pytest configuration for NL Workflow tests.
-Extends the backend conftest.py fixtures.
-"""
-
-import os
-import sys
-import uuid
-from pathlib import Path
-
-# Add the Backend directory to the path
-_backend = Path(__file__).resolve().parents[2] / 'Backend'
-sys.path.insert(0, str(_backend))
-
-# Configure Django settings
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
-
-# Setup Django
-import django
-django.setup()
-
+"""自然语言工作流测试数据；认证夹具由上层统一提供。"""
 import pytest
-from django.conf import settings
-from rest_framework.test import APIClient
-
-
-# Re-use existing fixtures from backend conftest
-pytest_plugins = ['tests.backend.conftest']
-
-
-@pytest.fixture
-def api_client():
-    """Return an API client."""
-    return APIClient()
-
-
-@pytest.fixture
-def authenticated_client(db, user):
-    """Return an authenticated API client."""
-    client = APIClient()
-    client.force_authenticate(user=user)
-    return client
-
-
-@pytest.fixture
-def nl_session(db, user):
-    """Create a test NL session."""
-    from nl_to_workflow.models import NLSession
-    session = NLSession.objects.create(
-        user=user,
-        name='Test NL Session',
-        description='Test workflow generation'
-    )
-    return session
 
 
 @pytest.fixture

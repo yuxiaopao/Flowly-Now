@@ -1,0 +1,34 @@
+{
+  "skill_name": "docx-format-check",
+  "category": "07_docx_export_pipeline",
+  "tier": "tier2_important",
+  "encrypted": true,
+  "scan": {
+    "name": "docx-format-check",
+    "path": "resources/app/skills/docx-format-check",
+    "has_skill_md_enc": true,
+    "has_skill_md_plain": false,
+    "encrypted": true,
+    "files": {
+      "enc": 1,
+      "plain": 0,
+      "total": 1
+    },
+    "subdirs": [],
+    "extensions": {
+      ".enc": 1
+    },
+    "readable_assets": []
+  },
+  "artifacts": [],
+  "runtime_prompts": [
+    "academic_docx_traps.md"
+  ],
+  "used_in_templates": [
+    "paper_writing",
+    "paper_writing_zh",
+    "course_paper"
+  ],
+  "flowly_status": "pending",
+  "replication_strategy": "decrypt_and_port"
+}

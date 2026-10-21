@@ -433,7 +433,8 @@ def create_multi_agent_chain(
             model=model,
             temperature=temperature,
             tools=config.get("tools", []),
-            knowledge_collection_ids=config.get("knowledge_collection_ids", [])
+            knowledge_collection_ids=config.get("knowledge_collection_ids", []),
+            user_id=llm_config.get('user_id'),
         )
 
         # Wrap as BaseAgent

@@ -53,6 +53,8 @@ class NLSession(models.Model):
         db_index=True
     )
     messages = models.JSONField(default=list, verbose_name='对话历史')
+    conversation_summary = models.TextField(blank=True, default='', verbose_name='对话摘要')
+    celery_task_id = models.CharField(max_length=64, blank=True, default='', verbose_name='Celery任务ID')
 
     # Model used
     model_used = models.CharField(max_length=100, blank=True, verbose_name='使用的模型')
@@ -67,8 +69,8 @@ class NLSession(models.Model):
 
     class Meta:
         db_table = 'nl_sessions'
-        verbose_name = 'NL会话'
-        verbose_name_plural = 'NL会话'
+        verbose_name = '语创会话'
+        verbose_name_plural = '语创会话'
         ordering = ['-updated_at']
 
     def __str__(self):

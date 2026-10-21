@@ -5,20 +5,23 @@
       subtitle="监控平台使用情况和性能指标"
     >
       <template #actions>
-        <el-date-picker
-          v-model="dateRange"
-          type="daterange"
-          range-separator="至"
-          start-placeholder="开始日期"
-          end-placeholder="结束日期"
-          @change="fetchData"
-        />
         <el-button @click="fetchData">
           <RefreshCw class="btn-icon" />
           刷新
         </el-button>
       </template>
     </PageHeader>
+
+    <PageToolbar>
+      <el-date-picker
+        v-model="dateRange"
+        type="daterange"
+        range-separator="至"
+        start-placeholder="开始日期"
+        end-placeholder="结束日期"
+        @change="fetchData"
+      />
+    </PageToolbar>
 
     <StatGrid
       :columns="6"
@@ -318,6 +321,7 @@
 </template>
 
 <script setup>
+import PageToolbar from '@/components/layout/PageToolbar.vue'
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import {
   GitBranch, Play, Cpu, DollarSign, Clock, CheckCircle,

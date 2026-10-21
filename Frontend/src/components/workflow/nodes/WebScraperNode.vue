@@ -1,6 +1,7 @@
 <template>
   <div
-    :style="{ '--node-accent': nodeColor }" class="domain-node scraper-node"
+    :style="{ '--node-accent': nodeColor }"
+    class="domain-node scraper-node"
     :class="{ selected, expanded: isExpanded, 'is-running': isRunning, 'is-completed': isCompleted, 'is-failed': isFailed }"
     @click.stop="handleSelect"
   >
@@ -25,8 +26,8 @@
     <div class="node-name-section">
       <input
         :id="id ? `node-label-${id}` : undefined"
-        name="node-label"
         v-model="localName"
+        name="node-label"
         class="node-name-input"
         placeholder="节点名称..."
         @blur="handleChange"
@@ -220,7 +221,7 @@
 <script setup>
 import { ref, watch, computed } from 'vue'
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
-import { Globe, ChevronDown, FileText, ExternalLink, Loader } from 'lucide-vue-next'
+import { ChevronDown, FileText, ExternalLink, Loader } from 'lucide-vue-next'
 import { useExecutionStore } from '@/stores/execution'
 import NodeTypeBadge from '@/components/workflow/nodes/NodeTypeBadge.vue'
 import { useNodePresentation } from '@/composables/useNodePresentation'
@@ -233,7 +234,7 @@ const props = defineProps({
 })
 
 const NODE_TYPE = 'web_scraper'
-const { nodeIcon, nodeColor, nodeLabel } = useNodePresentation(NODE_TYPE)
+const { nodeColor } = useNodePresentation(NODE_TYPE)
 
 const emit = defineEmits(['select'])
 const { updateNodeData } = useVueFlow()
@@ -285,8 +286,9 @@ watch(() => props.data, (d) => {
 }, { deep: true })
 
 function toggleExpand() {
-  handleSelect()
-  isExpanded.value = !isExpanded.value
+  const expanded = !isExpanded.value
+  emit('select')
+  isExpanded.value = expanded
 }
 
 function handleChange() {

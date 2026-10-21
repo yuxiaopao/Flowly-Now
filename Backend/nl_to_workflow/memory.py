@@ -6,7 +6,7 @@ memory components with Django model storage.
 """
 
 import logging
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from dataclasses import dataclass
 from datetime import datetime
 

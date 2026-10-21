@@ -2,10 +2,10 @@
 WebSocket consumers for codegraph app.
 """
 
+import asyncio
 import json
 import logging
 from channels.generic.websocket import AsyncWebsocketConsumer
-from channels.db import database_sync_to_async
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +34,7 @@ class CodeGraphConsumer(AsyncWebsocketConsumer):
         self.project_id = self.scope['url_route']['kwargs']['project_id']
         self.room_group_name = f'codegraph_{self.project_id}'
         self.user = self.scope.get('user')
+        self.refresh_task = None
         
         # 检查权限
         if not self.user or not self.user.is_authenticated:
@@ -59,6 +60,8 @@ class CodeGraphConsumer(AsyncWebsocketConsumer):
     
     async def disconnect(self, close_code):
         """处理 WebSocket 断开"""
+        if self.refresh_task and not self.refresh_task.done():
+            self.refresh_task.cancel()
         # 离开频道组
         await self.channel_layer.group_discard(
             self.room_group_name,
@@ -114,12 +117,9 @@ class CodeGraphConsumer(AsyncWebsocketConsumer):
     
     async def trigger_refresh(self):
         """触发后端重新分析"""
-        from .views import (
-            _code_parser, _graph_analyzer,
-            _project_cache, get_project_config,
-        )
+        from .views import get_project_config
         
-        config = get_project_config(self.project_id)
+        config = get_project_config(int(self.project_id))
         if not config:
             await self.send(text_data=json.dumps({
                 'type': 'error',
@@ -128,33 +128,30 @@ class CodeGraphConsumer(AsyncWebsocketConsumer):
             return
         
         # 在后台任务中执行（避免阻塞 WebSocket）
-        import asyncio
-        asyncio.create_task(self._refresh_analysis(config))
+        if not self.refresh_task or self.refresh_task.done():
+            self.refresh_task = asyncio.create_task(self._refresh_analysis(config))
     
     async def _refresh_analysis(self, config: dict):
         """执行刷新分析"""
-        import os
         from datetime import datetime
-        from channels.layers import get_channel_layer
-        from asgiref.sync import async_to_sync
-        
-        project_path = config.get('path', '')
-        project_name = config.get('name', f'Project {self.project_id}')
+
+        def build_analysis():
+            from .views import _code_parser, _project_cache
+            from .services.analyzer import GraphAnalyzer
+
+            project_id = int(self.project_id)
+            _project_cache.invalidate(project_id)
+            structure = _code_parser.build_structure(config.get('path', ''))
+            analysis = GraphAnalyzer().analyze(structure, project_id, config.get('name', ''))
+            _project_cache.set_structure(project_id, structure)
+            _project_cache.set_analysis(project_id, analysis)
+            return analysis
         
         try:
-            # 失效缓存
-            _project_cache.invalidate(self.project_id)
-            
-            # 重新分析
-            structure = _code_parser.build_structure(project_path)
-            analysis = _graph_analyzer.analyze(structure, self.project_id, project_name)
-            
-            # 缓存结果
-            _project_cache.set_analysis(self.project_id, analysis)
+            analysis = await asyncio.to_thread(build_analysis)
             
             # 广播更新
-            channel_layer = get_channel_layer()
-            await channel_layer.group_send(
+            await self.channel_layer.group_send(
                 f'codegraph_{self.project_id}',
                 {
                     'type': 'graph_update',
@@ -162,6 +159,7 @@ class CodeGraphConsumer(AsyncWebsocketConsumer):
                     'data': {
                         'project_id': self.project_id,
                         'stats': analysis.stats,
+                        'last_updated': analysis.last_updated,
                     },
                     'timestamp': datetime.now().isoformat(),
                 }

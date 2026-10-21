@@ -1,0 +1,108 @@
+{
+  "provider": "ltx_public",
+  "model": "Lightricks/LTX-Video-0.9.8-13B-distilled",
+  "space_url": "https://lightricks-ltx-video-distilled.hf.space",
+  "api_name": "/image_to_video",
+  "seconds": 7.5,
+  "width": 1024,
+  "height": 576,
+  "fps": 30,
+  "seed": 26841,
+  "timeout_seconds": 1200,
+  "poll_seconds": 10,
+  "negative_prompt": "person, hands, needle, living butterfly, extra wings, duplicated motif, extra bodies, text, watermark, blurry, jitter, distorted diamonds, abrupt cut, flat slideshow",
+  "shots": [
+    {
+      "id": "01-skeleton",
+      "image": "ai-flat-skeleton-native-01.png",
+      "caption": "01 平面纹样 → 三维蝴蝶骨架",
+      "seed": 26852,
+      "conditions": [
+        {
+          "image": "ai-flat-skeleton-native-01.png",
+          "frame_index": 80
+        },
+        {
+          "image": "ai-skeleton-native-01.png",
+          "frame_index": 160
+        }
+      ],
+      "prompt": "An abstract textile transformation on an EMPTY ivory linen surface. The sole objects in the entire scene are a small blue geometric butterfly diagram and the linen. The flat blue contours smoothly RISE VERTICALLY into rounded blue and ivory cotton cords, as if the diagram itself is inflating into a tiny embossed relief. The vertical body and EXACTLY FOUR nested diamonds stay centered and symmetrical. The cords autonomously emerge from the surface, forming a clean three-dimensional geometric skeleton. Soft contact shadows gradually appear under the raised cords. The surrounding linen remains completely EMPTY throughout the entire video. Fixed overhead oblique macro composition, entire motif visible, continuous restrained geometric transformation."
+    },
+    {
+      "id": "02-feather-growth",
+      "image": "ai-skeleton-native-01.png",
+      "caption": "02 保留菱格 · 凤凰 S 形羽线生长",
+      "prompt": "An abstract animated transformation on an EMPTY ivory linen surface. The sole objects in this scene are the central blue cotton body, EXACTLY FOUR blue diamond compartments, and thin blue cords. The blue cords autonomously EXTEND from the body into four flowing S curves, curling around the diamonds toward pointed feather tips. The four diamonds stay centered, fixed and symmetrical. The growth is a continuous organic geometric animation of the threads themselves. Rounded cotton fibers rise above the linen with soft contact shadows. Entire four-wing motif visible, empty linen surrounding the motif throughout, fixed oblique macro composition.",
+      "seed": 26853,
+      "conditions": [
+        {
+          "image": "ai-skeleton-native-01.png",
+          "frame_index": 80
+        },
+        {
+          "image": "ai-feather-lines-native-01.png",
+          "frame_index": 160
+        }
+      ]
+    },
+    {
+      "id": "03-stitch-fill",
+      "image": "ai-feather-lines-native-01.png",
+      "caption": "03 羽片铺展 · 形成立体绣层",
+      "prompt": "An abstract animated transformation of a single raised blue textile ornament on an EMPTY ivory linen surface. The sole objects in this entire scene are the blue geometric butterfly body, exactly four diamond compartments, and four sparse S-shaped cotton outlines. Many short blue-grey and ivory cotton filaments smoothly UNFOLD and GROW OUTWARD between the curved outlines like growing feather barbs. Each feather gradually becomes dense, layered and three-dimensional. The four diamonds remain centered, fixed and symmetrical throughout this geometric animation. The surrounding ivory linen stays completely EMPTY. Fixed oblique macro composition with the entire ornament visible, soft shadows under the raised fibers.",
+      "seed": 26854,
+      "conditions": [
+        {
+          "image": "ai-feather-lines-native-01.png",
+          "frame_index": 80
+        },
+        {
+          "image": "ai-motif-native-01.png",
+          "frame_index": 160
+        }
+      ]
+    },
+    {
+      "id": "04-fusion",
+      "image": "ai-motif-native-01.png",
+      "caption": "04 蝶骨与凤羽 · 共用一套轮廓",
+      "prompt": "An elegant computer-animated textile relief on an EMPTY ivory linen surface. A single symmetrical four-wing blue butterfly-feather ornament is the ONLY object. The central body and exactly four diamond compartments stay fixed. The four S-shaped feather layers gently rise above the diamonds by a few millimeters and then settle down into one connected four-wing contour. Soft changing shadows reveal separation between the geometric lower layer and the curved upper layers. The entire ornament remains visible, empty ivory linen around every edge throughout the shot. A slow restrained oblique camera drift reveals rounded cotton fibers and three-dimensional thickness.",
+      "seed": 26855,
+      "conditions": [
+        {
+          "image": "ai-motif-native-01.png",
+          "frame_index": 80
+        },
+        {
+          "image": "ai-motif-native-01.png",
+          "frame_index": 160
+        }
+      ]
+    },
+    {
+      "id": "05-orbit",
+      "image": "ai-motif-native-01.png",
+      "caption": "05 三维旋转 · 针脚厚度与羽片层叠",
+      "prompt": "The single raised indigo butterfly-feather embroidery stays fixed on warm ivory linen while the camera slowly orbits from front to a shallow thirty-degree oblique view and gently returns. Fine rounded cotton stitches cast moving contact shadows. All four diamond wing compartments and four layered S-shaped phoenix feather wings keep their exact structure. Subtle shifting grazing studio light reveals individual fibers and the height of the overlapping feather layers. One elegant continuous three-dimensional textile macro shot, no people, hands or extra motifs."
+    },
+    {
+      "id": "06-garment-map",
+      "image": "ai-mapping-native-01.png",
+      "caption": "06 大纹样缩放 · 映射斜襟曲面",
+      "prompt": "The large indigo butterfly-feather embroidery floating in front of the ivory stand-collar blouse slowly moves toward the fabric. It gradually reduces in scale, bends and stretches into a narrow flowing connected S-shaped embroidery band along the blouse's diagonal overlapping front placket, from the collar toward the lower left hem. Show the continuous travel and conformation of cotton threads to the cloth's curved surface. Preserve the diamond units and tapered phoenix feather details as they settle into the diagonal band. The camera slowly pulls back to show the complete blouse. The chest outside the placket stays plain ivory. No hands, person or mannequin body, no jump cut or fading slideshow."
+    },
+    {
+      "id": "07-cuffs",
+      "image": "ai-garment-native-01.png",
+      "caption": "07 袖口呼应 · 线迹随衣片生长",
+      "prompt": "The floating ivory Chinese stand-collar blouse has its completed narrow indigo phoenix-feather and diamond embroidery along the diagonal placket, while both cuffs begin as plain ivory fabric. Small indigo cotton threads start tracing curved feather paths and diamond units around BOTH cuffs, then fill into matching raised embroidered cuff bands. The stitches grow autonomously along the curved sleeve fabric with no human intervention. The placket design, frog buttons and blouse silhouette remain unchanged. The camera gently approaches one cuff briefly and then pulls back to show the whole blouse with the two matching completed cuff bands. No hands, needle, person or body."
+    },
+    {
+      "id": "08-final",
+      "image": "ai-garment-final-native-01.png",
+      "caption": "08 蝶羽共生纹 · 完整服饰呈现",
+      "prompt": "One complete ivory Chinese stand-collar diagonal-placket blouse floats alone in a quiet warm ivory studio. Preserve the exact narrow indigo feather-and-diamond embroidered diagonal placket, the frog-button closure, and the matching small embroidered bands on BOTH cuffs. The blouse gently turns by fifteen degrees to reveal fabric folds, sleeve volume and the relief of the cotton embroidery, then settles toward the original frontal three-quarter view. Keep the entire collar, hem and both sleeves inside the frame. Hold the finished garment steadily for the last two seconds. Elegant slow textile product presentation, soft grazing light, no human, mannequin body, head, hands, text or extra garment."
+    }
+  ]
+}

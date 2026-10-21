@@ -1,5 +1,6 @@
 import { request } from './index'
 import { APP_CONFIG, getApiBaseUrl } from '@/config'
+import { NL_CREATOR } from '@/config/nlCreator'
 
 const NL_REQUEST_TIMEOUT = APP_CONFIG.nlWorkflowRequestTimeout
 import Cookies from 'js-cookie'
@@ -9,24 +10,43 @@ export const nlWorkflowApi = {
    * 获取可用的模型列表
    */
   getModels(includeAll = false) {
-    return request.get('/nl-workflow/models/', {
-      params: includeAll ? { include_all: true } : {}
-    })
+    return request.get('/nl-workflow/models/', includeAll ? { include_all: true } : {})
   },
 
   /**
    * 创建 NL 会话并生成工作流
-   * @param {Object} data - { description, name, model, temperature }
+   * @param {Object} data - { description, name, model, temperature, async? }
    */
-  createSession(data) {
-    return request.post('/nl-workflow/sessions/', data, { timeout: NL_REQUEST_TIMEOUT })
+  createSession(data, { signal } = {}) {
+    return request.post('/nl-workflow/sessions/', data, { timeout: NL_REQUEST_TIMEOUT, preserveWorkflowKeys: true, signal })
+  },
+
+  /**
+   * 轮询异步生成任务状态
+   * @param {string} sessionId
+   * @param {Object} [params] - { task_id? }
+   */
+  getTaskStatus(sessionId, params = {}) {
+    return request.get(`/nl-workflow/sessions/${sessionId}/task/`, params, { preserveWorkflowKeys: true })
+  },
+
+  /**
+   * 重试卡住的异步生成任务
+   * @param {string} sessionId
+   * @param {Object} [data] - { action?, model?, temperature? }
+   */
+  retryTask(sessionId, data = {}) {
+    return request.post(`/nl-workflow/sessions/${sessionId}/task/`, {
+      action: 'retry',
+      ...data
+    }, { timeout: NL_REQUEST_TIMEOUT, preserveWorkflowKeys: true })
   },
 
   /**
    * 获取 NL 会话列表
    */
-  getSessions() {
-    return request.get('/nl-workflow/sessions/')
+  getSessions(params = {}) {
+    return request.get('/nl-workflow/sessions/', params)
   },
 
   /**
@@ -34,7 +54,13 @@ export const nlWorkflowApi = {
    * @param {number} sessionId
    */
   getSession(sessionId) {
-    return request.get(`/nl-workflow/sessions/${sessionId}/`)
+    return request.get(`/nl-workflow/sessions/${sessionId}/`, {}, { preserveWorkflowKeys: true })
+  },
+
+  async ensureWorkspaceVersion(sessionId) {
+    const session = await nlWorkflowApi.getSession(sessionId)
+    if (Number(session.workspaceVersion || 0) < NL_CREATOR.apiVersion) throw new Error(NL_CREATOR.outdatedBackend)
+    return session
   },
 
   /**
@@ -51,7 +77,7 @@ export const nlWorkflowApi = {
    * @param {Object} data - { name }
    */
   updateSession(sessionId, data) {
-    return request.patch(`/nl-workflow/sessions/${sessionId}/`, data)
+    return request.patch(`/nl-workflow/sessions/${sessionId}/`, data, { preserveWorkflowKeys: true })
   },
 
   /**
@@ -60,11 +86,11 @@ export const nlWorkflowApi = {
    * @param {string} message
    * @param {Object} options - { model, temperature }
    */
-  sendMessage(sessionId, message, options = {}) {
+  sendMessage(sessionId, message, options = {}, { signal } = {}) {
     return request.post(`/nl-workflow/sessions/${sessionId}/message/`, {
       message,
       ...options
-    }, { timeout: NL_REQUEST_TIMEOUT })
+    }, { timeout: NL_REQUEST_TIMEOUT, preserveWorkflowKeys: true, signal })
   },
 
   /**
@@ -76,7 +102,7 @@ export const nlWorkflowApi = {
    */
   streamMessage(sessionId, message, options = {}) {
     const token = Cookies.get('access_token') || localStorage.getItem('access_token')
-    const { workflow, workflowJson, ...rest } = options
+    const { workflow, workflowJson, signal, ...rest } = options
     const payload = {
       message,
       ...rest
@@ -91,6 +117,7 @@ export const nlWorkflowApi = {
         'Authorization': `Bearer ${token}`
       },
       credentials: 'include',
+      signal,
       body: JSON.stringify(payload)
     })
   },
@@ -99,8 +126,8 @@ export const nlWorkflowApi = {
    * 确认并保存生成的工作流
    * @param {number} sessionId
    */
-  confirmWorkflow(sessionId) {
-    return request.post(`/nl-workflow/sessions/${sessionId}/confirm/`)
+  confirmWorkflow(sessionId, workflow) {
+    return request.post(`/nl-workflow/sessions/${sessionId}/confirm/`, workflow ? { workflow_json: JSON.stringify(workflow) } : {})
   },
 
   /**
@@ -108,7 +135,7 @@ export const nlWorkflowApi = {
    * @param {Object} data - { description, name, model, temperature }
    * @returns {Promise<ReadableStream>} Fetch response with streaming body
    */
-  streamWorkflow(data) {
+  streamWorkflow(data, { signal } = {}) {
     const token = Cookies.get('access_token') || localStorage.getItem('access_token')
     const payload = { ...data }
     if (data.workflow || data.workflowJson) {
@@ -121,6 +148,7 @@ export const nlWorkflowApi = {
         'Authorization': `Bearer ${token}`
       },
       credentials: 'include',
+      signal,
       body: JSON.stringify(payload)
     })
   },

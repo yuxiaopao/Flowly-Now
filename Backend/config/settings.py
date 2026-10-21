@@ -37,6 +37,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Load environment variables
 load_dotenv(BASE_DIR / '.env')
 
+# Explicit hostnames only, for operator-approved self-hosted integration endpoints.
+INTEGRATIONS_HTTP_PROXY = os.getenv('INTEGRATIONS_HTTP_PROXY', '').strip()
+INTEGRATIONS_ALLOWED_PRIVATE_HOSTS = tuple(
+    host.strip().lower() for host in os.getenv('INTEGRATIONS_ALLOWED_PRIVATE_HOSTS', '').split(',') if host.strip()
+)
+
 # =============================================================================
 # SECURITY WARNING: keep the secret key used in production secret!
 # =============================================================================
@@ -418,6 +424,9 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Custom user model
 AUTH_USER_MODEL = 'users.User'
+AUTH_ACCESS_TOKEN_SECONDS = int(os.getenv('AUTH_ACCESS_TOKEN_SECONDS', 86400))
+AUTH_REFRESH_TOKEN_SECONDS = int(os.getenv('AUTH_REFRESH_TOKEN_SECONDS', 604800))
+PASSWORD_RESET_TIMEOUT = int(os.getenv('PASSWORD_RESET_TIMEOUT', 86400))
 
 # REST Framework configuration
 REST_FRAMEWORK = {
@@ -430,7 +439,7 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
     ],
-    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'DEFAULT_PAGINATION_CLASS': 'config.pagination.StandardResultsSetPagination',
     'PAGE_SIZE': PAGE_SIZE_DEFAULT,
     'DEFAULT_RENDERER_CLASSES': [
         'config.renderers.UnifiedJSONRenderer',
@@ -444,6 +453,7 @@ REST_FRAMEWORK = {
         'anon': RATE_LIMIT_ANON,
         'user': RATE_LIMIT_USER,
         'login': RATE_LIMIT_LOGIN,
+        'password_reset': os.getenv('RATE_LIMIT_PASSWORD_RESET', '10/hour'),
         'workflow_execute': RATE_LIMIT_WORKFLOW_EXECUTE,
     },
 }
@@ -519,6 +529,25 @@ CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
 CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_TIME_LIMIT = CELERY_TASK_TIME_LIMIT  # from config.constants
+# Concurrent workflows: prefer prefork/threads with -c N (NOT --pool=solo).
+# Prefetch=1 + acks_late keeps one task per slot and requeues on worker loss.
+CELERY_WORKER_PREFETCH_MULTIPLIER = int(os.getenv('CELERY_WORKER_PREFETCH_MULTIPLIER', '1'))
+CELERY_TASK_ACKS_LATE = True
+CELERY_TASK_REJECT_ON_WORKER_LOST = True
+CELERY_WORKER_CONCURRENCY = int(os.getenv('CELERY_WORKER_CONCURRENCY', '2'))
+
+# Workflow execution control
+WORKFLOW_MAX_CONCURRENT_PER_WORKFLOW = int(os.getenv('WORKFLOW_MAX_CONCURRENT_PER_WORKFLOW', '3'))
+WORKFLOW_STALE_RUNNING_MINUTES = int(os.getenv('WORKFLOW_STALE_RUNNING_MINUTES', '45'))
+WORKFLOW_HEARTBEAT_INTERVAL_SEC = float(os.getenv('WORKFLOW_HEARTBEAT_INTERVAL_SEC', '15'))
+
+# Optional Celery Beat schedule (enable beat process to activate)
+CELERY_BEAT_SCHEDULE = {
+    'recover-stale-workflow-executions': {
+        'task': 'workflows.tasks.recover_stale_executions_task',
+        'schedule': 300.0,  # every 5 minutes
+    },
+}
 
 # Redis cache (optional)
 try:
@@ -586,6 +615,29 @@ OLLAMA_NUM_CTX = int(os.getenv('OLLAMA_NUM_CTX', str(DEFAULT_OLLAMA_NUM_CTX)))
 # embeddings API key is configured (see rag/services.py EmbeddingService).
 OLLAMA_EMBEDDING_MODEL = os.getenv('OLLAMA_EMBEDDING_MODEL', DEFAULT_OLLAMA_EMBEDDING_MODEL)
 
+# RAG limits and optional separate embedding/chat endpoints. Secrets stay server-side.
+from rag.constants import (
+    DEFAULT_MAX_FILE_BYTES, DEFAULT_MAX_TEXT_CHARS, DEFAULT_MAX_QUERY_CHARS,
+    DEFAULT_CONTEXT_CHARS, DEFAULT_REQUEST_TIMEOUT, DEFAULT_EMBEDDING_BATCH_SIZE,
+    DEFAULT_CANDIDATE_LIMIT, DEFAULT_PROCESSING_LEASE_SECONDS,
+)
+RAG_MAX_FILE_BYTES = int(os.getenv('RAG_MAX_FILE_BYTES', str(DEFAULT_MAX_FILE_BYTES)))
+RAG_MAX_TEXT_CHARS = int(os.getenv('RAG_MAX_TEXT_CHARS', str(DEFAULT_MAX_TEXT_CHARS)))
+RAG_MAX_QUERY_CHARS = int(os.getenv('RAG_MAX_QUERY_CHARS', str(DEFAULT_MAX_QUERY_CHARS)))
+RAG_CONTEXT_CHARS = int(os.getenv('RAG_CONTEXT_CHARS', str(DEFAULT_CONTEXT_CHARS)))
+RAG_REQUEST_TIMEOUT = int(os.getenv('RAG_REQUEST_TIMEOUT', str(DEFAULT_REQUEST_TIMEOUT)))
+RAG_PROCESSING_LEASE_SECONDS = int(os.getenv('RAG_PROCESSING_LEASE_SECONDS', str(DEFAULT_PROCESSING_LEASE_SECONDS)))
+RAG_EMBEDDING_BATCH_SIZE = int(os.getenv('RAG_EMBEDDING_BATCH_SIZE', str(DEFAULT_EMBEDDING_BATCH_SIZE)))
+RAG_CANDIDATE_LIMIT = int(os.getenv('RAG_CANDIDATE_LIMIT', str(DEFAULT_CANDIDATE_LIMIT)))
+RAG_EMBEDDING_API_KEY = os.getenv('RAG_EMBEDDING_API_KEY', '').strip()
+RAG_EMBEDDING_BASE_URL = os.getenv('RAG_EMBEDDING_BASE_URL', '').strip()
+RAG_CHAT_MODEL = os.getenv('RAG_CHAT_MODEL', '').strip()
+RAG_CHAT_API_KEY = os.getenv('RAG_CHAT_API_KEY', '').strip()
+RAG_CHAT_BASE_URL = os.getenv('RAG_CHAT_BASE_URL', '').strip()
+RAG_PINECONE_CLOUD = os.getenv('RAG_PINECONE_CLOUD', 'aws')
+RAG_PINECONE_REGION = os.getenv('RAG_PINECONE_REGION', 'us-east-1')
+RAG_WEAVIATE_GRPC_PORT = int(os.getenv('RAG_WEAVIATE_GRPC_PORT', '50051'))
+
 # Z-Image-Turbo (local image generation) configuration
 ZIMAGE_MODEL_ID = os.getenv('ZIMAGE_MODEL_ID', 'Tongyi-MAI/Z-Image-Turbo')
 ZIMAGE_DEVICE = os.getenv('ZIMAGE_DEVICE', 'cuda')
@@ -607,10 +659,23 @@ NL_WORKFLOW_TEMPERATURE = float(os.getenv('NL_WORKFLOW_TEMPERATURE', '0.7'))
 NL_CHAT_MAX_TOKENS = int(os.getenv('NL_CHAT_MAX_TOKENS', '512'))
 NL_EDITOR_MAX_TOKENS = int(os.getenv('NL_EDITOR_MAX_TOKENS', '2048'))
 NL_GENERATE_MAX_TOKENS = int(os.getenv('NL_GENERATE_MAX_TOKENS', '4096'))
-# AI-first: use LLM to autonomously design workflows; templates only when LLM unavailable
-# or when NL_WORKFLOW_USE_TEMPLATES=true (offline/dev fallback).
+# AI-first: LLM designs workflows. Domain graph templates are offline-only.
+# NL_WORKFLOW_USE_TEMPLATES=true → force template builders (dev/offline).
+# NL_WORKFLOW_TEMPLATE_FALLBACK=true → allow template after LLM failure (default off).
 NL_WORKFLOW_USE_TEMPLATES = os.getenv('NL_WORKFLOW_USE_TEMPLATES', 'false').lower() in ('true', '1', 'yes')
-NL_WORKFLOW_TEMPLATE_FALLBACK = os.getenv('NL_WORKFLOW_TEMPLATE_FALLBACK', 'true').lower() in ('true', '1', 'yes')
+NL_WORKFLOW_TEMPLATE_FALLBACK = os.getenv('NL_WORKFLOW_TEMPLATE_FALLBACK', 'false').lower() in ('true', '1', 'yes')
+NL_WORKFLOW_GENERATE_RETRIES = int(os.getenv('NL_WORKFLOW_GENERATE_RETRIES', '2'))
+NL_WORKFLOW_USE_LLM_INTENT = os.getenv('NL_WORKFLOW_USE_LLM_INTENT', 'true').lower() in ('true', '1', 'yes')
+# P2: agent tool retrieval + async + chat summary
+NL_WORKFLOW_USE_AGENT_CONTEXT = os.getenv('NL_WORKFLOW_USE_AGENT_CONTEXT', 'true').lower() in ('true', '1', 'yes')
+NL_WORKFLOW_ASYNC_GENERATE = os.getenv('NL_WORKFLOW_ASYNC_GENERATE', 'false').lower() in ('true', '1', 'yes')
+NL_WORKFLOW_USE_HUB_REACT_PROMPT = os.getenv('NL_WORKFLOW_USE_HUB_REACT_PROMPT', 'false').lower() in ('true', '1', 'yes')
+# Soft RAG over imported n8n open-source workflows (training corpus for 语创)
+NL_WORKFLOW_USE_N8N_CORPUS = os.getenv('NL_WORKFLOW_USE_N8N_CORPUS', 'true').lower() in ('true', '1', 'yes')
+NL_WORKFLOW_N8N_CORPUS_LIMIT = int(os.getenv('NL_WORKFLOW_N8N_CORPUS_LIMIT', '3') or 3)
+NL_WORKFLOW_N8N_CORPUS_PATH = os.getenv('NL_WORKFLOW_N8N_CORPUS_PATH', '')
+NL_CHAT_SUMMARY_THRESHOLD = int(os.getenv('NL_CHAT_SUMMARY_THRESHOLD', '12'))
+NL_CHAT_USE_SUMMARY = os.getenv('NL_CHAT_USE_SUMMARY', 'true').lower() in ('true', '1', 'yes')
 # Project Agent / profiler: prefer LLM enrichment when any provider is configured
 SITE_AGENT_PREFER_LLM = os.getenv('SITE_AGENT_PREFER_LLM', 'true').lower() in ('true', '1', 'yes')
 SITE_AGENT_MODEL = os.getenv('SITE_AGENT_MODEL', '')  # empty → NL_WORKFLOW_MODEL
@@ -701,6 +766,9 @@ LOGGING = {
         'level': 'INFO',
     },
     'loggers': {
+        # HTTP client INFO/DEBUG logs include complete webhook and Bot token URLs.
+        'httpx': {'level': 'WARNING'},
+        'httpcore': {'level': 'WARNING'},
         'django': {
             'handlers': ['console', 'file'],
             'level': os.getenv('DJANGO_LOG_LEVEL', 'INFO'),

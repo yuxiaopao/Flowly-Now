@@ -30,12 +30,16 @@ export function createDatasetFormData(file, meta = {}) {
   return formData
 }
 
+function datasetBase(options = {}) {
+  return options.source === 'generic' ? '/datasets' : '/training/datasets'
+}
+
 export const datasetApi = {
   list(params) {
     return apiClient.get('/training/datasets/', { params })
   },
-  get(id) {
-    return apiClient.get(`/training/datasets/${id}/`)
+  get(id, options = {}) {
+    return apiClient.get(`${datasetBase(options)}/${id}/`)
   },
   create(data) {
     return apiClient.post('/training/datasets/', data)
@@ -52,14 +56,14 @@ export const datasetApi = {
       ...(onUploadProgress ? { onUploadProgress } : {}),
     })
   },
-  preview(id, page = 1) {
-    return apiClient.get(`/training/datasets/${id}/preview/`, { params: { page } })
+  preview(id, page = 1, options = {}) {
+    return apiClient.get(`${datasetBase(options)}/${id}/preview/`, { params: { page } })
   },
-  stats(id) {
-    return apiClient.get(`/training/datasets/${id}/stats/`)
+  stats(id, options = {}) {
+    return apiClient.get(`${datasetBase(options)}/${id}/stats/`)
   },
-  download(id) {
-    return apiClient.get(`/training/datasets/${id}/download/`, { responseType: 'blob' })
+  download(id, options = {}) {
+    return apiClient.get(`${datasetBase(options)}/${id}/download/`, { responseType: 'blob' })
   },
 }
 

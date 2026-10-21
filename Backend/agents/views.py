@@ -19,7 +19,9 @@ from .serializers import (
     AgentSerializer, AgentListSerializer, AgentToolSerializer,
     AgentConversationSerializer, AgentExecutionSerializer,
     AgentCollaborationRunSerializer, AgentCollaborationRunListSerializer,
-    AgentCollaborationRunCreateSerializer, AgentMarketplaceSerializer
+    AgentCollaborationRunCreateSerializer, AgentMarketplaceSerializer,
+    AgentChatRequestSerializer, AgentToolsRequestSerializer,
+    AgentToolRemoveSerializer, ConversationMessageSerializer,
 )
 from .engine import create_agent_engine, AgentEngine
 from .multi_agent import create_multi_agent_chain
@@ -335,14 +337,10 @@ class AgentViewSet(viewsets.ModelViewSet):
                 {'error': 'Agent is not active'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        message = request.data.get('message', '')
-        conversation_id = request.data.get('conversation_id')
-
-        if not message:
-            return Response(
-                {'error': 'Message is required'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        serializer = AgentChatRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        message = serializer.validated_data['message']
+        conversation_id = serializer.validated_data.get('conversation_id')
 
         conversation, _ = _get_or_create_conversation(agent, request.user, conversation_id)
 
@@ -354,7 +352,7 @@ class AgentViewSet(viewsets.ModelViewSet):
         conversation.token_count += _estimate_tokens(message)
         conversation.save()
 
-        engine = create_agent_engine(agent, conversation)
+        engine = create_agent_engine(agent, conversation, user=request.user)
         result = engine.chat(message)
 
         if result.get('success'):
@@ -387,14 +385,10 @@ class AgentViewSet(viewsets.ModelViewSet):
                 {'error': 'Agent is not active'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        message = request.data.get('message', '')
-        conversation_id = request.data.get('conversation_id')
-
-        if not message:
-            return Response(
-                {'error': 'Message is required'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        serializer = AgentChatRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        message = serializer.validated_data['message']
+        conversation_id = serializer.validated_data.get('conversation_id')
 
         conversation, _ = _get_or_create_conversation(agent, request.user, conversation_id)
 
@@ -406,7 +400,7 @@ class AgentViewSet(viewsets.ModelViewSet):
         conversation.token_count += _estimate_tokens(message)
         conversation.save()
 
-        engine = create_agent_engine(agent, conversation)
+        engine = create_agent_engine(agent, conversation, user=request.user)
         # Track whether streaming completed so we can compensate on failure
         stream_ok = False
 
@@ -477,7 +471,7 @@ class AgentViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        engine = create_agent_engine(agent)
+        engine = create_agent_engine(agent, user=request.user)
         execution = AgentExecution.objects.create(
             agent=agent,
             status='running',
@@ -561,8 +555,9 @@ class AgentViewSet(viewsets.ModelViewSet):
             })
 
         elif request.method == 'POST':
-            tool_names = request.data.get('tools', [])
-            agent.tools = tool_names
+            serializer = AgentToolsRequestSerializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            agent.tools = serializer.validated_data['tools']
             agent.save()
             return Response({
                 'tools': agent.tools
@@ -572,7 +567,9 @@ class AgentViewSet(viewsets.ModelViewSet):
     def tools_remove(self, request, pk=None):
         """Remove a tool from agent."""
         agent = self.get_object()
-        tool_name = request.data.get('tool')
+        serializer = AgentToolRemoveSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        tool_name = serializer.validated_data['tool']
 
         if tool_name and isinstance(agent.tools, list) and tool_name in agent.tools:
             agent.tools.remove(tool_name)
@@ -586,7 +583,7 @@ class AgentViewSet(viewsets.ModelViewSet):
     def reset_memory(self, request, pk=None):
         """Reset agent conversation memory."""
         agent = self.get_object()
-        engine = create_agent_engine(agent)
+        engine = create_agent_engine(agent, user=request.user)
         engine.reset_memory()
         return Response({'message': 'Memory reset successfully'})
 
@@ -687,20 +684,10 @@ class AgentConversationViewSet(viewsets.ModelViewSet):
     def add_message(self, request, pk=None):
         """Add a message to conversation."""
         conversation = self.get_object()
-        role = request.data.get('role')
-        content = request.data.get('content')
-
-        if not content:
-            return Response(
-                {'error': 'Content is required'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        if role not in ['user', 'assistant', 'system']:
-            return Response(
-                {'error': 'Invalid role'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        serializer = ConversationMessageSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        role = serializer.validated_data['role']
+        content = serializer.validated_data['content']
 
         conversation.messages.append({
             'role': role,
@@ -890,7 +877,7 @@ class AgentCollaborationViewSet(
         try:
             orchestrator = create_multi_agent_chain(
                 agents_config,
-                llm_config={'model': DEFAULT_LLM_MODEL, 'temperature': DEFAULT_TEMPERATURE}
+                llm_config={'model': DEFAULT_LLM_MODEL, 'temperature': DEFAULT_TEMPERATURE, 'user_id': request.user.id}
             )
             orchestrator.timeout_seconds = COLLABORATION_TIMEOUT_SECONDS
             result = asyncio.run(orchestrator.run(task))

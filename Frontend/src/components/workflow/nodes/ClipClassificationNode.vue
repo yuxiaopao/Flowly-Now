@@ -6,9 +6,14 @@
     node-type="clip_classification"
   >
     <template #expanded>
-      <div v-if="classNames.length" class="info">
+      <div
+        v-if="classNames.length"
+        class="info"
+      >
         <p>类别：{{ classNames.join(', ') }}</p>
-        <p v-if="accuracy != null">Accuracy {{ pct(accuracy) }}</p>
+        <p v-if="accuracy != null">
+          Accuracy {{ pct(accuracy) }}
+        </p>
       </div>
     </template>
   </SiteFactoryNodeShell>

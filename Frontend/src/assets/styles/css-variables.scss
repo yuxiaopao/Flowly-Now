@@ -6,9 +6,9 @@
   /* 品牌/语义色由 themes.scss 统一管理，此处仅保留布局与工具变量 */
 
   /* Layout */
-  --sidebar-width: 260px;
-  --sidebar-collapsed-width: 72px;
-  --header-height: 64px;
+  --sidebar-width: 224px;
+  --sidebar-collapsed-width: 64px;
+  --header-height: 56px;
 
   /* Radius */
   --radius-sm: 0.25rem;
@@ -23,9 +23,15 @@
   --transition-normal: 250ms ease;
   --transition-slow: 350ms ease;
 
-  /* Shadows */
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  /* 产品控件与字形：不依赖远程字体 */
+  --font-family-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+  --font-family-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+  --control-height: 36px;
+  --control-height-small: 28px;
+  --control-height-large: 44px;
+  --el-border-radius-base: var(--radius-lg);
+  --el-font-family: var(--font-family-sans);
+  --el-color-primary: var(--color-primary);
+  --el-color-primary-light-9: var(--color-primary-08);
+  --el-color-primary-light-7: var(--color-primary-20);
 }

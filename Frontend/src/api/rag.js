@@ -1,4 +1,14 @@
-import { request } from './index'
+import { request as apiRequest } from './index'
+import { RAG_CONFIG } from '@/config/rag'
+
+// RAG uses its documented snake_case contract; metadata keys are user-owned data.
+const config = { preserveRequestKeys: true, preserveResponseKeys: true, timeout: RAG_CONFIG.requestTimeout }
+const request = {
+  get: (url, params = {}, options = {}) => apiRequest.get(url, params, { ...config, ...options }),
+  post: (url, data = {}, options = {}) => apiRequest.post(url, data, { ...config, ...options }),
+  patch: (url, data = {}, options = {}) => apiRequest.patch(url, data, { ...config, ...options }),
+  delete: (url, options = {}) => apiRequest.delete(url, { ...config, ...options }),
+}
 
 /**
  * @typedef {Object} RAGAPI
@@ -144,6 +154,26 @@ export const ragApi = {
   /** @param {string|number} collectionId @param {{ query?: string, top_k?: number }} params */
   searchCollection(collectionId, params = {}) {
     return request.get(`/rag/collections/${collectionId}/search/`, params)
+  },
+
+  askCollection(collectionId, data) {
+    return request.post(`/rag/collections/${collectionId}/ask/`, data)
+  },
+
+  importGuides(collectionId) {
+    return request.post(`/rag/collections/${collectionId}/import_guides/`)
+  },
+
+  reindexCollection(collectionId) {
+    return request.post(`/rag/collections/${collectionId}/reindex/`)
+  },
+
+  getCapabilities() {
+    return request.get('/rag/collections/capabilities/')
+  },
+
+  getChunks(params = {}) {
+    return request.get('/rag/chunks/', params)
   },
 
   /** @param {string|number} collectionId */

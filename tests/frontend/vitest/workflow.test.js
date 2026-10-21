@@ -34,7 +34,6 @@ function resetWorkflowStore(store) {
 describe('Workflow Store', () => {
   let workflowStore
   let workflowApi
-  let gatewayApi
   let pinia
 
   beforeEach(async () => {
@@ -45,11 +44,9 @@ describe('Workflow Store', () => {
     // Import store after setting up pinia
     const { useWorkflowStore } = await import('@/stores/workflow')
     const { workflowApi: api } = await import('@/api/workflow')
-    const { default: gateway } = await import('@/api/gateway')
     
     workflowStore = useWorkflowStore()
     workflowApi = api
-    gatewayApi = gateway
 
     // Reset store state
     resetWorkflowStore(workflowStore)
@@ -61,6 +58,47 @@ describe('Workflow Store', () => {
   })
 
   describe('State Management', () => {
+    it('keeps the latest filter results when an older request finishes last', async () => {
+      let finishOld
+      const spy = vi.spyOn(workflowApi, 'getList')
+        .mockImplementationOnce(() => new Promise(resolve => { finishOld = resolve }))
+        .mockResolvedValueOnce({ count: 1, results: [{ id: 'latest', name: '最新筛选' }] })
+      try {
+        const oldRequest = workflowStore.fetchWorkflows({ search: '旧筛选' })
+        await workflowStore.fetchWorkflows({ search: '最新筛选' })
+        finishOld({ count: 99, results: [{ id: 'old' }] })
+        await oldRequest
+        expect(workflowStore.workflows.map(item => item.id)).toEqual(['latest'])
+        expect(workflowStore.totalCount).toBe(1)
+        expect(workflowStore.isLoading).toBe(false)
+      } finally {
+        spy.mockRestore()
+      }
+    })
+
+    it('keeps loading and error state attached to the current request', async () => {
+      let failOld
+      let finishLatest
+      const spy = vi.spyOn(workflowApi, 'getList')
+        .mockImplementationOnce(() => new Promise((resolve, reject) => { failOld = reject }))
+        .mockImplementationOnce(() => new Promise(resolve => { finishLatest = resolve }))
+      try {
+        const oldRequest = workflowStore.fetchWorkflows({ page: 1 })
+        const oldFailure = expect(oldRequest).rejects.toThrow('旧请求失败')
+        const latestRequest = workflowStore.fetchWorkflows({ page: 2 })
+        failOld(new Error('旧请求失败'))
+        await oldFailure
+        expect(workflowStore.isLoading).toBe(true)
+        expect(workflowStore.error).toBeNull()
+        finishLatest({ count: 1, results: [{ id: 'page-2' }] })
+        await latestRequest
+        expect(workflowStore.isLoading).toBe(false)
+        expect(workflowStore.workflows[0].id).toBe('page-2')
+      } finally {
+        spy.mockRestore()
+      }
+    })
+
     it('should initialize with empty state', () => {
       expect(workflowStore.workflows).toEqual([])
       expect(workflowStore.currentWorkflow).toBeNull()
@@ -114,7 +152,7 @@ describe('Workflow Store', () => {
     })
 
     it('should update existing node', () => {
-      const nodeId = 'node_2'
+      const nodeId = mockWorkflow.nodes[1].id
       const updates = { data: { ...mockWorkflow.nodes[1].data, label: 'Updated LLM' } }
 
       workflowStore.updateNode(nodeId, updates)
@@ -125,17 +163,17 @@ describe('Workflow Store', () => {
     })
 
     it('should remove node and associated edges', () => {
-      const nodeId = 'node_2'
+      const nodeId = mockWorkflow.nodes[1].id
       const initialNodeCount = workflowStore.nodes.length
-      const initialEdgeCount = workflowStore.edges.length
-
+      
       workflowStore.removeNode(nodeId)
 
       expect(workflowStore.nodes.length).toBe(initialNodeCount - 1)
+      expect(workflowStore.edges.some(edge => edge.source === nodeId || edge.target === nodeId)).toBe(false)
     })
 
     it('should update node position', () => {
-      const nodeId = 'node_2'
+      const nodeId = mockWorkflow.nodes[1].id
       const newPosition = { x: 500, y: 300 }
 
       workflowStore.updateNodePosition(nodeId, newPosition)
@@ -147,8 +185,8 @@ describe('Workflow Store', () => {
 
     it('should batch update positions', () => {
       const positions = [
-        { id: 'node_1', position: { x: 100, y: 100 } },
-        { id: 'node_2', position: { x: 200, y: 200 } }
+        { id: mockWorkflow.nodes[0].id, position: { x: 100, y: 100 } },
+        { id: mockWorkflow.nodes[1].id, position: { x: 200, y: 200 } }
       ]
 
       workflowStore.batchUpdatePositions(positions)
@@ -175,7 +213,7 @@ describe('Workflow Store', () => {
     })
 
     it('should update existing edge', () => {
-      const edgeId = 'edge_1'
+      const edgeId = mockWorkflow.edges[0].id
       const updates = { label: 'updated label' }
 
       workflowStore.updateEdge(edgeId, updates)
@@ -186,7 +224,7 @@ describe('Workflow Store', () => {
     })
 
     it('should remove edge', () => {
-      const edgeId = 'edge_1'
+      const edgeId = mockWorkflow.edges[0].id
       const initialCount = workflowStore.edges.length
 
       workflowStore.removeEdge(edgeId)
@@ -203,7 +241,7 @@ describe('Workflow Store', () => {
     })
 
     it('should select a node', () => {
-      const nodeId = 'node_2'
+      const nodeId = mockWorkflow.nodes[1].id
 
       workflowStore.selectNode(nodeId)
 
@@ -212,7 +250,7 @@ describe('Workflow Store', () => {
     })
 
     it('should select an edge', () => {
-      const edgeId = 'edge_1'
+      const edgeId = mockWorkflow.edges[0].id
 
       workflowStore.selectEdge(edgeId)
 
@@ -221,7 +259,7 @@ describe('Workflow Store', () => {
     })
 
     it('should clear selection', () => {
-      workflowStore.selectNode('node_1')
+      workflowStore.selectNode(mockWorkflow.nodes[0].id)
       workflowStore.clearSelection()
 
       expect(workflowStore.selectedNode).toBeNull()
@@ -229,7 +267,7 @@ describe('Workflow Store', () => {
     })
 
     it('should get selected node data', () => {
-      const nodeId = 'node_2'
+      const nodeId = mockWorkflow.nodes[1].id
       workflowStore.selectNode(nodeId)
 
       const selectedData = workflowStore.selectedNodeData

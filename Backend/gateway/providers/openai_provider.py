@@ -246,6 +246,11 @@ class OpenAIProvider(BaseProvider):
                 client_kwargs = {'api_key': self.api_key}
                 if self.base_url:
                     client_kwargs['base_url'] = self.base_url
+                try:
+                    from httpx import Timeout
+                    client_kwargs['timeout'] = Timeout(180.0, connect=15.0)
+                except ImportError:
+                    client_kwargs['timeout'] = 180.0
 
                 self._client = OpenAI(**client_kwargs)
             except ImportError:
@@ -300,10 +305,21 @@ class OpenAIProvider(BaseProvider):
     ) -> ProviderResponse:
         """Send chat completion request to OpenAI."""
         start_time = time.time()
+        model = model or self.default_model
 
         try:
             client = self._get_client()
-            model = model or self.default_model
+
+            # Agnes chat models spend completion budget on reasoning_content first.
+            # Prefer disabling thinking so workflow nodes get usable text output.
+            create_kwargs = dict(kwargs)
+            if self._is_agnes() and str(model or '').startswith('agnes-'):
+                extra_body = dict(create_kwargs.pop('extra_body', None) or {})
+                extra_body.setdefault('enable_thinking', False)
+                create_kwargs['extra_body'] = extra_body
+                # Keep enough budget if thinking cannot be disabled by the gateway.
+                if max_tokens is None or int(max_tokens) < 8192:
+                    max_tokens = 8192
 
             response = client.chat.completions.create(
                 model=model,
@@ -311,12 +327,22 @@ class OpenAIProvider(BaseProvider):
                 temperature=temperature,
                 max_tokens=max_tokens,
                 top_p=top_p,
-                **kwargs
+                **create_kwargs
             )
 
             latency_ms = int((time.time() - start_time) * 1000)
             choice = response.choices[0]
-            content = choice.message.content or ""
+            message = choice.message
+            content = (message.content or "").strip()
+            if not content:
+                # Some gateways put the visible answer only after reasoning tokens.
+                # If content is still empty, surface a hard failure instead of silent blank.
+                reasoning = getattr(message, 'reasoning_content', None) or ''
+                if reasoning and choice.finish_reason == 'length':
+                    raise RuntimeError(
+                        f'Agnes model {model} exhausted max_tokens on reasoning with empty content. '
+                        f'Increase max_tokens (current={max_tokens}) or disable thinking.'
+                    )
 
             usage = response.usage or {}
             input_tokens = usage.prompt_tokens or 0
@@ -361,13 +387,9 @@ class OpenAIProvider(BaseProvider):
                 error_message=str(e)
             )
 
-            return ProviderResponse(
-                content="",
-                model=model or self.default_model,
-                provider=self.provider_name,
-                latency_ms=latency_ms,
-                error=str(e)
-            )
+            # Do not swallow provider failures as empty successful completions.
+            # Workflow LLM nodes must fail loudly so upstream/downstream configs can be fixed.
+            raise
 
     def stream_chat(
         self,

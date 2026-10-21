@@ -72,7 +72,7 @@ class TestIntentDetection:
         assert result['subtype'] == 'qa_bot'
         
         result = analyze_intent('做一个客服系统')
-        assert result['subtype'] == 'qa_bot'
+        assert result['subtype'] == 'customer_service'
         
         result = analyze_intent('create a Q&A bot')
         assert result['subtype'] == 'qa_bot'

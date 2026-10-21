@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { integrationsApi } from '@/api/integrations'
+import { INTEGRATION_PAGE_SIZE } from '@/config/integrationCatalog'
 
 export const useIntegrationsStore = defineStore('integrations', {
   state: () => ({
@@ -99,67 +100,77 @@ export const useIntegrationsStore = defineStore('integrations', {
       }
     },
 
-    // Integrations
+    // Catalog IDs are service keys; connection IDs are user-owned database records.
     async fetchIntegrations(params = {}) {
+      const records = []
+      let page = 1
+      for (;;) {
+        const res = await integrationsApi.getIntegrations({ page_size: INTEGRATION_PAGE_SIZE, ...params, page })
+        records.push(...(res.results || res))
+        if (!res.next) break
+        page++
+      }
+      this.integrations = records
+      return records
+    },
+
+    async fetchAvailableIntegrations() {
+      const res = await integrationsApi.getAvailableIntegrations()
+      this.availableIntegrations = res
+      return res
+    },
+
+    async loadCatalog() {
       this.isLoading = true
+      this.error = null
       try {
-        const res = await integrationsApi.getIntegrations(params)
-        this.integrations = res.results || res
+        await Promise.all([this.fetchAvailableIntegrations(), this.fetchIntegrations()])
       } catch (error) {
         this.error = error.message
+        throw error
       } finally {
         this.isLoading = false
       }
     },
 
-    async fetchAvailableIntegrations() {
-      try {
-        const res = await integrationsApi.getAvailableIntegrations()
-        this.availableIntegrations = res
-        return res
-      } catch (error) {
-        this.error = error.message
-        throw error
-      }
+    upsertIntegration(record) {
+      const index = this.integrations.findIndex(item => item.id === record.id)
+      if (index === -1) this.integrations.unshift(record)
+      else this.integrations[index] = record
+      return record
+    },
+
+    async saveIntegration(data, id) {
+      const res = id ? await integrationsApi.updateIntegration(id, data) : await integrationsApi.createIntegration(data)
+      return this.upsertIntegration(res)
     },
 
     async connectIntegration(id) {
-      try {
-        const res = await integrationsApi.connectIntegration(id)
-        const index = this.integrations.findIndex(i => i.id === id)
-        if (index !== -1) {
-          this.integrations[index].isConnected = true
-          this.integrations[index].is_connected = true
-        }
-        return res
-      } catch (error) {
-        this.error = error.message
-        throw error
-      }
+      const res = await integrationsApi.connectIntegration(id)
+      this.upsertIntegration(res.integration)
+      return res
+    },
+
+    async testIntegration(id) {
+      const res = await integrationsApi.testIntegration(id)
+      this.upsertIntegration(res.integration)
+      return res
     },
 
     async disconnectIntegration(id) {
-      try {
-        const res = await integrationsApi.disconnectIntegration(id)
-        const index = this.integrations.findIndex(i => i.id === id)
-        if (index !== -1) {
-          this.integrations[index].isConnected = false
-          this.integrations[index].is_connected = false
-        }
-        return res
-      } catch (error) {
-        this.error = error.message
-        throw error
-      }
+      const res = await integrationsApi.disconnectIntegration(id)
+      return this.upsertIntegration(res)
+    },
+
+    async deleteIntegration(id) {
+      await integrationsApi.deleteIntegration(id)
+      this.integrations = this.integrations.filter(item => item.id !== id)
     },
 
     async syncIntegration(id) {
-      try {
-        return await integrationsApi.syncIntegration(id)
-      } catch (error) {
-        this.error = error.message
-        throw error
-      }
+      const res = await integrationsApi.syncIntegration(id)
+      this.upsertIntegration(res.integration)
+      return res
     },
 
     // Templates

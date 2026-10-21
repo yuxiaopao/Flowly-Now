@@ -63,13 +63,13 @@ defineProps({
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 64px;
-    height: 64px;
+    width: $spacing-12;
+    height: $spacing-12;
     margin-bottom: $spacing-4;
     border-radius: $radius-xl;
-    background: var(--color-primary-08);
-    color: var(--color-primary);
-    box-shadow: inset 0 0 0 1px var(--color-primary-20);
+    background: var(--surface-muted);
+    color: var(--text-secondary);
+    border: 1px solid var(--border-primary);
   }
 
   &__icon {

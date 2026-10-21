@@ -188,7 +188,7 @@ class TestErrorHandlerRegistry:
 
     def test_create_from_node(self):
         """Test creating handler from node-like object."""
-        node = MagicMock()
+        node = MagicMock(spec=['error_handling', 'max_retries', 'retry_delay', 'fallback_value'])
         node.error_handling = 'retry'
         node.max_retries = 10
         node.retry_delay = 5.0

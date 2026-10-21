@@ -1,0 +1,76 @@
+{
+  "name": "flowly-desktop",
+  "version": "1.0.0",
+  "description": "Flowly Desktop — Full client with GPU training agent",
+  "main": "main.js",
+  "author": "Flowly",
+  "license": "MIT",
+  "scripts": {
+    "prestart": "node scripts/sync-training-script.js && node scripts/sync-clip-index-script.js && node scripts/sync-icons.js",
+    "predev": "node scripts/sync-training-script.js && node scripts/sync-clip-index-script.js && node scripts/sync-icons.js",
+    "start": "electron .",
+    "dev": "electron . --enable-logging --use-dev-server",
+    "dev:full": "node scripts/dev-full.mjs",
+    "monitor": "electron .",
+    "test:monitor": "node --test scripts/training-monitor.test.cjs",
+    "build:renderer": "node scripts/build-renderer.js",
+    "build:app": "npm run build:renderer && npm run sync-training && npm run sync-icons && electron-builder",
+    "sync-training": "node scripts/sync-training-script.js",
+    "sync-icons": "node scripts/sync-icons.js",
+    "test:integration": "node scripts/integration-test.mjs",
+    "test:smoke": "node scripts/smoke-test.mjs",
+    "build": "npm run build:app",
+    "build:win": "npm run build:renderer && npm run sync-training && npm run sync-icons && electron-builder --win",
+    "build:mac": "npm run build:renderer && npm run sync-training && npm run sync-icons && electron-builder --mac",
+    "build:linux": "npm run build:renderer && npm run sync-training && npm run sync-icons && electron-builder --linux"
+  },
+  "dependencies": {
+    "electron-log": "^5.1.0",
+    "electron-store": "^8.1.0",
+    "ws": "^8.16.0"
+  },
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.1"
+  },
+  "build": {
+    "appId": "com.flowly.desktop",
+    "productName": "Flowly",
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": [
+        { "target": "nsis", "arch": ["x64"] }
+      ],
+      "icon": "assets/icon.ico"
+    },
+    "mac": {
+      "target": ["dmg"],
+      "icon": "assets/icon.icns"
+    },
+    "linux": {
+      "target": ["AppImage"],
+      "icon": "assets/icon.png"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "training-monitor/**",
+      "renderer/**",
+      "assets/**",
+      "training-scripts/**",
+      "node_modules/**"
+    ],
+    "extraResources": [
+      {
+        "from": "training-scripts",
+        "to": "training-scripts"
+      }
+    ],
+    "asar": true,
+    "asarUnpack": [
+      "training-scripts/**"
+    ]
+  }
+}

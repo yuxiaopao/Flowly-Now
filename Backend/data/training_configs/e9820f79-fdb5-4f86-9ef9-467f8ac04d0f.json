@@ -1,1 +1,0 @@
-{"job_id": "e9820f79-fdb5-4f86-9ef9-467f8ac04d0f", "framework": "ultralytics", "model_type": "detection", "training_kind": "yolo", "config": {"base_weight_uri": "yolo11x.pt"}, "dataset_id": "", "dataset_path": "", "hyperparameters": {}}

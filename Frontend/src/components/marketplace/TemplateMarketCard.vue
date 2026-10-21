@@ -1,7 +1,11 @@
 <template>
   <article
-    class="template-market-card hover-lift"
+    class="template-market-card"
+    tabindex="0"
+    role="link"
+    :aria-label="`查看模板：${template.name}`"
     :class="presentation.accentClass"
+    @keydown.enter.self="$emit('open', template)"
     @click="$emit('open', template)"
   >
     <div class="card-preview">
@@ -15,7 +19,6 @@
       <div
         v-else
         class="preview-visual"
-        :style="{ background: presentation.gradient }"
       >
         <component
           :is="presentation.icon"
@@ -178,17 +181,17 @@ const difficultyLabel = computed(() => {
   flex-direction: column;
   background: var(--card-bg);
   border: 1px solid var(--border-primary);
-  border-radius: 18px;
+  border-radius: var(--radius-card);
   overflow: hidden;
   cursor: pointer;
   transition:
     border-color 0.25s ease,
     box-shadow 0.25s ease,
-    transform 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+    background-color 0.2s ease;
 
   &:hover {
     border-color: var(--border-primary);
-    box-shadow: var(--shadow-lg);
+    border-color: var(--border-hover);
 
     .use-btn {
       opacity: 1;
@@ -208,7 +211,7 @@ const difficultyLabel = computed(() => {
 
 .card-preview {
   position: relative;
-  height: 132px;
+  height: 104px;
   overflow: hidden;
   background: var(--surface-muted);
   border-bottom: 1px solid var(--border-primary);
@@ -274,7 +277,6 @@ const difficultyLabel = computed(() => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  backdrop-filter: blur(8px);
 }
 
 .featured-pill {
@@ -373,7 +375,7 @@ const difficultyLabel = computed(() => {
   font-weight: 600;
   cursor: pointer;
   opacity: 0.92;
-  transform: translateY(1px);
+  transform: none;
   transition:
     opacity 0.2s ease,
     transform 0.2s ease,

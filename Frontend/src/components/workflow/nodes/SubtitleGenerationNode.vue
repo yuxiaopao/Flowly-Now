@@ -27,8 +27,8 @@
     <div class="node-name-section">
       <input
         :id="id ? `node-label-${id}` : undefined"
-        name="node-label"
         v-model="localName"
+        name="node-label"
         class="node-name-input"
         placeholder="节点名称..."
         @blur="handleChange"
@@ -325,7 +325,7 @@ const props = defineProps({
 })
 
 const NODE_TYPE = 'subtitle_generation'
-const { nodeIcon, nodeColor, nodeLabel } = useNodePresentation(NODE_TYPE)
+const { nodeColor } = useNodePresentation(NODE_TYPE)
 
 const emit = defineEmits(['select'])
 const { updateNodeData } = useVueFlow()
@@ -454,8 +454,9 @@ watch(() => props.data, (d) => {
 }, { deep: true })
 
 function toggleExpand() {
-  handleSelect()
-  isExpanded.value = !isExpanded.value
+  const expanded = !isExpanded.value
+  emit('select')
+  isExpanded.value = expanded
 }
 
 function handleChange() {

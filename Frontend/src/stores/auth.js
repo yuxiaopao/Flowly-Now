@@ -1,187 +1,114 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
-import Cookies from 'js-cookie'
+import { ref, computed, toRef } from 'vue'
 import authApi from '@/api/auth'
+import { authSession, saveAuthSession, clearAuthSession } from '@/utils/authSession'
+import { getSettingsError } from '@/utils/personalCenter'
+import { normalizeAccountAvatar, persistAccountAvatar, readAccountAvatar } from '@/utils/accountAvatar'
 
 export const useAuthStore = defineStore('auth', () => {
-  // State
-  const user = ref(null)
-  const token = ref(Cookies.get('access_token') || localStorage.getItem('access_token'))
-  const refreshToken = ref(Cookies.get('refresh_token') || localStorage.getItem('refresh_token'))
+  const user = toRef(authSession, 'user')
+  const token = toRef(authSession, 'access')
+  const refreshToken = toRef(authSession, 'refresh')
   const isLoading = ref(false)
   const error = ref(null)
-
-  // Getters
   const isAuthenticated = computed(() => !!token.value)
-  // 响应拦截器会将后端字段转为 camelCase（is_staff -> isStaff）
   const isAdmin = computed(() => Boolean(user.value?.isStaff || user.value?.isSuperuser))
   const userName = computed(() => user.value?.username || '')
   const userEmail = computed(() => user.value?.email || '')
+  let profilePromise = null
 
-  // Actions
-  async function login(credentials) {
+  async function run(action) {
     isLoading.value = true
     error.value = null
     try {
-      const response = await authApi.login(credentials)
-      const { access, refresh, user: userData } = response
-
-      // 保存 Token
-      token.value = access
-      refreshToken.value = refresh
-      Cookies.set('access_token', access, { expires: 1 })
-      Cookies.set('refresh_token', refresh, { expires: 7 })
-      localStorage.setItem('access_token', access)
-      localStorage.setItem('refresh_token', refresh)
-
-      // 保存用户信息
-      user.value = userData
-
-      return response
+      return await action()
     } catch (err) {
-      const apiMessage = err.response?.data
-        ? (typeof err.response.data === 'string'
-          ? err.response.data
-          : err.response.data?.non_field_errors?.[0]
-            || err.response.data?.detail
-            || err.response.data?.message
-            || err.response.data?.error)
-        : null
-      error.value = apiMessage || err.message
+      error.value = getSettingsError(err, '操作失败，请检查网络后重试')
       throw err
     } finally {
       isLoading.value = false
     }
   }
 
-  async function register(userData) {
-    isLoading.value = true
-    error.value = null
-    try {
-      const response = await authApi.register(userData)
+  function login({ remember = false, ...credentials }) {
+    return run(async () => {
+      const response = await authApi.login(credentials)
+      saveAuthSession(response, remember)
       return response
-    } catch (err) {
-      const apiMessage = err.response?.data
-        ? (typeof err.response.data === 'string'
-          ? err.response.data
-          : err.response.data?.non_field_errors?.[0]
-            || err.response.data?.detail
-            || err.response.data?.message
-            || err.response.data?.error)
-        : null
-      error.value = apiMessage || err.message
-      throw err
-    } finally {
-      isLoading.value = false
-    }
+    })
+  }
+
+  function register(data) {
+    return run(() => authApi.register(data))
   }
 
   async function logout() {
     try {
       await authApi.logout()
-    } catch (err) {
-      // 忽略登出 API 错误
+    } catch {
+      // The interceptor reports network errors; local sign-out must still finish.
     } finally {
-      // 清除本地状态
       clearAuth()
     }
   }
 
   function clearAuth() {
-    user.value = null
-    token.value = null
-    refreshToken.value = null
-    Cookies.remove('access_token')
-    Cookies.remove('refresh_token')
-    localStorage.removeItem('access_token')
-    localStorage.removeItem('refresh_token')
+    clearAuthSession()
+    error.value = null
   }
 
   async function fetchUserInfo() {
     if (!token.value) return null
-
-    isLoading.value = true
-    error.value = null
-    try {
-      const response = await authApi.getUserInfo()
-      user.value = response
-      return response
-    } catch (err) {
-      error.value = err.message
-      // Token 可能过期
-      if (err.response?.status === 401) {
-        clearAuth()
-      }
-      return null
-    } finally {
-      isLoading.value = false
+    if (!profilePromise) {
+      profilePromise = authApi.getUserInfo().then(response => {
+        if (token.value) user.value = response
+        return token.value ? response : null
+      }).finally(() => { profilePromise = null })
     }
+    return profilePromise
   }
 
-  async function updateProfile(data) {
-    isLoading.value = true
-    error.value = null
-    try {
-      const response = await authApi.updateProfile(data)
+  function updateProfile(data) {
+    return run(async () => {
+      const payload = data.avatarPreferences ? { ...data, avatarPreferences: normalizeAccountAvatar({ ...readAccountAvatar(user.value), ...data.avatarPreferences }) } : data
+      const response = await authApi.updateProfile(payload)
+      if (data.avatarPreferences) {
+        const synced = response.avatarPreferences !== undefined
+        const preferences = normalizeAccountAvatar(synced ? response.avatarPreferences : { ...readAccountAvatar(user.value), ...data.avatarPreferences })
+        response.avatarPreferencesPersisted = persistAccountAvatar(user.value.id, preferences)
+        response.avatarPreferencesSynced = synced
+        response.avatarPreferences = preferences
+      }
       user.value = { ...user.value, ...response }
       return response
-    } catch (err) {
-      const apiMessage = err.response?.data
-        ? (typeof err.response.data === 'string'
-          ? err.response.data
-          : err.response.data?.non_field_errors?.[0]
-            || err.response.data?.detail
-            || err.response.data?.message
-            || err.response.data?.error)
-        : null
-      error.value = apiMessage || err.message
-      throw err
-    } finally {
-      isLoading.value = false
-    }
+    })
   }
 
-  async function changePassword(passwords) {
-    isLoading.value = true
-    error.value = null
-    try {
-      const response = await authApi.changePassword(passwords)
+  function changePassword(data) {
+    return run(async () => {
+      const response = await authApi.changePassword(data)
+      saveAuthSession(response)
       return response
-    } catch (err) {
-      const apiMessage = err.response?.data
-        ? (typeof err.response.data === 'string'
-          ? err.response.data
-          : err.response.data?.non_field_errors?.[0]
-            || err.response.data?.detail
-            || err.response.data?.message
-            || err.response.data?.error)
-        : null
-      error.value = apiMessage || err.message
-      throw err
-    } finally {
-      isLoading.value = false
-    }
+    })
   }
 
-  return {
-    // State
-    user,
-    token,
-    refreshToken,
-    isLoading,
-    error,
-    // Getters
-    isAuthenticated,
-    isAdmin,
-    userName,
-    userEmail,
-    // Actions
-    login,
-    register,
-    logout,
-    clearAuth,
-    fetchUserInfo,
-    updateProfile,
-    changePassword
+  async function uploadAvatar(file) {
+    const response = await authApi.uploadAvatar(file)
+    const preferences = normalizeAccountAvatar(response.avatarPreferences || { ...readAccountAvatar(user.value), mode: 'image' })
+    persistAccountAvatar(user.value.id, preferences)
+    user.value = { ...user.value, avatar: response.avatar, avatarPreferences: preferences }
+    return response
   }
+
+  async function removeAvatar() {
+    const response = await authApi.removeAvatar()
+    const preferences = normalizeAccountAvatar(response.avatarPreferences || { ...readAccountAvatar(user.value), mode: 'robot' })
+    persistAccountAvatar(user.value.id, preferences)
+    user.value = { ...user.value, avatar: response.avatar, avatarPreferences: preferences }
+    return response
+  }
+
+  return { user, token, refreshToken, isLoading, error, isAuthenticated, isAdmin,
+    userName, userEmail, login, register, logout, clearAuth, fetchUserInfo,
+    updateProfile, changePassword, uploadAvatar, removeAvatar }
 })

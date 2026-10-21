@@ -17,3 +17,6 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
+
+# Built from the vendored local avatar application by predev/prebuild.
+public/avatar-studio/

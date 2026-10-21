@@ -1,0 +1,86 @@
+@use './variables.scss' as *;
+
+// 共用产品控件层，作用于列表、表单、设置和编辑器。
+.el-button {
+  height: var(--control-height);
+  border-radius: var(--radius-lg);
+  font-weight: $font-weight-medium;
+  letter-spacing: 0;
+
+  &--small { height: var(--control-height-small); }
+  &--large { height: var(--control-height-large); }
+  &.is-text:not(.is-has-bg) { background: transparent; border-color: transparent; }
+  &.is-circle { width: var(--control-height); padding: 0; }
+  svg { width: $spacing-4; height: $spacing-4; }
+}
+
+:root body .el-input__wrapper, :root body .el-select__wrapper {
+  min-height: var(--control-height);
+  border-radius: var(--radius-lg);
+}
+:root body .el-input--small .el-input__wrapper, :root body .el-select--small .el-select__wrapper {
+  min-height: var(--control-height-small);
+}
+:root body .el-input--large .el-input__wrapper, :root body .el-select--large .el-select__wrapper {
+  min-height: var(--control-height-large);
+}
+.el-textarea__inner { border-radius: var(--radius-lg); line-height: $line-height-relaxed; }
+.el-form-item__label { font-weight: $font-weight-medium; }
+.el-form-item__error { line-height: $line-height-normal; }
+
+.el-table {
+  border-radius: var(--radius-lg);
+  font-variant-numeric: tabular-nums;
+  th.el-table__cell { font-weight: $font-weight-medium; }
+  td.el-table__cell { padding-block: $spacing-3; }
+  .cell { line-height: $line-height-normal; }
+}
+:root body .el-tag {
+  --el-tag-bg-color: var(--surface-muted);
+  --el-tag-border-color: var(--border-primary);
+  --el-tag-text-color: var(--text-secondary);
+  border-radius: var(--radius-sm);
+  font-weight: $font-weight-medium;
+  &--success { --el-tag-bg-color: var(--success-bg); --el-tag-text-color: var(--success); }
+  &--warning { --el-tag-bg-color: var(--warning-bg); --el-tag-text-color: var(--warning); }
+  &--danger { --el-tag-bg-color: var(--error-bg); --el-tag-text-color: var(--error); }
+}
+.el-card { --el-card-bg-color: var(--card-bg); border-color: var(--card-border); border-radius: var(--radius-card); }
+.el-dialog, .el-message-box { box-shadow: var(--shadow-xl); border-radius: var(--radius-card); }
+.el-message-box { background: var(--bg-elevated); border-color: var(--border-primary); --el-messagebox-content-color: var(--text-secondary); }
+.el-dialog__body { overflow-wrap: anywhere; }
+.el-dropdown-menu__item { min-height: var(--control-height); border-radius: var(--radius-md); }
+:root body .el-skeleton { --el-skeleton-color: var(--bg-tertiary); --el-skeleton-to-color: var(--bg-hover); }
+
+.main-content .page-header {
+  gap: $spacing-4;
+  h1 { font-size: $font-size-2xl; font-weight: $font-weight-semibold; line-height: $line-height-tight; }
+  .subtitle { color: var(--text-secondary); font-size: $font-size-sm; line-height: $line-height-normal; }
+  .header-actions { display: flex; align-items: center; gap: $spacing-3; flex-wrap: wrap; }
+}
+.main-content .page-header__actions { max-width: 100%; }
+
+.app-layout .anim-stagger > *, .app-layout .anim-fade-up, .app-layout .anim-scale-in {
+  animation: none;
+}
+
+// 默认控件保持紧凑；触屏尺寸给出完整点击区域。
+@media (max-width: 768px) {
+  .el-button { height: var(--control-height-large); }
+  .el-button.is-circle { width: var(--control-height-large); }
+  :root body .el-input__wrapper, :root body .el-select__wrapper { min-height: var(--control-height-large); }
+  .el-table, .el-form-item__label, .el-button, .el-tabs__item { font-size: $font-size-sm; }
+  .el-pagination { max-width: 100%; flex-wrap: wrap; justify-content: center; gap: $spacing-2; }
+  .el-pagination button, .el-pagination .el-pager li { min-width: var(--control-height); height: var(--control-height); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+

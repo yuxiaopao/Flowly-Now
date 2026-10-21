@@ -79,16 +79,16 @@
             v-model="activeTab"
             size="small"
           >
-            <el-radio-button label="all">
+            <el-radio-button value="all">
               全部
             </el-radio-button>
-            <el-radio-button label="unread">
+            <el-radio-button value="unread">
               未读
             </el-radio-button>
-            <el-radio-button label="workflows">
+            <el-radio-button value="workflows">
               工作流
             </el-radio-button>
-            <el-radio-button label="agents">
+            <el-radio-button value="agents">
               Agent
             </el-radio-button>
           </el-radio-group>

@@ -4,6 +4,7 @@ WebSocket consumers for real-time training progress streaming.
 import json
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
 import logging
+from users.websocket_permissions import can_subscribe_training, UNAUTHENTICATED_CLOSE_CODE, FORBIDDEN_CLOSE_CODE
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +28,13 @@ class TrainingConsumer(AsyncJsonWebsocketConsumer):
     async def connect(self):
         """Handle WebSocket connection."""
         self.job_id = self.scope['url_route']['kwargs']['job_id']
+        self.user = self.scope.get('user')
+        if not self.user or not self.user.is_authenticated:
+            await self.close(code=UNAUTHENTICATED_CLOSE_CODE)
+            return
+        if not await can_subscribe_training(self.user, self.job_id):
+            await self.close(code=FORBIDDEN_CLOSE_CODE)
+            return
         self.group_name = f'training_{self.job_id}'
         
         # Join the training group for this job

@@ -25,8 +25,8 @@
     <div class="node-name-section">
       <input
         :id="id ? `node-label-${id}` : undefined"
-        name="node-label"
         v-model="localName"
+        name="node-label"
         class="node-name-input"
         placeholder="节点名称..."
         @blur="handleChange"
@@ -48,7 +48,7 @@
         class="version-display"
       >
         <Tag class="version-icon" />
-        <span class="version-badge">v{{ localConfig.version }}</span>
+        <span class="version-badge">{{ localConfig.version === 'latest' ? '最新版本' : `v${localConfig.version}` }}</span>
       </div>
       <div
         class="execution-mode"
@@ -77,8 +77,10 @@
         <div class="config-section">
           <label class="config-label">版本</label>
           <el-input-number
-            v-model="localConfig.version"
+            v-model="selectedVersion"
             :min="1"
+            :value-on-clear="null"
+            placeholder="最新版本"
             size="small"
             controls-position="right"
             @change="handleChange"
@@ -154,10 +156,10 @@
 <script setup>
 import { ref, watch, computed } from 'vue'
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
-import { GitMerge, ChevronDown, Layers, Tag, Loader, Check, X } from 'lucide-vue-next'
+import { ChevronDown, Layers, Tag, Loader, Check, X } from 'lucide-vue-next'
 import { useExecutionStore } from '@/stores/execution'
 import NodeTypeBadge from '@/components/workflow/nodes/NodeTypeBadge.vue'
-import { useNodePresentation } from '@/composables/useNodePresentation'
+import { getDefaultNodeConfig } from '@/config/nodeRegistry'
 
 
 const props = defineProps({
@@ -167,7 +169,6 @@ const props = defineProps({
 })
 
 const NODE_TYPE = 'subworkflow'
-const { nodeIcon, nodeColor, nodeLabel } = useNodePresentation(NODE_TYPE)
 
 const emit = defineEmits(['select'])
 const { updateNodeData } = useVueFlow()
@@ -187,28 +188,29 @@ const resultSummary = computed(() => {
 const isExpanded = ref(false)
 const localName = ref(props.data.label || '子工作流')
 const localConfig = ref({
-  subworkflowName: props.data.config?.subworkflowName || '',
-  version: props.data.config?.version || 1,
-  executionMode: props.data.config?.executionMode || 'sync',
-  timeout: props.data.config?.timeout || 0
+  ...getDefaultNodeConfig(NODE_TYPE),
+  ...props.data.config,
+})
+
+const selectedVersion = computed({
+  get: () => localConfig.value.version === 'latest' ? null : Number(localConfig.value.version) || null,
+  set: value => { localConfig.value.version = value === null ? 'latest' : value },
 })
 
 watch(() => props.data, (d) => {
   if (d) {
     localName.value = d.label || '子工作流'
     localConfig.value = {
-      subworkflowName: d.config?.subworkflowName || '',
-      version: d.config?.version || 1,
-      executionMode: d.config?.executionMode || 'sync',
-      timeout: d.config?.timeout || 0,
+      ...getDefaultNodeConfig(NODE_TYPE),
       ...d.config
     }
   }
 }, { deep: true })
 
 function toggleExpand() {
-  handleSelect()
-  isExpanded.value = !isExpanded.value
+  const expanded = !isExpanded.value
+  emit('select')
+  isExpanded.value = expanded
 }
 
 function handleChange() {

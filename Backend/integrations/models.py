@@ -5,6 +5,7 @@ Webhook integration models for external system integration.
 from django.db import models
 from django.contrib.auth import get_user_model
 from django.utils import timezone
+from .catalog import INTEGRATION_CHOICES
 
 User = get_user_model()
 
@@ -192,7 +193,7 @@ class Integration(models.Model):
     name = models.CharField(max_length=200, verbose_name='名称')
     integration_type = models.CharField(
         max_length=30,
-        choices=IntegrationType.choices,
+        choices=INTEGRATION_CHOICES,
         default=IntegrationType.CUSTOM,
         verbose_name='集成类型'
     )
@@ -212,6 +213,10 @@ class Integration(models.Model):
     # Statistics
     total_syncs = models.IntegerField(default=0, verbose_name='总同步次数')
     failed_syncs = models.IntegerField(default=0, verbose_name='失败次数')
+    last_checked_at = models.DateTimeField(null=True, blank=True)
+    verification_status = models.CharField(max_length=20, default='untested')
+    last_error = models.TextField(blank=True)
+    last_result = models.JSONField(default=dict, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='创建时间')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='更新时间')
@@ -225,6 +230,43 @@ class Integration(models.Model):
     def __str__(self):
         return f"{self.name} ({self.get_integration_type_display()})"
 
+    def get_secrets(self):
+        from workflows.services.encryption_utils import decrypt_value
+        import json
+        if 'encrypted' in self.credentials:
+            raw = decrypt_value(self.credentials['encrypted'])
+            if not raw:
+                raise ValueError('凭证无法解密，请重新填写并保存配置。')
+            return json.loads(raw)
+        return {key: value for key, value in (self.credentials or {}).items() if key != 'legacy_encrypted'}
+
+    def set_secrets(self, values):
+        from workflows.services.encryption_utils import encrypt_value
+        import json
+        archived = self.credentials.get('legacy_encrypted') if isinstance(self.credentials, dict) else None
+        self.credentials = {'encrypted': encrypt_value(json.dumps(values))} if values else {}
+        if archived:
+            self.credentials['legacy_encrypted'] = archived
+
+
+class IntegrationDelivery(models.Model):
+    """Outbox and audit record; one automatic delivery per execution event."""
+
+    integration = models.ForeignKey(Integration, on_delete=models.CASCADE, related_name='deliveries')
+    event_key = models.CharField(max_length=150)
+    event = models.CharField(max_length=50)
+    payload = models.JSONField(default=dict)
+    status = models.CharField(max_length=20, default='pending')
+    message = models.TextField(blank=True)
+    status_code = models.IntegerField(null=True, blank=True)
+    duration_ms = models.IntegerField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        constraints = [models.UniqueConstraint(fields=['integration', 'event_key'], name='unique_integration_event')]
+
 
 class IntegrationTemplate(models.Model):
     """Templates for common integrations."""
@@ -235,7 +277,7 @@ class IntegrationTemplate(models.Model):
     # Template
     integration_type = models.CharField(
         max_length=30,
-        choices=Integration.IntegrationType.choices,
+        choices=INTEGRATION_CHOICES,
         default=Integration.IntegrationType.CUSTOM,
         verbose_name='集成类型'
     )

@@ -30,7 +30,7 @@ const SUBTITLE_KEYS = new Set([
   'caption', 'captions',
 ])
 
-const MEDIA_EXT = /\.(png|jpe?g|gif|webp|bmp|svg|mp4|webm|mov|avi|mkv|mp3|wav|ogg|m4a|flac|srt|vtt|pdf|zip|tar|gz|pt|pth|safetensors|onnx|bin|yaml|yml|json|csv|html)$/i
+const MEDIA_EXT = /\.(png|jpe?g|gif|webp|bmp|svg|mp4|webm|mov|avi|mkv|mp3|wav|ogg|m4a|flac|srt|vtt|ass|pdf|zip|tar|gz|pt|pth|safetensors|onnx|bin|yaml|yml|json|csv|html|blend|glb|gltf|obj|fbx)$/i
 const WEIGHT_EXT = /\.(pt|pth|safetensors|onnx|bin|ckpt)$/i
 const DATA_EXT = /\.(csv|json|yaml|yml|txt|md|pdf|docx?|xlsx?)$/i
 
@@ -99,11 +99,6 @@ function isMetaField(key) {
   return META_FIELD_KEYS.has(String(key || '').toLowerCase())
 }
 
-function nodeHasOutput(nodeExecution) {
-  const output = nodeExecution?.outputData ?? nodeExecution?.output_data ?? nodeExecution?.output
-  return output != null && (typeof output !== 'object' || Object.keys(output).length > 0)
-}
-
 function isHttpUrl(value) {
   return isNonEmptyString(value) && /^https?:\/\//i.test(value.trim())
 }
@@ -114,8 +109,60 @@ function looksLikePath(value) {
   return v.includes('/') || v.includes('\\') || MEDIA_EXT.test(v)
 }
 
+/** Media identity for dedupe: strip signed query / hash so the same asset is not listed N times. */
+function normalizeMediaUrl(value) {
+  if (!isNonEmptyString(value)) return String(value ?? '')
+  const v = value.trim()
+  try {
+    if (/^https?:\/\//i.test(v)) {
+      const u = new URL(v)
+      const path = u.pathname || '/'
+      if (MEDIA_EXT.test(path) || /\/media\//i.test(path) || /\.(png|jpe?g|gif|webp|mp4|webm|mov|mp3|wav)(\?|$)/i.test(v)) {
+        return `${u.origin}${path}`.toLowerCase()
+      }
+      return `${u.origin}${path}${u.search}`.toLowerCase()
+    }
+  } catch {
+    /* fall through */
+  }
+  const noHash = v.split('#')[0]
+  const q = noHash.indexOf('?')
+  if (q >= 0 && (MEDIA_EXT.test(noHash.slice(0, q)) || /\/media\//i.test(noHash))) {
+    return noHash.slice(0, q).toLowerCase()
+  }
+  return noHash.toLowerCase()
+}
+
+const MEDIA_ARTIFACT_TYPES = new Set(['image', 'video', 'audio'])
+
+/** Prefer generator-facing fields when replacing a weaker duplicate. */
+function mediaFieldRank(field) {
+  const f = String(field || '').toLowerCase()
+  if (/^images\[\d+\]$/.test(f)) return 100
+  if (f === 'video_url' || f === 'videourl') return 90
+  if (f === 'image_url' || f === 'imageurl') return 85
+  if (f === 'audio_url' || f === 'audiourl') return 85
+  if (f === 'url') return 70
+  if (f === 'image' || f === 'video' || f === 'audio') return 60
+  if (f === 'thumbnail' || f === 'preview' || f === 'cover' || f === 'screenshot') return 20
+  return 40
+}
+
+function artifactDedupeKey(artifact) {
+  if (MEDIA_ARTIFACT_TYPES.has(artifact.type)) {
+    const url = artifact.url || artifact.value
+    return `${artifact.type}|${normalizeMediaUrl(url)}`
+  }
+  if (artifact.type === 'file' || artifact.type === 'website' || artifact.type === 'subtitle') {
+    return `${artifact.type}|${normalizeMediaUrl(artifact.url || artifact.value)}`
+  }
+  // prompts / structured data: keep field so distinct texts are not collapsed
+  return `${artifact.type}|${artifact.value}|${artifact.field || ''}|${artifact.nodeId || ''}`
+}
+
 function inferTypeFromKey(key, value) {
   const k = String(key || '').toLowerCase()
+  if (isNonEmptyString(value) && /^(?:[a-z]:[\\/]|\\\\)/i.test(value.trim())) return 'file'
   if (PROMPT_KEYS.has(k)) return 'prompt'
   if (IMAGE_KEYS.has(k)) return 'image'
   if (VIDEO_KEYS.has(k)) return 'video'
@@ -129,6 +176,7 @@ function inferTypeFromKey(key, value) {
     if (/\.(mp4|webm|mov)(\?|$)/i.test(v)) return 'video'
     if (/\.(mp3|wav|ogg|m4a)(\?|$)/i.test(v)) return 'audio'
     if (/\.(srt|vtt)(\?|$)/i.test(v)) return 'subtitle'
+    if (MEDIA_EXT.test(v.split(/[?#]/)[0]) || DATA_EXT.test(v.split(/[?#]/)[0])) return 'file'
     if (isHttpUrl(value)) return 'image'
   }
   if (isNonEmptyString(value)) {
@@ -185,6 +233,17 @@ function walkOutput(output, meta, push) {
   const data = unwrapNodeExecutionOutput(output)
   if (data == null) return
 
+  // URLs already emitted from this object (images[] / results[]) — skip sibling aliases
+  const localMediaUrls = new Set()
+  const noteLocalMedia = (url) => {
+    if (!isNonEmptyString(url)) return
+    localMediaUrls.add(normalizeMediaUrl(url))
+  }
+  const isLocalDup = (url) => {
+    if (!isNonEmptyString(url)) return false
+    return localMediaUrls.has(normalizeMediaUrl(url))
+  }
+
   if (typeof data === 'string') {
     const type = inferTypeFromValue(data) || (data.length > 80 ? 'prompt' : 'data')
     const artifact = makeArtifact(type, data, meta)
@@ -198,6 +257,7 @@ function walkOutput(output, meta, push) {
     data.images.forEach((item, index) => {
       const url = typeof item === 'string' ? item : item?.url || item?.image_url || item?.imageUrl
       if (!url) return
+      noteLocalMedia(url)
       push(makeArtifact('image', url, { ...meta, field: `images[${index}]`, label: `图片 ${index + 1}` }))
     })
   }
@@ -207,9 +267,11 @@ function walkOutput(output, meta, push) {
       if (!item || typeof item !== 'object') return
       const lang = item.target_language || item.targetLanguage || `lang-${index + 1}`
       if (item.video_url) {
+        noteLocalMedia(item.video_url)
         push(makeArtifact('video', item.video_url, { ...meta, field: `results[${index}].video_url`, label: `翻译视频 (${lang})` }))
       }
       if (item.dubbed_audio_url) {
+        noteLocalMedia(item.dubbed_audio_url)
         push(makeArtifact('audio', item.dubbed_audio_url, { ...meta, field: `results[${index}].dubbed_audio_url`, label: `配音 (${lang})` }))
       }
       if (item.subtitles) {
@@ -218,10 +280,20 @@ function walkOutput(output, meta, push) {
     })
   }
 
+  // Common alias fields that often mirror images[] / video_url on the same payload
+  const ALIAS_MEDIA_KEYS = new Set([
+    'url', 'image_url', 'imageUrl', 'image', 'thumbnail', 'screenshot', 'preview', 'cover',
+    'video_url', 'videoUrl', 'video', 'mp4',
+    'audio_url', 'audioUrl', 'audio', 'voice_url', 'voiceUrl',
+    '_display', 'output',
+  ])
+
   Object.entries(data).forEach(([key, raw]) => {
     if (raw == null || key.startsWith('_')) return
+    if (key === 'metadata') return
 
     if (key === 'images' && Array.isArray(raw)) return
+    if (key === 'results' && Array.isArray(raw)) return
 
     if (Array.isArray(raw)) {
       raw.forEach((item, index) => {
@@ -239,7 +311,7 @@ function walkOutput(output, meta, push) {
         walkOutput(raw, { ...meta, field: key }, push)
       } else if (raw.text || raw.content || raw.prompt) {
         walkOutput(raw, { ...meta, field: key }, push)
-      } else if (Object.keys(raw).length <= 12) {
+      } else if (['variables', 'outputs', 'node_outputs', 'nodeOutputs'].includes(key) || Object.keys(raw).length <= 12) {
         walkOutput(raw, { ...meta, field: key }, push)
       } else {
         push(makeArtifact('data', raw, { ...meta, field: key, label: key }))
@@ -247,10 +319,21 @@ function walkOutput(output, meta, push) {
       return
     }
 
+    // Skip sibling aliases of URLs already taken from images[] / results[]
+    if (ALIAS_MEDIA_KEYS.has(key) && typeof raw === 'string' && isLocalDup(raw)) {
+      return
+    }
+
     const inferred = inferTypeFromKey(key, raw) || inferTypeFromValue(raw)
     if (inferred) {
+      if (MEDIA_ARTIFACT_TYPES.has(inferred) && typeof raw === 'string' && isLocalDup(raw)) {
+        return
+      }
       const artifact = makeArtifact(inferred, String(raw), { ...meta, field: key, label: key })
-      if (artifact) push(artifact)
+      if (artifact) {
+        if (MEDIA_ARTIFACT_TYPES.has(inferred)) noteLocalMedia(String(raw))
+        push(artifact)
+      }
       return
     }
 
@@ -307,7 +390,7 @@ export function extractExecutionArtifacts({
   includeStructuredData = true,
 } = {}) {
   const artifacts = []
-  const seen = new Set()
+  const seen = new Map() // dedupeKey -> index in artifacts
   const nameMap = nodeNameMap || {}
 
   const push = (artifact) => {
@@ -322,9 +405,20 @@ export function extractExecutionArtifacts({
       artifact.nodeTypeDisplay,
     )
 
-    const dedupeKey = `${artifact.type}|${artifact.value}|${artifact.field || ''}`
-    if (seen.has(dedupeKey)) return
-    seen.add(dedupeKey)
+    const dedupeKey = artifactDedupeKey(artifact)
+    if (seen.has(dedupeKey)) {
+      // Same media URL from another field/node: keep the stronger field (e.g. images[0] > thumbnail)
+      const idx = seen.get(dedupeKey)
+      const existing = artifacts[idx]
+      if (
+        MEDIA_ARTIFACT_TYPES.has(artifact.type)
+        && mediaFieldRank(artifact.field) > mediaFieldRank(existing.field)
+      ) {
+        artifacts[idx] = artifact
+      }
+      return
+    }
+    seen.set(dedupeKey, artifacts.length)
     artifacts.push(artifact)
   }
 
@@ -333,12 +427,7 @@ export function extractExecutionArtifacts({
     resolvedNodeExecutions = nodeExecutionsFromStatus(execution)
   }
 
-  const hasNodeLevelOutputs = resolvedNodeExecutions.some(nodeHasOutput)
-    || (nodeStatusMap && Object.values(nodeStatusMap).some(
-      (state) => typeof state === 'object' && state?.output != null
-    ))
-
-  const shouldIncludeAggregate = includeWorkflowAggregate ?? !hasNodeLevelOutputs
+  const shouldIncludeAggregate = includeWorkflowAggregate ?? true
 
   resolvedNodeExecutions.forEach((nodeExecution) => {
     const nodeId = nodeExecution.nodeId || nodeExecution.node_id || nodeExecution.node
@@ -382,19 +471,16 @@ export function extractExecutionArtifacts({
   }
 
   if (outputData && shouldIncludeAggregate) {
-    walkOutput(outputData, { nodeName: '工作流汇总', nodeType: 'output' }, push)
+    const aggregate = typeof outputData === 'object'
+      ? Object.fromEntries(Object.entries(outputData).filter(([key]) => !['nodeOutputs', 'node_outputs'].includes(key)))
+      : outputData
+    walkOutput(aggregate, { nodeName: '工作流汇总', nodeType: 'output' }, push)
   }
 
-  if (outputData && hasNodeLevelOutputs) {
+  if (outputData) {
     const nodeOutputs = outputData.nodeOutputs || outputData.node_outputs
     if (nodeOutputs && typeof nodeOutputs === 'object') {
-      const coveredNodeIds = new Set(
-        resolvedNodeExecutions
-          .map((n) => n.nodeId || n.node_id || n.node)
-          .filter(Boolean)
-      )
       Object.entries(nodeOutputs).forEach(([nodeId, out]) => {
-        if (coveredNodeIds.has(nodeId)) return
         walkOutput(out, {
           nodeId,
           nodeName: resolveNodeLabel(nodeId, nodeId, nameMap),
@@ -431,11 +517,12 @@ export function getArtifactPreviewUrl(artifact) {
  */
 export function getExecutionArtifactSummary(execution, options = {}) {
   const result = extractExecutionArtifacts({
-    nodeExecutions: execution?.nodeExecutions ?? execution?.node_executions ?? [],
+    nodeExecutions: execution?.nodeExecutions ?? execution?.node_executions
+      ?? execution?.artifactOutputs ?? execution?.artifact_outputs ?? [],
     outputData: execution?.outputData ?? execution?.output_data ?? null,
     nodeStatusMap: execution?.nodeStatus ?? execution?.node_status ?? null,
     execution,
-    includeWorkflowAggregate: false,
+    includeWorkflowAggregate: true,
     includeStructuredData: false,
     ...options,
   })

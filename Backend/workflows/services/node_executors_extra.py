@@ -70,13 +70,20 @@ def run_switch_node(service, node_config: Dict, input_data: Dict) -> Dict:
 
 def run_merge_node(service, node_config: Dict, input_data: Dict) -> Dict:
     mode = node_config.get('mode') or 'combine'
-    items = input_data.get('items') if isinstance(input_data.get('items'), list) else [input_data]
+    items = input_data.get('items') if isinstance(input_data.get('items'), list) else None
+    if items is None:
+        loop_result = input_data.get('loop_result') or input_data.get('results')
+        if isinstance(loop_result, list):
+            items = loop_result
+        else:
+            items = [input_data]
 
     if mode == 'override':
         output = items[-1] if items else input_data
     elif mode == 'zip':
         output = {'merged': items}
     else:
+        # concat / combine: flatten dicts, and optionally stitch video clips.
         if all(isinstance(i, dict) for i in items):
             merged = {}
             for item in items:
@@ -84,6 +91,129 @@ def run_merge_node(service, node_config: Dict, input_data: Dict) -> Dict:
             output = merged
         else:
             output = {'items': items}
+
+        video_urls = []
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            url = item.get('video_url') or item.get('video')
+            if not url and isinstance(item.get('output'), dict):
+                url = item['output'].get('video_url') or item['output'].get('video')
+            if not url and isinstance(item.get('output'), dict):
+                nested = item['output'].get('output') if isinstance(item['output'].get('output'), dict) else None
+                if nested:
+                    url = nested.get('video_url') or nested.get('video')
+            # loop iteration wrapper: {'output': {node_id: {...}}}
+            if not url and isinstance(item.get('output'), dict):
+                for value in item['output'].values():
+                    if isinstance(value, dict) and (value.get('video_url') or value.get('video')):
+                        url = value.get('video_url') or value.get('video')
+                        break
+            if isinstance(url, str) and url.strip():
+                video_urls.append(url.strip())
+
+        # Also accept aggregated list already on context
+        if not video_urls and isinstance(input_data.get('video_urls'), list):
+            video_urls = [u for u in input_data['video_urls'] if isinstance(u, str) and u.strip()]
+
+        # Fan-in from parallel shot chains: harvest video_url from node_outputs
+        if isinstance(input_data.get('node_outputs'), dict):
+            harvested = []
+            for out in input_data['node_outputs'].values():
+                if not isinstance(out, dict):
+                    continue
+                url = out.get('video_url') or out.get('video')
+                if isinstance(url, str) and url.strip():
+                    harvested.append(url.strip())
+            # preserve order, dedupe
+            if harvested:
+                seen = set()
+                ordered = []
+                for u in harvested:
+                    if u not in seen:
+                        seen.add(u)
+                        ordered.append(u)
+                if len(ordered) > len(video_urls):
+                    video_urls = ordered
+
+        if len(video_urls) >= 2 and mode in ('concat', 'combine'):
+            try:
+                from workflows.services.video_postprocess import concat_videos, is_ffmpeg_available
+                if is_ffmpeg_available():
+                    # Short-drama finishing: always aim ~60s (12 × 5s slots)
+                    target_sec = float(
+                        (node_config.get('target_duration_sec')
+                         or node_config.get('targetDurationSec')
+                         or 60)
+                    )
+                    clip_sec = float(
+                        node_config.get('clip_duration_sec')
+                        or node_config.get('clipDurationSec')
+                        or 5
+                    )
+                    fill_mode = (
+                        node_config.get('fill_mode')
+                        or node_config.get('fillMode')
+                        or 'stretch'
+                    )
+                    final_path = concat_videos(
+                        video_urls,
+                        target_duration_sec=target_sec,
+                        clip_duration_sec=clip_sec,
+                        fill_mode=str(fill_mode),
+                    )
+                    # Prefer media URL if under MEDIA_ROOT; else absolute path for local play
+                    from django.conf import settings
+                    from pathlib import Path
+                    media_root = Path(settings.MEDIA_ROOT).resolve()
+                    try:
+                        rel = final_path.resolve().relative_to(media_root)
+                        # Always expose absolute public URL so subtitle/burn can resolve locally
+                        final_url = f"http://127.0.0.1:8000{getattr(settings, 'MEDIA_URL', '/media/').rstrip('/')}/{rel.as_posix()}"
+                        # Prefer settings-based builder when available
+                        try:
+                            from workflows.services.media_service import build_public_media_url
+                            final_url = build_public_media_url(rel.as_posix())
+                        except Exception:
+                            pass
+                    except Exception:
+                        final_url = str(final_path)
+                    output = {
+                        **(output if isinstance(output, dict) else {'data': output}),
+                        'video_url': final_url,
+                        'video_urls': video_urls,
+                        'clip_count': len(video_urls),
+                        'target_duration_sec': target_sec,
+                        'clip_duration_sec': clip_sec,
+                        'concatenated': True,
+                    }
+                else:
+                    output = {
+                        **(output if isinstance(output, dict) else {'data': output}),
+                        'video_url': video_urls[0],
+                        'video_urls': video_urls,
+                        'clip_count': len(video_urls),
+                        'concatenated': False,
+                        'warning': 'ffmpeg unavailable; returned first clip as video_url',
+                    }
+            except Exception as exc:
+                output = {
+                    **(output if isinstance(output, dict) else {'data': output}),
+                    # Always expose a playable URL so subtitle/burn/output can continue
+                    'video_url': video_urls[0],
+                    'video_urls': video_urls,
+                    'clip_count': len(video_urls),
+                    'concatenated': False,
+                    'error': str(exc),
+                    'warning': 'concat failed; fell back to first clip as video_url',
+                }
+        elif len(video_urls) == 1:
+            output = {
+                **(output if isinstance(output, dict) else {'data': output}),
+                'video_url': video_urls[0],
+                'video_urls': video_urls,
+                'clip_count': 1,
+            }
 
     return {'success': True, 'output': output}
 
@@ -236,20 +366,25 @@ def run_integration_node(service, node_type: str, node_config: Dict, input_data:
             if node_type == 'rss_feed':
                 return handler(config, input_data)
             result = handler(config, input_data)
+            if result.get('simulated'):
+                return {
+                    'success': False,
+                    'error': result.get('message') or f'{node_type} 缺少可用凭证或必要配置，尚未执行',
+                    'error_type': 'configuration',
+                }
+            if result.get('success') is False or result.get('ok') is False or result.get('error'):
+                return {'success': False, 'error': str(result.get('error') or '第三方服务拒绝了操作'), 'error_type': 'integration'}
+            if int(result.get('status_code') or 200) >= 400:
+                return {'success': False, 'error': f'第三方服务返回 HTTP {result["status_code"]}', 'error_type': 'integration'}
             return {'success': True, 'output': result}
         except Exception as exc:
             logger.exception('Integration node %s failed', node_type)
             return {'success': False, 'error': str(exc)}
 
     return {
-        'success': True,
-        'output': {
-            'integration': node_type,
-            'operation': operation,
-            'config': config,
-            'input': input_data,
-            'message': f'集成节点 {node_type}/{operation} 已排队，请配置凭证后执行',
-        },
+        'success': False,
+        'error': f'集成节点 {node_type}/{operation} 尚未实现对应执行器',
+        'error_type': 'unsupported_integration',
     }
 
 

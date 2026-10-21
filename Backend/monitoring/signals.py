@@ -5,7 +5,7 @@ Handles alert lifecycle and metric collection.
 
 import logging
 from django.dispatch import receiver, Signal
-from django.db.models.signals import post_save
+from django.db.models.signals import post_save, pre_save
 from django.utils import timezone
 
 logger = logging.getLogger(__name__)
@@ -39,16 +39,22 @@ def on_alert_created(sender, instance, created, **kwargs):
             severity=instance.severity
         )
 
-        # Notify user if notification channel is configured
-        if instance.rule and instance.rule.notification_channels:
+        # The rule owns notification flags; channel configuration belongs to the user.
+        if instance.rule and instance.rule.owner_id:
             send_alert_notification(instance)
 
 
+@receiver(pre_save, sender='monitoring.Alert')
+def remember_alert_status(sender, instance, **kwargs):
+    if instance.pk:
+        instance._previous_status = sender.objects.filter(pk=instance.pk).values_list('status', flat=True).first()
+
+
 @receiver(post_save, sender='monitoring.Alert')
-def on_alert_status_changed(sender, instance, **kwargs):
+def on_alert_status_changed(sender, instance, created, **kwargs):
     """Handle alert status changes."""
-    if instance.tracker.has_changed('status'):
-        old_status = instance.tracker.previous('status')
+    old_status = getattr(instance, '_previous_status', None)
+    if not created and old_status is not None and old_status != instance.status:
         new_status = instance.status
 
         logger.info(f"Alert status changed: {instance.id} from {old_status} to {new_status}")
@@ -57,7 +63,7 @@ def on_alert_status_changed(sender, instance, **kwargs):
             alert_acknowledged.send(
                 sender=sender,
                 alert_id=instance.id,
-                acknowledged_by=instance.acknowledged_by_id
+                user_id=instance.rule.owner_id
             )
 
         elif new_status == 'resolved':
@@ -113,11 +119,11 @@ def send_alert_notification(alert):
 
     # Send through WebSocket
     channel_layer = get_channel_layer_safe()
-    if channel_layer and alert.rule and alert.rule.created_by_id:
+    if channel_layer and alert.rule and alert.rule.owner_id:
         try:
             from asgiref.sync import async_to_sync
             async_to_sync(channel_layer.group_send)(
-                f'notifications_{alert.rule.created_by_id}',
+                f'notifications_{alert.rule.owner_id}',
                 {
                     'type': 'alert_notification',
                     'data': notification_data
@@ -127,18 +133,4 @@ def send_alert_notification(alert):
             logger.error(f"Failed to send alert notification: {e}")
 
 
-def broadcast_to_monitoring(data):
-    """Broadcast event to monitoring channel."""
-    channel_layer = get_channel_layer_safe()
-    if channel_layer:
-        try:
-            from asgiref.sync import async_to_sync
-            async_to_sync(channel_layer.group_send)(
-                'monitoring',
-                {
-                    'type': 'metric_update',
-                    'data': data
-                }
-            )
-        except Exception as e:
-            logger.error(f"Failed to broadcast to monitoring: {e}")
+from monitoring.broadcasts import broadcast_to_monitoring

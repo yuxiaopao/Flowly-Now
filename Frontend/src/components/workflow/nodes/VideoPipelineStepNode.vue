@@ -6,7 +6,10 @@
     :class="{ selected, 'is-running': isRunning, 'is-completed': isCompleted, 'is-failed': isFailed }"
     @click.stop="handleSelect"
   >
-    <Handle type="target" :position="Position.Left" />
+    <Handle
+      type="target"
+      :position="Position.Left"
+    />
 
     <div class="node-header">
       <NodeTypeBadge :node-type="nodeType" />
@@ -67,11 +70,20 @@
       </div>
     </div>
 
-    <div v-if="videoUrl && showVideoPreview" class="preview-zone">
-      <NodeMediaPreview kind="video" :src="videoUrl" />
+    <div
+      v-if="videoUrl && showVideoPreview"
+      class="preview-zone"
+    >
+      <NodeMediaPreview
+        kind="video"
+        :src="videoUrl"
+      />
     </div>
 
-    <Handle type="source" :position="Position.Right" />
+    <Handle
+      type="source"
+      :position="Position.Right"
+    />
 
     <div
       class="resize-handle"

@@ -6,6 +6,7 @@ import os
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from .models import TrainingJob, Dataset
+from .artifacts import build_model_artifact_manifest
 from tenants.access import get_accessible_tenant_ids
 
 User = get_user_model()
@@ -330,6 +331,7 @@ class YoloTrainingRunListSerializer(serializers.ModelSerializer):
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     created_by_name = serializers.CharField(source='created_by.username', read_only=True, allow_null=True)
     workflow_name = serializers.CharField(source='workflow.name', read_only=True, allow_null=True)
+    metrics_summary = serializers.SerializerMethodField()
 
     class Meta:
         model = TrainingJob
@@ -337,9 +339,20 @@ class YoloTrainingRunListSerializer(serializers.ModelSerializer):
             'id', 'name', 'status', 'status_display', 'training_kind',
             'yolo_version', 'model_variant', 'progress', 'current_epoch', 'total_epochs',
             'best_fitness', 'estimated_duration_seconds', 'eta_seconds',
-            'created_at', 'created_by', 'created_by_name', 'workflow', 'workflow_name',
+            'class_names', 'metrics', 'metrics_summary',
+            'created_at', 'completed_at', 'duration_seconds',
+            'created_by', 'created_by_name', 'workflow', 'workflow_name',
             'best_weight_path', 'error_message'
         ]
+
+    def get_metrics_summary(self, obj) -> dict:
+        metrics = obj.metrics if isinstance(obj.metrics, dict) else {}
+        return {
+            'mAP50': metrics.get('mAP50') or metrics.get('map50'),
+            'mAP50-95': metrics.get('mAP50-95') or metrics.get('map50_95'),
+            'precision': metrics.get('precision'),
+            'recall': metrics.get('recall'),
+        }
 
 
 class YoloTrainingRunDetailSerializer(serializers.ModelSerializer):
@@ -350,6 +363,7 @@ class YoloTrainingRunDetailSerializer(serializers.ModelSerializer):
     workflow_name = serializers.CharField(source='workflow.name', read_only=True, allow_null=True)
     node_name = serializers.CharField(source='node.name', read_only=True, allow_null=True)
     tenant_name = serializers.CharField(source='tenant.name', read_only=True, allow_null=True)
+    model_artifact_manifest = serializers.SerializerMethodField()
 
     class Meta:
         model = TrainingJob
@@ -365,10 +379,14 @@ class YoloTrainingRunDetailSerializer(serializers.ModelSerializer):
             'metrics_history', 'loss_box_history', 'loss_cls_history', 'loss_dfl_history',
             'precision_history', 'recall_history', 'map50_history', 'map50_95_history',
             'preview_samples', 'metrics', 'error_message', 'job_id',
+            'model_artifact_manifest',
             'started_at', 'completed_at', 'created_at', 'updated_at',
             'created_by', 'created_by_name', 'tenant', 'tenant_name'
         ]
         read_only_fields = fields
+
+    def get_model_artifact_manifest(self, obj):
+        return build_model_artifact_manifest(obj)
 
 
 class YoloTrainingRetrySerializer(serializers.Serializer):
@@ -420,12 +438,12 @@ class TrainingJobSerializer(serializers.ModelSerializer):
     )
     duration = serializers.SerializerMethodField()
     duration_seconds = serializers.IntegerField(
-        source='duration_seconds',
         read_only=True
     )
     current_loss = serializers.FloatField(read_only=True)
     current_metric = serializers.FloatField(read_only=True)
     metrics_history = serializers.JSONField(read_only=True)
+    model_artifact_manifest = serializers.SerializerMethodField()
 
     class Meta:
         model = TrainingJob
@@ -437,6 +455,7 @@ class TrainingJobSerializer(serializers.ModelSerializer):
             'gpu_info', 'progress', 'current_epoch', 'total_epochs',
             'current_loss', 'current_metric', 'duration_seconds', 'metrics_history',
             'metrics', 'error_message', 'job_id',
+            'model_artifact_manifest',
             'started_at', 'completed_at', 'duration',
             'created_at', 'created_by', 'created_by_name',
             'tenant', 'tenant_name'
@@ -450,3 +469,6 @@ class TrainingJobSerializer(serializers.ModelSerializer):
         if obj.started_at and obj.completed_at:
             return (obj.completed_at - obj.started_at).total_seconds()
         return None
+
+    def get_model_artifact_manifest(self, obj):
+        return build_model_artifact_manifest(obj)

@@ -112,7 +112,10 @@ class ExecutionContext:
         """
         self.node_outputs[node_id] = output
         
-        # 如果输出是字典，自动提取变量
+        # 如果输出是字典，自动提取变量。
+        # 注意：并行分镜会写出同名 image_prompt / images；全局 variables 仍 last-wins，
+        # 真正的分支隔离由 WorkflowExecutor._build_node_execution_context 负责。
+        # 这里仍写入，兼容线性链路；读取时以 _branch_upstream 覆盖为准。
         if isinstance(output, dict):
             for key, value in output.items():
                 # 跳过内部键

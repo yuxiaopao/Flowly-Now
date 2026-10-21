@@ -8,6 +8,9 @@
       >
         <div
           class="command-palette"
+          role="dialog"
+          aria-modal="true"
+          aria-label="快速跳转"
           @click.stop
         >
           <!-- Search Input -->
@@ -17,6 +20,12 @@
               ref="searchInput"
               v-model="query"
               type="text"
+              aria-label="搜索页面与命令"
+              role="combobox"
+              aria-autocomplete="list"
+              aria-expanded="true"
+              aria-controls="command-results"
+              :aria-activedescendant="filteredResults[selectedIndex] ? 'command-' + selectedIndex : undefined"
               class="search-input"
               placeholder="输入命令或搜索..."
               @keydown="handleKeydown"
@@ -30,6 +39,7 @@
               v-for="tab in tabs"
               :key="tab.id"
               :class="['tab', { active: activeTab === tab.id }]"
+              :aria-pressed="activeTab === tab.id"
               @click="activeTab = tab.id"
             >
               <component
@@ -42,7 +52,10 @@
 
           <!-- Results -->
           <div
+            id="command-results"
             ref="resultsContainer"
+            role="listbox"
+            aria-label="匹配的页面与命令"
             class="results"
           >
             <!-- Empty State -->
@@ -69,7 +82,10 @@
                 </div>
                 <div
                   v-for="(item, index) in group"
+                  :id="'command-' + getGlobalIndex(groupName, index)"
                   :key="item.id"
+                  role="option"
+                  :aria-selected="isSelected(item)"
                   :class="['result-item', { selected: isSelected(item) }]"
                   @click="executeItem(item)"
                   @mouseenter="selectedIndex = getGlobalIndex(groupName, index)"
@@ -132,11 +148,11 @@
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAppStore } from '@/stores/app'
+import { APP_NAV_ITEMS } from '@/config/appNavigation'
 import {
-  Search, Command, Home, FileText, Bot, Workflow,
-  Settings, Plus, Play, Pause, Copy, Trash2,
-  Download, Upload, Eye, ChevronRight,
-  Users, Bell, Database, Key, Palette, Moon, Sun, Contrast, CircleDot
+  Search, Command, Bot, Workflow,
+  Settings, Plus, Play, ChevronRight,
+  Users, Bell, Key, Palette, Moon, Sun, Contrast, CircleDot
 } from 'lucide-vue-next'
 
 const router = useRouter()
@@ -157,33 +173,23 @@ const tabs = [
 ]
 
 const commands = computed(() => ([
-  { id: 'nav-dashboard', title: '仪表盘', description: '返回主仪表盘', icon: Home, shortcut: ['G', 'H'], action: () => router.push('/home'), tab: 'navigation' },
-  { id: 'nav-workflows', title: '工作流列表', description: '查看所有工作流', icon: Workflow, shortcut: ['G', 'W'], action: () => router.push('/workflows'), tab: 'navigation' },
-  { id: 'nav-agents', title: 'Agents', description: '管理 AI Agents', icon: Bot, shortcut: ['G', 'A'], action: () => router.push('/agents'), tab: 'navigation' },
-  { id: 'nav-knowledge', title: '知识库', description: 'RAG 知识库管理', icon: Database, shortcut: ['G', 'K'], action: () => router.push('/knowledge'), tab: 'navigation' },
-  { id: 'nav-analytics', title: '数据分析', description: '查看分析数据', icon: Eye, shortcut: ['G', 'S'], action: () => router.push('/analytics'), tab: 'navigation' },
-  { id: 'nav-settings', title: '个人中心', description: '账号、凭证与偏好设置', icon: Settings, shortcut: ['G', 'S'], action: () => router.push('/settings'), tab: 'navigation' },
-
-  { id: 'action-new-workflow', title: '新建工作流', description: '创建一个新的工作流', icon: Plus, shortcut: ['N', 'W'], action: () => router.push('/workflows/new'), tab: 'actions' },
-  { id: 'action-new-agent', title: '新建 Agent', description: '创建一个新的 Agent', icon: Bot, shortcut: ['N', 'A'], action: () => router.push('/agents/new'), tab: 'actions' },
-  { id: 'action-execute', title: '执行选中的工作流', description: '运行当前选中的工作流', icon: Play, shortcut: ['⌘', '↵'], action: () => {}, tab: 'actions' },
-  { id: 'action-stop', title: '停止执行', description: '停止当前执行', icon: Pause, shortcut: ['⇧', '⌘', '↵'], action: () => {}, tab: 'actions' },
-  { id: 'action-save', title: '保存', description: '保存当前工作流', icon: FileText, shortcut: ['⌘', 'S'], action: () => {}, tab: 'actions' },
-  { id: 'action-duplicate', title: '复制', description: '复制当前工作流', icon: Copy, shortcut: ['⌘', 'D'], action: () => {}, tab: 'actions' },
-  { id: 'action-export', title: '导出', description: '导出工作流', icon: Download, shortcut: ['⌘', 'E'], action: () => {}, tab: 'actions' },
-  { id: 'action-import', title: '导入', description: '导入工作流', icon: Upload, shortcut: ['⇧', '⌘', 'I'], action: () => {}, tab: 'actions' },
-  { id: 'action-delete', title: '删除', description: '删除当前工作流', icon: Trash2, shortcut: ['⌘', '⌫'], action: () => {}, tab: 'actions' },
+  ...APP_NAV_ITEMS.map(item => ({
+    id: item.path, title: item.label, description: '打开' + item.label,
+    icon: item.icon, action: () => router.push(item.path), tab: 'navigation',
+  })),
+  { id: 'action-new-workflow', title: '新建工作流', description: '打开工作流编辑器', icon: Plus, action: () => router.push('/workflows/new'), tab: 'actions' },
+  { id: 'action-new-agent', title: '新建智能体', description: '配置新的 Agent', icon: Bot, action: () => router.push('/agents/new'), tab: 'actions' },
 
   { id: 'settings-profile', title: '个人资料', description: '编辑个人资料', icon: Users, action: () => router.push('/settings/profile'), tab: 'settings' },
-  { id: 'settings-api-keys', title: 'API 密钥', description: '管理 API 密钥', icon: Key, action: () => router.push('/settings/api-keys'), tab: 'settings' },
+  { id: 'settings-api-keys', title: '模型与服务凭证', description: '管理 API 密钥', icon: Key, action: () => router.push('/settings/credentials'), tab: 'settings' },
   { id: 'settings-billing', title: '订阅管理', description: '管理订阅和账单', icon: Palette, action: () => router.push('/settings/billing'), tab: 'settings' },
-  { id: 'settings-notifications', title: '通知设置', description: '配置通知偏好', icon: Bell, action: () => router.push('/settings/preferences'), tab: 'settings' },
+  { id: 'settings-notifications', title: '通知设置', description: '配置通知偏好', icon: Bell, action: () => router.push('/settings/notifications'), tab: 'settings' },
   { id: 'settings-integrations', title: '集成', description: '管理第三方集成', icon: Workflow, action: () => router.push('/settings/integrations'), tab: 'settings' },
 
-  { id: 'theme-dark', title: '切换到深色模式', description: '使用深色主题', icon: Moon, shortcut: ['⌘', '⇧', '1'], action: () => appStore.setTheme('dark'), tab: 'settings' },
-  { id: 'theme-light', title: '切换到浅色模式', description: '使用浅色主题', icon: Sun, shortcut: ['⌘', '⇧', '2'], action: () => appStore.setTheme('light'), tab: 'settings' },
-  { id: 'theme-pure-bw', title: '切换到纯黑白', description: '使用极简黑白主题', icon: Contrast, shortcut: ['⌘', '⇧', '3'], action: () => appStore.setTheme('pure-bw'), tab: 'settings' },
-  { id: 'theme-high-contrast', title: '切换到高对比', description: '使用高对比主题', icon: CircleDot, shortcut: ['⌘', '⇧', '4'], action: () => appStore.setTheme('high-contrast'), tab: 'settings' }
+  { id: 'theme-dark', title: '切换到深色模式', description: '使用深色主题', icon: Moon, action: () => appStore.setTheme('dark'), tab: 'settings' },
+  { id: 'theme-light', title: '切换到浅色模式', description: '使用浅色主题', icon: Sun, action: () => appStore.setTheme('light'), tab: 'settings' },
+  { id: 'theme-pure-bw', title: '切换到纯黑白', description: '使用极简黑白主题', icon: Contrast, action: () => appStore.setTheme('pure-bw'), tab: 'settings' },
+  { id: 'theme-high-contrast', title: '切换到高对比', description: '使用高对比主题', icon: CircleDot, action: () => appStore.setTheme('high-contrast'), tab: 'settings' }
 ]))
 
 const groupedResults = computed(() => {
@@ -243,6 +249,7 @@ const executeItem = (item) => {
 }
 
 const handleKeydown = (e) => {
+  if (e.key === 'Escape') { e.preventDefault(); close(); return }
   const total = filteredResults.value.length
   if (!total) return
 
@@ -279,9 +286,13 @@ const scrollToSelected = () => {
   })
 }
 
+let returnFocus
+
 const open = () => {
+  returnFocus = document.activeElement
   isOpen.value = true
   query.value = ''
+  activeTab.value = 'all'
   selectedIndex.value = 0
   nextTick(() => {
     searchInput.value?.focus()
@@ -290,9 +301,18 @@ const open = () => {
 
 const close = () => {
   isOpen.value = false
+  nextTick(() => returnFocus?.focus())
 }
 
 const handleGlobalKeydown = (e) => {
+  if (isOpen.value && e.key === 'Escape') { e.preventDefault(); close(); return }
+  if (isOpen.value && e.key === 'Tab') {
+    const controls = [...document.querySelectorAll('.command-palette input, .command-palette button')]
+    const first = controls[0]
+    const last = controls.at(-1)
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last?.focus() }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus() }
+  }
   if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
     e.preventDefault()
     if (isOpen.value) {
@@ -328,11 +348,10 @@ defineExpose({ open, close })
   inset: 0;
   z-index: 9999;
   background: var(--overlay-backdrop);
-  backdrop-filter: blur(8px);
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  padding-top: 15vh;
+  padding: 10vh 16px 16px;
 }
 
 .command-palette {
@@ -419,7 +438,7 @@ defineExpose({ open, close })
 }
 
 .results {
-  max-height: 400px;
+  max-height: min(400px, 50dvh);
   overflow-y: auto;
   padding: 8px;
 }
@@ -565,5 +584,10 @@ defineExpose({ open, close })
     transform: scale(0.95) translateY(-10px);
     opacity: 0;
   }
+}
+@media (max-width: 600px) {
+  .tabs .tab { min-height: 44px; padding: 8px 10px; }
+  .item-shortcut { display: none; }
+  .search-container .search-input { min-width: 0; }
 }
 </style>

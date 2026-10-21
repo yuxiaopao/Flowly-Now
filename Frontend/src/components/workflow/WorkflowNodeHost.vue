@@ -1,17 +1,24 @@
 <template>
-  <component
-    :is="nodeComponent"
-    :id="id"
-    :data="data"
-    :selected="selected"
-    v-bind="extraProps"
-    @select="forwardSelect"
-  />
+  <div class="workflow-node-host">
+    <component
+      :is="nodeComponent"
+      :id="id"
+      :data="data"
+      :selected="selected"
+      v-bind="extraProps"
+      @select="forwardSelect"
+    />
+    <NodeExecutionResult
+      :node-id="id"
+      :data="data"
+    />
+  </div>
 </template>
 
 <script setup>
 import { inject } from 'vue'
 import { WORKFLOW_SELECT_NODE_KEY } from '@/config/workflowCanvas'
+import NodeExecutionResult from '@/components/workflow/NodeExecutionResult.vue'
 
 const props = defineProps({
   nodeComponent: {
@@ -52,3 +59,11 @@ function forwardSelect(nodeId) {
   emit('select', resolvedId)
 }
 </script>
+
+<style scoped>
+.workflow-node-host {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+</style>

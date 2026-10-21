@@ -5,6 +5,7 @@ This module provides Pydantic-based output parsing that eliminates
 the need for manual regex-based JSON parsing.
 """
 
+import copy
 import json
 import logging
 from typing import Dict, Any, Optional, List, Generator, Union, Tuple
@@ -82,6 +83,18 @@ class WorkflowOutputParser:
         Returns:
             Dict with workflow structure or error
         """
+        # Prefer coerce-first path: salvage nearly-valid JSON before Pydantic.
+        coerced = cls._try_load_and_coerce(response)
+        if coerced and not coerced.get('error'):
+            try:
+                parsed = WorkflowSchema.model_validate(coerced)
+                workflow = parsed.model_dump()
+                if normalize:
+                    workflow = cls._normalize_workflow(workflow)
+                return workflow
+            except Exception as e:
+                logger.warning(f"Coerced JSON failed schema validate: {e}")
+
         # Try structured parsing first
         try:
             parser = cls.get_workflow_parser()
@@ -101,6 +114,178 @@ class WorkflowOutputParser:
         except Exception as e:
             logger.exception(f"Unexpected parsing error: {e}")
             return cls._fallback_regex_parse(response)
+
+    @classmethod
+    def _try_load_and_coerce(cls, response: str) -> Optional[Dict[str, Any]]:
+        """Extract JSON object from LLM text and fill safe defaults."""
+        import re
+
+        text = (response or '').strip()
+        if not text:
+            return None
+
+        candidates = []
+        code_block = re.search(r'```(?:json)?\s*([\s\S]+?)\s*```', text)
+        if code_block:
+            candidates.append(code_block.group(1).strip())
+        raw = re.search(r'\{[\s\S]*\}', text)
+        if raw:
+            candidates.append(raw.group(0))
+        candidates.append(text)
+
+        data = None
+        for candidate in candidates:
+            try:
+                data = json.loads(candidate)
+                break
+            except json.JSONDecodeError:
+                continue
+        if not isinstance(data, dict):
+            return None
+
+        nodes = data.get('nodes')
+        if not isinstance(nodes, list) or not nodes:
+            return None
+
+        for i, node in enumerate(nodes):
+            if not isinstance(node, dict):
+                continue
+            node.setdefault('id', f'node_{i + 1}')
+            ntype = str(node.get('type') or 'llm')
+            node['type'] = ntype
+            if not str(node.get('name') or '').strip():
+                defaults = {
+                    'start': '开始', 'end': '结束', 'input': '输入', 'output': '输出',
+                }
+                node['name'] = defaults.get(ntype, ntype)
+            if not isinstance(node.get('position'), dict):
+                node['position'] = {'x': 100 + i * 180, 'y': 150}
+            else:
+                node['position'].setdefault('x', 100 + i * 180)
+                node['position'].setdefault('y', 150)
+            node.setdefault('config', {})
+
+        if not isinstance(data.get('edges'), list):
+            data['edges'] = []
+        if not data['edges'] and len(nodes) >= 2:
+            data['edges'] = [
+                {
+                    'id': f'edge_{i + 1}',
+                    'source': nodes[i]['id'],
+                    'target': nodes[i + 1]['id'],
+                    'label': '',
+                }
+                for i in range(len(nodes) - 1)
+            ]
+
+        data.setdefault('name', 'Generated Workflow')
+        data.setdefault('description', '')
+        return data
+
+    @classmethod
+    def _extract_node_config(cls, node: Dict[str, Any]) -> Dict[str, Any]:
+        """Read config from flat or VueFlow `data.config` shapes."""
+        if not isinstance(node, dict):
+            return {}
+        cfg = node.get('config')
+        if isinstance(cfg, dict) and cfg:
+            return dict(cfg)
+        data = node.get('data')
+        if isinstance(data, dict):
+            nested = data.get('config')
+            if isinstance(nested, dict):
+                return dict(nested)
+        return {}
+
+    @classmethod
+    def _extract_node_label(cls, node: Dict[str, Any], fallback: str = 'Node') -> str:
+        if not isinstance(node, dict):
+            return fallback
+        if node.get('name'):
+            return str(node['name'])
+        data = node.get('data') if isinstance(node.get('data'), dict) else {}
+        return str(data.get('label') or data.get('name') or fallback)
+
+    @classmethod
+    def _merge_nodes_by_id(
+        cls,
+        current_nodes: List[Dict[str, Any]],
+        incoming_nodes: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        """
+        Merge LLM node patches onto current nodes by id.
+
+        Critical: empty incoming config must NOT wipe existing `data.config`.
+        """
+        current_by_id = {
+            str(n.get('id')): n for n in (current_nodes or []) if isinstance(n, dict) and n.get('id')
+        }
+        if not incoming_nodes:
+            return list(current_nodes or [])
+
+        merged: List[Dict[str, Any]] = []
+        seen = set()
+        for raw in incoming_nodes:
+            if not isinstance(raw, dict):
+                continue
+            nid = str(raw.get('id') or '')
+            base = copy.deepcopy(current_by_id.get(nid) or {})
+            incoming_cfg = cls._extract_node_config(raw)
+            base_cfg = cls._extract_node_config(base)
+            # Prefer non-empty incoming; otherwise keep base. Shallow-merge keys.
+            if incoming_cfg and base_cfg:
+                cfg = {**base_cfg, **incoming_cfg}
+            elif incoming_cfg:
+                cfg = incoming_cfg
+            else:
+                cfg = base_cfg
+
+            ntype = (
+                raw.get('type')
+                or (raw.get('data') or {}).get('type')
+                or base.get('type')
+                or (base.get('data') or {}).get('type')
+                or 'llm'
+            )
+            label = cls._extract_node_label(
+                raw,
+                fallback=cls._extract_node_label(base, fallback=str(ntype)),
+            )
+            position = raw.get('position') or base.get('position') or {'x': 0, 'y': 0}
+            data = {}
+            if isinstance(base.get('data'), dict):
+                data.update(base['data'])
+            if isinstance(raw.get('data'), dict):
+                # merge data but re-apply resolved config/label below
+                for k, v in raw['data'].items():
+                    if k == 'config' and (not isinstance(v, dict) or not v):
+                        continue
+                    data[k] = v
+            data['label'] = label
+            data['type'] = ntype
+            data['config'] = cfg
+            if 'description' not in data:
+                data['description'] = raw.get('description') or base.get('description') or ''
+
+            node_out = {
+                **base,
+                **{k: v for k, v in raw.items() if k not in ('config', 'data', 'name', 'type', 'position')},
+                'id': nid or raw.get('id') or base.get('id'),
+                'type': ntype,
+                'name': label,
+                'position': position,
+                'config': cfg,
+                'data': data,
+            }
+            merged.append(node_out)
+            if nid:
+                seen.add(nid)
+
+        # Keep current nodes that LLM omitted (partial patch responses)
+        for nid, node in current_by_id.items():
+            if nid not in seen:
+                merged.append(copy.deepcopy(node))
+        return merged
 
     @classmethod
     def parse_modification(
@@ -124,9 +309,16 @@ class WorkflowOutputParser:
             modifications = parsed.model_dump(exclude_unset=True)
 
             # Merge only fields that LLM actually returned — preserve existing values for unset fields
-            updated = current_workflow.copy()
+            updated = copy.deepcopy(current_workflow) if isinstance(current_workflow, dict) else {}
             for key, value in modifications.items():
-                if value is not None:
+                if value is None:
+                    continue
+                if key == 'nodes' and isinstance(value, list):
+                    updated['nodes'] = cls._merge_nodes_by_id(
+                        current_workflow.get('nodes') or [],
+                        value,
+                    )
+                else:
                     updated[key] = value
 
             # Normalize if nodes/edges changed
@@ -137,7 +329,25 @@ class WorkflowOutputParser:
 
         except OutputParserException as e:
             logger.warning(f"Modification parsing failed: {e}")
-            # Return current workflow if parsing fails
+            # Truncated LLM JSON is common — try regex/json recovery then merge
+            try:
+                recovered = cls._fallback_regex_parse(response)
+                if isinstance(recovered, dict) and recovered.get('nodes'):
+                    merged_nodes = cls._merge_nodes_by_id(
+                        current_workflow.get('nodes') or [],
+                        recovered.get('nodes') or [],
+                    )
+                    updated = copy.deepcopy(current_workflow) if isinstance(current_workflow, dict) else {}
+                    updated['nodes'] = merged_nodes
+                    if recovered.get('edges'):
+                        updated['edges'] = recovered['edges']
+                    if recovered.get('name'):
+                        updated['name'] = recovered['name']
+                    if recovered.get('description') is not None:
+                        updated['description'] = recovered['description']
+                    return cls._normalize_workflow(updated)
+            except Exception as recover_err:
+                logger.warning('Modification recovery failed: %s', recover_err)
             return current_workflow
 
         except Exception as e:
@@ -149,7 +359,7 @@ class WorkflowOutputParser:
         """
         Normalize workflow structure with defaults and validation.
 
-        This ensures all required fields exist even if LLM omits them.
+        Preserves VueFlow `data.config` / `data.label` so editor saves don't wipe configs.
         """
         nodes = workflow.get('nodes', [])
         edges = workflow.get('edges', [])
@@ -159,15 +369,30 @@ class WorkflowOutputParser:
         normalized_nodes = []
 
         for i, node in enumerate(nodes):
+            if not isinstance(node, dict):
+                continue
             node_id = node.get('id') or f'node_{i + 1}'
             node_id_map[node.get('id', node_id)] = node_id
+            ntype = (
+                node.get('type')
+                or (node.get('data') or {}).get('type')
+                or 'llm'
+            )
+            label = cls._extract_node_label(node, fallback=str(ntype))
+            cfg = cls._extract_node_config(node)
+            position = node.get('position') or {'x': 100 + i * 180, 'y': 150}
+            data = dict(node.get('data') or {}) if isinstance(node.get('data'), dict) else {}
+            data['label'] = label
+            data['type'] = ntype
+            data['config'] = cfg
 
             normalized_nodes.append({
                 'id': node_id,
-                'type': node.get('type', 'llm'),
-                'name': node.get('name', 'Node'),
-                'position': node.get('position', {'x': 100 + i * 180, 'y': 150}),
-                'config': node.get('config', {})
+                'type': ntype,
+                'name': label,
+                'position': position,
+                'config': cfg,
+                'data': data,
             })
 
         # Normalize edges

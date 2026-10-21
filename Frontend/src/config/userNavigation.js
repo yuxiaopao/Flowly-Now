@@ -2,87 +2,71 @@
  * 个人中心（/settings）导航 — 单一数据源。
  * 此处登记的模块不应再出现在主导航侧边栏或仪表盘入口中。
  */
-import {
-  User,
-  Key,
-  Plug,
-  FileText,
-  Settings,
-  CreditCard,
-  Database,
-  Palette,
-  MonitorDot,
-} from 'lucide-vue-next'
-
-/** @type {Array<{ key: string, to: string, icon: import('vue').Component, label: string, description: string }>} */
+/** @type {Array<{ key: string, to: string, label: string, description: string }>} */
 export const PERSONAL_CENTER_NAV_ITEMS = [
   {
     key: 'profile',
     to: '/settings/profile',
-    icon: User,
     label: '个人资料',
     description: '账号信息与基础资料',
   },
   {
+    key: 'avatar',
+    to: '/settings/avatar',
+    label: 'AI 头像',
+    description: 'Bloub 定制、动画编辑与导出',
+  },
+  {
     key: 'credentials',
     to: '/settings/credentials',
-    icon: Key,
     label: '模型与服务凭证',
     description: '统一管理大模型、邮箱等密钥',
   },
   {
     key: 'integrations',
     to: '/settings/integrations',
-    icon: Plug,
     label: '第三方集成',
     description: '连接外部平台与服务',
   },
   {
     key: 'api-doc',
     to: '/settings/api-doc',
-    icon: FileText,
     label: 'API 文档',
     description: '查看接口说明与接入方式',
   },
   {
     key: 'notifications',
     to: '/settings/notifications',
-    icon: Settings,
     label: '通知与邮件',
     description: '通知偏好、默认发件人与 SMTP',
   },
   {
     key: 'preferences',
     to: '/settings/preferences',
-    icon: Settings,
     label: '偏好设置',
-    description: '主题、通知与使用习惯',
+    description: '外观主题与编辑器习惯',
   },
   {
     key: 'billing',
     to: '/settings/billing',
-    icon: CreditCard,
     label: '订阅管理',
     description: '套餐、账单与配额',
   },
   {
     key: 'data-export',
     to: '/settings/data-export',
-    icon: Database,
     label: '数据管理',
     description: '导出、备份与数据控制',
   },
   {
     key: 'branding',
     to: '/settings/branding',
-    icon: Palette,
     label: '品牌定制',
     description: 'Logo、名称与视觉配置',
   },
   {
     key: 'desktop-agent',
     to: '/settings/desktop-agent',
-    icon: MonitorDot,
     label: '桌面端 Agent',
     description: '本地执行节点与桌面代理',
   },
@@ -128,6 +112,7 @@ export function resolvePersonalCenterActiveKey(path) {
   if (path.includes('data-export')) return 'data-export'
   if (path.includes('branding')) return 'branding'
   if (path.includes('desktop-agent')) return 'desktop-agent'
+  if (path.includes('/settings/avatar')) return 'avatar'
   if (path.includes('profile')) return 'profile'
   return 'profile'
 }

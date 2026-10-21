@@ -6,6 +6,10 @@
       `app-card--${size}`,
       { 'app-card--clickable': clickable || $attrs.onClick, 'app-card--bordered': bordered }
     ]"
+    :tabindex="clickable ? 0 : undefined"
+    :role="clickable ? 'button' : undefined"
+    @keydown.enter.self="clickable && handleClick($event)"
+    @keydown.space.self.prevent="clickable && handleClick($event)"
     @click="handleClick"
   >
     <div
@@ -76,10 +80,11 @@ defineProps({
   noPadding: Boolean
 })
 
-defineEmits(['click'])
+const emit = defineEmits(['click'])
 
 function handleClick(e) {
   if (e?.target?.closest('.app-card__actions')) return
+  emit('click', e)
 }
 </script>
 
@@ -89,20 +94,12 @@ function handleClick(e) {
 .app-card {
   position: relative;
   background-color: var(--card-bg);
+  background-image: var(--tech-card-highlight);
   border-radius: var(--radius-card, $radius-xl);
   overflow: hidden;
   transition: border-color 0.25s cubic-bezier(0.22, 1, 0.36, 1),
               box-shadow 0.25s cubic-bezier(0.22, 1, 0.36, 1),
               transform 0.25s cubic-bezier(0.22, 1, 0.36, 1);
-
-  &::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    background: var(--card-inner-highlight);
-    border-radius: inherit;
-  }
 
   &--default {
     border: 1px solid var(--card-border);
@@ -130,12 +127,11 @@ function handleClick(e) {
 
     &:hover {
       border-color: var(--accent-blue-soft);
-      transform: translateY(-3px);
       box-shadow: var(--shadow-lg);
     }
 
     &:active {
-      transform: translateY(-1px);
+      background-color: var(--bg-hover);
     }
   }
 
@@ -155,15 +151,15 @@ function handleClick(e) {
 
   &--default {
     .app-card__header {
-      padding: $spacing-4 $spacing-5;
+      padding: var(--content-gap) var(--content-card-padding);
     }
 
     .app-card__body {
-      padding: $spacing-5;
+      padding: var(--content-card-padding);
     }
 
     .app-card__footer {
-      padding: $spacing-4 $spacing-5;
+      padding: var(--content-gap) var(--content-card-padding);
     }
   }
 
@@ -200,7 +196,7 @@ function handleClick(e) {
 .app-card__icon {
   width: 20px;
   height: 20px;
-  color: var(--accent-blue);
+  color: var(--tech-blue);
 }
 
 .app-card__title {

@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { ragApi } from '@/api/rag'
+import { loadRagPages } from '@/utils/rag'
 
 export const useRAGStore = defineStore('rag', () => {
   // State
@@ -31,8 +32,9 @@ export const useRAGStore = defineStore('rag', () => {
     isLoading.value = true
     error.value = null
     try {
-      const response = await ragApi.getCollections(params)
-      collections.value = response.results || response
+      const items = await loadRagPages(ragApi.getCollections, params)
+      const response = { results: items, count: items.length }
+      collections.value = items
       return response
     } catch (err) {
       error.value = err.message
@@ -154,8 +156,9 @@ export const useRAGStore = defineStore('rag', () => {
     isLoading.value = true
     error.value = null
     try {
-      const response = await ragApi.getPipelines(params)
-      pipelines.value = response.results || response
+      const items = await loadRagPages(ragApi.getPipelines, params)
+      const response = { results: items, count: items.length }
+      pipelines.value = items
       return response
     } catch (err) {
       error.value = err.message
@@ -262,8 +265,9 @@ export const useRAGStore = defineStore('rag', () => {
     isLoading.value = true
     error.value = null
     try {
-      const response = await ragApi.getVectorStores(params)
-      vectorStores.value = response.results || response
+      const items = await loadRagPages(ragApi.getVectorStores, params)
+      const response = { results: items, count: items.length }
+      vectorStores.value = items
       return response
     } catch (err) {
       error.value = err.message

@@ -10,13 +10,25 @@ from rest_framework import status
 class TestUserRegistration:
     """Test user registration."""
 
+    @pytest.mark.parametrize('consent', [False, 'false', '0', 0])
+    def test_registration_requires_explicit_terms_acceptance(self, api_client, consent):
+        from users.models import User
+        response = api_client.post('/api/v1/auth/register/', {
+            'username': 'consentuser', 'email': 'consent@example.com',
+            'password': 'securepass123', 'password_confirm': 'securepass123',
+            'agree_terms': consent,
+        }, format='json')
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert not User.objects.filter(username='consentuser').exists()
+
     def test_register_user(self, api_client):
         """Test user registration."""
         data = {
             'username': 'newuser',
             'email': 'newuser@example.com',
             'password': 'securepass123',
-            'password_confirm': 'securepass123'
+            'password_confirm': 'securepass123',
+            'agree_terms': True,
         }
         response = api_client.post('/api/v1/auth/register/', data)
         assert response.status_code == status.HTTP_201_CREATED
@@ -30,7 +42,8 @@ class TestUserRegistration:
             'username': 'newuser',
             'email': 'newuser@example.com',
             'password': 'securepass123',
-            'password_confirm': 'differentpass'
+            'password_confirm': 'differentpass',
+            'agree_terms': True,
         }
         response = api_client.post('/api/v1/auth/register/', data)
         assert response.status_code == status.HTTP_400_BAD_REQUEST

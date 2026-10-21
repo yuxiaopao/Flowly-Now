@@ -6,20 +6,40 @@
     node-type="project_profiler"
   >
     <template #expanded>
-      <div v-if="profile.domain || classSummary.total" class="profile-card">
-        <div v-if="classSummary.total" class="class-summary">
+      <div
+        v-if="profile.domain || classSummary.total"
+        class="profile-card"
+      >
+        <div
+          v-if="classSummary.total"
+          class="class-summary"
+        >
           <p><strong>类别分析</strong> 共 {{ classSummary.total }} 类</p>
-          <p v-if="classSummary.preview">{{ classSummary.preview }}</p>
-          <p v-if="classSummary.metrics"><strong>指标</strong> {{ classSummary.metrics }}</p>
-          <p v-if="!classSummary.total && !profile.domain" class="warn-hint">
+          <p v-if="classSummary.preview">
+            {{ classSummary.preview }}
+          </p>
+          <p v-if="classSummary.metrics">
+            <strong>指标</strong> {{ classSummary.metrics }}
+          </p>
+          <p
+            v-if="!classSummary.total && !profile.domain"
+            class="warn-hint"
+          >
             等待上游训练节点输出 class_names
           </p>
         </div>
         <p><strong>领域</strong> {{ profile.domain }}</p>
         <p><strong>场景</strong> {{ profile.scenario }}</p>
-        <p v-if="profile.ui_tone"><strong>风格</strong> {{ profile.ui_tone }}</p>
+        <p v-if="profile.ui_tone">
+          <strong>风格</strong> {{ profile.ui_tone }}
+        </p>
         <ul v-if="profile.copy_hints?.length">
-          <li v-for="(h, i) in profile.copy_hints" :key="i">{{ h }}</li>
+          <li
+            v-for="(h, i) in profile.copy_hints"
+            :key="i"
+          >
+            {{ h }}
+          </li>
         </ul>
       </div>
     </template>

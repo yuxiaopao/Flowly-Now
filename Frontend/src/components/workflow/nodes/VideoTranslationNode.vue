@@ -3,23 +3,32 @@
     ref="rootEl"
     :style="{ '--node-accent': nodeColor, ...resize.sizeStyle.value }"
     class="domain-node video-translation-node"
-    :class="{ selected, expanded: isExpanded, 'is-running': isRunning, 'is-completed': isCompleted, 'is-failed': isFailed }"
+    :class="{ selected, 'is-running': isRunning, 'is-completed': isCompleted, 'is-failed': isFailed }"
     @click.stop="handleSelect"
   >
-    <Handle type="target" :position="Position.Left" />
+    <Handle
+      type="target"
+      :position="Position.Left"
+    />
 
     <div class="node-header">
       <NodeTypeBadge :node-type="NODE_TYPE" />
-      <button class="action-btn" @click.stop="toggleExpand">
-        <ChevronDown class="action-icon" :class="{ rotated: isExpanded }" />
+      <button
+        class="action-btn"
+        aria-label="配置视频翻译节点"
+        @click.stop="handleSelect"
+      >
+        <Settings
+          class="action-icon"
+        />
       </button>
     </div>
 
     <div class="node-name-section">
       <input
         :id="id ? `node-label-${id}` : undefined"
-        name="node-label"
         v-model="localName"
+        name="node-label"
         class="node-name-input"
         placeholder="视频翻译..."
         @blur="handleChange"
@@ -33,31 +42,55 @@
         <span class="info-label">语言</span>
         <span class="info-value">{{ localConfig.source_language || 'zh' }} → {{ targetLabel }}</span>
       </div>
-      <div v-if="stepLabel" class="info-row">
+      <div
+        v-if="stepLabel"
+        class="info-row"
+      >
         <span class="info-label">进度</span>
         <span class="info-value">{{ stepLabel }}</span>
       </div>
-      <div class="status-bar" :class="{ running: isRunning, completed: isCompleted, failed: isFailed }">
-        <div v-if="isRunning" class="status-running">
+      <div
+        class="status-bar"
+        :class="{ running: isRunning, completed: isCompleted, failed: isFailed }"
+      >
+        <div
+          v-if="isRunning"
+          class="status-running"
+        >
           <Loader class="status-icon spinning" />
           <span>{{ stepLabel || '处理中...' }}</span>
         </div>
-        <div v-else-if="isCompleted" class="status-done">
+        <div
+          v-else-if="isCompleted"
+          class="status-done"
+        >
           <span class="status-dot" />
           <span>{{ lipSyncLabel }}</span>
         </div>
-        <div v-else-if="isFailed" class="status-error">
+        <div
+          v-else-if="isFailed"
+          class="status-error"
+        >
           <span class="status-dot" />
           <span>{{ outputError || '失败' }}</span>
         </div>
       </div>
     </div>
 
-    <div v-if="videoUrl && (isCompleted || showPreview)" class="preview-zone">
-      <NodeMediaPreview kind="video" :src="videoUrl" />
+    <div
+      v-if="videoUrl && (isCompleted || showPreview)"
+      class="preview-zone"
+    >
+      <NodeMediaPreview
+        kind="video"
+        :src="videoUrl"
+      />
     </div>
 
-    <Handle type="source" :position="Position.Right" />
+    <Handle
+      type="source"
+      :position="Position.Right"
+    />
 
     <div
       class="resize-handle"
@@ -70,7 +103,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
-import { ChevronDown, Loader } from 'lucide-vue-next'
+import { Settings, Loader } from 'lucide-vue-next'
 import NodeTypeBadge from '@/components/workflow/nodes/NodeTypeBadge.vue'
 import NodeMediaPreview from '@/components/workflow/nodes/NodeMediaPreview.vue'
 import { useNodePresentation } from '@/composables/useNodePresentation'
@@ -103,7 +136,6 @@ const resize = useNodeResize({
   maxHeight: 900,
 })
 
-const isExpanded = ref(false)
 const showPreview = ref(true)
 
 const defaultConfig = () => ({
@@ -173,10 +205,6 @@ const lipSyncLabel = computed(() => {
   return '已完成'
 })
 
-function toggleExpand() {
-  isExpanded.value = !isExpanded.value
-}
-
 function handleChange() {
   if (!props.id) return
   updateNodeData(props.id, {
@@ -187,7 +215,6 @@ function handleChange() {
 
 function handleSelect() {
   emit('select')
-  if (!isExpanded.value) isExpanded.value = true
 }
 </script>
 

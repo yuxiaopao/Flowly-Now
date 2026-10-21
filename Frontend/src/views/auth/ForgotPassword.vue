@@ -27,12 +27,35 @@
         ref="formRef"
         :model="formData"
         :rules="formRules"
+        novalidate
         @submit.prevent="handleSubmit"
       >
-        <el-form-item prop="email">
+        <el-alert
+          v-if="resultMessage"
+          :title="resultMessage"
+          type="success"
+          :closable="false"
+          show-icon
+          role="status"
+        />
+        <el-alert
+          v-if="formError"
+          :title="formError"
+          type="error"
+          :closable="false"
+          show-icon
+          role="alert"
+        />
+        <el-form-item
+          prop="email"
+          label="注册邮箱"
+          label-position="top"
+        >
           <el-input
-            v-model="formData.email"
+            v-model.trim="formData.email"
             type="email"
+            autocomplete="email"
+            aria-label="注册邮箱"
             placeholder="请输入邮箱地址"
             size="large"
             :prefix-icon="Mail"
@@ -69,16 +92,14 @@
 
 <script setup>
 import { ref, reactive } from 'vue'
-import { useRouter } from 'vue-router'
 import { ArrowLeft, Mail } from 'lucide-vue-next'
 import { sendResetEmail } from '@/api/auth'
-import { useAppStore } from '@/stores/app'
-
-const router = useRouter()
-const appStore = useAppStore()
+import { getSettingsError } from '@/utils/personalCenter'
 
 const formRef = ref(null)
 const submitting = ref(false)
+const formError = ref('')
+const resultMessage = ref('')
 
 const formData = reactive({
   email: ''
@@ -92,16 +113,17 @@ const formRules = {
 }
 
 async function handleSubmit() {
-  const valid = await formRef.value.validate().catch(() => false)
-  if (!valid) return
-
+  if (submitting.value) return
   submitting.value = true
+  formError.value = ''
+  resultMessage.value = ''
   try {
-    await sendResetEmail(formData)
-    appStore.success('重置链接已发送，请检查您的邮箱。')
-    router.push('/login')
+    const valid = await formRef.value.validate().catch(() => false)
+    if (!valid) return
+    const response = await sendResetEmail(formData.email)
+    resultMessage.value = response.message
   } catch (error) {
-    appStore.error(error.response?.data?.message || '发送重置链接失败')
+    formError.value = getSettingsError(error, '发送失败，请检查网络后重试')
   } finally {
     submitting.value = false
   }

@@ -1,13 +1,13 @@
 <template>
-  <div class="vector-store-page">
-    <div class="page-header">
-      <div class="header-left">
-        <h1>向量存储</h1>
-        <p class="subtitle">
-          管理向量数据库连接和配置
-        </p>
-      </div>
-      <div class="header-actions">
+  <PageShell
+    width="wide"
+    class="vector-store-page"
+  >
+    <PageHeader
+      title="向量存储"
+      subtitle="管理向量数据库连接和配置"
+    >
+      <template #actions>
         <el-button
           type="primary"
           @click="showCreateDialog = true"
@@ -15,17 +15,20 @@
           <Plus class="btn-icon" />
           创建向量存储
         </el-button>
-      </div>
-    </div>
+      </template>
+    </PageHeader>
 
     <!-- Filter -->
-    <div class="filter-bar">
+    <PageToolbar>
       <el-select
         v-model="filterType"
         placeholder="存储类型"
         clearable
-        style="width: 150px"
       >
+        <el-option
+          label="本地持久化存储"
+          value="memory"
+        />
         <el-option
           label="Qdrant"
           value="qdrant"
@@ -51,7 +54,7 @@
         v-model="teamFilter"
         placeholder="按团队筛选"
         clearable
-        style="width: 200px"
+        class="filter-control"
       >
         <el-option
           label="全部（含个人）"
@@ -68,23 +71,24 @@
           :value="String(t.id)"
         />
       </el-select>
-    </div>
+    </PageToolbar>
 
     <!-- Empty State -->
-    <div
+    <PageEmptyState
       v-if="vectorStores.length === 0 && !isLoading"
-      class="empty-state"
+      :icon="Database"
+      title="暂无向量存储"
+      description="创建您的第一个向量存储来管理文档嵌入"
     >
-      <Database class="empty-icon" />
-      <h3>暂无向量存储</h3>
-      <p>创建您的第一个向量存储来管理文档嵌入</p>
-      <el-button
-        type="primary"
-        @click="showCreateDialog = true"
-      >
-        创建向量存储
-      </el-button>
-    </div>
+      <template #actions>
+        <el-button
+          type="primary"
+          @click="showCreateDialog = true"
+        >
+          创建向量存储
+        </el-button>
+      </template>
+    </PageEmptyState>
 
     <!-- Vector Stores Grid -->
     <div
@@ -129,6 +133,8 @@
             <el-button
               text
               size="small"
+            
+              :aria-label="`${store.name}的更多操作`"
             >
               <MoreVertical />
             </el-button>
@@ -270,6 +276,10 @@
             style="width: 100%"
           >
             <el-option
+              label="本地持久化存储"
+              value="memory"
+            />
+            <el-option
               label="Qdrant"
               value="qdrant"
             >
@@ -388,13 +398,13 @@
           prop="metric"
         >
           <el-radio-group v-model="form.metric">
-            <el-radio label="cosine">
+            <el-radio value="cosine">
               余弦相似度
             </el-radio>
-            <el-radio label="euclidean">
+            <el-radio value="euclidean">
               欧几里得距离
             </el-radio>
-            <el-radio label="dotproduct">
+            <el-radio value="dotproduct">
               点积
             </el-radio>
           </el-radio-group>
@@ -494,10 +504,14 @@
         </el-button>
       </template>
     </el-dialog>
-  </div>
+  </PageShell>
 </template>
 
 <script setup>
+import PageEmptyState from '@/components/layout/PageEmptyState.vue'
+import PageToolbar from '@/components/layout/PageToolbar.vue'
+import PageHeader from '@/components/layout/PageHeader.vue'
+import PageShell from '@/components/layout/PageShell.vue'
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useRAGStore } from '@/stores/rag'
@@ -574,6 +588,7 @@ const filteredStores = computed(() => {
 
 function getStoreTypeLabel(type) {
   const labels = {
+    memory: '本地持久化存储',
     qdrant: 'Qdrant',
     milvus: 'Milvus',
     chroma: 'Chroma',
@@ -741,71 +756,24 @@ onMounted(async () => {
 <style lang="scss" scoped>
 @use '@/assets/styles/variables.scss' as *;
 
-.vector-store-page {
-  padding: $spacing-6;
-}
-
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: $spacing-6;
-
-  h1 {
-    font-size: $font-size-2xl;
-    font-weight: $font-weight-bold;
-    margin: 0;
-  }
-
-  .subtitle {
-    font-size: $font-size-sm;
-    color: var(--text-secondary);
-    margin: $spacing-1 0 0;
-  }
-}
-
 .btn-icon {
   width: 16px;
   height: 16px;
 }
 
-.filter-bar {
-  margin-bottom: $spacing-4;
-}
 
-.empty-state {
-  text-align: center;
-  padding: $spacing-12;
-
-  .empty-icon {
-    width: 64px;
-    height: 64px;
-    color: var(--text-tertiary);
-    margin-bottom: $spacing-4;
-  }
-
-  h3 {
-    font-size: $font-size-lg;
-    margin: 0 0 $spacing-2;
-  }
-
-  p {
-    color: var(--text-secondary);
-    margin: 0 0 $spacing-4;
-  }
-}
 
 .stores-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--content-card-min-width)), 1fr));
   gap: $spacing-4;
 }
 
 .store-card {
   background: var(--bg-secondary);
   border: 1px solid var(--border-primary);
-  border-radius: $radius-xl;
-  padding: $spacing-4;
+  border-radius: var(--content-card-radius);
+  padding: var(--content-card-padding);
   transition: all $transition-fast;
 
   &:hover {
@@ -964,6 +932,4 @@ onMounted(async () => {
   margin-top: $spacing-1;
 }
 </style>
-
-
 

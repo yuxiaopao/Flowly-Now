@@ -8,23 +8,43 @@
   >
     <template #expanded>
       <div class="agent-panel">
-        <div v-if="ragStatus === 'missing'" class="rag-banner">
+        <div
+          v-if="ragStatus === 'missing'"
+          class="rag-banner"
+        >
           <span>未配置向量库，对话记忆无法同步至知识库。</span>
-          <router-link to="/knowledge" class="rag-link" @click.stop>去配置 →</router-link>
+          <router-link
+            to="/knowledge"
+            class="rag-link"
+            @click.stop
+          >
+            去配置 →
+          </router-link>
         </div>
-        <div v-else-if="ragStatus === 'ready'" class="rag-banner ready">
+        <div
+          v-else-if="ragStatus === 'ready'"
+          class="rag-banner ready"
+        >
           <span>向量库已就绪，发送消息后将自动创建项目记忆集合。</span>
         </div>
-        <div v-else-if="ragStatus === 'synced'" class="rag-banner synced">
+        <div
+          v-else-if="ragStatus === 'synced'"
+          class="rag-banner synced"
+        >
           <span>对话已同步至知识库</span>
           <router-link
             v-if="ragCollectionId"
             :to="`/knowledge?collection=${ragCollectionId}`"
             class="rag-link"
             @click.stop
-          >查看 →</router-link>
+          >
+            查看 →
+          </router-link>
         </div>
-        <div ref="chatRef" class="chat-log">
+        <div
+          ref="chatRef"
+          class="chat-log"
+        >
           <div
             v-for="(msg, idx) in messages"
             :key="idx"
@@ -34,11 +54,17 @@
             <span class="role">{{ msg.role === 'user' ? '你' : 'Agent' }}</span>
             <span class="text">{{ msg.content }}</span>
           </div>
-          <p v-if="!messages.length" class="empty-hint">
+          <p
+            v-if="!messages.length"
+            class="empty-hint"
+          >
             输入修改需求，例如「把首页改成深色」
           </p>
         </div>
-        <div v-if="lastReply.files_changed?.length" class="meta">
+        <div
+          v-if="lastReply.files_changed?.length"
+          class="meta"
+        >
           已修改：{{ lastReply.files_changed.join(', ') }}
         </div>
         <div class="composer">
@@ -59,7 +85,12 @@
             {{ sending ? '…' : '发送' }}
           </button>
         </div>
-        <p v-if="!siteId" class="warn">等待上游网站生成完成后再对话</p>
+        <p
+          v-if="!siteId"
+          class="warn"
+        >
+          等待上游网站生成完成后再对话
+        </p>
         <a
           v-if="siteId"
           class="debugger-link"

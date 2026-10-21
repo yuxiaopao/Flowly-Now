@@ -21,7 +21,10 @@ from .serializers import (
     WebhookDeliverySerializer,
     IntegrationSerializer,
     IntegrationTemplateSerializer,
+    IntegrationDeliverySerializer,
 )
+from .catalog import public_catalog, CONNECTORS, RESULT_LIMIT
+from .services import run_check, deliver
 
 
 class WebhookViewSet(viewsets.ModelViewSet):
@@ -176,35 +179,60 @@ class IntegrationViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return Integration.objects.filter(user=self.request.user)
 
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
     @action(detail=True, methods=['post'])
     def connect(self, request, pk=None):
         """Connect an integration."""
         integration = self.get_object()
-        # In production, this would initiate OAuth flow or API connection
-        integration.is_connected = True
-        integration.save()
-        return Response({'status': 'Connected'})
+        integration.is_active = True
+        integration.save(update_fields=['is_active', 'updated_at'])
+        if CONNECTORS[integration.integration_type]['mode'] == 'api':
+            result = run_check(integration)
+        else:
+            delivery = deliver(integration)
+            result = {'success': delivery.status == 'success', 'message': delivery.message,
+                      'status_code': delivery.status_code, 'duration_ms': delivery.duration_ms}
+        return Response({'result': result, 'integration': self.get_serializer(integration).data})
+
+    @action(detail=True, methods=['post'])
+    def test(self, request, pk=None):
+        return self.connect(request, pk)
 
     @action(detail=True, methods=['post'])
     def disconnect(self, request, pk=None):
         """Disconnect an integration."""
         integration = self.get_object()
         integration.is_connected = False
-        integration.save()
-        return Response({'status': 'Disconnected'})
+        integration.is_active = False
+        integration.verification_status = 'disconnected'
+        integration.save(update_fields=['is_active', 'is_connected', 'verification_status', 'updated_at'])
+        return Response(self.get_serializer(integration).data)
 
     @action(detail=True, methods=['post'])
     def sync(self, request, pk=None):
         """Trigger sync for an integration."""
         integration = self.get_object()
-        # In production, this would trigger async sync task
-        return Response({'status': 'Sync started'})
+        if not integration.is_active or not integration.is_connected:
+            return Response({'detail': '请先测试连接，验证成功后再执行操作。'}, status=status.HTTP_400_BAD_REQUEST)
+        if CONNECTORS[integration.integration_type]['mode'] == 'api':
+            result = run_check(integration, read=True)
+        else:
+            delivery = deliver(integration)
+            result = {'success': delivery.status == 'success', 'message': delivery.message,
+                      'status_code': delivery.status_code, 'duration_ms': delivery.duration_ms}
+        return Response({'result': result, 'integration': self.get_serializer(integration).data})
+
+    @action(detail=True, methods=['get'])
+    def deliveries(self, request, pk=None):
+        records = self.get_object().deliveries.all()[:RESULT_LIMIT]
+        return Response(IntegrationDeliverySerializer(records, many=True).data)
 
     @action(detail=False, methods=['get'])
     def available(self, request):
         """Get available integration templates."""
-        templates = IntegrationTemplate.objects.filter(is_active=True)
-        return Response(IntegrationTemplateSerializer(templates, many=True).data)
+        return Response(public_catalog())
 
 
 class IntegrationTemplateViewSet(viewsets.ReadOnlyModelViewSet):

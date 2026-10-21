@@ -28,6 +28,61 @@
         </el-form-item>
       </div>
 
+      <el-form-item label="检索来源">
+        <el-select
+          v-model="localData.provider"
+          @change="handleChange"
+        >
+          <el-option
+            label="Flowly 知识库"
+            value="knowledge_base"
+          />
+          <el-option
+            label="Chroma 工作流索引"
+            value="chroma"
+          />
+          <el-option
+            label="Pinecone 工作流索引"
+            value="pinecone"
+          />
+          <el-option
+            label="Qdrant 工作流索引"
+            value="qdrant"
+          />
+        </el-select>
+      </el-form-item>
+      <el-form-item
+        v-if="localData.provider === 'knowledge_base'"
+        label="知识库"
+        required
+      >
+        <el-select
+          v-model="localData.collectionId"
+          filterable
+          :loading="loadingCollections"
+          @change="handleChange"
+        >
+          <el-option
+            v-for="collection in collections"
+            :key="collection.id"
+            :value="collection.id"
+            :label="collection.name"
+          />
+        </el-select>
+        <p class="field-hint">
+          使用知识库设置的检索方式，输出 context、documents 和 sources，可供后续大模型引用。
+        </p>
+      </el-form-item>
+      <el-form-item
+        v-else
+        label="索引名称"
+        required
+      >
+        <el-input
+          v-model="localData.indexName"
+          @change="handleChange"
+        />
+      </el-form-item>
       <!-- 检索配置 -->
       <div class="form-section">
         <h4 class="section-title">
@@ -86,7 +141,7 @@
             v-model="localData.filter"
             type="textarea"
             :rows="3"
-            placeholder="{&quot;field&quot;: &quot;category&quot;, &quot;operator&quot;: &quot;eq&quot;, &quot;value&quot;: &quot;news&quot;}"
+            placeholder="{&quot;category&quot;: &quot;news&quot;}"
             class="json-input"
             @change="handleChange"
           />
@@ -122,7 +177,18 @@
 </template>
 
 <script setup>
-import { reactive, watch } from 'vue'
+import { reactive, watch, ref, onMounted } from 'vue'
+import { ragApi } from '@/api/rag'
+import { loadRagPages } from '@/utils/rag'
+import { RAG_CONFIG } from '@/config/rag'
+const collections = ref([])
+const loadingCollections = ref(false)
+onMounted(async () => {
+  loadingCollections.value = true
+  try { collections.value = await loadRagPages(ragApi.getCollections) }
+  catch { /* API interceptor displays the error. */ }
+  finally { loadingCollections.value = false }
+})
 
 const props = defineProps({
   modelValue: {
@@ -137,7 +203,10 @@ const localData = reactive({
   label: '',
   description: '',
   query: '',
-  topK: 5,
+  topK: RAG_CONFIG.topK,
+  provider: 'knowledge_base',
+  collectionId: '',
+  indexName: '',
   enableRerank: false,
   filter: ''
 })
@@ -148,7 +217,10 @@ watch(() => props.modelValue, (newVal) => {
       label: newVal.label || '',
       description: newVal.description || '',
       query: newVal.query || '',
-      topK: newVal.topK ?? 5,
+      provider: newVal.provider || (newVal.indexName ? 'chroma' : 'knowledge_base'),
+      collectionId: newVal.collectionId || newVal.collection_id || '',
+      indexName: newVal.indexName || '',
+      topK: newVal.topK ?? RAG_CONFIG.topK,
       enableRerank: newVal.enableRerank ?? false,
       filter: newVal.filter || ''
     })

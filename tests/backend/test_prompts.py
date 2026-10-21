@@ -78,9 +78,18 @@ class TestPromptTemplateAPI:
         response = api_client.get('/api/v1/prompts/templates/featured/')
         assert response.status_code in (status.HTTP_200_OK, status.HTTP_401_UNAUTHORIZED)
 
-    def test_filter_by_category(self, authenticated_client):
-        # Skip - backend bug: expects UUID not slug for category filtering
-        pass
+    @pytest.mark.parametrize('use_slug', [False, True])
+    def test_filter_by_category(self, authenticated_client, user, use_slug):
+        from prompts.models import PromptCategory, PromptTemplate
+        category = PromptCategory.objects.create(name='数据分析', slug='analysis')
+        included = PromptTemplate.objects.create(name='分析模板', template='分析 {text}', category=category, created_by=user)
+        PromptTemplate.objects.create(name='其他模板', template='总结 {text}', created_by=user)
+        key = category.slug if use_slug else str(category.id)
+        response = authenticated_client.get('/api/v1/prompts/templates/', {'category': key})
+        assert response.status_code == 200
+        page = response.data.get('data', response.data)
+        assert page['count'] == 1
+        assert page['results'][0]['id'] == str(included.id)
 
     def test_search_templates(self, authenticated_client):
         """Test searching templates."""

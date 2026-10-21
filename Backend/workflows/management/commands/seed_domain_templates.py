@@ -37,6 +37,7 @@ class Command(BaseCommand):
         self._create_agent_templates(categories)
         self._create_utility_templates(categories)
         self._create_hybrid_templates(categories)
+        self._create_cumcm_template(categories)
 
         self.stdout.write(self.style.SUCCESS('Successfully seeded domain templates'))
 
@@ -91,6 +92,14 @@ class Command(BaseCommand):
                 "color": "#6366f1",
                 "sort_order": 6,
             },
+            {
+                "name": "Academic & Research",
+                "slug": "academic",
+                "description": "Mathematical modeling, research pipelines, and academic writing",
+                "icon": "graduation-cap",
+                "color": "#0ea5e9",
+                "sort_order": 7,
+            },
         ]
 
         categories = {}
@@ -106,6 +115,35 @@ class Command(BaseCommand):
                 self.stdout.write(f"Category already exists: {obj.name}")
 
         return categories
+
+    def _admin_user(self):
+        return User.objects.filter(is_superuser=True).first() or User.objects.first()
+
+    def _upsert_template(self, *, name, category, defaults, refresh_fields=None):
+        """Create or update WorkflowTemplate by name + category (model has no slug)."""
+        payload = dict(defaults)
+        payload.pop('author', None)
+        payload.pop('category', None)
+        payload.pop('name', None)
+        payload.setdefault('created_by', self._admin_user())
+        payload.setdefault('is_public', True)
+        payload.setdefault('is_active', True)
+
+        template, created = WorkflowTemplate.objects.update_or_create(
+            name=name,
+            category=category,
+            defaults=payload,
+        )
+        if not created and refresh_fields:
+            for field, value in refresh_fields.items():
+                setattr(template, field, value)
+            template.save(update_fields=list(refresh_fields.keys()))
+        if created:
+            self.stdout.write(self.style.SUCCESS(f"Created template: {template.name}"))
+        else:
+            action = 'Updated' if refresh_fields else 'Already exists'
+            self.stdout.write(f"{action} template: {template.name}")
+        return template, created
 
     def _create_multimodal_templates(self, categories):
         """Template 1: AI Video Production Pipeline."""
@@ -239,11 +277,10 @@ class Command(BaseCommand):
             }
         ]
 
-        template, created = WorkflowTemplate.objects.get_or_create(
-            slug="ai-video-production-pipeline",
+        template, created = WorkflowTemplate.objects.update_or_create(
+            name="AI Video Production Pipeline",
+            category=category,
             defaults={
-                "category": category,
-                "name": "AI Video Production Pipeline",
                 "description": "Automatically generate videos from text prompts with AI-powered editing and subtitle generation",
                 "difficulty": "intermediate",
                 "tags": ["video", "AI", "automation", "content creation"],
@@ -335,11 +372,10 @@ class Command(BaseCommand):
             },
         ]
 
-        template, created = WorkflowTemplate.objects.get_or_create(
-            slug="video-multilingual-translation",
+        template, created = WorkflowTemplate.objects.update_or_create(
+            name="视频多语言翻译",
+            category=category,
             defaults={
-                "category": category,
-                "name": "视频多语言翻译",
                 "description": "Translate video speech with AI dubbing, lip sync, and burned-in subtitles",
                 "difficulty": "advanced",
                 "tags": ["video", "translation", "lip-sync", "subtitles", "multilingual"],
@@ -485,11 +521,10 @@ class Command(BaseCommand):
             }
         ]
 
-        template, created = WorkflowTemplate.objects.get_or_create(
-            slug="rag-knowledge-qa-system",
+        template, created = WorkflowTemplate.objects.update_or_create(
+            name="RAG Knowledge Q&A System",
+            category=category,
             defaults={
-                "category": category,
-                "name": "RAG Knowledge Q&A System",
                 "description": "Build a complete RAG pipeline: load documents, chunk, embed, store, retrieve, and answer questions",
                 "difficulty": "intermediate",
                 "tags": ["RAG", "knowledge base", "Q&A", "vector search"],
@@ -653,11 +688,10 @@ class Command(BaseCommand):
             }
         ]
 
-        template, created = WorkflowTemplate.objects.get_or_create(
-            slug="automl-training-pipeline",
+        template, created = WorkflowTemplate.objects.update_or_create(
+            name="AutoML Training Pipeline",
+            category=category,
             defaults={
-                "category": category,
-                "name": "AutoML Training Pipeline",
                 "description": "End-to-end ML pipeline: upload dataset, annotate, augment, train, evaluate, and deploy model",
                 "difficulty": "advanced",
                 "tags": ["ML", "automation", "training", "deployment"],
@@ -788,11 +822,10 @@ class Command(BaseCommand):
                 {"id": "e7", "source": "site_preview_1", "target": "project_agent_1"},
             ],
         }
-        template, created = WorkflowTemplate.objects.get_or_create(
-            slug="yolo-detection-project",
+        template, created = WorkflowTemplate.objects.update_or_create(
+            name="YOLO 识别项目",
+            category=category,
             defaults={
-                "category": category,
-                "name": "YOLO 识别项目",
                 "description": "上传已标注数据集 → YOLO 训练 → 场景分析 → 建站向导 → 环境 → QA → 预览 → Agent",
                 "difficulty": "intermediate",
                 "tags": ["YOLO", "detection", "MLOps", "website"],
@@ -966,11 +999,10 @@ class Command(BaseCommand):
                 {"id": "e11", "source": "site_preview_1", "target": "project_agent_1"},
             ],
         }
-        template, created = WorkflowTemplate.objects.get_or_create(
+        template, created = WorkflowTemplate.objects.update_or_create(
             name="YOLO 识别项目 v2（AI 分工）",
+            category=category,
             defaults={
-                "category": category,
-                "name": "YOLO 识别项目 v2（AI 分工）",
                 "description": "训练 → 脚手架 → 后端/前端/UI Agent → 环境 → QA → 复查 → 预览 → Agent",
                 "difficulty": "intermediate",
                 "tags": ["YOLO", "detection", "MLOps", "website", "ai-agents"],
@@ -983,6 +1015,9 @@ class Command(BaseCommand):
                 "rating_count": 0,
                 "is_featured": True,
                 "is_verified": True,
+                "is_public": True,
+                "is_active": True,
+                "created_by": self._admin_user(),
             },
         )
         if created:
@@ -1081,11 +1116,10 @@ class Command(BaseCommand):
                 {"id": "e7", "source": "site_preview_1", "target": "project_agent_1"},
             ],
         }
-        template, created = WorkflowTemplate.objects.get_or_create(
-            slug="clip-retrieval-project",
+        template, created = WorkflowTemplate.objects.update_or_create(
+            name="CLIP 检索项目",
+            category=category,
             defaults={
-                "category": category,
-                "name": "CLIP 检索项目",
                 "description": "图文数据集 → CLIP 索引 → 检索站 → QA → 预览 → Agent",
                 "difficulty": "intermediate",
                 "tags": ["CLIP", "retrieval", "MLOps", "website"],
@@ -1141,11 +1175,10 @@ class Command(BaseCommand):
                 {"id": "e7", "source": "site_preview_1", "target": "project_agent_1"},
             ],
         }
-        template, created = WorkflowTemplate.objects.get_or_create(
-            slug="transformer-classification-project",
+        template, created = WorkflowTemplate.objects.update_or_create(
+            name="Transformer 微调项目",
+            category=category,
             defaults={
-                "category": category,
-                "name": "Transformer 微调项目",
                 "description": "数据集 → Transformer 微调 → 分类站 → QA → 预览 → Agent",
                 "difficulty": "intermediate",
                 "tags": ["Transformers", "classification", "MLOps", "website"],
@@ -1271,11 +1304,10 @@ class Command(BaseCommand):
             }
         ]
 
-        template, created = WorkflowTemplate.objects.get_or_create(
-            slug="multi-agent-research-assistant",
+        template, created = WorkflowTemplate.objects.update_or_create(
+            name="Multi-Agent Research Assistant",
+            category=category,
             defaults={
-                "category": category,
-                "name": "Multi-Agent Research Assistant",
                 "description": "Deploy a team of AI agents: planner decomposes tasks, executor runs them, memory tracks progress",
                 "difficulty": "advanced",
                 "tags": ["agent", "research", "automation", "multi-agent"],
@@ -1397,11 +1429,10 @@ class Command(BaseCommand):
             }
         ]
 
-        template, created = WorkflowTemplate.objects.get_or_create(
-            slug="data-etl-pipeline",
+        template, created = WorkflowTemplate.objects.update_or_create(
+            name="Data ETL Pipeline",
+            category=category,
             defaults={
-                "category": category,
-                "name": "Data ETL Pipeline",
                 "description": "Extract data from web sources, transform with CSV/JSON operations, and load into files",
                 "difficulty": "beginner",
                 "tags": ["ETL", "data", "automation", "web scraping"],
@@ -1553,11 +1584,10 @@ class Command(BaseCommand):
             }
         ]
 
-        template, created = WorkflowTemplate.objects.get_or_create(
-            slug="multimodal-content-studio",
+        template, created = WorkflowTemplate.objects.update_or_create(
+            name="Multimodal Content Studio",
+            category=category,
             defaults={
-                "category": category,
-                "name": "Multimodal Content Studio",
                 "description": "Create rich content: generate images, add voiceover narration, and export as branded multimedia",
                 "difficulty": "intermediate",
                 "tags": ["multimedia", "content creation", "branding", "automation"],
@@ -1576,3 +1606,47 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS(f"Created template: {template.name}"))
         else:
             self.stdout.write(f"Template already exists: {template.name}")
+
+    def _create_cumcm_template(self, categories):
+        """CUMCM mathematical modeling full pipeline."""
+        from nl_to_workflow.cumcm_enrichment import build_cumcm_workflow
+
+        category = categories["academic"]
+        workflow_data = build_cumcm_workflow(
+            '全国大学生数学建模竞赛（CUMCM）完整流水线模板'
+        )
+
+        admin_user = User.objects.filter(is_superuser=True).first()
+        if not admin_user:
+            admin_user = User.objects.first()
+
+        template, created = WorkflowTemplate.objects.update_or_create(
+            name="CUMCM 数学建模·完整流水线",
+            category=category,
+            defaults={
+                "description": workflow_data.get("description", ""),
+                "created_by": admin_user,
+                "difficulty": "advanced",
+                "tags": ["cumcm", "数学建模", "国赛", "论文", "建模竞赛"],
+                "workflow_data": workflow_data,
+                "variables_schema": {},
+                "estimated_duration": "30 min",
+                "required_apis": ["agnes"],
+                "use_count": 0,
+                "rating": 4.8,
+                "rating_count": 0,
+                "is_featured": True,
+                "is_verified": True,
+                "is_public": True,
+                "is_active": True,
+            },
+        )
+        if created:
+            self.stdout.write(self.style.SUCCESS(f"Created template: {template.name}"))
+        else:
+            template.workflow_data = workflow_data
+            template.description = workflow_data.get("description", template.description)
+            template.is_public = True
+            template.is_active = True
+            template.save(update_fields=["workflow_data", "description", "is_public", "is_active"])
+            self.stdout.write(f"Updated template: {template.name}")

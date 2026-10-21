@@ -17,6 +17,44 @@ export const NODE_GAP_X = 60
 export const NODE_GAP_Y = 60
 export const START_X = 80
 export const START_Y = 80
+const POSITION_PRECISION = 2
+
+function roundCanvasCoordinate(value) {
+  const number = Number(value)
+  if (!Number.isFinite(number)) return 0
+  return Number(number.toFixed(POSITION_PRECISION))
+}
+
+function normalizePosition(position) {
+  return {
+    x: roundCanvasCoordinate(position?.x),
+    y: roundCanvasCoordinate(position?.y),
+  }
+}
+
+function getNodeDimensions(node, opts) {
+  const style = node?.style || node?.data?.style || {}
+  const uiSize = node?.data?.uiSize || style.uiSize || {}
+  const width = Number(node?.width ?? node?.dimensions?.width ?? uiSize.width ?? style.width)
+  const height = Number(node?.height ?? node?.dimensions?.height ?? uiSize.height ?? style.height)
+  return {
+    width: Number.isFinite(width) && width > 0 ? width : opts.nodeWidth,
+    height: Number.isFinite(height) && height > 0 ? height : opts.nodeHeight,
+  }
+}
+
+function getNodeRect(node, opts, positionOverride = null) {
+  const position = normalizePosition(positionOverride || node?.position)
+  const { width, height } = getNodeDimensions(node, opts)
+  return {
+    x: position.x,
+    y: position.y,
+    width,
+    height,
+    right: position.x + width,
+    bottom: position.y + height,
+  }
+}
 
 function normalizeLayoutOptions(options = {}) {
   return {
@@ -36,7 +74,7 @@ export function isZeroPosition(position) {
   if (!position) return true
   const x = Number(position.x)
   const y = Number(position.y)
-  return (!Number.isFinite(x) || !Number.isFinite(y)) || (x === 0 && y === 0)
+  return !Number.isFinite(x) || !Number.isFinite(y)
 }
 
 function buildEdgeMaps(edges = []) {
@@ -119,6 +157,10 @@ function computeLayers(nodes, edges) {
 
 /**
  * 根据 DAG 形状自动选择水平或垂直布局
+ *
+ * 术语：
+ * - horizontal：层从左到右推进，同层兄弟上下排列（适合简单长链）
+ * - vertical：层从上到下推进，同层兄弟左右横排（适合宽扇出/并行分镜）
  */
 export function pickLayoutDirection(nodes, edges) {
   if (!nodes?.length) return 'horizontal'
@@ -127,26 +169,43 @@ export function pickLayoutDirection(nodes, edges) {
   const layerCount = layers.length
   const maxLayerSize = Math.max(...layers.map((layer) => layer.length), 1)
 
-  // 链式深图优先垂直；宽分支图优先水平
+  // 宽并行扇出（≥3 同层兄弟）：同类节点必须横排 → vertical
+  if (maxLayerSize >= 3) return 'vertical'
+  // 深链少分支：也可竖排推进，避免画布过长
   if (layerCount >= 6 && maxLayerSize <= 2) return 'vertical'
-  if (maxLayerSize >= 3 && layerCount <= 4) return 'horizontal'
-  if (layerCount > maxLayerSize + 1) return 'vertical'
   return 'horizontal'
 }
 
-function getCollisionThresholds(opts) {
-  return {
-    minDx: opts.nodeWidth + opts.nodeGapX,
-    minDy: opts.nodeHeight + opts.nodeGapY
-  }
+function nodeRectsCollide(a, b, opts) {
+  const marginX = opts.nodeGapX
+  const marginY = opts.nodeGapY
+  return (
+    a.x < b.right + marginX
+    && a.right + marginX > b.x
+    && a.y < b.bottom + marginY
+    && a.bottom + marginY > b.y
+  )
 }
 
-function positionsCollide(a, b, opts) {
-  if (isZeroPosition(a) || isZeroPosition(b)) return false
-  const { minDx, minDy } = getCollisionThresholds(opts)
-  const dx = Math.abs(Number(a.x) - Number(b.x))
-  const dy = Math.abs(Number(a.y) - Number(b.y))
-  return dx < minDx && dy < minDy
+function findBlockingRect(rect, occupiedRects, opts) {
+  return occupiedRects.find((occupied) => nodeRectsCollide(rect, occupied, opts)) || null
+}
+
+function chooseCollisionSeparation(rect, occupied, originalPos, opts) {
+  const candidates = [
+    { x: occupied.x - opts.nodeGapX - rect.width, y: rect.y },
+    { x: occupied.right + opts.nodeGapX, y: rect.y },
+    { x: rect.x, y: occupied.y - opts.nodeGapY - rect.height },
+    { x: rect.x, y: occupied.bottom + opts.nodeGapY },
+  ].map(normalizePosition)
+
+  candidates.sort((a, b) => {
+    const da = Math.hypot(a.x - originalPos.x, a.y - originalPos.y)
+    const db = Math.hypot(b.x - originalPos.x, b.y - originalPos.y)
+    return da - db
+  })
+
+  return candidates[0]
 }
 
 /**
@@ -155,8 +214,10 @@ function positionsCollide(a, b, opts) {
 export function hasOverlappingPositions(nodes, options = {}) {
   const opts = normalizeLayoutOptions(options)
   for (let i = 0; i < nodes.length; i += 1) {
+    if (isZeroPosition(nodes[i]?.position)) continue
     for (let j = i + 1; j < nodes.length; j += 1) {
-      if (positionsCollide(nodes[i].position, nodes[j].position, opts)) {
+      if (isZeroPosition(nodes[j]?.position)) continue
+      if (nodeRectsCollide(getNodeRect(nodes[i], opts), getNodeRect(nodes[j], opts), opts)) {
         return true
       }
     }
@@ -180,21 +241,17 @@ export function needsAutoLayout(nodes) {
  */
 export function resolveNodeCollision(node, allNodes, options = {}) {
   const opts = normalizeLayoutOptions(options)
-  const pos = {
-    x: Math.round(Number(node.position?.x) || 0),
-    y: Math.round(Number(node.position?.y) || 0),
-  }
+  const pos = normalizePosition(node.position)
   const occupied = allNodes
     .filter((n) => n.id !== node.id)
-    .map((n) => ({
-      x: Math.round(Number(n.position?.x) || 0),
-      y: Math.round(Number(n.position?.y) || 0),
-    }))
+    .filter((n) => !isZeroPosition(n.position))
+    .map((n) => getNodeRect(n, opts))
 
-  const collides = occupied.some((occ) => positionsCollide(pos, occ, opts))
+  const movingRect = getNodeRect(node, opts, pos)
+  const collides = findBlockingRect(movingRect, occupied, opts)
   if (!collides) return pos
 
-  return findNonOverlappingPosition(pos, occupied, opts)
+  return findNonOverlappingPosition(node, pos, occupied, opts)
 }
 
 function getBoundingBox(positions) {
@@ -211,27 +268,25 @@ function getBoundingBox(positions) {
   valid.forEach((pos) => {
     minX = Math.min(minX, pos.x)
     minY = Math.min(minY, pos.y)
-    maxX = Math.max(maxX, pos.x)
-    maxY = Math.max(maxY, pos.y)
+    maxX = Math.max(maxX, pos.right ?? pos.x)
+    maxY = Math.max(maxY, pos.bottom ?? pos.y)
   })
 
   return { minX, minY, maxX, maxY }
 }
 
-function findNonOverlappingPosition(initialPos, occupiedPositions, opts) {
-  let pos = { x: Math.round(initialPos.x), y: Math.round(initialPos.y) }
-  const { minDx, minDy } = getCollisionThresholds(opts)
+function findNonOverlappingPosition(node, initialPos, occupiedRects, opts) {
+  const originalPos = normalizePosition(initialPos)
+  let pos = { ...originalPos }
   let attempts = 0
 
-  while (attempts < 48) {
-    const collides = occupiedPositions.some((occupied) => positionsCollide(pos, occupied, opts))
-    if (!collides) return pos
+  while (attempts < 64) {
+    const rect = getNodeRect(node, opts, pos)
+    const blocking = findBlockingRect(rect, occupiedRects, opts)
+    if (!blocking) return pos
 
     attempts += 1
-    pos = {
-      x: Math.round(pos.x + (attempts % 2 === 0 ? minDx : 0)),
-      y: Math.round(pos.y + (attempts % 2 === 1 ? minDy : 0))
-    }
+    pos = chooseCollisionSeparation(rect, blocking, originalPos, opts)
   }
 
   return pos
@@ -243,7 +298,7 @@ function placeNewNodes(nodes, edges, options = {}) {
   const resolvedOpts = { ...opts, direction }
   const { inEdges, outEdges } = buildEdgeMaps(edges)
   const posMap = Object.fromEntries(
-    nodes.map((node) => [node.id, { x: Number(node.position?.x) || 0, y: Number(node.position?.y) || 0 }])
+    nodes.map((node) => [node.id, isZeroPosition(node.position) ? null : normalizePosition(node.position)])
   )
 
   const unpositioned = nodes.filter((node) => isZeroPosition(posMap[node.id]))
@@ -251,7 +306,7 @@ function placeNewNodes(nodes, edges, options = {}) {
 
   const occupied = nodes
     .filter((node) => !isZeroPosition(posMap[node.id]))
-    .map((node) => posMap[node.id])
+    .map((node) => getNodeRect(node, opts, posMap[node.id]))
 
   unpositioned.forEach((node) => {
     const sources = (inEdges[node.id] || []).filter((id) => !isZeroPosition(posMap[id]))
@@ -278,9 +333,9 @@ function placeNewNodes(nodes, edges, options = {}) {
       candidate = { x: resolvedOpts.startX, y: resolvedOpts.startY }
     }
 
-    const resolved = findNonOverlappingPosition(candidate, occupied, resolvedOpts)
+    const resolved = findNonOverlappingPosition(node, candidate, occupied, resolvedOpts)
     posMap[node.id] = resolved
-    occupied.push(resolved)
+    occupied.push(getNodeRect(node, resolvedOpts, resolved))
   })
 
   return nodes.map((node) => ({
@@ -313,10 +368,7 @@ export function applyWorkflowLayout(nodes, edges, existingNodes = [], options = 
     if (preserved && !isZeroPosition(preserved)) {
       return {
         ...node,
-        position: {
-          x: Number(preserved.x) || 0,
-          y: Number(preserved.y) || 0
-        }
+        position: normalizePosition(preserved)
       }
     }
     return node

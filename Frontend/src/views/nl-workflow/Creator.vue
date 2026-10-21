@@ -14,10 +14,14 @@
         @click="showHistorySidebar = false"
       />
       <aside
+        ref="historyPanel"
         class="history-sidebar"
         :class="{ open: showHistorySidebar }"
         :style="historySidebarStyle"
         :aria-hidden="!showHistorySidebar"
+        :inert="!showHistorySidebar"
+        @keydown.esc="showHistorySidebar = false"
+        @keydown.tab="trapHistoryFocus"
       >
         <div class="sidebar-header">
           <div class="sidebar-title">
@@ -26,6 +30,7 @@
           </div>
           <button
             class="sidebar-close-btn"
+            aria-label="关闭对话历史"
             @click="showHistorySidebar = false"
           >
             <X class="close-icon" />
@@ -109,13 +114,34 @@
           </button>
           <button
             class="filter-tag"
-            :class="{ active: historyStatusFilter === 'generating' }"
-            @click="historyStatusFilter = 'generating'; handleHistorySearch()"
+            :class="{ active: historyStatusFilter === 'processing' }"
+            @click="historyStatusFilter = 'processing'; handleHistorySearch()"
           >
-            生成中
+            处理中
+          </button>
+          <button
+            v-for="state in ['active', 'failed']"
+            :key="state"
+            class="filter-tag"
+            :class="{ active: historyStatusFilter === state }"
+            @click="historyStatusFilter = state; handleHistorySearch()"
+          >
+            {{ getStatusText(state) }}
           </button>
         </div>
 
+        <div
+          v-if="historyError"
+          class="workspace-notice"
+          role="alert"
+        >
+          {{ historyError }} <el-button
+            link
+            @click="loadHistory()"
+          >
+            重试
+          </el-button>
+        </div>
         <div
           v-loading="historyLoading"
           class="session-list"
@@ -130,6 +156,10 @@
               'is-active': activeSessionId === (session.sessionId || session.session_id || session.id),
               'is-selected': selectedSessions.includes(session.sessionId || session.session_id || session.id)
             }"
+            role="button"
+            tabindex="0"
+            @keydown.enter="handleSessionItemClick($event)"
+            @keydown.space.prevent="handleSessionItemClick($event)"
             @click="handleSessionItemClick($event)"
           >
             <div
@@ -180,12 +210,16 @@
             <div
               v-if="!batchMode"
               class="session-actions"
+              @click.stop
             >
               <el-dropdown
                 trigger="click"
                 @command="(cmd) => handleSessionAction(cmd, session)"
               >
-                <button class="action-btn">
+                <button
+                  class="action-btn"
+                  :aria-label="`${session.name || '未命名会话'}的更多操作`"
+                >
                   <MoreVertical class="action-icon" />
                 </button>
                 <template #dropdown>
@@ -217,14 +251,22 @@
           >
             <History class="empty-icon" />
             <div class="empty-title">
-              暂无对话记录
+              {{ historySearchQuery || historyStatusFilter ? '没有匹配的对话' : '暂无对话记录' }}
             </div>
             <div class="empty-hint">
-              点击上方「新建对话」开始
+              {{ historySearchQuery || historyStatusFilter ? '调整搜索词或状态筛选' : '点击上方「新建对话」开始' }}
             </div>
           </div>
         </div>
 
+        <el-button
+          v-if="historyHasMore"
+          :loading="historyLoading"
+          class="history-more"
+          @click="loadHistory(true)"
+        >
+          加载更多对话
+        </el-button>
         <div
           v-if="!batchMode"
           class="sidebar-footer"
@@ -251,42 +293,116 @@
     <!-- ============================================ -->
     <!-- 主内容区 -->
     <!-- ============================================ -->
-    <div class="creator-main">
-      <!-- 顶部工具栏 -->
-      <div class="creator-toolbar">
-        <button
-          class="toolbar-btn"
-          @click="showHistorySidebar = true"
-        >
-          <Menu class="toolbar-icon" />
-          <span>历史对话</span>
+    <div
+      class="creator-main"
+      :inert="showHistorySidebar"
+    >
+      <header class="workspace-header">
+        <div class="workspace-header-start">
+          <button
+            ref="historyTrigger"
+            class="toolbar-btn icon-button"
+            title="历史对话"
+            aria-label="历史对话"
+            :aria-expanded="showHistorySidebar"
+            @click="showHistorySidebar = true"
+          >
+            <PanelLeft class="toolbar-icon" />
+          </button>
+          <h1>{{ NL_CREATOR.title }}</h1>
           <span
-            v-if="historyTotal > 0"
-            class="toolbar-badge"
-          >{{ historyTotal }}</span>
-        </button>
-
+            class="header-divider"
+            aria-hidden="true"
+          >/</span>
+          <button
+            class="conversation-title"
+            :title="NL_CREATOR.renameConversation"
+            :disabled="!currentTab || _isSending"
+            @click="handleRenameTab(currentTab)"
+          >
+            {{ currentTab?.title || NL_CREATOR.newConversation }}
+          </button>
+        </div>
         <div class="toolbar-right">
+          <button
+            v-if="currentTab?.hasWorkflow"
+            ref="previewTrigger"
+            class="toolbar-btn preview-toggle"
+            :aria-expanded="showMiniPreview"
+            @click="showMiniPreview = !showMiniPreview"
+          >
+            <PanelRight class="toolbar-icon" /><span>{{ NL_CREATOR.preview }}</span>
+          </button>
+          <el-dropdown
+            trigger="click"
+            placement="bottom-end"
+          >
+            <button
+              class="toolbar-btn icon-button"
+              :title="NL_CREATOR.conversationActions"
+              :aria-label="NL_CREATOR.conversationActions"
+            >
+              <MoreVertical class="toolbar-icon" />
+            </button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item
+                  :disabled="!currentTab?.sessionId || currentTabLoading || _isSending"
+                  @click="refreshCurrentSession"
+                >
+                  <RefreshCw class="dropdown-icon" />同步会话
+                </el-dropdown-item>
+                <el-dropdown-item
+                  :disabled="!currentTab || _isSending"
+                  @click="exportConversation"
+                >
+                  <Download class="dropdown-icon" />导出对话
+                </el-dropdown-item>
+                <el-dropdown-item
+                  :disabled="!currentTab || _isSending"
+                  @click="handleRenameTab(currentTab)"
+                >
+                  <Edit2 class="dropdown-icon" />重命名对话
+                </el-dropdown-item>
+                <el-dropdown-item
+                  :disabled="!currentTab || _isSending"
+                  @click="closeTab(activeTabId)"
+                >
+                  <X class="dropdown-icon" />关闭当前对话
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
           <button
             class="toolbar-btn new-tab-btn"
             :disabled="currentTabLoading"
             @click="handleNewTab"
           >
-            <Plus class="toolbar-icon" />
-            <span>新标签</span>
+            <Plus class="toolbar-icon" /><span>{{ NL_CREATOR.newConversation }}</span>
           </button>
         </div>
+      </header>
+      <div
+        v-if="storageError"
+        class="workspace-notice"
+        role="alert"
+      >
+        {{ storageError }}
       </div>
 
       <!-- ============================================ -->
       <!-- 浏览器风格标签页 -->
       <!-- ============================================ -->
       <div
-        v-if="tabs.length > 0"
+        v-if="tabs.length > 1"
         class="tab-bar"
       >
         <div class="tab-scroll-container">
-          <div class="tab-list">
+          <div
+            class="tab-list"
+            role="tablist"
+            aria-label="语创对话"
+          >
             <div
               v-for="tab in tabs"
               :key="tab.id"
@@ -295,6 +411,14 @@
                 'is-active': activeTabId === tab.id,
                 'is-loading': tab.isLoading
               }"
+              role="tab"
+              :aria-selected="activeTabId === tab.id"
+              :aria-disabled="_isSending && activeTabId !== tab.id"
+              :tabindex="activeTabId === tab.id ? 0 : -1"
+              @keydown.enter="switchTab(tab.id)"
+              @keydown.space.prevent="switchTab(tab.id)"
+              @keydown.right.prevent="switchTab(tabs[(tabs.indexOf(tab) + 1) % tabs.length].id)"
+              @keydown.left.prevent="switchTab(tabs[(tabs.indexOf(tab) + tabs.length - 1) % tabs.length].id)"
               @click="switchTab(tab.id)"
               @dblclick="handleRenameTab(tab)"
             >
@@ -330,7 +454,9 @@
               <!-- Close Button -->
               <button
                 class="tab-close"
-                :title="tab.isDirty ? '关闭并保存' : '关闭'"
+                :title="tab.draft ? '关闭标签会移除未发送草稿' : '关闭标签'"
+                :aria-label="`关闭 ${tab.title}`"
+                :disabled="_isSending"
                 @click.stop="closeTab(tab.id)"
               >
                 <X class="tab-close-icon" />
@@ -379,322 +505,508 @@
         </div>
       </div>
 
-      <!-- 模型选择器 -->
-      <div class="model-selector-bar">
-        <div class="model-selector">
-          <label class="model-label">选择模型</label>
-          <el-select
-            v-model="selectedModel"
-            placeholder="选择 AI 模型"
-            filterable
-            size="large"
-            class="model-select"
-            :loading="modelsLoading"
-            no-data-text="加载模型中..."
-            data-testid="model-selector"
-            @focus="loadModels"
-          >
-            <template v-if="Object.keys(modelOptions).length > 0">
-              <el-option-group
-                v-for="(modelList, provider) in modelOptions"
-                :key="provider"
-                :label="provider"
-              >
-                <el-option
-                  v-for="opt in modelList"
-                  :key="opt.modelId"
-                  :label="opt.name"
-                  :value="opt.modelId"
-                >
-                  <div class="model-option-content">
-                    <span>{{ opt.name }}</span>
-                    <span
-                      v-if="opt.modelId === selectedModel"
-                      class="model-selected-badge"
-                    >使用中</span>
-                  </div>
-                </el-option>
-              </el-option-group>
-            </template>
-            <template v-else>
-              <el-option
-                label="加载中..."
-                value=""
-                disabled
-              />
-            </template>
-          </el-select>
-        </div>
-        <el-checkbox
-          v-model="showAllModels"
-          class="show-all-models"
-          @change="loadModels(true)"
+      <div
+        v-if="modelsError"
+        class="workspace-notice"
+        role="alert"
+      >
+        {{ modelsError }} <el-button
+          link
+          @click="loadModels(true)"
         >
-          显示全部模型
-        </el-checkbox>
-        <div
-          v-if="selectedModel"
-          class="model-info"
-        >
-          <span class="model-name">{{ selectedModel }}</span>
-          <el-tag
-            v-if="selectedModelProvider"
-            size="small"
-            type="info"
-          >
-            {{ selectedModelProvider }}
-          </el-tag>
-        </div>
-        <div
-          v-else-if="!modelsLoading && availableModels.length === 0"
-          class="model-info model-unavailable"
-        >
-          <el-icon><AlertTriangle /></el-icon>
-          <span>无可用模型，请确保已配置 API Key 或启动 Ollama</span>
-        </div>
+          重试
+        </el-button>
       </div>
-
       <!-- 聊天容器 -->
-      <div class="chat-container">
+      <div
+        v-if="currentTab?.taskId && ['processing', 'failed'].includes(currentTab.sessionStatus)"
+        class="workspace-notice"
+        role="status"
+      >
+        后台任务：{{ getStatusText(currentTab.sessionStatus) }}。可同步会话查看最新结果。
+        <el-button
+          v-if="currentTab.sessionStatus === 'failed'"
+          link
+          :loading="recoveringTask"
+          @click="retryBackgroundTask"
+        >
+          重试后台任务
+        </el-button>
+      </div>
+      <div
+        class="chat-container"
+        :class="{ 'has-preview': currentTab?.hasWorkflow && showMiniPreview, 'is-welcome': isWelcome }"
+      >
         <div
-          ref="messagesContainer"
-          :key="activeTabId"
-          class="chat-messages"
+          class="conversation-pane"
+          :inert="compactPreview && currentTab?.hasWorkflow && showMiniPreview"
         >
           <div
-            v-for="(message, index) in currentTabMessages"
-            :key="index"
-            :class="['message', `message-${message.role}`]"
+            v-if="isWelcome"
+            class="welcome-state"
           >
-            <div class="message-avatar">
-              <NlAvatar
-                :role="message.role"
-                size="md"
-              />
-            </div>
-            <div class="message-content">
-              <div
-                v-if="message.isStreaming || (!message.workflow && message.content)"
-                class="message-text"
-              >
-                <template v-if="message.isStreaming">
-                  {{ message.content }}<span class="cursor">|</span>
-                </template>
-                <template v-else>
-                  {{ message.content }}
-                </template>
+            <h2>{{ NL_CREATOR.welcomeTitle }}</h2>
+            <p>{{ NL_CREATOR.welcomeDescription }}</p>
+          </div>
+          <div
+            v-show="!isWelcome"
+            ref="messagesContainer"
+            :key="activeTabId"
+            class="chat-messages"
+            role="log"
+            aria-label="对话消息"
+            :aria-busy="currentTabLoading"
+            @scroll="followMessages = $event.target.scrollHeight - $event.target.scrollTop - $event.target.clientHeight < NL_CREATOR.scrollThreshold"
+          >
+            <div
+              v-for="(message, index) in currentTabMessages"
+              :key="index"
+              :class="['message', `message-${message.role}`]"
+            >
+              <div class="message-avatar">
+                <NlAvatar
+                  :role="message.role"
+                  size="md"
+                  :state="getAssistantAvatarState(message, streamMode)"
+                  :animated="Boolean(message.isStreaming)"
+                />
               </div>
-              <div
-                v-else-if="message.workflow"
-                class="message-text message-text--summary"
-              >
-                已生成工作流: {{ message.workflow.name || '未命名' }}
-              </div>
-
-              <div
-                v-if="message.workflow"
-                class="workflow-preview"
-              >
-                <div class="preview-header">
-                  <GitBranch class="preview-icon" />
-                  <span class="preview-name">{{ message.workflow.name }}</span>
-                  <el-tag
-                    size="small"
-                    type="info"
-                  >
-                    {{ message.workflow.nodes?.length || 0 }} 节点
-                  </el-tag>
+              <div class="message-content">
+                <div
+                  v-if="message.isStreaming || (!message.workflow && message.content)"
+                  class="message-text"
+                >
+                  <template v-if="message.isStreaming">
+                    {{ message.content }}<span class="cursor">|</span>
+                  </template>
+                  <template v-else>
+                    {{ message.content }}
+                  </template>
+                </div>
+                <div
+                  v-else-if="message.workflow"
+                  class="message-text message-text--summary"
+                >
+                  已生成工作流: {{ message.workflow.name || '未命名' }}
                 </div>
 
                 <div
-                  v-if="message.workflow.description"
-                  class="preview-desc"
+                  v-if="message.workflow"
+                  class="workflow-preview"
                 >
-                  {{ message.workflow.description }}
-                </div>
-
-                <div class="preview-nodes">
-                  <div
-                    v-for="(node, idx) in (message.workflow.nodes || []).slice(0, 8)"
-                    :key="idx"
-                    class="node-item"
-                  >
-                    <span class="node-name">{{ node.name || node.type }}</span>
+                  <div class="preview-header">
+                    <GitBranch class="preview-icon" />
+                    <span class="preview-name">{{ message.workflow.name }}</span>
                     <el-tag
                       size="small"
                       type="info"
                     >
-                      {{ node.type }}
+                      {{ message.workflow.nodes?.length || 0 }} 节点
                     </el-tag>
                   </div>
+
+                  <div
+                    v-if="message.workflow.description"
+                    class="preview-desc"
+                  >
+                    {{ message.workflow.description }}
+                  </div>
+
+                  <div class="preview-nodes">
+                    <div
+                      v-for="(node, idx) in (message.workflow.nodes || []).slice(0, 8)"
+                      :key="idx"
+                      class="node-item"
+                    >
+                      <span class="node-name">{{ node.name || node.type }}</span>
+                      <el-tag
+                        size="small"
+                        type="info"
+                      >
+                        {{ node.type }}
+                      </el-tag>
+                    </div>
+                    <span
+                      v-if="(message.workflow.nodes?.length || 0) > 8"
+                      class="more-nodes"
+                    >
+                      +{{ message.workflow.nodes.length - 8 }} 更多
+                    </span>
+                  </div>
+
+                  <div class="preview-actions">
+                    <el-button
+                      size="small"
+                      @click="viewWorkflow(message.workflow)"
+                    >
+                      查看详情
+                    </el-button>
+                    <el-button
+                      size="small"
+                      type="primary"
+                      :loading="_isSaving"
+                      :disabled="_isSending"
+                      @click="saveWorkflow(message.workflow)"
+                    >
+                      <Save class="btn-icon-sm" />
+                      保存到我的工作流
+                    </el-button>
+                  </div>
+                </div>
+
+                <div
+                  v-if="message.suggestions?.length && !message.isStreaming"
+                  class="suggestions"
+                >
+                  <span class="suggestions-label">您可以：</span>
+                  <button
+                    v-for="suggestion in message.suggestions"
+                    :key="suggestion"
+                    class="suggestion-btn"
+                    :disabled="_isSending"
+                    @click="continueConversation(suggestion)"
+                  >
+                    {{ suggestion }}
+                  </button>
+                </div>
+
+                <!-- Email Config Guidance -->
+                <EmailConfigGuide
+                  v-if="message.emailGuidance && !message.isStreaming"
+                  :guidance="message.emailGuidance"
+                />
+
+                <!-- General Node Config Guidance -->
+                <NodeConfigGuide
+                  v-for="(guidance, guidanceIndex) in (!message.isStreaming ? guidanceList(message.nodeGuidance) : [])"
+                  :key="guidanceIndex"
+                  :guidance="guidance"
+                />
+
+                <!-- Intent Analysis Display -->
+                <div
+                  v-if="message.intent && !message.isStreaming"
+                  class="intent-display"
+                >
+                  <span class="intent-label">识别意图：</span>
+                  <el-tag
+                    size="small"
+                    :type="getIntentTagType(message.intent.type || message.intent)"
+                    class="intent-tag"
+                  >
+                    {{ getIntentText(message.intent.type || message.intent) }}
+                  </el-tag>
                   <span
-                    v-if="(message.workflow.nodes?.length || 0) > 8"
-                    class="more-nodes"
-                  >
-                    +{{ message.workflow.nodes.length - 8 }} 更多
-                  </span>
+                    v-if="message.intent.detail"
+                    class="intent-detail"
+                  >{{ message.intent.detail }}</span>
                 </div>
 
-                <div class="preview-actions">
-                  <el-button
-                    size="small"
-                    @click="viewWorkflow(message.workflow)"
+                <div
+                  v-if="!message.isStreaming"
+                  class="message-tools"
+                >
+                  <button
+                    class="toolbar-btn"
+                    aria-label="复制消息"
+                    @click="copyMessage(message)"
                   >
-                    查看详情
-                  </el-button>
-                  <el-button
-                    size="small"
-                    type="primary"
-                    @click="saveWorkflow(message.workflow)"
+                    <Copy class="toolbar-icon" />复制
+                  </button>
+                  <button
+                    v-if="message.error || message.interrupted"
+                    class="toolbar-btn"
+                    :disabled="_isSending"
+                    @click="restoreLastRequest"
                   >
-                    <Save class="btn-icon-sm" />
-                    保存到我的工作流
-                  </el-button>
+                    重新编辑需求
+                  </button>
+                </div>
+                <div class="message-time">
+                  {{ formatTime(message.timestamp) }}
                 </div>
               </div>
+            </div>
 
-              <div
-                v-if="message.suggestions?.length && !message.isStreaming"
-                class="suggestions"
-              >
-                <span class="suggestions-label">您可以：</span>
-                <button
-                  v-for="suggestion in message.suggestions"
-                  :key="suggestion"
-                  class="suggestion-btn"
-                  @click="continueConversation(suggestion)"
-                >
-                  {{ suggestion }}
-                </button>
+            <div
+              v-if="currentTabLoading"
+              class="message message-assistant"
+            >
+              <div class="message-avatar">
+                <NlAvatar
+                  role="assistant"
+                  size="md"
+                  :state="streamMode === 'generating' ? 'generating' : 'thinking'"
+                  animated
+                />
               </div>
-
-              <!-- Email Config Guidance -->
-              <EmailConfigGuide
-                v-if="message.emailGuidance && !message.isStreaming"
-                :guidance="message.emailGuidance"
-              />
-
-              <!-- General Node Config Guidance -->
-              <NodeConfigGuide
-                v-if="message.nodeGuidance && !message.isStreaming"
-                :guidance="message.nodeGuidance"
-              />
-
-              <!-- Intent Analysis Display -->
-              <div
-                v-if="message.intent && !message.isStreaming"
-                class="intent-display"
-              >
-                <span class="intent-label">识别意图：</span>
-                <el-tag
-                  size="small"
-                  :type="getIntentTagType(message.intent.type)"
-                  class="intent-tag"
+              <div class="message-content">
+                <!-- Enhanced Streaming Progress Indicator -->
+                <div
+                  v-if="isStreaming"
+                  class="streaming-progress"
                 >
-                  {{ getIntentText(message.intent.type) }}
-                </el-tag>
-                <span
-                  v-if="message.intent.detail"
-                  class="intent-detail"
-                >{{ message.intent.detail }}</span>
-              </div>
+                  <div class="progress-header">
+                    <div class="progress-stage">
+                      <span
+                        class="stage-dot"
+                        :class="{ 'is-active': isStreaming }"
+                      />
+                      <span class="stage-text">{{ streamStageLabel }}</span>
+                    </div>
+                    <div class="progress-stats">
+                      <span
+                        v-if="tokenCount > 0"
+                        class="token-count"
+                      >{{ tokenCount }} 字符</span>
+                      <span
+                        v-if="estimatedTimeRemaining"
+                        class="time-remaining"
+                      >{{ estimatedTimeRemaining }}</span>
+                    </div>
+                  </div>
+                  <div class="progress-steps">
+                    <div
+                      v-for="(step, idx) in streamSteps"
+                      :key="step"
+                      class="progress-step"
+                      :class="{
+                        'is-active': idx <= currentStreamStepIndex,
+                        'is-current': idx === currentStreamStepIndex
+                      }"
+                    >
+                      <span class="step-dot" />
+                      <span class="step-label">{{ step }}</span>
+                    </div>
+                  </div>
 
-              <div class="message-time">
-                {{ formatTime(message.timestamp) }}
+                  <!-- 深度思考内容实时展示 -->
+                  <div
+                    v-if="streamThinking"
+                    class="thinking-display"
+                  >
+                    <div class="thinking-header">
+                      <Brain class="thinking-icon" />
+                      <span class="thinking-label">深度思考</span>
+                    </div>
+                    <div class="thinking-content">
+                      {{ streamThinking }}
+                    </div>
+                  </div>
+
+                  <div class="progress-bar">
+                    <div
+                      class="progress-fill"
+                      :style="{ width: streamProgress + '%' }"
+                    />
+                  </div>
+                  <div class="progress-percentage">
+                    {{ Math.round(streamProgress) }}%
+                  </div>
+                </div>
+                <div
+                  v-else
+                  class="typing-indicator"
+                >
+                  <span />
+                  <span />
+                  <span />
+                </div>
               </div>
             </div>
           </div>
 
-          <div
-            v-if="currentTabLoading"
-            class="message message-assistant"
+          <section
+            v-if="isWelcome"
+            class="examples"
+            aria-label="需求模板"
           >
-            <div class="message-avatar">
-              <NlAvatar
-                role="assistant"
-                size="md"
-              />
+            <div class="starter-list">
+              <button
+                v-for="example in NL_STARTERS"
+                :key="example.title"
+                class="starter-item"
+                @click="applyExample(example)"
+              >
+                <span class="starter-category">{{ example.category }}</span><strong>{{ example.title }}</strong><ArrowUpRight
+                  class="starter-arrow"
+                  aria-hidden="true"
+                />
+              </button>
             </div>
-            <div class="message-content">
-              <!-- Enhanced Streaming Progress Indicator -->
-              <div
-                v-if="isStreaming"
-                class="streaming-progress"
-              >
-                <div class="progress-header">
-                  <div class="progress-stage">
-                    <span
-                      class="stage-dot"
-                      :class="{ 'is-active': isStreaming }"
-                    />
-                    <span class="stage-text">{{ streamStageLabel }}</span>
-                  </div>
-                  <div class="progress-stats">
-                    <span
-                      v-if="tokenCount > 0"
-                      class="token-count"
-                    >{{ tokenCount }} tokens</span>
-                    <span
-                      v-if="estimatedTimeRemaining"
-                      class="time-remaining"
-                    >{{ estimatedTimeRemaining }}</span>
-                  </div>
-                </div>
-                <div class="progress-steps">
-                  <div
-                    v-for="(step, idx) in streamSteps"
-                    :key="step"
-                    class="progress-step"
-                    :class="{
-                      'is-active': idx <= currentStreamStepIndex,
-                      'is-current': idx === currentStreamStepIndex
-                    }"
-                  >
-                    <span class="step-dot" />
-                    <span class="step-label">{{ step }}</span>
-                  </div>
-                </div>
+          </section>
 
-                <!-- 深度思考内容实时展示 -->
-                <div
-                  v-if="streamThinking"
-                  class="thinking-display"
+          <div class="chat-input">
+            <el-input
+              id="chat-message-input"
+              ref="chatInputRef"
+              v-model="inputMessage"
+              type="textarea"
+              :autosize="NL_CREATOR.composerRows"
+              :maxlength="NL_CREATOR.maxMessageLength"
+              :title="`${inputModeHint} · ${NL_CREATOR.keyboardHint}`"
+              data-testid="chat-input"
+              :placeholder="inputPlaceholder"
+              :disabled="currentTabLoading"
+              aria-label="输入工作流描述"
+              @keydown.enter="handleInputKeydown"
+            />
+            <div class="composer-controls">
+              <div class="input-mode-bar">
+                <button
+                  type="button"
+                  class="mode-chip"
+                  :class="{ 'mode-chip--active': inputMode === 'thinking' }"
+                  :disabled="currentTabLoading"
+                  :aria-pressed="inputMode === 'thinking'"
+                  :title="NL_CREATOR.thinkingHint"
+                  aria-label="深度思考"
+                  data-testid="mode-thinking"
+                  @click="inputMode = 'thinking'"
                 >
-                  <div class="thinking-header">
-                    <Brain class="thinking-icon" />
-                    <span class="thinking-label">深度思考</span>
-                  </div>
-                  <div class="thinking-content">
-                    {{ streamThinking }}
-                  </div>
-                </div>
-
-                <div class="progress-bar">
-                  <div
-                    class="progress-fill"
-                    :style="{ width: streamProgress + '%' }"
-                  />
-                </div>
-                <div class="progress-percentage">
-                  {{ Math.round(streamProgress) }}%
-                </div>
+                  <Brain class="mode-chip-icon" />
+                  <span class="mode-label">{{ NL_CREATOR.thinkingLabel }}</span>
+                </button>
+                <button
+                  type="button"
+                  class="mode-chip"
+                  :class="{ 'mode-chip--active': inputMode === 'generate' }"
+                  :disabled="currentTabLoading"
+                  :aria-pressed="inputMode === 'generate'"
+                  :title="NL_CREATOR.generateHint"
+                  aria-label="生成工作流"
+                  data-testid="mode-generate"
+                  @click="inputMode = 'generate'"
+                >
+                  <GitBranch class="mode-chip-icon" />
+                  <span class="mode-label">{{ NL_CREATOR.generateLabel }}</span>
+                </button>
               </div>
-              <div
-                v-else
-                class="typing-indicator"
+              <div class="composer-model">
+                <el-select
+                  v-model="selectedModel"
+                  placeholder="选择 AI 模型"
+                  filterable
+                  size="small"
+                  class="model-select"
+                  aria-label="选择 AI 模型"
+                  :loading="modelsLoading"
+                  :disabled="_isSending"
+                  :no-data-text="modelsLoading ? '加载模型中...' : '暂无可用模型'"
+                  data-testid="model-selector"
+                  @focus="loadModels(false)"
+                >
+                  <template v-if="Object.keys(modelOptions).length > 0">
+                    <el-option-group
+                      v-for="(modelList, provider) in modelOptions"
+                      :key="provider"
+                      :label="provider"
+                    >
+                      <el-option
+                        v-for="opt in modelList"
+                        :key="opt.modelId"
+                        :label="opt.name"
+                        :value="opt.modelId"
+                      >
+                        <div class="model-option-content">
+                          <span>{{ opt.name }}</span>
+                          <span
+                            v-if="opt.modelId === selectedModel"
+                            class="model-selected-badge"
+                          >使用中</span>
+                        </div>
+                      </el-option>
+                    </el-option-group>
+                  </template>
+                  <template v-else>
+                    <el-option
+                      label="加载中..."
+                      value=""
+                      disabled
+                    />
+                  </template>
+                </el-select>
+                <el-popover
+                  placement="top-start"
+                  trigger="click"
+                  :width="NL_CREATOR.modelSettingsWidth"
+                >
+                  <template #reference>
+                    <button
+                      class="toolbar-btn icon-button"
+                      :title="NL_CREATOR.modelSettings"
+                      :aria-label="NL_CREATOR.modelSettings"
+                    >
+                      <Settings class="toolbar-icon" />
+                    </button>
+                  </template>
+                  <div class="model-settings">
+                    <el-checkbox
+                      v-model="showAllModels"
+                      :disabled="_isSending"
+                      @change="loadModels(true)"
+                    >
+                      显示全部模型
+                    </el-checkbox>
+                    <p v-if="selectedModelProvider">
+                      {{ selectedModelProvider }} · {{ selectedModel }}
+                    </p>
+                    <el-button
+                      text
+                      :loading="modelsLoading"
+                      :disabled="_isSending"
+                      @click="loadModels(true)"
+                    >
+                      <RefreshCw class="toolbar-icon" />刷新模型
+                    </el-button>
+                  </div>
+                </el-popover>
+              </div>
+              <VoiceRecorder
+                :key="activeTabId"
+                v-model="voiceClip"
+                :disabled="currentTabLoading"
+                @busy-change="voiceBusy = $event"
+              />
+              <el-button
+                v-if="_isSending"
+                type="danger"
+                plain
+                @click="activeController?.abort()"
               >
-                <span />
-                <span />
-                <span />
-              </div>
+                <Square class="btn-icon-sm" />停止接收
+              </el-button>
+              <AppButton
+                v-else
+                variant="primary"
+                class="send-button"
+                :aria-label="sendButtonLabel"
+                :title="sendButtonLabel"
+                :loading="currentTabLoading"
+                :disabled="!inputMessage.trim() || voiceBusy || _isSending || !selectedModel || modelsLoading || backgroundTaskPending"
+                data-testid="send-button"
+                @click="sendMessage"
+              >
+                <ArrowUp class="btn-icon" />
+              </AppButton>
+            </div>
+            <div
+              v-if="!modelsLoading && !selectedModel && availableModels.length === 0"
+              class="composer-warning"
+              role="status"
+            >
+              {{ NL_CREATOR.noModel }}
             </div>
           </div>
         </div>
-
         <!-- Mini Workflow Preview Panel (embedded) with Edge Visualization -->
         <div
-          v-if="currentTab?.hasWorkflow && !currentTabLoading"
+          v-if="currentTab?.hasWorkflow && showMiniPreview"
+          ref="previewPanel"
           class="mini-workflow-preview"
+          role="region"
+          aria-label="工作流预览"
+          @keydown.esc.stop="showMiniPreview = false"
         >
           <div class="preview-panel-header">
             <GitBranch class="preview-panel-icon" />
@@ -719,9 +1031,10 @@
             <el-button
               size="small"
               text
-              @click="showMiniPreview = !showMiniPreview"
+              :aria-label="NL_CREATOR.closePreview"
+              @click="showMiniPreview = false"
             >
-              {{ showMiniPreview ? '收起' : '展开' }}
+              <X class="btn-icon-sm" />
             </el-button>
           </div>
           <div
@@ -778,12 +1091,16 @@
 
             <!-- General Node Config Guidance in Right Panel -->
             <NodeConfigGuide
-              v-if="nodeGuidance"
-              :guidance="nodeGuidance"
+              v-for="(guidance, guidanceIndex) in guidanceList(nodeGuidance)"
+              :key="guidanceIndex"
+              :guidance="guidance"
             />
 
             <!-- Workflow Visualization with VueFlow -->
-            <div class="workflow-visualization">
+            <div
+              ref="previewContainer"
+              class="workflow-visualization"
+            >
               <div
                 v-if="nlNodes.length === 0"
                 class="empty-workflow-hint"
@@ -792,9 +1109,11 @@
                 <span>{{ currentTabLoading ? '正在生成工作流...' : '暂无工作流预览，请发送描述生成' }}</span>
               </div>
               <VueFlow
-                v-else
+                v-else-if="previewReady"
+                :id="`nl-preview-${activeTabId}`"
                 v-model:nodes="nlNodes"
                 v-model:edges="nlEdges"
+                :style="{ width: `${previewDimensions.width}px`, height: `${previewDimensions.height}px` }"
                 :node-types="nlNodeTypes"
                 :default-viewport="{ ...WORKFLOW_CANVAS_VIEWPORT, zoom: 0.85 }"
                 :min-zoom="WORKFLOW_CANVAS_ZOOM.min"
@@ -807,223 +1126,6 @@
                 fit-view-on-init
                 @node-click="handleNlNodeClick"
               >
-                <template #node-start="{ data }">
-                  <StartNode :data="data" />
-                </template>
-                <template #node-end="{ data }">
-                  <EndNode :data="data" />
-                </template>
-                <template #node-llm="{ data }">
-                  <LLMNode :data="data" />
-                </template>
-                <template #node-input="{ data }">
-                  <InputNode :data="data" />
-                </template>
-                <template #node-output="{ data }">
-                  <OutputNode :data="data" />
-                </template>
-                <template #node-condition="{ data }">
-                  <ConditionNode :data="data" />
-                </template>
-                <template #node-delay="{ data }">
-                  <DelayNode :data="data" />
-                </template>
-                <template #node-http="{ data }">
-                  <HttpNode :data="data" />
-                </template>
-                <template #node-code="{ data }">
-                  <CodeNode :data="data" />
-                </template>
-                <template #node-variable="{ data }">
-                  <VariableNode :data="data" />
-                </template>
-                <template #node-prompt="{ data }">
-                  <PromptNode :data="data" />
-                </template>
-                <template #node-email="{ data }">
-                  <EmailNode :data="data" />
-                </template>
-                <template #node-memory="{ data }">
-                  <MemoryNode :data="data" />
-                </template>
-                <template #node-tool="{ data }">
-                  <ToolNode :data="data" />
-                </template>
-                <template #node-retriever="{ data }">
-                  <RetrieverNode :data="data" />
-                </template>
-                <template #node-vector_store="{ data }">
-                  <VectorStoreNode :data="data" />
-                </template>
-                <template #node-embedding="{ data }">
-                  <EmbeddingNode :data="data" />
-                </template>
-                <template #node-subworkflow="{ data }">
-                  <SubworkflowNode :data="data" />
-                </template>
-                <template #node-executor="{ data }">
-                  <ExecutorNode :data="data" />
-                </template>
-                <template #node-planner="{ data }">
-                  <PlannerNode :data="data" />
-                </template>
-                <template #node-agent="{ data }">
-                  <AgentNode :data="data" />
-                </template>
-                <template #node-loop="{ data }">
-                  <LoopNode :data="data" />
-                </template>
-                <template #node-switch="{ data }">
-                  <SwitchNode :data="data" />
-                </template>
-                <template #node-file_reader="{ data }">
-                  <FileReaderNode :data="data" />
-                </template>
-                <template #node-file_writer="{ data }">
-                  <FileWriterNode :data="data" />
-                </template>
-                <template #node-transform="{ data }">
-                  <TransformNode :data="data" />
-                </template>
-                <template #node-json_transform="{ data }">
-                  <JsonTransformNode :data="data" />
-                </template>
-                <template #node-csv_transform="{ data }">
-                  <CsvTransformNode :data="data" />
-                </template>
-                <template #node-document_loader="{ data }">
-                  <DocumentLoaderNode :data="data" />
-                </template>
-                <template #node-web_scraper="{ data }">
-                  <WebScraperNode :data="data" />
-                </template>
-                <template #node-dataset_upload="{ data }">
-                  <DatasetUploadNode :data="data" />
-                </template>
-                <template #node-data_annotation="{ data }">
-                  <DataAnnotationNode :data="data" />
-                </template>
-                <template #node-data_augmentation="{ data }">
-                  <DataAugmentationNode :data="data" />
-                </template>
-                <template #node-model_training="{ data }">
-                  <ModelTrainingNode :data="data" />
-                </template>
-                <template #node-yolo_training="{ data, id, selected }">
-                  <YoloTrainingNode
-                    :id="id"
-                    :data="data"
-                    :selected="selected"
-                  />
-                </template>
-                <template #node-project_profiler="{ data, id, selected }">
-                  <ProjectProfilerNode
-                    :id="id"
-                    :data="data"
-                    :selected="selected"
-                  />
-                </template>
-                <template #node-model_evaluation="{ data }">
-                  <ModelEvaluationNode :data="data" />
-                </template>
-                <template #node-model_deployment="{ data }">
-                  <ModelDeploymentNode :data="data" />
-                </template>
-                <template #node-image_generation="{ data }">
-                  <ImageGenerationNode :data="data" />
-                </template>
-                <template #node-image_editing="{ data }">
-                  <ImageEditingNode :data="data" />
-                </template>
-                <template #node-video_generation="{ data }">
-                  <VideoGenerationNode :data="data" />
-                </template>
-                <template #node-audio_generation="{ data }">
-                  <AudioGenerationNode :data="data" />
-                </template>
-                <template #node-subtitle_generation="{ data, id, selected }">
-                  <SubtitleGenerationNode
-                    :id="id"
-                    :data="data"
-                    :selected="selected"
-                  />
-                </template>
-                <template #node-video_upload="{ data, id, selected }">
-                  <VideoUploadNode
-                    :id="id"
-                    :data="data"
-                    :selected="selected"
-                  />
-                </template>
-                <template #node-subtitle_translate="{ data, id, selected }">
-                  <SubtitleTranslateNode
-                    :id="id"
-                    :data="data"
-                    :selected="selected"
-                  />
-                </template>
-                <template #node-segment_dubbing="{ data, id, selected }">
-                  <SegmentDubbingNode
-                    :id="id"
-                    :data="data"
-                    :selected="selected"
-                  />
-                </template>
-                <template #node-lip_sync="{ data, id, selected }">
-                  <LipSyncNode
-                    :id="id"
-                    :data="data"
-                    :selected="selected"
-                  />
-                </template>
-                <template #node-subtitle_burn="{ data, id, selected }">
-                  <SubtitleBurnNode
-                    :id="id"
-                    :data="data"
-                    :selected="selected"
-                  />
-                </template>
-                <template #node-video_translation="{ data, id, selected }">
-                  <VideoTranslationNode
-                    :id="id"
-                    :data="data"
-                    :selected="selected"
-                  />
-                </template>
-                <template #node-website_generator="{ data }">
-                  <WebsiteGeneratorNode :data="data" />
-                </template>
-                <template #node-environment_provision="{ data, id, selected }">
-                  <EnvironmentProvisionNode
-                    :id="id"
-                    :data="data"
-                    :selected="selected"
-                  />
-                </template>
-                <template #node-site_qa="{ data, id, selected }">
-                  <SiteQaNode
-                    :id="id"
-                    :data="data"
-                    :selected="selected"
-                  />
-                </template>
-                <template #node-site_preview="{ data, id, selected }">
-                  <SitePreviewNode
-                    :id="id"
-                    :data="data"
-                    :selected="selected"
-                  />
-                </template>
-                <template #node-project_agent="{ data, id, selected }">
-                  <ProjectAgentNode
-                    :id="id"
-                    :data="data"
-                    :selected="selected"
-                  />
-                </template>
-                <template #node-reranker="{ data }">
-                  <RerankerNode :data="data" />
-                </template>
                 <Background :gap="16" />
               </VueFlow>
             </div>
@@ -1069,34 +1171,25 @@
                     aria-label="节点类型"
                   />
                 </div>
-                <div
-                  v-if="selectedNode.config?.model || selectedNode.config?.prompt"
-                  class="config-field"
-                >
-                  <label for="node-model-input">模型</label>
+                <div class="config-field">
+                  <label for="node-config-json">节点参数 (JSON)</label>
                   <el-input
-                    id="node-model-input"
-                    v-model="editingNodeConfig.model"
-                    size="small"
-                    placeholder="模型名称"
-                    aria-label="模型名称"
-                  />
-                </div>
-                <div
-                  v-if="selectedNode.config?.prompt"
-                  class="config-field"
-                >
-                  <label for="node-prompt-input">提示词</label>
-                  <el-input
-                    id="node-prompt-input"
-                    v-model="editingNodeConfig.prompt"
+                    id="node-config-json"
+                    v-model="configJson"
                     type="textarea"
-                    :rows="3"
-                    size="small"
-                    placeholder="提示词模板"
-                    aria-label="提示词模板"
+                    :rows="8"
+                    aria-label="节点参数 JSON"
+                    :disabled="configSaving"
                   />
+                  <small>参数将保存到会话草稿；完整表单可在工作流编辑器中继续配置。</small>
                 </div>
+                <p
+                  v-if="configError"
+                  class="config-error"
+                  role="alert"
+                >
+                  {{ configError }}
+                </p>
                 <div class="config-actions">
                   <el-button
                     size="small"
@@ -1107,6 +1200,8 @@
                   <el-button
                     size="small"
                     type="primary"
+                    :loading="configSaving"
+                    :disabled="_isSending"
                     @click="saveNodeConfig"
                   >
                     保存
@@ -1126,106 +1221,14 @@
               <el-button
                 size="small"
                 type="primary"
+                :loading="_isSaving"
+                :disabled="_isSending || configSaving"
                 @click="saveWorkflow(getCurrentWorkflow())"
               >
                 <Save class="btn-icon-sm" />
-                保存
+                保存并打开编辑器
               </el-button>
             </div>
-          </div>
-        </div>
-
-        <div
-          v-if="currentTabMessages.length <= 1"
-          class="examples"
-        >
-          <p class="examples-title">
-            快速开始：
-          </p>
-          <div class="examples-grid">
-            <div
-              class="example-card example-card--chat"
-              @click="applyExample('我想做一个智能客服，能自动回答产品问题，复杂问题转人工')"
-            >
-              <MessageSquare class="example-icon" />
-              <span>先聊聊 · 客服场景</span>
-            </div>
-            <div
-              class="example-card"
-              @click="applyExample('创建一个简单的问答机器人，可以回答用户关于产品的问题')"
-            >
-              <MessageSquare class="example-icon" />
-              <span>直接生成 · 问答机器人</span>
-            </div>
-            <div
-              class="example-card"
-              @click="applyExample('创建一个数据处理工作流，读取CSV文件，进行清洗和转换')"
-            >
-              <FileSpreadsheet class="example-icon" />
-              <span>直接生成 · 数据处理</span>
-            </div>
-            <div
-              class="example-card example-card--chat"
-              @click="applyExample('你好，我想了解一下工作流可以做什么')"
-            >
-              <Languages class="example-icon" />
-              <span>先聊聊 · 了解能力</span>
-            </div>
-          </div>
-        </div>
-
-        <div class="chat-input">
-          <div class="input-mode-bar">
-            <button
-              type="button"
-              class="mode-chip"
-              :class="{ 'mode-chip--active': inputMode === 'thinking' }"
-              :disabled="currentTabLoading"
-              data-testid="mode-thinking"
-              @click="inputMode = 'thinking'"
-            >
-              <Brain class="mode-chip-icon" />
-              <span>深度思考</span>
-            </button>
-            <button
-              type="button"
-              class="mode-chip"
-              :class="{ 'mode-chip--active': inputMode === 'generate' }"
-              :disabled="currentTabLoading"
-              data-testid="mode-generate"
-              @click="inputMode = 'generate'"
-            >
-              <GitBranch class="mode-chip-icon" />
-              <span>生成工作流</span>
-            </button>
-            <span class="mode-hint">{{ inputModeHint }}</span>
-          </div>
-          <el-input
-            id="chat-message-input"
-            ref="chatInputRef"
-            v-model="inputMessage"
-            type="textarea"
-            :rows="3"
-            data-testid="chat-input"
-            :placeholder="inputPlaceholder"
-            :disabled="currentTabLoading"
-            aria-label="输入工作流描述"
-            @keydown.enter="handleInputKeydown"
-          />
-          <div class="input-actions">
-            <div class="input-info">
-              <span class="hint">Enter 发送, Shift+Enter 换行</span>
-            </div>
-            <AppButton
-              variant="primary"
-              :loading="currentTabLoading"
-              :disabled="!inputMessage.trim() || _isSending"
-              data-testid="send-button"
-              @click="sendMessage"
-            >
-              <Send class="btn-icon" />
-              {{ sendButtonLabel }}
-            </AppButton>
           </div>
         </div>
       </div>
@@ -1235,7 +1238,7 @@
     <el-dialog
       v-model="showWorkflowDetail"
       title="工作流详情"
-      width="700px"
+      width="min(700px, 94vw)"
       append-to-body
       destroy-on-close
       :close-on-click-modal="true"
@@ -1284,6 +1287,8 @@
         </el-button>
         <el-button
           type="primary"
+          :loading="_isSaving"
+          :disabled="_isSending"
           @click="saveWorkflow(selectedWorkflow)"
         >
           保存工作流
@@ -1295,22 +1300,30 @@
 
 <script setup>
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, onBeforeRouteLeave } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
 import { useAppStore } from '@/stores/app'
+import { useAuthStore } from '@/stores/auth'
+import { VOICE_RECORDER } from '@/config/voiceRecorder'
+import VoiceRecorder from '@/components/nl-workflow/VoiceRecorder.vue'
+import { NL_CREATOR, NL_SESSION_STATUS, NL_STARTERS } from '@/config/nlCreator'
+import { latestWorkflow, parseNodeConfig, conversationMarkdown, consumeNlStream, guidanceList, nlErrorMessage } from '@/utils/nlCreator'
 import {
-  GitBranch, Send, Save,
-  MessageSquare, FileSpreadsheet, Languages, AlertTriangle, History, Trash2,
+  GitBranch, ArrowUp, ArrowUpRight, PanelLeft, PanelRight, Save,
+  MessageSquare, Download, Copy, RefreshCw, Square, AlertTriangle, History, Trash2,
   Search, Clock, MoreVertical, Edit2, AlertCircle, Plus,
-  Menu, X, CheckSquare, ExternalLink, ChevronDown, XCircle, MinusCircle, CheckCircle,
+  X, CheckSquare, ExternalLink, ChevronDown, XCircle, MinusCircle, CheckCircle,
   Settings, Brain
 } from 'lucide-vue-next'
 import { nlWorkflowApi } from '@/api/nl-workflow'
+import { nlPayloadWithCapabilities } from '@/utils/hardwareProfile'
 import { createWorkflow } from '@/api/workflow'
 import { nlWorkflowToVueFlow, nlWorkflowToSavePayload } from '@/utils/workflowTransform'
+import { buildNodeTypesMap } from '@/config/nodeComponents'
 import { WORKFLOW_CANVAS_VIEWPORT, WORKFLOW_CANVAS_ZOOM } from '@/config/workflowCanvas'
 import AppButton from '@/components/common/AppButton.vue'
 import NlAvatar from '@/components/nl-workflow/NlAvatar.vue'
+import { getAssistantAvatarState } from '@/utils/botAvatar'
 import EmailConfigGuide from '@/components/nl-workflow/EmailConfigGuide.vue'
 import NodeConfigGuide from '@/components/nl-workflow/NodeConfigGuide.vue'
 import logoBlack from '@/assets/logos/logo.png'
@@ -1320,64 +1333,47 @@ import '@vue-flow/core/dist/theme-default.css'
 // VueFlow node components for NL workflow preview
 import { VueFlow } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
-import StartNode from '@/components/workflow/nodes/StartNode.vue'
-import EndNode from '@/components/workflow/nodes/EndNode.vue'
-import LLMNode from '@/components/workflow/nodes/LLMNode.vue'
-import InputNode from '@/components/workflow/nodes/InputNode.vue'
-import OutputNode from '@/components/workflow/nodes/OutputNode.vue'
-import ConditionNode from '@/components/workflow/nodes/ConditionNode.vue'
-import DelayNode from '@/components/workflow/nodes/DelayNode.vue'
-import HttpNode from '@/components/workflow/nodes/HttpNode.vue'
-import CodeNode from '@/components/workflow/nodes/CodeNode.vue'
-import VariableNode from '@/components/workflow/nodes/VariableNode.vue'
-import PromptNode from '@/components/workflow/nodes/PromptNode.vue'
-import EmailNode from '@/components/workflow/nodes/EmailNode.vue'
-import MemoryNode from '@/components/workflow/nodes/MemoryNode.vue'
-import ToolNode from '@/components/workflow/nodes/ToolNode.vue'
-import RetrieverNode from '@/components/workflow/nodes/RetrieverNode.vue'
-import VectorStoreNode from '@/components/workflow/nodes/VectorStoreNode.vue'
-import EmbeddingNode from '@/components/workflow/nodes/EmbeddingNode.vue'
-import SubworkflowNode from '@/components/workflow/nodes/SubworkflowNode.vue'
-import ExecutorNode from '@/components/workflow/nodes/ExecutorNode.vue'
-import PlannerNode from '@/components/workflow/nodes/PlannerNode.vue'
-import AgentNode from '@/components/workflow/nodes/AgentNode.vue'
-import LoopNode from '@/components/workflow/nodes/LoopNode.vue'
-import SwitchNode from '@/components/workflow/nodes/SwitchNode.vue'
-import FileReaderNode from '@/components/workflow/nodes/FileReaderNode.vue'
-import FileWriterNode from '@/components/workflow/nodes/FileWriterNode.vue'
-import TransformNode from '@/components/workflow/nodes/TransformNode.vue'
-import JsonTransformNode from '@/components/workflow/nodes/JsonTransformNode.vue'
-import CsvTransformNode from '@/components/workflow/nodes/CsvTransformNode.vue'
-import DocumentLoaderNode from '@/components/workflow/nodes/DocumentLoaderNode.vue'
-import WebScraperNode from '@/components/workflow/nodes/WebScraperNode.vue'
-import DatasetUploadNode from '@/components/workflow/nodes/DatasetUploadNode.vue'
-import DataAnnotationNode from '@/components/workflow/nodes/DataAnnotationNode.vue'
-import DataAugmentationNode from '@/components/workflow/nodes/DataAugmentationNode.vue'
-import ModelTrainingNode from '@/components/workflow/nodes/ModelTrainingNode.vue'
-import ModelEvaluationNode from '@/components/workflow/nodes/ModelEvaluationNode.vue'
-import ModelDeploymentNode from '@/components/workflow/nodes/ModelDeploymentNode.vue'
-import ImageGenerationNode from '@/components/workflow/nodes/ImageGenerationNode.vue'
-import ImageEditingNode from '@/components/workflow/nodes/ImageEditingNode.vue'
-import VideoGenerationNode from '@/components/workflow/nodes/VideoGenerationNode.vue'
-import AudioGenerationNode from '@/components/workflow/nodes/AudioGenerationNode.vue'
-import SubtitleGenerationNode from '@/components/workflow/nodes/SubtitleGenerationNode.vue'
-import VideoUploadNode from '@/components/workflow/nodes/VideoUploadNode.vue'
-import SubtitleTranslateNode from '@/components/workflow/nodes/SubtitleTranslateNode.vue'
-import SegmentDubbingNode from '@/components/workflow/nodes/SegmentDubbingNode.vue'
-import LipSyncNode from '@/components/workflow/nodes/LipSyncNode.vue'
-import SubtitleBurnNode from '@/components/workflow/nodes/SubtitleBurnNode.vue'
-import VideoTranslationNode from '@/components/workflow/nodes/VideoTranslationNode.vue'
-import WebsiteGeneratorNode from '@/components/workflow/nodes/WebsiteGeneratorNode.vue'
-import EnvironmentProvisionNode from '@/components/workflow/nodes/EnvironmentProvisionNode.vue'
-import SiteQaNode from '@/components/workflow/nodes/SiteQaNode.vue'
-import SitePreviewNode from '@/components/workflow/nodes/SitePreviewNode.vue'
-import ProjectAgentNode from '@/components/workflow/nodes/ProjectAgentNode.vue'
-import RerankerNode from '@/components/workflow/nodes/RerankerNode.vue'
-import YoloTrainingNode from '@/components/workflow/nodes/YoloTrainingNode.vue'
-import ProjectProfilerNode from '@/components/workflow/nodes/ProjectProfilerNode.vue'
 
 const router = useRouter()
 const appStore = useAppStore()
+const authStore = useAuthStore()
+const voiceBusy = ref(false)
+const voiceClip = computed({
+  get: () => currentTab.value?.voiceClip || null,
+  set: value => { if (currentTab.value) currentTab.value.voiceClip = value },
+})
+function guardVoiceCapture() {
+  if (!voiceBusy.value) return false
+  appStore.warning(VOICE_RECORDER.labels.busy)
+  return true
+}
+function protectUnsavedRecording(event) {
+  if (voiceBusy.value || tabs.value.some(tab => tab.voiceClip && !tab.voiceClip.downloaded)) {
+    event.preventDefault()
+    event.returnValue = ''
+  }
+}
+onBeforeRouteLeave(async () => {
+  if (!voiceBusy.value && !tabs.value.some(tab => tab.voiceClip && !tab.voiceClip.downloaded)) return true
+  try {
+    await ElMessageBox.confirm(VOICE_RECORDER.labels.leave, VOICE_RECORDER.labels.title, { confirmButtonText: '离开页面', cancelButtonText: '保留录音', type: 'warning' })
+    return true
+  } catch { return false }
+})
+const storageError = ref('')
+const historyError = ref('')
+const modelsError = ref('')
+const historyPage = ref(1)
+const historyHasMore = ref(false)
+const configJson = ref('{}')
+const configError = ref('')
+const configSaving = ref(false)
+const recoveringTask = ref(false)
+const followMessages = ref(true)
+let historyRequestId = 0
+let historySearchTimer
+let activeController = null
+let storageTimer
 
 const darkThemes = ['dark', 'pure-bw', 'high-contrast']
 const currentTabLogo = computed(() =>
@@ -1387,14 +1383,14 @@ const currentTabLogo = computed(() =>
 const showWorkflowDetail = ref(false)
 const selectedWorkflow = ref(null)
 const selectedModel = ref('')
-const selectedModelProvider = ref('')
+const selectedModelProvider = computed(() => availableModels.value.find(model => model.modelId === selectedModel.value)?.provider || '')
 const showAllModels = ref(false)
 // Streaming state
 const isStreaming = ref(false)
 const streamProgress = ref(0)
 const streamStage = ref('')
 const streamMode = ref('idle') // idle | thinking | generating
-const inputMode = ref('thinking') // thinking | generate — 用户手动选择
+const inputMode = computed({ get: () => currentTab.value?.mode || 'thinking', set: value => { if (currentTab.value) currentTab.value.mode = value } }) // thinking | generate — 用户手动选择
 const streamThinking = ref('') // 深度思考内容（实时累积）
 const tokenCount = ref(0)
 const estimatedTimeRemaining = ref('')
@@ -1421,6 +1417,24 @@ const currentStreamStepIndex = computed(() => {
 
 // Workflow preview
 const showMiniPreview = ref(true)
+const previewTrigger = ref(null)
+const previewPanel = ref(null)
+const previewMedia = window.matchMedia(NL_CREATOR.compactPreviewQuery)
+const compactPreview = ref(previewMedia.matches)
+const updatePreviewLayout = event => { compactPreview.value = event.matches }
+const previewContainer = ref(null)
+const previewReady = ref(false)
+const previewDimensions = ref({ width: 0, height: 0 })
+watch(previewContainer, (element, previous, onCleanup) => {
+  previewReady.value = false
+  if (!element) return
+  const observer = new ResizeObserver(([entry]) => {
+    previewDimensions.value = { width: entry.contentRect.width, height: entry.contentRect.height }
+    previewReady.value = entry.contentRect.width > 0 && entry.contentRect.height > 0
+  })
+  observer.observe(element)
+  onCleanup(() => observer.disconnect())
+})
 
 // Node configuration preview
 const showNodeConfig = ref(false)
@@ -1450,6 +1464,22 @@ const modelsLoading = ref(false)
 const availableModels = ref([])
 
 const showHistorySidebar = ref(false)
+const historyPanel = ref(null)
+const historyTrigger = ref(null)
+
+watch(showHistorySidebar, async open => {
+  await nextTick()
+  if (open) historyPanel.value?.querySelector('button')?.focus()
+  else historyTrigger.value?.focus()
+})
+
+function trapHistoryFocus(event) {
+  const controls = [...(historyPanel.value?.querySelectorAll('button:not(:disabled), input:not(:disabled), [tabindex="0"]') || [])].filter(element => element.getClientRects().length)
+  const first = controls[0]
+  const last = controls[controls.length - 1]
+  if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus() }
+  else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus() }
+}
 
 const historySidebarStyle = computed(() => ({
   transform: showHistorySidebar.value ? 'translateX(0)' : 'translateX(-100%)',
@@ -1464,7 +1494,8 @@ const historyTotal = ref(0)
 const batchMode = ref(false)
 const selectedSessions = ref([])
 
-const STORAGE_KEY = 'flowly_nl_tabs'
+const storageOwner = authStore.user?.id || authStore.user?.username || 'anonymous'
+const storageKey = () => `${NL_CREATOR.storagePrefix}:${storageOwner}`
 
 // ============================================
 // 标签页管理
@@ -1478,50 +1509,26 @@ function generateTabId() {
 
 function saveTabsToStorage() {
   try {
-    const tabData = tabs.value.map(t => ({
-      id: t.id,
-      title: t.title,
-      sessionId: t.sessionId,
-      hasWorkflow: t.hasWorkflow,
-      messages: t.messages.map(m => ({
-        role: m.role,
-        content: m.content,
-        timestamp: m.timestamp,
-        workflow: m.workflow,
-        suggestions: m.suggestions,
-        emailGuidance: m.emailGuidance,
-        nodeGuidance: m.nodeGuidance,
-        intent: m.intent
-      }))
+    const tabData = tabs.value.map(({ id, title, sessionId, hasWorkflow, workflowId, messages, draft, mode, isDirty, savedFingerprint, taskId, sessionStatus }) => ({
+      id, title, sessionId, hasWorkflow, workflowId, draft, mode, isDirty, savedFingerprint, taskId, sessionStatus,
+      messages: messages.map(message => ({ ...message, isStreaming: false }))
     }))
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(tabData))
-    localStorage.setItem(STORAGE_KEY + '_active', activeTabId.value || '')
-  } catch (e) {
-    // Silently ignore storage errors
+    localStorage.setItem(storageKey(), JSON.stringify({ tabs: tabData, activeId: activeTabId.value }))
+    storageError.value = ''
+  } catch {
+    storageError.value = NL_CREATOR.storageError
   }
 }
 
 function loadTabsFromStorage() {
   try {
-    const data = localStorage.getItem(STORAGE_KEY)
-    const savedActiveId = localStorage.getItem(STORAGE_KEY + '_active')
-    if (data) {
-      const tabData = JSON.parse(data)
-      tabs.value = tabData.map(t => ({
-        ...t,
-        isLoading: false,
-        isDirty: false
-      }))
-      if (savedActiveId && tabs.value.find(t => t.id === savedActiveId)) {
-        activeTabId.value = savedActiveId
-      } else if (tabs.value.length > 0) {
-        activeTabId.value = tabs.value[tabs.value.length - 1].id
-      }
-      // Restore guidance for the active tab
-      restoreActiveTabGuidance()
-    }
-  } catch (e) {
-    // Silently ignore storage errors
+    const saved = JSON.parse(localStorage.getItem(storageKey()) || 'null')
+    if (!Array.isArray(saved?.tabs)) return
+    tabs.value = saved.tabs.filter(tab => tab.id && Array.isArray(tab.messages)).map(tab => ({ ...tab, isLoading: false }))
+    activeTabId.value = tabs.value.find(tab => tab.id === saved.activeId)?.id || tabs.value[0]?.id || null
+    restoreActiveTabGuidance()
+  } catch {
+    storageError.value = NL_CREATOR.storageError
   }
 }
 
@@ -1555,13 +1562,22 @@ const currentTab = computed(() => {
   return tabs.value.find(t => t.id === activeTabId.value) || null
 })
 
+watch(() => Boolean(currentTab.value?.hasWorkflow && showMiniPreview.value && compactPreview.value), async (open, previous) => {
+  await nextTick()
+  if (open) previewPanel.value?.querySelector('button')?.focus()
+  else if (previous) previewTrigger.value?.focus()
+})
+
 const currentTabMessages = computed(() => {
   return currentTab.value?.messages || []
 })
 
+const isWelcome = computed(() => !currentTab.value?.isLoading && !currentTab.value?.hasWorkflow && currentTabMessages.value.every(message => message.role === 'assistant' && message.content === NL_CREATOR.greeting))
+
 const currentTabLoading = computed(() => {
   return currentTab.value?.isLoading || false
 })
+const backgroundTaskPending = computed(() => Boolean(currentTab.value?.taskId && currentTab.value?.sessionStatus === 'processing'))
 
 const sendButtonLabel = computed(() => {
   if (!currentTabLoading.value) return '发送'
@@ -1575,17 +1591,9 @@ const activeSessionId = computed(() => {
   return currentTab.value?.sessionId || null
 })
 
-const inputPlaceholder = computed(() => (
-  inputMode.value === 'generate'
-    ? '描述要生成的工作流；若上方已聊清楚，可直接发送「生成工作流」或确认描述'
-    : '和我聊聊您的工作流需求...\n\n例如：我想做 YOLO 目标检测，有标注数据集，训练完还要生成识别网站'
-))
+const inputPlaceholder = computed(() => inputMode.value === 'generate' ? NL_CREATOR.generatePlaceholder : NL_CREATOR.thinkingPlaceholder)
 
-const inputModeHint = computed(() => (
-  inputMode.value === 'generate'
-    ? '将基于对话内容或当前描述生成工作流'
-    : '与 AI 讨论需求，不会自动生成工作流'
-))
+const inputModeHint = computed(() => inputMode.value === 'generate' ? NL_CREATOR.generateHint : NL_CREATOR.thinkingHint)
 
 const apiMode = computed(() => (inputMode.value === 'generate' ? 'generate' : 'chat'))
 
@@ -1607,8 +1615,8 @@ const filteredHistorySessions = computed(() => {
   }
 
   sessions.sort((a, b) => {
-    const dateA = new Date(a.created_at || 0)
-    const dateB = new Date(b.created_at || 0)
+    const dateA = new Date(a.updatedAt || a.updated_at || a.createdAt || a.created_at || 0)
+    const dateB = new Date(b.updatedAt || b.updated_at || b.createdAt || b.created_at || 0)
     return dateB.getTime() - dateA.getTime()
   })
 
@@ -1616,7 +1624,7 @@ const filteredHistorySessions = computed(() => {
 })
 
 // Input bound to current tab
-const inputMessage = ref('')
+const inputMessage = computed({ get: () => currentTab.value?.draft || '', set: value => { if (currentTab.value) currentTab.value.draft = value } })
 const _isSending = ref(false)
 const _isSaving = ref(false)
 const chatInputRef = ref(null)
@@ -1629,24 +1637,31 @@ watch(currentTabMessages, () => {
 }, { deep: true })
 
 onMounted(async () => {
+  window.addEventListener('beforeunload', protectUnsavedRecording)
+  previewMedia.addEventListener('change', updatePreviewLayout)
   loadTabsFromStorage()
-  await loadModels()
-  await loadHistory()
-
   if (tabs.value.length === 0) {
     createNewTab()
   }
+  await Promise.allSettled([loadModels(), loadHistory(), currentTab.value?.sessionId ? refreshCurrentSession() : Promise.resolve()])
 })
 
 onBeforeUnmount(() => {
+  window.removeEventListener('beforeunload', protectUnsavedRecording)
+  previewMedia.removeEventListener('change', updatePreviewLayout)
+  activeController?.abort()
+  clearTimeout(historySearchTimer)
+  clearTimeout(storageTimer)
   saveTabsToStorage()
 })
 
 function createNewTab(sessionOrData = null) {
+  if (guardVoiceCapture()) return
+  if (_isSending.value) return
   const tabId = generateTabId()
   const greetingMessages = [{
     role: 'assistant',
-    content: '您好！我是 Flowly 的 AI 工作流助手。\n\n请先选择输入框上方的模式：\n· 深度思考 — 与我讨论需求，不会自动生成\n· 生成工作流 — 基于对话或描述生成工作流\n\n默认使用「深度思考」，聊清楚后切换到「生成工作流」再发送。',
+    content: NL_CREATOR.greeting,
     timestamp: new Date().toISOString(),
     suggestions: [
       '我想做一个智能客服系统',
@@ -1671,6 +1686,8 @@ function createNewTab(sessionOrData = null) {
   const newTab = {
     id: tabId,
     title: sessionName,
+    draft: '',
+    mode: 'thinking',
     sessionId: sessionId,
     messages: greetingMessages,
     isLoading: false,
@@ -1680,7 +1697,6 @@ function createNewTab(sessionOrData = null) {
 
   tabs.value.push(newTab)
   activeTabId.value = tabId
-  inputMessage.value = ''
   saveTabsToStorage()
 
   if (sessionData) {
@@ -1695,9 +1711,9 @@ function createNewTab(sessionOrData = null) {
 }
 
 function switchTab(tabId) {
-  if (activeTabId.value === tabId) return
+  if (guardVoiceCapture()) return
+  if (activeTabId.value === tabId || _isSending.value) return
   activeTabId.value = tabId
-  inputMessage.value = ''
   saveTabsToStorage()
   nextTick(() => {
     scrollToBottom()
@@ -1705,14 +1721,58 @@ function switchTab(tabId) {
   })
 }
 
-function closeTab(tabId) {
+/**
+ * Poll NL async task until completed/failed/timeout.
+ * Used by createSession fallback when backend returns processing/async.
+ */
+async function pollNlTaskUntilReady(sessionId, options = {}) {
+  const maxAttempts = options.maxAttempts || NL_CREATOR.pollAttempts
+  const intervalMs = options.intervalMs || NL_CREATOR.pollInterval
+  const taskId = options.taskId
+  const onProgress = options.onProgress
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    activeController?.signal.throwIfAborted()
+    const statusPayload = await nlWorkflowApi.getTaskStatus(
+      sessionId,
+      taskId ? { task_id: taskId } : {}
+    )
+    const status = statusPayload.status
+    if (typeof onProgress === 'function') {
+      onProgress(statusPayload)
+    }
+
+    if (status === 'completed' || status === 'failed') {
+      return statusPayload
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, intervalMs))
+  }
+
+  return {
+    status: 'timeout',
+    error: '生成超时，请稍后在历史会话中查看结果',
+    sessionId
+  }
+}
+
+async function closeTab(tabId, discardDraft = false) {
+  if (guardVoiceCapture()) return
   const tabIndex = tabs.value.findIndex(t => t.id === tabId)
   if (tabIndex === -1) return
 
   const tab = tabs.value[tabIndex]
-  if (tab.isLoading) {
+  if (tab.isLoading || _isSending.value) {
     appStore.error('对话生成中，无法关闭')
     return
+  }
+
+  if ((tab.draft?.trim() || (tab.voiceClip && !tab.voiceClip.downloaded)) && !discardDraft) {
+    try {
+      await ElMessageBox.confirm(tab.voiceClip && !tab.voiceClip.downloaded ? VOICE_RECORDER.labels.leave : '这个标签有未发送的草稿，关闭后将移除草稿。', '关闭标签', {
+        confirmButtonText: '关闭标签', cancelButtonText: '继续编辑', type: 'warning'
+      })
+    } catch { return }
   }
 
   tabs.value.splice(tabIndex, 1)
@@ -1728,6 +1788,7 @@ function closeTab(tabId) {
 }
 
 function handleNewTab() {
+  if (guardVoiceCapture()) return
   createNewTab()
   emailGuidance.value = null
   nodeGuidance.value = null
@@ -1735,38 +1796,37 @@ function handleNewTab() {
   loadHistory()
 }
 
-function handleRenameTab(tab) {
-  ElMessageBox.prompt('请输入新的标签名称', '重命名', {
-    confirmButtonText: '确定',
-    cancelButtonText: '取消',
-    inputValue: tab.title || ''
-  }).then(({ value }) => {
-    if (value) {
-      tab.title = value
-      saveTabsToStorage()
-    }
-  }).catch(() => {})
+async function handleRenameTab(tab) {
+  if (tab.sessionId) return renameSession({ sessionId: tab.sessionId, name: tab.title })
+  try {
+    const { value } = await ElMessageBox.prompt('请输入标签名称', '重命名', {
+      inputValue: tab.title, inputValidator: value => Boolean(value?.trim() && value.trim().length <= NL_CREATOR.maxNameLength) || '请输入 1 到 200 个字符'
+    })
+    tab.title = value.trim()
+    saveTabsToStorage()
+  } catch { /* User dismissed the prompt. */ }
 }
 
-function handleTabAction(command) {
-  switch (command) {
-    case 'close-all':
-      while (tabs.value.length > 1) {
-        const idx = tabs.value.findIndex(t => t.id !== activeTabId.value)
-        if (idx > -1) tabs.value.splice(idx, 1)
-      }
-      saveTabsToStorage()
-      break
-    case 'close-others':
-      tabs.value = tabs.value.filter(t => t.id === activeTabId.value)
-      saveTabsToStorage()
-      break
-    case 'close-saved':
-      tabs.value = tabs.value.filter(t => t.id === activeTabId.value || !t.hasWorkflow)
-      if (tabs.value.length === 0) createNewTab()
-      saveTabsToStorage()
-      break
+async function handleTabAction(command) {
+  if (guardVoiceCapture()) return
+  if (_isSending.value) return
+  const targets = tabs.value.filter(tab => !tab.isLoading && (
+    command === 'close-all' ||
+    (command === 'close-others' && tab.id !== activeTabId.value) ||
+    (command === 'close-saved' && tab.workflowId && !tab.isDirty)
+  ))
+  if (targets.some(tab => tab.draft?.trim() || (tab.voiceClip && !tab.voiceClip.downloaded))) {
+    try {
+      await ElMessageBox.confirm('选中的标签含有未发送草稿或未下载录音，关闭后将移除。', '关闭标签', {
+        confirmButtonText: '关闭标签', cancelButtonText: '继续编辑', type: 'warning'
+      })
+    } catch { return }
   }
+  const targetIds = new Set(targets.map(tab => tab.id))
+  tabs.value = tabs.value.filter(tab => !targetIds.has(tab.id))
+  if (!tabs.value.length) createNewTab()
+  if (!tabs.value.some(tab => tab.id === activeTabId.value)) activeTabId.value = tabs.value[0].id
+  saveTabsToStorage()
 }
 
 async function loadSessionIntoTab(tabId, session) {
@@ -1785,7 +1845,7 @@ async function loadSessionIntoTab(tabId, session) {
   if (!sessionId) {
     tab.messages = [{
       role: 'assistant',
-      content: '您好！我是 Flowly 的 AI 工作流助手。\n\n请先选择输入框上方的模式：\n• **深度思考** — 与我讨论需求，不会自动生成\n• **生成工作流** — 基于对话或描述生成工作流',
+      content: '您好！我是 Flowly「语创」助手。\n\n请先选择输入框上方的模式：\n• **深度思考** — 与我讨论需求，不会自动生成\n• **生成工作流** — 基于对话或描述生成工作流',
       timestamp: new Date().toISOString(),
       suggestions: [
         '我想做一个智能客服系统',
@@ -1808,11 +1868,11 @@ async function loadSessionIntoTab(tabId, session) {
 
     const loadedMessages = []
 
-    if (session.description) {
+    if (!response.messages?.length && response.description) {
       loadedMessages.push({
         role: 'user',
-        content: session.description,
-        timestamp: session.created_at
+        content: response.description,
+        timestamp: response.createdAt
       })
     }
 
@@ -1822,8 +1882,8 @@ async function loadSessionIntoTab(tabId, session) {
           role: msg.role,
           content: msg.content,
           timestamp: msg.timestamp || new Date().toISOString(),
-          emailGuidance: msg.emailGuidance,
-          nodeGuidance: msg.nodeGuidance,
+          emailGuidance: msg.emailGuidance || msg.email_guidance,
+          nodeGuidance: msg.nodeGuidance || msg.node_guidance,
           workflow: msg.workflow,
           suggestions: msg.suggestions,
           intent: msg.intent
@@ -1838,13 +1898,21 @@ async function loadSessionIntoTab(tabId, session) {
     } else {
       loadedMessages.push({
         role: 'assistant',
-        content: '您好！我是 Flowly 的 AI 工作流助手。请描述您想要创建的工作流，我将根据您的描述自动生成。',
+        content: '您好！我是 Flowly「语创」助手。请描述您想要创建的工作流，我将根据您的描述自动生成。',
         timestamp: new Date().toISOString()
       })
     }
 
+    if (response.status === 'failed' && response.errorMessage) {
+      loadedMessages.push({ role: 'assistant', content: nlErrorMessage(new Error(response.errorMessage)), error: true, timestamp: response.updatedAt })
+    }
     tab.messages = loadedMessages
-    tab.title = session.name || session.description?.substring(0, 20) || '未命名会话'
+    tab.title = response.name || session.name || '未命名会话'
+    tab.workflowId = response.workflowId || null
+    tab.taskId = response.celeryTaskId || null
+    tab.sessionStatus = response.status
+    tab.hasWorkflow = false
+    tab.isDirty = false
 
     const workflowData = response.workflow || response.workflowJson
     if (workflowData && Object.keys(workflowData).length > 0) {
@@ -1870,6 +1938,7 @@ async function loadSessionIntoTab(tabId, session) {
       }
     }
 
+    if (activeTabId.value === tab.id) { restoreActiveTabGuidance(); updateWorkflowValidation(getCurrentWorkflow()) }
     saveTabsToStorage()
   } catch (err) {
     tab.messages = [{
@@ -1888,7 +1957,7 @@ async function loadSessionIntoTab(tabId, session) {
 // 消息发送
 // ============================================
 function handleInputKeydown(event) {
-  if (event.key !== 'Enter' || event.shiftKey) return
+  if (event.key !== 'Enter' || event.shiftKey || event.isComposing || event.keyCode === 229) return
   event.preventDefault()
   sendMessage()
 }
@@ -1987,8 +2056,9 @@ function finalizeAssistantWorkflowMessage(messageObj, workflowData, fallbackMess
 }
 
 async function sendMessage() {
+  if (guardVoiceCapture()) return
   const tab = currentTab.value
-  if (!tab || tab.isLoading) return
+  if (!tab || tab.isLoading || backgroundTaskPending.value) return
 
   // Read the actual textarea DOM value to handle all code paths
   const ta = chatInputRef.value?.$el?.querySelector?.('textarea')
@@ -1997,9 +2067,12 @@ async function sendMessage() {
   const actualValue = ta?.value?.trim() || inputMessage.value?.trim() || ''
 
   if (!actualValue) return
+  if (!selectedModel.value) { appStore.error(NL_CREATOR.noModel); return }
+  if (actualValue.length > NL_CREATOR.maxMessageLength) return
   if (_isSending.value || tab._isCreatingSession) return
 
   _isSending.value = true
+  activeController = new AbortController()
   const userMessage = actualValue
   inputMessage.value = ''
   if (ta) ta.value = ''
@@ -2010,6 +2083,7 @@ async function sendMessage() {
     timestamp: new Date().toISOString()
   })
 
+  followMessages.value = true
   scrollToBottom()
   tab.isLoading = true
   tab.isDirty = true
@@ -2050,11 +2124,12 @@ async function sendMessage() {
           })
         }
       } catch (sendErr) {
+        if (!sendErr.fallbackAllowed) throw sendErr
         // Fallback to non-streaming
-        response = await nlWorkflowApi.sendMessage(tab.sessionId, userMessage, {
+        response = await nlWorkflowApi.sendMessage(tab.sessionId, userMessage, nlPayloadWithCapabilities({
           model: selectedModel.value,
           mode: apiMode.value
-        })
+        }), { signal: activeController.signal })
 
         continueMessage.content = response.message || '我理解了，您还有其他需要调整的地方吗？'
         continueMessage.suggestions = response.suggestions || generateContextSuggestions(response.workflow, {
@@ -2109,19 +2184,37 @@ async function sendMessage() {
 
         hasGenerationFailed.value = false
       } catch (createErr) {
+        if (!createErr.fallbackAllowed || tab.sessionId) throw createErr
         // Fallback to non-streaming
-        response = await nlWorkflowApi.createSession({
+        response = await nlWorkflowApi.createSession(nlPayloadWithCapabilities({
           description: userMessage,
-          name: `NL Workflow ${Date.now()}`,
+          name: `语创 ${Date.now()}`,
           model: selectedModel.value,
           mode: apiMode.value
-        })
+        }), { signal: activeController.signal })
 
         tab.sessionId = response.sessionId || response.id
+        tab.taskId = response.taskId || response.task_id || null
+        tab.sessionStatus = response.status
         tab.title = userMessage.substring(0, 20) + (userMessage.length > 20 ? '...' : '')
 
-        if (response.error) {
-          assistantMessage.content = `抱歉，生成工作流时遇到了问题：${response.error}`
+        // Async path: poll until completed / failed
+        if (response.status === 'processing' || response.async) {
+          assistantMessage.content = '正在后台生成工作流，请稍候...'
+          const polled = await pollNlTaskUntilReady(tab.sessionId, {
+            taskId: response.taskId || response.task_id,
+            onProgress: (statusPayload) => {
+              const state = statusPayload.celeryState || statusPayload.celery_state || statusPayload.status
+              assistantMessage.content = `正在后台生成工作流（${state}）...`
+            }
+          })
+          response = { ...response, ...polled }
+          tab.sessionStatus = response.status
+        }
+
+        if (response.error || response.status === 'failed') {
+          const errText = response.error || response.errorMessage || response.error_message || '生成失败'
+          assistantMessage.content = `抱歉，生成工作流时遇到了问题：${errText}`
           hasGenerationFailed.value = true
         } else {
           const workflowData = response.workflow || response.workflowJson
@@ -2158,7 +2251,7 @@ async function sendMessage() {
           }
         }
 
-        hasGenerationFailed.value = !!response.error
+        hasGenerationFailed.value = !!(response.error || response.status === 'failed')
       } finally {
         assistantMessage.isStreaming = false
         tab._isCreatingSession = false
@@ -2166,19 +2259,24 @@ async function sendMessage() {
     }
   } catch (err) {
     // Outer catch handles any unexpected errors — must show user feedback
-    const msg = err?.message || '生成失败，请重试'
+    const cancelled = err?.name === 'AbortError' || err?.code === 'ERR_CANCELED'
+    const msg = cancelled ? NL_CREATOR.interrupted : nlErrorMessage(err)
     // Determine which message object to update (assistantMessage in else branch, continueMessage in if branch)
     const lastMsg = tab.messages.length > 0 ? tab.messages[tab.messages.length - 1] : null
     if (lastMsg) {
-      lastMsg.content = `生成工作流时遇到了问题：${msg}`
+      lastMsg.content = [lastMsg.content, msg].filter(Boolean).join('\n\n')
+      lastMsg.error = !cancelled
+      lastMsg.interrupted = cancelled
       lastMsg.isStreaming = false
     }
     hasGenerationFailed.value = true
-    appStore.error(msg)
+    if (!cancelled) appStore.error(msg)
   } finally {
     if (tab) tab.isLoading = false
     isStreaming.value = false
     _isSending.value = false
+    activeController = null
+    loadHistory()
     finishStreamState()
     saveTabsToStorage()
     scrollToBottom()
@@ -2188,378 +2286,66 @@ async function sendMessage() {
 /**
  * Stream message with real-time UI updates
  */
-async function streamMessageWithUI(tab, userMessage, messageObj, mode = 'chat') {
-  streamStage.value = mode === 'generate' ? '工作流生成' : '深度思考'
-  streamMode.value = mode === 'generate' ? 'generating' : 'thinking'
-  streamStartedAt.value = Date.now()
-  streamProgress.value = 10
-  
-  try {
-    const response = await nlWorkflowApi.streamMessage(tab.sessionId, userMessage, {
-      model: selectedModel.value,
-      mode
-    })
-
-    if (!response.ok) {
-      throw new Error(`HTTP error: ${response.status}`)
-    }
-
-    const reader = response.body.getReader()
-    const decoder = new TextDecoder()
-    let fullContent = ''
-    let buffer = ''
-    let workflowData = null
-
-    while (true) { // eslint-disable-line no-constant-condition
-      const { done, value } = await reader.read()
-      if (done) break
-
-      const chunk = decoder.decode(value, { stream: true })
-      buffer += chunk
-      tokenCount.value += chunk.length
-
-      // Update estimated time
-      updateEstimatedTime()
-
-      // Process complete SSE events
-      const lines = buffer.split('\n')
-      buffer = lines.pop() || ''
-
-      for (const line of lines) {
-        if (line.startsWith('data: ')) {
-          try {
-            const data = JSON.parse(line.slice(6))
-
-            switch (data.type) {
-              case 'thinking':
-                streamMode.value = 'thinking'
-                streamStage.value = '深度思考'
-                streamThinking.value += data.content || ''
-                streamProgress.value = Math.min(30, streamProgress.value)
-                break
-
-              case 'progress':
-              case 'step':
-                applyStreamProgressEvent(data, messageObj, fullContent, workflowData)
-                break
-
-              case 'token':
-                fullContent = applyTokenStreamEvent(data, messageObj, fullContent, mode)
-                break
-
-              case 'intent':
-                messageObj.intent = data.intent
-                if (data.intent === 'generate' || data.mode === 'generate') {
-                  streamMode.value = 'generating'
-                  streamStage.value = '工作流生成'
-                } else {
-                  setStreamModeFromIntent(data.intent)
-                }
-                break
-
-              case 'ready_to_generate':
-                messageObj.readyToGenerate = true
-                messageObj.suggestions = generateContextSuggestions(null, {
-                  readyToGenerate: true,
-                  intent: 'chat'
-                })
-                break
-
-              case 'workflow':
-                streamMode.value = 'generating'
-                streamStage.value = '工作流生成'
-                workflowData = data.workflow
-                streamProgress.value = 90
-                messageObj.content = data.message || fullContent || '工作流已更新'
-                if (data.email_guidance) {
-                  emailGuidance.value = data.email_guidance
-                  messageObj.emailGuidance = data.email_guidance
-                }
-                if (data.node_guidance) {
-                  nodeGuidance.value = data.node_guidance
-                  messageObj.nodeGuidance = data.node_guidance
-                }
-                // Also check for guidance embedded in workflow data (_email_guidance, _node_guidance)
-                if (workflowData?._email_guidance && !messageObj.emailGuidance) {
-                  emailGuidance.value = workflowData._email_guidance
-                  messageObj.emailGuidance = workflowData._email_guidance
-                }
-                if (workflowData?._node_guidance && !messageObj.nodeGuidance) {
-                  nodeGuidance.value = workflowData._node_guidance
-                  messageObj.nodeGuidance = workflowData._node_guidance
-                }
-                break
-
-              case 'node_guidance':
-                if (data.node_guidance) {
-                  nodeGuidance.value = data.node_guidance
-                  messageObj.nodeGuidance = data.node_guidance
-                }
-                break
-
-              case 'done':
-                if (data.workflow_json) {
-                  try {
-                    workflowData = JSON.parse(data.workflow_json)
-                  } catch (parseErr) {
-                    console.warn('Failed to parse workflow_json:', parseErr)
-                  }
-                }
-                if (data.workflow) {
-                  workflowData = data.workflow
-                }
-                streamProgress.value = 100
-                messageObj.content = stripReadyMarker(data.message || fullContent) || '我理解了，您还有其他需要调整的地方吗？'
-                messageObj.intent = data.intent || messageObj.intent
-                messageObj.readyToGenerate = data.ready_to_generate || messageObj.readyToGenerate
-                messageObj.suggestions = data.suggestions || generateContextSuggestions(workflowData, {
-                  readyToGenerate: messageObj.readyToGenerate,
-                  intent: messageObj.intent
-                })
-                if (data.email_guidance) {
-                  emailGuidance.value = data.email_guidance
-                  messageObj.emailGuidance = data.email_guidance
-                }
-                if (data.node_guidance) {
-                  nodeGuidance.value = data.node_guidance
-                  messageObj.nodeGuidance = data.node_guidance
-                }
-                // Also check for guidance embedded in workflow data
-                if (workflowData?._email_guidance && !messageObj.emailGuidance) {
-                  emailGuidance.value = workflowData._email_guidance
-                  messageObj.emailGuidance = workflowData._email_guidance
-                }
-                if (workflowData?._node_guidance && !messageObj.nodeGuidance) {
-                  nodeGuidance.value = workflowData._node_guidance
-                  messageObj.nodeGuidance = workflowData._node_guidance
-                }
-                break
-
-              case 'error':
-                throw new Error(data.error)
-
-              case 'suggestions':
-                messageObj.suggestions = data.suggestions
-                break
-
-              case 'email_guidance':
-                if (data.email_guidance) {
-                  emailGuidance.value = data.email_guidance
-                  messageObj.emailGuidance = data.email_guidance
-                }
-                break
-            }
-          } catch (e) {
-            // eslint-disable-next-line no-undef
-            const currentData = data
-            if (e.message === currentData?.error) throw e
-            // Skip malformed JSON
-          }
-        }
-      }
-    }
-
-    return { workflow: workflowData, message: fullContent }
-
-  } catch (error) {
-    streamProgress.value = 0
-    throw error
-  }
+async function streamMessageWithUI(tab, message, output, mode) {
+  const response = await nlWorkflowApi.streamMessage(tab.sessionId, message, {
+    ...nlPayloadWithCapabilities({ model: selectedModel.value, mode, workflow: latestWorkflow(tab) }),
+    signal: activeController.signal
+  })
+  return readStreamWithUI(response, tab, message, output, mode)
 }
 
-/**
- * Stream workflow generation with real-time UI updates
- */
-async function streamWorkflowWithUI(tab, userMessage, messageObj, mode = 'chat') {
-  streamMode.value = mode === 'generate' ? 'generating' : 'thinking'
-  streamStage.value = mode === 'generate' ? '工作流生成' : '深度思考'
-  streamStartedAt.value = Date.now()
-  streamProgress.value = 5
-  
-  try {
-    const response = await nlWorkflowApi.streamWorkflow({
-      description: userMessage,
-      name: `NL Workflow ${Date.now()}`,
-      model: selectedModel.value,
-      mode
-    })
+async function streamWorkflowWithUI(tab, message, output, mode) {
+  const response = await nlWorkflowApi.streamWorkflow(nlPayloadWithCapabilities({
+    description: message, name: message.slice(0, NL_CREATOR.titleLength), model: selectedModel.value, mode
+  }), { signal: activeController.signal })
+  return readStreamWithUI(response, tab, message, output, mode)
+}
 
-    if (!response.ok) {
-      throw new Error(`HTTP error: ${response.status}`)
+async function readStreamWithUI(response, tab, message, output, mode) {
+  let fullContent = ''
+  let workflow = null
+  await consumeNlStream(response, event => {
+    if (event.type === 'session') {
+      tab.sessionId = event.session_id || event.sessionId
+      tab.title = message.slice(0, NL_CREATOR.titleLength)
+      saveTabsToStorage()
     }
-
-    const reader = response.body.getReader()
-    const decoder = new TextDecoder()
-    let fullContent = ''
-    let buffer = ''
-    let workflowData = null
-    let streamIntent = 'chat'
-    let readyToGenerate = false
-
-    while (true) { // eslint-disable-line no-constant-condition
-      const { done, value } = await reader.read()
-      if (done) break
-
-      const chunk = decoder.decode(value, { stream: true })
-      buffer += chunk
-      tokenCount.value += chunk.length
+    if (event.type === 'thinking') streamThinking.value += event.content || ''
+    if (['progress', 'step'].includes(event.type)) applyStreamProgressEvent(event, output, fullContent, workflow)
+    if (event.type === 'token') {
+      fullContent = applyTokenStreamEvent(event, output, fullContent, mode)
+      tokenCount.value += (event.content || '').length
       updateEstimatedTime()
-
-      const lines = buffer.split('\n')
-      buffer = lines.pop() || ''
-
-      for (const line of lines) {
-        if (line.startsWith('data: ')) {
-          try {
-            const data = JSON.parse(line.slice(6))
-
-            switch (data.type) {
-              case 'thinking':
-                streamMode.value = 'thinking'
-                streamStage.value = '深度思考'
-                streamThinking.value += data.content || ''
-                streamProgress.value = Math.min(25, streamProgress.value)
-                break
-
-              case 'session':
-                tab.sessionId = data.session_id || data.sessionId
-                tab.title = userMessage.substring(0, 20) + (userMessage.length > 20 ? '...' : '')
-                break
-
-              case 'progress':
-              case 'step':
-                applyStreamProgressEvent(data, messageObj, fullContent, workflowData)
-                if (data.stage === 'complete') {
-                  streamProgress.value = 100
-                  if (workflowData) {
-                    messageObj.content = data.message || `已生成工作流: ${workflowData.name || '未命名'}`
-                  }
-                }
-                break
-
-              case 'token':
-                fullContent = applyTokenStreamEvent(data, messageObj, fullContent, mode)
-                if (workflowData) {
-                  messageObj.content = stripReadyMarker(fullContent)
-                }
-                break
-
-              case 'intent':
-                streamIntent = data.intent || streamIntent
-                messageObj.intent = streamIntent
-                if (streamIntent === 'generate' || data.mode === 'generate') {
-                  streamMode.value = 'generating'
-                  streamStage.value = '工作流生成'
-                } else {
-                  setStreamModeFromIntent(streamIntent)
-                }
-                break
-
-              case 'ready_to_generate':
-                readyToGenerate = true
-                messageObj.readyToGenerate = true
-                messageObj.suggestions = generateContextSuggestions(null, {
-                  readyToGenerate: true,
-                  intent: 'chat'
-                })
-                break
-
-              case 'workflow':
-                streamMode.value = 'generating'
-                streamStage.value = '工作流生成'
-                workflowData = data.workflow
-                streamProgress.value = 95
-                if (workflowData) {
-                  messageObj.workflow = workflowData
-                  messageObj.content = data.message || `已生成工作流: ${workflowData.name || '未命名'}`
-                  messageObj.suggestions = generateContextSuggestions(workflowData)
-                  syncNlPreview()
-                }
-                break
-
-              case 'suggestions':
-                messageObj.suggestions = data.suggestions || generateContextSuggestions(workflowData)
-                break
-
-              case 'email_guidance':
-                if (data.email_guidance) {
-                  emailGuidance.value = data.email_guidance
-                  messageObj.emailGuidance = data.email_guidance
-                }
-                break
-
-              case 'node_guidance':
-                if (data.node_guidance) {
-                  nodeGuidance.value = data.node_guidance
-                  messageObj.nodeGuidance = data.node_guidance
-                }
-                break
-
-              case 'done':
-                if (data.workflow_json) {
-                  try {
-                    workflowData = JSON.parse(data.workflow_json)
-                  } catch (parseErr) {
-                    console.warn('Failed to parse workflow_json:', parseErr)
-                  }
-                }
-                if (data.workflow) {
-                  workflowData = data.workflow
-                }
-                streamProgress.value = 100
-                streamIntent = data.intent || streamIntent
-                readyToGenerate = data.ready_to_generate || readyToGenerate
-                messageObj.intent = streamIntent
-                messageObj.readyToGenerate = readyToGenerate
-                if (workflowData) {
-                  messageObj.workflow = workflowData
-                  messageObj.content = data.message || `已生成工作流: ${workflowData.name || '未命名'}`
-                  messageObj.suggestions = data.suggestions || generateContextSuggestions(workflowData)
-                  syncNlPreview()
-                } else {
-                  messageObj.content = stripReadyMarker(data.message || fullContent) || messageObj.content || '我理解了您的需求'
-                  messageObj.suggestions = data.suggestions || generateContextSuggestions(null, {
-                    readyToGenerate,
-                    intent: streamIntent
-                  })
-                }
-                if (data.email_guidance) {
-                  emailGuidance.value = data.email_guidance
-                  messageObj.emailGuidance = data.email_guidance
-                }
-                break
-
-              case 'error':
-                throw new Error(data.error)
-            }
-          } catch (e) {
-            // eslint-disable-next-line no-undef
-            if (e.message === data?.error) throw e
-            // Skip malformed JSON (blank lines, partial data)
-          }
-        }
-      }
     }
-
-    if (workflowData) {
-      finalizeAssistantWorkflowMessage(
-        messageObj,
-        workflowData,
-        messageObj.content || `已生成工作流: ${workflowData.name || '未命名'}`
-      )
+    if (event.type === 'intent') {
+      output.intent = event.intent
+      setStreamModeFromIntent(event.intent)
     }
-
-    return {
-      workflow: workflowData,
-      message: messageObj.content || stripReadyMarker(fullContent),
-      intent: streamIntent,
-      ready_to_generate: readyToGenerate
+    if (event.type === 'ready_to_generate') output.readyToGenerate = true
+    if (event.workflow || event.workflow_json) {
+      workflow = event.workflow || (typeof event.workflow_json === 'string' ? JSON.parse(event.workflow_json) : event.workflow_json)
+      output.workflow = workflow
+      tab.hasWorkflow = true
+      updateWorkflowValidation(workflow)
     }
-
-  } catch (error) {
-    streamProgress.value = 0
-    throw error
-  }
+    if (event.email_guidance || workflow?._email_guidance) {
+      output.emailGuidance = event.email_guidance || workflow._email_guidance
+      emailGuidance.value = output.emailGuidance
+    }
+    if (event.node_guidance || workflow?._node_guidance) {
+      output.nodeGuidance = event.node_guidance || workflow._node_guidance
+      nodeGuidance.value = output.nodeGuidance
+    }
+    if (event.suggestions) output.suggestions = event.suggestions
+    if (event.type === 'done') {
+      tab.sessionStatus = 'completed'
+      output.content = stripReadyMarker(event.message || fullContent) || output.content
+      output.intent = event.intent || output.intent
+      output.readyToGenerate = event.ready_to_generate || output.readyToGenerate
+      streamProgress.value = 100
+    }
+  })
+  return { workflow, message: output.content || fullContent, intent: output.intent, ready_to_generate: output.readyToGenerate }
 }
 
 /**
@@ -2618,7 +2404,7 @@ function generateContextSuggestions(workflow, options = {}) {
   }
   
   // Add "Undo last change" if workflow was modified
-  if (currentTab?.isDirty && hasWorkflow) {
+  if (currentTab.value?.isDirty && hasWorkflow) {
     suggestions.push('撤销上次更改')
   }
   
@@ -2666,7 +2452,7 @@ function updateWorkflowValidation(workflow) {
   
   const errors = []
   const warnings = []
-  let estimatedCost = 0
+  const estimatedCost = workflow.estimated_cost ?? workflow.estimatedCost ?? null
   
   // Check for nodes
   const nodes = workflow.nodes || []
@@ -2694,13 +2480,6 @@ function updateWorkflowValidation(workflow) {
     warnings.push('缺少结束节点')
   }
   
-  // Estimate cost based on node count and types
-  nodes.forEach(node => {
-    if (node.type === 'llm') {
-      estimatedCost += 0.001 // Rough estimate per LLM call
-    }
-  })
-  
   workflowValidation.value = {
     errors,
     warnings,
@@ -2713,12 +2492,9 @@ function updateWorkflowValidation(workflow) {
 /**
  * Scroll to bottom of messages container
  */
-function scrollToBottom(forceTop = false) {
+function scrollToBottom() {
   nextTick(() => {
-    if (messagesContainer.value) {
-      if (forceTop) {
-        messagesContainer.value.scrollTop = 0
-      }
+    if (messagesContainer.value && followMessages.value) {
       messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
     }
   })
@@ -2744,16 +2520,10 @@ function continueConversation(suggestion) {
 }
 
 function applyExample(example) {
-  const isGenerateExample = /创建|生成|读取CSV|数据处理工作流/.test(example)
-  inputMode.value = isGenerateExample ? 'generate' : 'thinking'
-  inputMessage.value = example
-  nextTick(() => {
-    const ta = chatInputRef.value?.$el?.querySelector?.('textarea')
-      || chatInputRef.value?.$refs?.textarea
-      || document.querySelector('textarea[data-testid="chat-input"]')
-    if (ta) ta.value = example
-    sendMessage()
-  })
+  if (_isSending.value) return
+  inputMode.value = example.mode
+  inputMessage.value = example.prompt
+  nextTick(() => chatInputRef.value?.focus())
 }
 
 function viewWorkflow(workflow) {
@@ -2770,109 +2540,57 @@ async function saveWorkflowDirect(workflow) {
   return response?.id || response?.data?.id
 }
 
-async function saveWorkflow(_workflow) { // eslint-disable-line no-unused-vars
-  if (_isSaving.value) return
-
+async function saveWorkflow(workflow) {
+  if (_isSaving.value || _isSending.value || configSaving.value) return
+  const tab = currentTab.value
+  const target = workflow || latestWorkflow(tab)
+  if (!target) return appStore.error('当前没有可保存的工作流')
   _isSaving.value = true
-
-  // If _workflow is provided (from message button), use it directly
-  const activeTab = currentTab.value
-  let targetWorkflow = _workflow || null
-  let targetTab = activeTab
-
-  // If no workflow passed in, search all tabs for one
-  if (!targetWorkflow) {
-    targetWorkflow = getCurrentWorkflow()
-  }
-
-  // Find the tab that owns the targetWorkflow
-  if (targetWorkflow && targetTab) {
-    const foundInCurrentTab = (targetTab.messages || []).some(m => m.workflow === targetWorkflow)
-    if (!foundInCurrentTab) {
-      // Search other tabs for the workflow
-      for (const tab of tabs.value) {
-        if (tab.sessionId && (tab.messages || []).some(m => m.workflow === targetWorkflow)) {
-          targetTab = tab
-          break
-        }
-      }
-    }
-  } else if (!targetWorkflow || !targetTab?.sessionId) {
-    // Fallback: find any tab with sessionId and workflow
-    for (const tab of tabs.value) {
-      if (tab.sessionId) {
-        for (let i = (tab.messages || []).length - 1; i >= 0; i--) {
-          if (tab.messages[i].workflow) {
-            targetTab = tab
-            targetWorkflow = tab.messages[i].workflow
-            break
-          }
-        }
-        if (targetWorkflow) break
-      }
-    }
-  }
-
-  if (!targetWorkflow) {
-    appStore.error('当前没有可保存的工作流')
-    _isSaving.value = false
-    return
-  }
-
-  const finishSave = async (workflowId) => {
-    appStore.success('工作流已保存')
-    showWorkflowDetail.value = false
-    if (targetTab) {
-      targetTab.isDirty = false
-      targetTab.workflowId = workflowId
-    }
-    saveTabsToStorage()
-    await router.push({ name: 'WorkflowEdit', params: { id: workflowId }, query: { fromNlSaved: '1' } })
-  }
-
   try {
-    if (targetTab?.sessionId) {
-      try {
-        const response = await nlWorkflowApi.confirmWorkflow(targetTab.sessionId)
-        const workflowId = response.workflow_id || response.id || response.data?.workflow_id || response.workflowId
-        if (workflowId) {
-          await finishSave(workflowId)
-          return
-        }
-      } catch (confirmErr) {
-        // Session may be stale after backend restart — fall through to direct save
-        console.warn('[NL Creator] confirmWorkflow failed, trying direct save', confirmErr)
-      }
+    const fingerprint = JSON.stringify(target)
+    let workflowId = tab.savedFingerprint === fingerprint ? tab.workflowId : null
+    if (!workflowId && tab.sessionId) {
+      await nlWorkflowApi.ensureWorkspaceVersion(tab.sessionId)
+      const result = await nlWorkflowApi.confirmWorkflow(tab.sessionId, target)
+      workflowId = result.workflowId || result.workflow_id || result.id
+    } else if (!workflowId) {
+      workflowId = await saveWorkflowDirect(target)
     }
-
-    const workflowId = await saveWorkflowDirect(targetWorkflow)
-    if (workflowId) {
-      await finishSave(workflowId)
-    } else {
-      appStore.error('保存失败：未获取到工作流 ID')
-    }
-  } catch (err) {
-    appStore.error('保存失败')
-  } finally {
-    _isSaving.value = false
-  }
+    if (!workflowId) throw new Error('未获取到工作流 ID')
+    tab.isDirty = false
+    tab.workflowId = workflowId
+    tab.savedFingerprint = fingerprint
+    saveTabsToStorage()
+    showWorkflowDetail.value = false
+    appStore.success('工作流已保存，可在编辑器中配置和运行')
+    await router.push({ name: 'WorkflowEdit', params: { id: workflowId }, query: { fromNlSaved: '1' } })
+  } catch (error) {
+    appStore.error(error.message || '保存失败，请重试')
+  } finally { _isSaving.value = false }
 }
 
 // ============================================
 // 模型加载
 // ============================================
 async function loadModels(force = false) {
+  if (modelsLoading.value) return
   if (!force && availableModels.value.length > 0 && !showAllModels.value) return
   modelsLoading.value = true
   try {
     const response = await nlWorkflowApi.getModels(showAllModels.value)
     availableModels.value = response.models || []
     const defaultModel = response.default ?? response.defaultModel
-    if (defaultModel) {
+    modelsError.value = ''
+    availableModels.value = availableModels.value.map(model => ({ ...model, modelId: model.modelId || model.model_id }))
+    if (availableModels.value.some(model => model.modelId === selectedModel.value)) {
+      // Preserve the user's model selection across refreshes.
+    } else if (defaultModel && availableModels.value.some(model => model.modelId === defaultModel)) {
       selectedModel.value = defaultModel
     } else if (availableModels.value.length > 0) {
       const first = availableModels.value[0]
       selectedModel.value = first.modelId ?? first.model_id ?? ''
+    } else {
+      selectedModel.value = ''
     }
 
     const grouped = {}
@@ -2883,10 +2601,11 @@ async function loadModels(force = false) {
     })
     modelOptions.value = grouped
 
-    const current = availableModels.value.find(m => m.modelId === selectedModel.value)
-    selectedModelProvider.value = current?.provider || ''
   } catch (err) {
-    appStore.error('加载模型列表失败')
+    modelsError.value = '加载模型列表失败，请刷新重试'
+    availableModels.value = []
+    modelOptions.value = {}
+    selectedModel.value = ''
   } finally {
     modelsLoading.value = false
   }
@@ -2920,62 +2639,33 @@ function formatDate(timestamp) {
   return date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })
 }
 
-async function loadHistory() {
+async function loadHistory(append = false) {
+  const requestId = ++historyRequestId
   historyLoading.value = true
+  historyError.value = ''
+  const page = append ? historyPage.value + 1 : 1
   try {
-    const response = await nlWorkflowApi.getSessions()
-    // toCamelCaseKeys already ran in Axios interceptor (session_id -> sessionId)
-    const raw = response.data || response || []
-    // Normalize: only set sessionId if it doesn't already exist after camelCase conversion
-    const normalized = raw.map(s => {
-      const obj = { ...s }
-      if (!obj.sessionId) {
-        obj.sessionId = s.sessionId || s.session_id || s.id || null
-      }
-      return obj
-    })
-    const seen = new Set()
-    historySessions.value = normalized.filter(s => {
-      if (!s.sessionId) return true
-      if (seen.has(s.sessionId)) return false
-      seen.add(s.sessionId)
-      return true
-    })
-    historyTotal.value = historySessions.value.length
-  } catch (err) {
-    appStore.error('加载历史记录失败')
-  } finally {
-    historyLoading.value = false
-  }
+    const response = await nlWorkflowApi.getSessions({ paginated: true, page, page_size: NL_CREATOR.pageSize, search: historySearchQuery.value.trim(), status: historyStatusFilter.value })
+    if (requestId !== historyRequestId) return
+    const rows = (response.results || response.data || response || []).map(session => ({ ...session, sessionId: session.sessionId || session.session_id || session.id }))
+    const combined = append ? [...historySessions.value, ...rows] : rows
+    historySessions.value = [...new Map(combined.map(row => [row.sessionId, row])).values()]
+    historyTotal.value = response.count ?? rows.length
+    historyPage.value = page
+    historyHasMore.value = Boolean(response.hasMore ?? response.has_more)
+  } catch (error) {
+    if (requestId === historyRequestId) historyError.value = error.message || '历史记录加载失败'
+  } finally { if (requestId === historyRequestId) historyLoading.value = false }
 }
 
 function handleHistorySearch() {
-  // Search is reactive via computed
+  clearTimeout(historySearchTimer)
+  historySearchTimer = setTimeout(() => loadHistory(), NL_CREATOR.debounceMs)
 }
 
-function getStatusType(status) {
-  const types = {
-    'generating': 'warning',
-    'completed': 'success',
-    'failed': 'danger',
-    'pending': 'info'
-  }
-  return types[status] || 'info'
-}
+function getStatusType(status) { return NL_SESSION_STATUS[status]?.type || 'info' }
+function getStatusText(status) { return NL_SESSION_STATUS[status]?.label || status }
 
-function getStatusText(status) {
-  const texts = {
-    'generating': '生成中',
-    'completed': '已完成',
-    'failed': '失败',
-    'pending': '等待中'
-  }
-  return texts[status] || status
-}
-
-// ============================================
-// Intent Analysis Display
-// ============================================
 function getIntentTagType(intentType) {
   const types = {
     'create': 'success',
@@ -3016,63 +2706,7 @@ function getCurrentWorkflow() {
 // ============================================
 // VueFlow 数据转换（NL → VueFlow 格式）
 // ============================================
-const nlNodeTypes = {
-  start: StartNode,
-  end: EndNode,
-  llm: LLMNode,
-  input: InputNode,
-  output: OutputNode,
-  condition: ConditionNode,
-  delay: DelayNode,
-  http: HttpNode,
-  code: CodeNode,
-  variable: VariableNode,
-  prompt: PromptNode,
-  email: EmailNode,
-  memory: MemoryNode,
-  tool: ToolNode,
-  retriever: RetrieverNode,
-  vector_store: VectorStoreNode,
-  embedding: EmbeddingNode,
-  subworkflow: SubworkflowNode,
-  executor: ExecutorNode,
-  planner: PlannerNode,
-  agent: AgentNode,
-  loop: LoopNode,
-  switch: SwitchNode,
-  file_reader: FileReaderNode,
-  file_writer: FileWriterNode,
-  transform: TransformNode,
-  json_transform: JsonTransformNode,
-  csv_transform: CsvTransformNode,
-  document_loader: DocumentLoaderNode,
-  web_scraper: WebScraperNode,
-  dataset_upload: DatasetUploadNode,
-  data_annotation: DataAnnotationNode,
-  data_augmentation: DataAugmentationNode,
-  model_training: ModelTrainingNode,
-  yolo_training: YoloTrainingNode,
-  project_profiler: ProjectProfilerNode,
-  model_evaluation: ModelEvaluationNode,
-  model_deployment: ModelDeploymentNode,
-  image_generation: ImageGenerationNode,
-  image_editing: ImageEditingNode,
-  video_generation: VideoGenerationNode,
-  audio_generation: AudioGenerationNode,
-  subtitle_generation: SubtitleGenerationNode,
-  video_upload: VideoUploadNode,
-  subtitle_translate: SubtitleTranslateNode,
-  segment_dubbing: SegmentDubbingNode,
-  lip_sync: LipSyncNode,
-  subtitle_burn: SubtitleBurnNode,
-  video_translation: VideoTranslationNode,
-  website_generator: WebsiteGeneratorNode,
-  environment_provision: EnvironmentProvisionNode,
-  site_qa: SiteQaNode,
-  site_preview: SitePreviewNode,
-  project_agent: ProjectAgentNode,
-  reranker: RerankerNode
-}
+const nlNodeTypes = buildNodeTypesMap()
 
 // nlNodes/nlEdges must be refs (not computed) because VueFlow v-model:nodes/edges writes to them
 const nlNodes = ref([])
@@ -3092,12 +2726,12 @@ function syncNlPreview() {
   nlNodes.value = converted.nodes
   nlEdges.value = converted.edges.map((edge) => ({
     ...edge,
-    style: { stroke: '#06b6d4', strokeWidth: 2 }
+    style: { stroke: 'var(--color-primary)', strokeWidth: 2 }
   }))
 }
 
 watch(
-  [() => currentTab.value?.id, () => currentTab.value?.messages],
+  [() => currentTab.value?.id, () => latestWorkflow(currentTab.value)],
   () => {
     syncNlPreview()
   },
@@ -3105,10 +2739,103 @@ watch(
 )
 
 function handleNlNodeClick(event) {
-  selectedNode.value = event.node
+  selectedNode.value = getCurrentWorkflow()?.nodes.find(node => node.id === event.node.id) || null
+  cancelNodeEdit()
   showNodeConfig.value = true
-  editingNodeConfig.value = { ...event.node.data }
 }
+
+function cancelNodeEdit() {
+  editingNodeConfig.value = { name: selectedNode.value?.name || '' }
+  configJson.value = JSON.stringify(selectedNode.value?.config || {}, null, 2)
+  configError.value = ''
+  showNodeConfig.value = false
+}
+
+async function saveNodeConfig() {
+  if (configSaving.value || !selectedNode.value) return
+  configError.value = ''
+  const tab = currentTab.value
+  try {
+    const config = parseNodeConfig(configJson.value)
+    const name = editingNodeConfig.value.name.trim()
+    if (!name || name.length > NL_CREATOR.maxNameLength) throw new Error('节点名称须为 1 到 200 个字符')
+    const workflow = JSON.parse(JSON.stringify(latestWorkflow(tab)))
+    const node = workflow.nodes.find(node => node.id === selectedNode.value.id)
+    if (!node) throw new Error('节点已变更，请重新选择')
+    node.name = name
+    node.config = config
+    configSaving.value = true
+    if (tab.sessionId) await nlWorkflowApi.ensureWorkspaceVersion(tab.sessionId)
+    const response = tab.sessionId ? await nlWorkflowApi.updateSession(tab.sessionId, { workflow_json: JSON.stringify(workflow) }) : null
+    const message = [...tab.messages].reverse().find(message => message.workflow)
+    message.workflow = response?.workflow || response?.workflowJson || workflow
+    message.nodeGuidance = message.workflow._node_guidance || null
+    message.emailGuidance = message.workflow._email_guidance || null
+    restoreActiveTabGuidance()
+    tab.isDirty = true
+    selectedNode.value = node
+    updateWorkflowValidation(workflow)
+    saveTabsToStorage()
+    showNodeConfig.value = false
+    appStore.success(NL_CREATOR.savedConfig)
+  } catch (error) { configError.value = error instanceof SyntaxError ? NL_CREATOR.configInvalid : error.message }
+  finally { configSaving.value = false }
+}
+
+async function copyMessage(message) {
+  try { await navigator.clipboard.writeText(message.content || ''); appStore.success(NL_CREATOR.copySuccess) }
+  catch { appStore.error(NL_CREATOR.copyError) }
+}
+
+function exportConversation() {
+  const tab = currentTab.value
+  if (!tab) return
+  const url = URL.createObjectURL(new Blob([conversationMarkdown(tab)], { type: 'text/markdown;charset=utf-8' }))
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `${tab.title.replace(/[\\/:*?"<>|]/g, '_')}.md`
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
+function restoreLastRequest() {
+  const message = [...currentTabMessages.value].reverse().find(message => message.role === 'user')
+  if (message) inputMessage.value = message.content
+  nextTick(() => chatInputRef.value?.focus())
+}
+
+async function refreshCurrentSession() {
+  const tab = currentTab.value
+  if (!tab?.sessionId || tab.isLoading || _isSending.value) return
+  try {
+    if (tab.taskId) await nlWorkflowApi.getTaskStatus(tab.sessionId, { task_id: tab.taskId })
+    await loadSessionIntoTab(tab.id, { sessionId: tab.sessionId, name: tab.title })
+  } catch (error) { appStore.error(nlErrorMessage(error)) }
+}
+
+async function retryBackgroundTask() {
+  const tab = currentTab.value
+  if (!tab?.sessionId || recoveringTask.value || tab.sessionStatus !== 'failed') return
+  recoveringTask.value = true
+  try {
+    const response = await nlWorkflowApi.retryTask(tab.sessionId, { model: selectedModel.value })
+    tab.taskId = response.taskId || tab.taskId
+    tab.sessionStatus = response.status
+    await refreshCurrentSession()
+  } catch (error) { appStore.error(nlErrorMessage(error)) }
+  finally { recoveringTask.value = false }
+}
+
+watch([inputMessage, inputMode], () => {
+  clearTimeout(storageTimer)
+  storageTimer = setTimeout(saveTabsToStorage, NL_CREATOR.debounceMs)
+})
+watch(activeTabId, () => {
+  selectedNode.value = null
+  showNodeConfig.value = false
+  restoreActiveTabGuidance()
+  updateWorkflowValidation(getCurrentWorkflow())
+})
 
 function handleSessionAction(command, session) {
   const sessionId = session.sessionId || session.session_id
@@ -3138,13 +2865,14 @@ async function renameSession(session) {
     const { value: newName } = await ElMessageBox.prompt('请输入新的会话名称', '重命名会话', {
       confirmButtonText: '确定',
       cancelButtonText: '取消',
-      inputValue: session.name || session.description || ''
+      inputValue: session.name || session.description || '',
+      inputValidator: value => Boolean(value?.trim() && value.trim().length <= NL_CREATOR.maxNameLength) || '请输入 1 到 200 个字符'
     })
 
-    if (newName) {
+    if (newName?.trim()) {
       let apiSuccess = false
       try {
-        await nlWorkflowApi.updateSession(sessionId, { name: newName })
+        await nlWorkflowApi.updateSession(sessionId, { name: newName.trim() })
         apiSuccess = true
       } catch (err) {
         appStore.error('重命名失败，请重试')
@@ -3197,8 +2925,9 @@ function handleSessionItemClick(event) {
 }
 
 async function deleteSession(session) {
+  if (guardVoiceCapture()) return
   const sessionId = session.sessionId || session.session_id
-  if (!sessionId) return
+  if (!sessionId || _isSending.value) return
 
   try {
     await ElMessageBox.confirm('确定要删除这个对话吗？', '删除对话', {
@@ -3214,7 +2943,7 @@ async function deleteSession(session) {
     // Close any tab with this session
     const tabIndex = tabs.value.findIndex(t => t.sessionId === sessionId)
     if (tabIndex > -1) {
-      closeTab(tabs.value[tabIndex].id)
+      await closeTab(tabs.value[tabIndex].id, true)
     } else if (tabs.value.length === 0) {
       createNewTab()
     }
@@ -3222,7 +2951,7 @@ async function deleteSession(session) {
     await loadHistory()
     appStore.success('会话已删除')
   } catch (err) {
-    if (err !== 'cancel') {
+    if (err !== 'cancel' && err !== 'close') {
       appStore.error('删除失败')
     }
   }
@@ -3239,6 +2968,7 @@ function toggleSessionSelection(session) {
 }
 
 function handleSelectAll() {
+  batchMode.value = true
   if (selectedSessions.value.length === filteredHistorySessions.value.length) {
     selectedSessions.value = []
   } else {
@@ -3252,7 +2982,8 @@ function handleCancelBatch() {
 }
 
 async function handleBatchDelete() {
-  if (selectedSessions.value.length === 0) return
+  if (guardVoiceCapture()) return
+  if (selectedSessions.value.length === 0 || _isSending.value) return
 
   try {
     await ElMessageBox.confirm(
@@ -3265,31 +2996,18 @@ async function handleBatchDelete() {
       }
     )
 
-    const deletePromises = selectedSessions.value.map(sessionId =>
-      nlWorkflowApi.deleteSession(sessionId).catch(() => {})
-    )
-    await Promise.all(deletePromises)
-
-    historySessions.value = historySessions.value.filter(
-      s => !selectedSessions.value.includes(s.sessionId || s.session_id)
-    )
-    historyTotal.value = historySessions.value.length
-
-    // Close tabs with deleted sessions
-    const tabsToRemove = tabs.value.filter(t =>
-      t.sessionId && selectedSessions.value.includes(t.sessionId)
-    )
-    tabsToRemove.forEach(t => {
-      const idx = tabs.value.findIndex(tab => tab.id === t.id)
-      if (idx > -1) tabs.value.splice(idx, 1)
-    })
-
-    if (tabs.value.length === 0) createNewTab()
-
+    const ids = [...selectedSessions.value]
+    const results = await Promise.allSettled(ids.map(id => nlWorkflowApi.deleteSession(id)))
+    const deleted = ids.filter((_, index) => results[index].status === 'fulfilled')
+    const failed = ids.filter((_, index) => results[index].status === 'rejected')
+    tabs.value = tabs.value.filter(tab => !deleted.includes(tab.sessionId))
+    if (!tabs.value.length) createNewTab()
+    if (!tabs.value.some(tab => tab.id === activeTabId.value)) activeTabId.value = tabs.value[0].id
     await loadHistory()
-    appStore.success(`已删除 ${selectedSessions.value.length} 个对话`)
+    if (deleted.length) appStore.success(`已删除 ${deleted.length} 个对话`)
+    if (failed.length) appStore.error(`${failed.length} 个对话删除失败，已保留，请重试`)
   } catch (err) {
-    if (err !== 'cancel') {
+    if (err !== 'cancel' && err !== 'close') {
       appStore.error('批量删除失败')
     }
   } finally {
@@ -3301,7 +3019,7 @@ async function handleBatchDelete() {
 
 <style lang="scss" scoped>
 @use '@/assets/styles/variables.scss' as *;
-@import '@/styles/workflow-domain-node.scss';
+@use '@/styles/workflow-domain-node.scss';
 
 .nl-creator {
   display: flex;
@@ -3776,25 +3494,6 @@ async function handleBatchDelete() {
 // ============================================
 // 主内容区
 // ============================================
-.creator-main {
-  flex: 1;
-  max-width: 1100px;
-  margin: 0 auto;
-  padding: $spacing-6;
-  transition: all 0.3s ease;
-
-  @media (max-width: 768px) {
-    padding: $spacing-4;
-  }
-}
-
-.creator-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: $spacing-3;
-}
-
 .toolbar-btn {
   display: flex;
   align-items: center;
@@ -3871,6 +3570,7 @@ async function handleBatchDelete() {
 
 .tab-scroll-container {
   flex: 1;
+  min-width: 0;
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: none;
@@ -4052,34 +3752,6 @@ async function handleBatchDelete() {
 // ============================================
 // 模型选择器
 // ============================================
-.model-selector-bar {
-  display: flex;
-  align-items: center;
-  gap: $spacing-4;
-  padding: $spacing-4 $spacing-6;
-  background-color: var(--bg-secondary);
-  border: 1px solid var(--border-primary);
-  border-radius: $radius-xl;
-  margin-bottom: $spacing-4;
-}
-
-.model-selector {
-  display: flex;
-  align-items: center;
-  gap: $spacing-3;
-}
-
-.model-label {
-  font-size: $font-size-sm;
-  font-weight: $font-weight-medium;
-  color: var(--text-secondary);
-  white-space: nowrap;
-}
-
-.model-select {
-  min-width: 280px;
-}
-
 .model-option-content {
   display: flex;
   align-items: center;
@@ -4094,49 +3766,9 @@ async function handleBatchDelete() {
   font-weight: $font-weight-medium;
 }
 
-.model-info {
-  display: flex;
-  align-items: center;
-  gap: $spacing-2;
-  margin-left: auto;
-
-  .model-name {
-    font-size: $font-size-sm;
-    color: var(--text-secondary);
-    font-family: monospace;
-  }
-
-  &.model-unavailable {
-    color: var(--color-warning, #e6a23c);
-
-    svg {
-      width: 16px;
-      height: 16px;
-    }
-
-    span {
-      font-size: $font-size-sm;
-    }
-  }
-}
-
 // ============================================
 // 聊天容器
 // ============================================
-.chat-container {
-  background-color: var(--bg-secondary);
-  border: 1px solid var(--border-primary);
-  border-radius: $radius-2xl;
-  overflow: hidden;
-}
-
-.chat-messages {
-  min-height: 400px;
-  max-height: 500px;
-  overflow-y: auto;
-  padding: $spacing-6;
-}
-
 .message {
   display: flex;
   gap: $spacing-4;
@@ -4146,8 +3778,8 @@ async function handleBatchDelete() {
     flex-direction: row-reverse;
 
     .message-text {
-      background: linear-gradient(135deg, var(--color-primary) 0%, $color-secondary 100%);
-      color: white;
+      background: var(--button-primary-bg);
+      color: var(--button-primary-text);
     }
   }
 }
@@ -4164,8 +3796,8 @@ async function handleBatchDelete() {
   // Avatar images / svgs are handled by NlAvatar component itself
 
   .message-assistant & {
-    background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-light) 100%);
-    box-shadow: 0 2px 8px var(--color-primary-shadow, rgba(6, 182, 212, 0.3));
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-primary);
     padding: 2px;
   }
 
@@ -4181,7 +3813,8 @@ async function handleBatchDelete() {
 }
 
 .message-content {
-  max-width: 80%;
+  min-width: 0;
+  max-width: min(80%, 72ch);
 }
 
 .message-text {
@@ -4342,155 +3975,6 @@ async function handleBatchDelete() {
   &:hover {
     background-color: var(--color-primary-20);
     border-color: var(--color-primary);
-  }
-}
-
-.examples {
-  padding: $spacing-4 $spacing-6;
-  border-top: 1px solid var(--border-primary);
-  background-color: var(--bg-active);
-}
-
-.examples-title {
-  font-size: $font-size-sm;
-  color: var(--text-tertiary);
-  margin: 0 0 $spacing-3;
-}
-
-.examples-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: $spacing-3;
-}
-
-.example-card {
-  display: flex;
-  align-items: center;
-  gap: $spacing-2;
-  padding: $spacing-3;
-  background-color: var(--bg-tertiary);
-  border: 1px solid var(--border-primary);
-  border-radius: $radius-lg;
-  cursor: pointer;
-  transition: all $transition-fast;
-
-  &--chat {
-    border-style: dashed;
-    background-color: var(--bg-secondary);
-  }
-
-  &:hover {
-    border-color: var(--color-primary);
-    background-color: var(--color-primary-05);
-  }
-
-  span {
-    font-size: $font-size-sm;
-    color: var(--text-primary);
-  }
-
-  .example-icon {
-    width: 20px;
-    height: 20px;
-    color: var(--color-primary);
-  }
-}
-
-.chat-input {
-  padding: $spacing-4;
-  border-top: 1px solid var(--border-primary);
-  background-color: var(--bg-secondary);
-
-  :deep(.el-textarea__inner) {
-    background-color: var(--bg-tertiary);
-    border-color: var(--border-primary);
-    border-radius: $radius-lg;
-    padding: $spacing-3;
-    resize: none;
-    font-size: $font-size-sm;
-
-    &:focus {
-      border-color: var(--color-primary);
-    }
-  }
-}
-
-.input-mode-bar {
-  display: flex;
-  align-items: center;
-  gap: $spacing-2;
-  margin-bottom: $spacing-3;
-  flex-wrap: wrap;
-}
-
-.mode-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: $spacing-1;
-  padding: $spacing-2 $spacing-3;
-  border-radius: $radius-lg;
-  border: 1px solid var(--border-primary);
-  background-color: var(--bg-tertiary);
-  color: var(--text-secondary);
-  font-size: $font-size-sm;
-  cursor: pointer;
-  transition: all $transition-fast;
-
-  .mode-chip-icon {
-    width: 16px;
-    height: 16px;
-  }
-
-  &:hover:not(:disabled) {
-    border-color: var(--color-primary-40);
-    color: var(--text-primary);
-  }
-
-  &:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-  }
-
-  &--active {
-    color: var(--text-primary);
-    font-weight: $font-weight-medium;
-  }
-
-  &--active:first-of-type {
-    color: var(--color-primary);
-    background-color: var(--color-primary-10);
-    border-color: var(--color-primary-30);
-  }
-
-  &--active:nth-of-type(2) {
-    color: #059669;
-    background-color: rgba(5, 150, 105, 0.1);
-    border-color: rgba(5, 150, 105, 0.3);
-  }
-}
-
-.mode-hint {
-  margin-left: auto;
-  font-size: $font-size-xs;
-  color: var(--text-tertiary);
-  line-height: 1.4;
-}
-
-.input-actions {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: $spacing-3;
-}
-
-.input-info {
-  display: flex;
-  align-items: center;
-  gap: $spacing-4;
-
-  .hint {
-    font-size: $font-size-xs;
-    color: var(--text-tertiary);
   }
 }
 
@@ -4746,80 +4230,6 @@ async function handleBatchDelete() {
 
 .preview-panel-body {
   padding: $spacing-4;
-}
-
-.preview-nodes-list {
-  display: flex;
-  flex-direction: column;
-  gap: $spacing-2;
-  max-height: 300px;
-  overflow-y: auto;
-  margin-bottom: $spacing-3;
-}
-
-.preview-node-item {
-  display: flex;
-  align-items: center;
-  gap: $spacing-3;
-  padding: $spacing-2 $spacing-3;
-  background-color: var(--bg-tertiary);
-  border-radius: $radius-lg;
-  transition: all $transition-fast;
-
-  &:hover {
-    background-color: var(--bg-hover);
-    
-    .node-actions {
-      opacity: 1;
-    }
-  }
-
-  &.has-error {
-    border-left: 3px solid var(--color-error);
-  }
-
-  .node-icon {
-    width: 32px;
-    height: 32px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background-color: var(--color-primary-10);
-    border-radius: $radius-md;
-    color: var(--color-primary);
-
-    svg {
-      width: 16px;
-      height: 16px;
-    }
-  }
-
-  .node-info {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    gap: $spacing-2;
-  }
-
-  .node-name {
-    font-size: $font-size-sm;
-    font-weight: $font-weight-medium;
-    color: var(--text-primary);
-  }
-
-  .node-type-tag {
-    font-size: 10px;
-  }
-
-  .node-actions {
-    opacity: 0;
-    transition: opacity $transition-fast;
-
-    .node-action-icon {
-      width: 14px;
-      height: 14px;
-    }
-  }
 }
 
 .preview-panel-footer {
@@ -5083,4 +4493,7 @@ async function handleBatchDelete() {
   margin-right: auto;
   margin-left: $spacing-3;
 }
+
 </style>
+
+<style lang="scss" scoped src="./workspace.scss"></style>

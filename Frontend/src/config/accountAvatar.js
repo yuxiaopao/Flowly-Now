@@ -1,0 +1,17 @@
+export const ACCOUNT_AVATAR = Object.freeze({
+  headerSize: 40,
+  iconScale: 1.55,
+  defaults: Object.freeze({ mode: 'robot', shape: 'cercle', color: 'bleu', expression: 'neutre', blocks: [] }),
+  maxBlocks: 200,
+  minDuration: 0.1,
+  maxDuration: 10,
+  robotLabel: '动态机器人头像',
+  imageLabel: '已上传的个人头像',
+  chooseRobot: '使用机器人头像',
+  chooseImage: '使用已上传图片',
+  darkThemes: Object.freeze(['dark', 'high-contrast']),
+  monochromeColors: Object.freeze(['encre', 'creme']),
+  lightBody: '#f9f9f9',
+  darkBody: '#0a0a0c',
+  storagePrefix: 'flowly:account-avatar:',
+})

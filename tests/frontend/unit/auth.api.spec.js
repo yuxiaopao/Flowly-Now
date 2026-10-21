@@ -31,7 +31,7 @@ beforeEach(() => {
 describe('authApi.login', () => {
   it('POST /auth/login/ 携带用户名和密码', async () => {
     await authApi.login({ username: 'testuser', password: 'pass123' })
-    expect(mockRequest.post).toHaveBeenCalledWith('/auth/login/', { username: 'testuser', password: 'pass123' })
+    expect(mockRequest.post).toHaveBeenCalledWith('/auth/login/', { username: 'testuser', password: 'pass123' }, { skipErrorToast: true })
   })
 
   it('登录失败时 reject', async () => {
@@ -44,7 +44,7 @@ describe('authApi.register', () => {
   it('POST /auth/register/ 携带注册数据', async () => {
     const payload = { username: 'newuser', password: 'pass123', email: 'new@example.com' }
     await authApi.register(payload)
-    expect(mockRequest.post).toHaveBeenCalledWith('/auth/register/', payload)
+    expect(mockRequest.post).toHaveBeenCalledWith('/auth/register/', payload, { skipErrorToast: true })
   })
 })
 
@@ -59,7 +59,7 @@ describe('authApi.getUserInfo', () => {
   it('GET /auth/user/', async () => {
     mockRequest.get.mockResolvedValueOnce({ id: 1, username: 'testuser', role: 'developer' })
     const result = await authApi.getUserInfo()
-    expect(mockRequest.get).toHaveBeenCalledWith('/auth/user/')
+    expect(mockRequest.get).toHaveBeenCalledWith('/auth/user/', {}, { skipAuthRedirect: true })
     expect(result).toMatchObject({ id: 1 })
   })
 })
@@ -67,14 +67,14 @@ describe('authApi.getUserInfo', () => {
 describe('authApi.updateProfile', () => {
   it('PATCH /auth/user/ 更新用户资料', async () => {
     await authApi.updateProfile({ bio: '新简介' })
-    expect(mockRequest.patch).toHaveBeenCalledWith('/auth/user/', { bio: '新简介' })
+    expect(mockRequest.patch).toHaveBeenCalledWith('/auth/user/', { bio: '新简介' }, { skipErrorToast: true })
   })
 })
 
 describe('authApi.changePassword', () => {
   it('POST /auth/change-password/ 携带旧密码和新密码', async () => {
     await authApi.changePassword({ old_password: 'old123', new_password: 'new456' })
-    expect(mockRequest.post).toHaveBeenCalledWith('/auth/change-password/', { old_password: 'old123', new_password: 'new456' })
+    expect(mockRequest.post).toHaveBeenCalledWith('/auth/change-password/', { old_password: 'old123', new_password: 'new456' }, { skipErrorToast: true })
   })
 })
 
@@ -88,7 +88,7 @@ describe('authApi.refreshToken', () => {
 describe('authApi.requestPasswordReset', () => {
   it('POST /auth/password-reset/ 携带邮箱', async () => {
     await authApi.requestPasswordReset('user@example.com')
-    expect(mockRequest.post).toHaveBeenCalledWith('/auth/password-reset/', { email: 'user@example.com' })
+    expect(mockRequest.post).toHaveBeenCalledWith('/auth/password-reset/', { email: 'user@example.com' }, { skipErrorToast: true })
   })
 })
 
@@ -99,20 +99,6 @@ describe('authApi.resetPassword', () => {
       uidb64: 'UID123',
       token: 'TOKEN456',
       new_password: 'newpass789'
-    })
-  })
-})
-
-describe('authApi.verifyEmail', () => {
-  it('POST /auth/verify-email/ 携带 key', async () => {
-    await authApi.verifyEmail('verify-key-123')
-    expect(mockRequest.post).toHaveBeenCalledWith('/auth/verify-email/', { key: 'verify-key-123' })
-  })
-})
-
-describe('authApi.resendVerificationEmail', () => {
-  it('POST /auth/verify-email/resend/', async () => {
-    await authApi.resendVerificationEmail()
-    expect(mockRequest.post).toHaveBeenCalledWith('/auth/verify-email/resend/')
+    }, { skipErrorToast: true })
   })
 })

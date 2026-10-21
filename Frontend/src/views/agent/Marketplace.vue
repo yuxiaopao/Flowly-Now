@@ -5,38 +5,6 @@
       :meta="`${totalCount} 个公开 Agent`"
     >
       <template #actions>
-        <el-input
-          v-model="searchQuery"
-          placeholder="搜索 Agent 名称或描述..."
-          :prefix-icon="Search"
-          clearable
-          class="search-input"
-          @input="handleSearch"
-        />
-        <el-select
-          v-model="typeFilter"
-          placeholder="类型"
-          clearable
-          class="type-select"
-          @change="handleSearch"
-        >
-          <el-option
-            label="对话型"
-            value="conversational"
-          />
-          <el-option
-            label="任务型"
-            value="task"
-          />
-          <el-option
-            label="研究型"
-            value="research"
-          />
-          <el-option
-            label="编程型"
-            value="coding"
-          />
-        </el-select>
         <router-link to="/agents">
           <AppButton variant="secondary">
             <Bot class="btn-icon" />
@@ -45,6 +13,41 @@
         </router-link>
       </template>
     </PageHeader>
+
+    <PageToolbar>
+      <el-input
+        v-model="searchQuery"
+        placeholder="搜索 Agent 名称或描述..."
+        :prefix-icon="Search"
+        clearable
+        class="search-input"
+        @input="handleSearch"
+      />
+      <el-select
+        v-model="typeFilter"
+        placeholder="类型"
+        clearable
+        class="type-select"
+        @change="handleSearch"
+      >
+        <el-option
+          label="对话型"
+          value="conversational"
+        />
+        <el-option
+          label="任务型"
+          value="task"
+        />
+        <el-option
+          label="研究型"
+          value="research"
+        />
+        <el-option
+          label="编程型"
+          value="coding"
+        />
+      </el-select>
+    </PageToolbar>
 
     <div
       v-if="isLoading"
@@ -203,6 +206,7 @@
 </template>
 
 <script setup>
+import PageToolbar from '@/components/layout/PageToolbar.vue'
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { agentApi } from '@/api/agent'
@@ -307,14 +311,6 @@ function getTypeLabel(type) {
 <style lang="scss" scoped>
 @use '@/assets/styles/variables.scss' as *;
 
-.search-input {
-  width: 280px;
-}
-
-.type-select {
-  width: 120px;
-}
-
 .btn-icon {
   width: 16px;
   height: 16px;
@@ -326,16 +322,16 @@ function getTypeLabel(type) {
 
 .agent-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: $spacing-5;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--content-card-min-width)), 1fr));
+  gap: var(--content-gap);
 }
 
 .agent-card {
   position: relative;
   background-color: var(--bg-secondary);
   border: 1px solid var(--border-primary);
-  border-radius: $radius-xl;
-  padding: $spacing-5;
+  border-radius: var(--content-card-radius);
+  padding: var(--content-card-padding);
   transition: border-color 0.25s ease, box-shadow 0.25s ease, transform 0.25s cubic-bezier(0.22, 1, 0.36, 1);
 
   &:hover {

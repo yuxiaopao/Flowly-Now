@@ -21,8 +21,12 @@ urlpatterns = [
     path('projects/<int:project_id>/modules/', views.ModuleListView.as_view(), name='module-list'),
     path('projects/<int:project_id>/modules/dependencies/', views.ModuleDependencyView.as_view(), name='module-dependencies'),
     
-    # 文件相关
+    # 文件相关（explain 需在 file/ 之前，避免被更短路径干扰）
+    path('projects/<int:project_id>/file/explain/', views.FileAiExplainView.as_view(), name='file-ai-explain'),
     path('projects/<int:project_id>/file/', views.FileContentView.as_view(), name='file-content'),
+
+    # 分析助手
+    path('projects/<int:project_id>/assistant/ask/', views.AssistantAskView.as_view(), name='assistant-ask'),
     
     # 搜索
     path('projects/<int:project_id>/search/', views.SearchView.as_view(), name='search'),

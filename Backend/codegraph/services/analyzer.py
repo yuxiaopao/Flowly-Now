@@ -3,13 +3,12 @@ Graph Analyzer - 图结构分析与计算
 计算节点中心性、检测循环依赖、找出热点模块等
 """
 
-import os
+from datetime import datetime, timezone
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Set, Tuple
-from concurrent.futures import ThreadPoolExecutor
+from typing import Dict, List, Optional, Set
 
-from .parser import CodeStructure, FileNode, DependencyEdge
+from .parser import CodeStructure, FileNode
 
 
 @dataclass
@@ -105,7 +104,7 @@ class GraphAnalyzer:
         # 计算各项指标
         metrics = self._calculate_all_metrics()
         cycles = self.detect_cycles()
-        hotspots = self.find_hotspots()
+        hotspots = self.find_hotspots(metrics=metrics)
         enriched_nodes = self._enrich_nodes(structure.nodes, metrics)
 
         # 函数节点以特殊 type 标记，合并进前端节点列表
@@ -139,7 +138,7 @@ class GraphAnalyzer:
             cycles=cycles,
             hotspots=hotspots,
             metrics=metrics,
-            last_updated=structure.stats.get('last_updated', ''),
+            last_updated=datetime.now(timezone.utc).isoformat(),
         )
 
     def _enrich_nodes(self, nodes: List[FileNode], metrics: Dict[str, NodeMetrics]) -> List[dict]:
@@ -230,19 +229,19 @@ class GraphAnalyzer:
 
             # 计算依赖值
             dependency = defaultdict(float)
-            nodes_by_distance = sorted(distances.items(), key=lambda x: -x[1])
-            for _, v in nodes_by_distance:
+            nodes_by_distance = sorted(distances, key=distances.get, reverse=True)
+            for v in nodes_by_distance:
                 for pred in predecessors.get(v, []):
                     dependency[pred] += (sigma[pred] / sigma[v]) * (1 + dependency[v])
 
             # 累加中心性
-            if n > 2:
-                for node in distances:
-                    centrality[node] += dependency[node] / ((n - 1) * (n - 2))
+            for node in distances:
+                if node != source:
+                    centrality[node] += dependency[node]
 
         # 归一化
         if n > 2:
-            norm = 2 / ((n - 1) * (n - 2))
+            norm = 1 / ((n - 1) * (n - 2))
             for node in centrality:
                 centrality[node] *= norm
 
@@ -330,13 +329,14 @@ class GraphAnalyzer:
 
         return simplified
 
-    def find_hotspots(self, top_n: int = 10) -> List[dict]:
+    def find_hotspots(self, top_n: int = 10, metrics: Optional[Dict[str, NodeMetrics]] = None) -> List[dict]:
         """
         找出高耦合热点模块
         基于中心性和入度综合计算
         """
         hotspots = []
-        metrics = self._calculate_all_metrics()
+        if metrics is None:
+            metrics = self._calculate_all_metrics()
 
         for node_id, metric in metrics.items():
             # 综合得分: 60% 中心性 + 40% 入度

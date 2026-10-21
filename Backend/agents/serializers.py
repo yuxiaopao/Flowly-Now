@@ -7,6 +7,31 @@ from tenants.models import Tenant
 from .models import Agent, AgentTool, AgentConversation, AgentExecution, AgentCollaborationRun
 
 
+class AgentChatRequestSerializer(serializers.Serializer):
+    message = serializers.CharField(allow_blank=False)
+    conversation_id = serializers.UUIDField(required=False, allow_null=True)
+
+
+class AgentToolsRequestSerializer(serializers.Serializer):
+    tools = serializers.ListField(child=serializers.CharField())
+
+    def validate_tools(self, value):
+        from .engine import AgentEngine
+        unsupported = [name for name in value if name not in AgentEngine.TOOLS_REGISTRY]
+        if unsupported:
+            raise serializers.ValidationError('不支持的工具：' + '、'.join(unsupported))
+        return list(dict.fromkeys(value))
+
+
+class AgentToolRemoveSerializer(serializers.Serializer):
+    tool = serializers.CharField(allow_blank=False)
+
+
+class ConversationMessageSerializer(serializers.Serializer):
+    role = serializers.ChoiceField(choices=('user', 'assistant', 'system'))
+    content = serializers.CharField(allow_blank=False)
+
+
 class AgentToolSerializer(serializers.ModelSerializer):
     """Serializer for AgentTool model."""
 
@@ -17,6 +42,9 @@ class AgentToolSerializer(serializers.ModelSerializer):
 
 class AgentSerializer(serializers.ModelSerializer):
     """Serializer for Agent model."""
+
+    temperature = serializers.FloatField(min_value=0, max_value=2, required=False)
+    max_tokens = serializers.IntegerField(min_value=1, required=False)
 
     tools_detail = AgentToolSerializer(source='agent_tools', many=True, read_only=True)
     tenant_name = serializers.CharField(source='tenant.name', read_only=True, default=None)

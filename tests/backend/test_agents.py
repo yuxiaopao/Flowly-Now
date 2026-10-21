@@ -6,6 +6,7 @@ Tests for Agent, AgentConversation, AgentTool, and AgentExecution views.
 
 import pytest
 from unittest.mock import patch, MagicMock
+from rest_framework import status
 
 
 pytestmark = pytest.mark.django_db
@@ -13,6 +14,26 @@ pytestmark = pytest.mark.django_db
 
 class TestAgentSerializerValidation:
     """Test Agent serializers validation rules."""
+
+    def test_agent_list_respects_page_size_query_param(self, authenticated_client, user):
+        from agents.models import Agent
+
+        for index in range(13):
+            Agent.objects.create(
+                name=f'Paging Agent {index}',
+                owner=user,
+                agent_type='conversational',
+            )
+
+        response = authenticated_client.get('/api/v1/agents/', {'page': 1, 'page_size': 12})
+
+        assert response.status_code == status.HTTP_200_OK
+        payload = response.data['data']
+        assert payload['count'] == 13
+        assert payload['total_pages'] == 2
+        assert payload['current_page'] == 1
+        assert payload['page_size'] == 12
+        assert len(payload['results']) == 12
 
     def test_create_agent_requires_name(self, authenticated_client):
         response = authenticated_client.post(
@@ -25,7 +46,7 @@ class TestAgentSerializerValidation:
             format='json'
         )
         assert response.status_code == 400
-        assert 'name' in response.data or 'detail' in response.data
+        assert 'name' in response.data['errors']
 
     def test_create_agent_validates_agent_type(self, authenticated_client):
         response = authenticated_client.post(
@@ -74,45 +95,55 @@ class TestAgentSerializerValidation:
         )
         assert response.status_code == 200
 
-    def test_agent_chat_requires_message(self, authenticated_client):
+    def test_agent_chat_requires_message(self, authenticated_client, user):
+        from agents.models import Agent
+        agent = Agent.objects.create(name='输入校验', owner=user)
         response = authenticated_client.post(
-            '/api/v1/agents/chat/',
+            f'/api/v1/agents/{agent.id}/chat/',
             data={},
             format='json'
         )
         assert response.status_code == 400
         assert 'message' in str(response.data)
 
-    def test_agent_chat_requires_agent_id_or_conversation_id(self, authenticated_client):
+    def test_agent_chat_requires_agent_id_or_conversation_id(self, authenticated_client, user):
+        from agents.models import Agent
+        agent = Agent.objects.create(name='会话校验', owner=user)
         response = authenticated_client.post(
-            '/api/v1/agents/chat/',
-            data={'message': 'Hello'},
+            f'/api/v1/agents/{agent.id}/chat/',
+            data={'message': 'Hello', 'conversation_id': 'invalid'},
             format='json'
         )
         assert response.status_code == 400
 
-    def test_agent_tools_action_requires_tools_list(self, authenticated_client):
+    def test_agent_tools_action_requires_tools_list(self, authenticated_client, user):
+        from agents.models import Agent
+        agent = Agent.objects.create(name='工具校验', owner=user)
         response = authenticated_client.post(
-            '/api/v1/agents/tools/',
+            f'/api/v1/agents/{agent.id}/tools/',
             data={},
             format='json'
         )
         assert response.status_code == 400
 
-    def test_agent_tools_remove_requires_tool(self, authenticated_client):
-        response = authenticated_client.post(
-            '/api/v1/agents/tools_remove/',
-            data={},
-            format='json'
-        )
-        assert response.status_code == 400
-
-    def test_agent_reset_memory_requires_session_id(self, authenticated_client):
+    def test_agent_tools_remove_requires_tool(self, authenticated_client, user):
+        from agents.models import Agent
+        agent = Agent.objects.create(name='工具移除', owner=user)
         response = authenticated_client.delete(
-            '/api/v1/agents/debug/history/',
+            f'/api/v1/agents/{agent.id}/tools_remove/',
+            data={},
             format='json'
         )
         assert response.status_code == 400
+
+    def test_agent_debug_history_clear(self, authenticated_client, user):
+        from agents.models import Agent
+        agent = Agent.objects.create(name='调试历史', owner=user)
+        response = authenticated_client.delete(
+            f'/api/v1/agents/{agent.id}/debug_history/',
+            format='json'
+        )
+        assert response.status_code == 200
 
 
 class TestAgentConversationValidation:

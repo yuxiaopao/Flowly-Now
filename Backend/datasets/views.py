@@ -10,6 +10,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.parsers import MultiPartParser, FormParser
 from django.db.models import Q
+from django.http import FileResponse
 
 from .models import Dataset
 from .serializers import (
@@ -377,6 +378,20 @@ class DatasetViewSet(viewsets.ModelViewSet):
                 {'error': str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+    @action(detail=True, methods=['get'])
+    def download(self, request, pk=None):
+        """Download the dataset file."""
+        dataset = self.get_object()
+        file_path = dataset.get_absolute_file_path()
+        if not file_path or not os.path.exists(file_path):
+            return Response(
+                {'error': 'Dataset file not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        filename = os.path.basename(file_path)
+        return FileResponse(open(file_path, 'rb'), as_attachment=True, filename=filename)
 
     @action(detail=True, methods=['post'])
     def reprocess(self, request, pk=None):

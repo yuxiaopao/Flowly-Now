@@ -6,9 +6,7 @@ Code Parser - 多语言代码依赖解析器
 import os
 import re
 import ast
-import inspect
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
 from concurrent.futures import ThreadPoolExecutor
 import hashlib
@@ -121,6 +119,27 @@ class CodeStructure:
             'stats': self.stats,
         }
 
+    @classmethod
+    def from_dict(cls, data: dict) -> 'CodeStructure':
+        """Restore the typed structure used by search and module APIs from either cache tier."""
+        return cls(
+            root_path=data['root_path'],
+            nodes=[FileNode(
+                id=node['id'], path=node['path'], name=node['name'],
+                extension=f".{node['type']}", size=node['size'], lines=node['lines'],
+                module=node['module'], imports=node.get('imports', []),
+                imported_by=node.get('imported_by', []),
+                functions=[FuncNode(**function) for function in node.get('functions', [])],
+            ) for node in data.get('nodes', [])],
+            edges=[DependencyEdge(
+                id=edge['id'], source=edge['source'], target=edge['target'],
+                edge_type=edge['type'], weight=edge.get('weight', 1),
+            ) for edge in data.get('edges', [])],
+            func_nodes=[FuncNode(**function) for function in data.get('func_nodes', [])],
+            func_edges=[FuncCallEdge(**edge) for edge in data.get('func_edges', [])],
+            stats=data.get('stats', {}),
+        )
+
 
 class BaseParser:
     """基础解析器"""
@@ -140,8 +159,6 @@ class VueParser(BaseParser):
     """Vue 单文件组件解析器"""
 
     SCRIPT_PATTERN = re.compile(r'<script[^>]*>(.*?)</script>', re.DOTALL | re.IGNORECASE)
-    TS_SCRIPT_PATTERN = re.compile(r'<script[^>]*ts[^>]*>(.*?)</script>', re.DOTALL | re.IGNORECASE)
-    SETUP_PATTERN = re.compile(r'<script[^>]*setup[^>]*>(.*?)</script>', re.DOTALL | re.IGNORECASE)
 
     # Vue/TS import: import X from 'path' | import { X } from 'path' | import * as X from 'path'
     IMPORT_REGEX = re.compile(
@@ -211,21 +228,22 @@ class JavaScriptParser(BaseParser):
 class PythonParser(BaseParser):
     """Python 解析器"""
 
-    # import X | import X as Y
-    IMPORT_REGEX = re.compile(r'''^import\s+([\w.]+)''', re.MULTILINE)
-    # from X import Y | from X import Y as Z
-    FROM_IMPORT_REGEX = re.compile(r'''from\s+([\w.]+)\s+import''', re.MULTILINE)
-
     def extract_imports(self, content: str) -> List[str]:
+        try:
+            tree = ast.parse(content)
+        except (SyntaxError, ValueError):
+            return []
         imports = []
-
-        for match in self.IMPORT_REGEX.finditer(content):
-            imports.append(match.group(1))
-
-        for match in self.FROM_IMPORT_REGEX.finditer(content):
-            imports.append(match.group(1))
-
-        return imports
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                imports.extend(alias.name for alias in node.names)
+            elif isinstance(node, ast.ImportFrom):
+                prefix = '.' * node.level + (node.module or '')
+                if node.module:
+                    imports.append(prefix)
+                separator = '' if not prefix or prefix.endswith('.') else '.'
+                imports.extend(f'{prefix}{separator}{alias.name}' for alias in node.names if alias.name != '*')
+        return list(dict.fromkeys(imports))
 
 
 class PythonFuncExtractor:
@@ -297,7 +315,7 @@ class PythonFuncExtractor:
                     if callee in local_funcs:
                         target_id = f"{file_node_id}::{callee}"
                         call_edges.append(FuncCallEdge(
-                            id=f"func_edge_{edge_id}",
+                            id=f"{file_node_id}::edge_{edge_id}",
                             source=func_id,
                             target=target_id,
                         ))
@@ -364,15 +382,13 @@ class JavaScriptFuncExtractor:
         r'(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s+)?\([^)]*\)\s*=>',
         re.MULTILINE
     )
-    # 匹配方法: name(...) { ... }  在 class 或对象字面量中
-    METHOD_DEF = re.compile(
-        r'(?:async\s+)?(\w+)\s*\(([^)]*)\)\s*(?:{|=>)',
-        re.MULTILINE
-    )
     # 匹配函数调用: func(...)  |  obj.func(...)
     CALL_EXPR = re.compile(
         r'(?<![.\w])(\w+)\s*\(',
         re.MULTILINE
+    )
+    LITERALS_AND_COMMENTS = re.compile(
+        r'''//[^\n]*|/\*[\s\S]*?\*/|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`'''
     )
 
     # 内置方法（不视为本地调用）
@@ -402,45 +418,58 @@ class JavaScriptFuncExtractor:
         if not script:
             return [], []
 
-        func_defs = {}  # name -> (lineno, signature)
+        # Mask non-code while retaining character/line offsets and balanced body braces.
+        masked = self.LITERALS_AND_COMMENTS.sub(
+            lambda match: ''.join('\n' if char == '\n' else ' ' for char in match.group()), script,
+        )
+        func_defs = {}  # name -> (start, body_start, signature)
         edge_id = 0
         func_nodes: List[FuncNode] = []
         call_edges: List[FuncCallEdge] = []
 
-        for m in self.FUNC_DECL.finditer(script):
+        for m in self.FUNC_DECL.finditer(masked):
             name, params = m.group(1), m.group(2)
-            func_defs[name] = (m.start(), f"({params})")
+            func_defs[name] = (m.start(), m.end(), f"({params})")
 
-        for m in self.ARROW_FUNC.finditer(script):
+        for m in self.ARROW_FUNC.finditer(masked):
             name = m.group(1)
-            func_defs[name] = (m.start(), "()")
-
-        # 提取所有调用
-        all_calls = {}
-        for m in self.CALL_EXPR.finditer(script):
-            name = m.group(1)
-            if name not in self.BUILTINS and name not in all_calls:
-                all_calls[name] = m.start()
+            func_defs[name] = (m.start(), m.end(), "()")
 
         # 为本地定义的函数创建节点
         local_func_names = set(func_defs.keys())
-        for name, (pos, sig) in func_defs.items():
+        for name, (pos, body_start, sig) in func_defs.items():
             func_id = f"{file_node_id}::{name}"
+            while body_start < len(masked) and masked[body_start].isspace():
+                body_start += 1
+            body_end = body_start
+            if body_start < len(masked) and masked[body_start] == '{':
+                depth = 1
+                body_end += 1
+                while body_end < len(masked) and depth:
+                    depth += (masked[body_end] == '{') - (masked[body_end] == '}')
+                    body_end += 1
+            else:
+                while body_end < len(masked) and masked[body_end] not in ';\n':
+                    body_end += 1
+            calls = list(dict.fromkeys(
+                match.group(1) for match in self.CALL_EXPR.finditer(masked[body_start:body_end])
+                if match.group(1) not in self.BUILTINS
+            ))
             func_nodes.append(FuncNode(
                 id=func_id,
                 name=name,
                 signature=sig,
-                lineno=pos,
-                end_lineno=0,
-                calls=[],
+                lineno=script.count('\n', 0, pos) + 1,
+                end_lineno=script.count('\n', 0, body_end) + 1,
+                calls=calls,
             ))
 
         # 跨文件调用边：本地函数调用其他本地函数
         for node in func_nodes:
-            called_locals = [c for c in all_calls if c in local_func_names and c != node.name]
+            called_locals = [callee for callee in node.calls if callee in local_func_names]
             for callee in called_locals:
                 call_edges.append(FuncCallEdge(
-                    id=f"func_edge_{edge_id}",
+                    id=f"{file_node_id}::edge_{edge_id}",
                     source=node.id,
                     target=f"{file_node_id}::{callee}",
                 ))
@@ -451,7 +480,7 @@ class JavaScriptFuncExtractor:
     def _extract_script(self, content: str) -> str:
         """从 Vue 文件中提取 <script> 内容"""
         match = re.search(r'<script[^>]*>(.*?)</script>', content, re.DOTALL | re.IGNORECASE)
-        return match.group(1) if match else content
+        return ('\n' * content.count('\n', 0, match.start(1)) + match.group(1)) if match else content
 
 
 class CodeParser:
@@ -499,8 +528,6 @@ class CodeParser:
     def __init__(self, max_depth: int = 10, max_workers: int = 4):
         self.max_depth = max_depth
         self.max_workers = max_workers
-        self._file_cache: Dict[str, FileNode] = {}
-        self._path_to_id: Dict[str, str] = {}
 
     def _should_exclude_dir(self, dir_name: str) -> bool:
         return dir_name in self.EXCLUDE_DIRS or dir_name.startswith('.')
@@ -539,30 +566,33 @@ class CodeParser:
 
         current_dir = os.path.dirname(current_file)
 
+        if current_file.endswith('.py'):
+            level = len(import_path) - len(import_path.lstrip('.'))
+            base = current_dir if level else root_path
+            for _ in range(max(level - 1, 0)):
+                base = os.path.dirname(base)
+            resolved = os.path.join(base, *import_path.lstrip('.').split('.'))
+            for candidate in (resolved + '.py', os.path.join(resolved, '__init__.py')):
+                if os.path.isfile(candidate):
+                    return os.path.normpath(candidate)
+            return None
+
         # 相对路径
         if import_path.startswith('.'):
             resolved = os.path.normpath(os.path.join(current_dir, import_path))
             # 处理扩展名
-            for ext in ['', '.js', '.ts', '.vue', '.jsx', '.tsx', '/index.js', '/index.ts', '/index.vue']:
-                if os.path.exists(resolved + ext):
+            for ext in ['', '.js', '.ts', '.vue', '.jsx', '.tsx', '.mjs', '.cjs', '/index.js', '/index.ts', '/index.vue']:
+                if os.path.isfile(resolved + ext):
                     return resolved + ext
-                if os.path.isdir(resolved + ext.replace('/index', '')):
-                    index_path = os.path.join(resolved + ext.replace('/index', ''), 'index.js')
-                    if os.path.exists(index_path):
-                        return index_path
-            if os.path.exists(resolved):
-                return resolved
             return None
 
         # 绝对路径 / 别名路径
-        if import_path.startswith('@/') or import_path.startswith('@'):
-            alias_path = import_path.lstrip('@/').lstrip('@')
+        if import_path.startswith('@/'):
+            alias_path = import_path[2:]
             resolved = os.path.join(root_path, alias_path)
-            for ext in ['.js', '.ts', '.vue', '.jsx', '.tsx']:
-                if os.path.exists(resolved + ext):
+            for ext in ['', '.js', '.ts', '.vue', '.jsx', '.tsx', '.mjs', '.cjs', '/index.js', '/index.ts', '/index.vue']:
+                if os.path.isfile(resolved + ext):
                     return resolved + ext
-            if os.path.exists(resolved):
-                return resolved
 
         return None
 
@@ -586,17 +616,18 @@ class CodeParser:
                 else:
                     module = 'root'
             else:
-                module = parts[0] if parts else 'root'
+                module = parts[0] if len(parts) > 1 else 'root'
 
             parser = self.PARSERS.get(ext)
             imports = parser.extract_imports(content) if parser else []
 
             # 解析 import 路径为实际文件
             resolved_imports = []
-            for imp in imports:
+            for imp in dict.fromkeys(imports):
                 resolved = self._resolve_import_path(imp, file_path, root_path)
                 if resolved:
-                    resolved_imports.append(resolved)
+                    if resolved not in resolved_imports:
+                        resolved_imports.append(resolved)
 
             content_hash = hashlib.md5(content.encode()).hexdigest()[:16]
 
@@ -657,19 +688,15 @@ class CodeParser:
 
         # 收集节点并建立 path -> id 映射
         nodes = [r for r in results if r is not None]
-        for node in nodes:
-            self._file_cache[node.path] = node
-            self._path_to_id[node.path] = node.id
+        file_cache = {node.path: node for node in nodes}
+        path_to_id = {node.path: node.id for node in nodes}
 
         # 建立 imported_by 反向引用
         for node in nodes:
             for imp_path in node.imports:
                 imp_rel = os.path.relpath(imp_path, root_path)
-                if imp_rel in self._path_to_id:
-                    target_id = self._path_to_id[imp_rel]
-                    if imp_rel in self._file_cache:
-                        if target_id not in self._file_cache[imp_rel].imported_by:
-                            self._file_cache[imp_rel].imported_by.append(node.id)
+                if imp_rel in file_cache and node.id not in file_cache[imp_rel].imported_by:
+                    file_cache[imp_rel].imported_by.append(node.id)
 
         # 构建文件间依赖边
         edges = []
@@ -677,11 +704,11 @@ class CodeParser:
         for node in nodes:
             for imp_path in node.imports:
                 imp_rel = os.path.relpath(imp_path, root_path)
-                if imp_rel in self._path_to_id:
+                if imp_rel in path_to_id:
                     edges.append(DependencyEdge(
                         id=f"edge_{edge_id}",
                         source=node.id,
-                        target=self._path_to_id[imp_rel],
+                        target=path_to_id[imp_rel],
                         edge_type="import",
                         weight=1,
                     ))
@@ -694,10 +721,11 @@ class CodeParser:
         js_extractor = JavaScriptFuncExtractor()
 
         for node in nodes:
+            content = self.get_file_content(os.path.join(root_path, node.path)) or ''
             if node.extension == '.py':
-                fn, fe = py_extractor.extract(node.path, node.id)
+                fn, fe = py_extractor.extract(content, node.id)
             elif node.extension in ('.js', '.ts', '.jsx', '.tsx', '.vue', '.mjs', '.cjs'):
-                fn, fe = js_extractor.extract(node.path, node.id)
+                fn, fe = js_extractor.extract(content, node.id)
             else:
                 fn, fe = [], []
 

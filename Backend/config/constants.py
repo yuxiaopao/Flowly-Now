@@ -77,6 +77,11 @@ CURSOR_PAGE_SIZE_MAX = 200
 # Workflow Status
 # =============================================================================
 
+WORKFLOW_NODE_DEFAULT_WIDTH = 160
+WORKFLOW_NODE_DEFAULT_HEIGHT = 90
+WORKFLOW_NODE_COLLISION_GAP_X = 24
+WORKFLOW_NODE_COLLISION_GAP_Y = 24
+
 class WorkflowStatus:
     DRAFT = "draft"
     PUBLISHED = "published"

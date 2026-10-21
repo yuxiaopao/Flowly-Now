@@ -1,4 +1,4 @@
-path: E:/Flowly-now/Backend/scripts/fixtures/t2_mini_yolo
+path: .
 train: images/train
 val: images/train
 names:

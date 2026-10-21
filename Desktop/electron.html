@@ -1,0 +1,965 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' ws: wss:; img-src 'self' data:;" />
+  <title>Flowly Agent</title>
+  <style>
+    /* ============================================================
+       Flowly Agent — Desktop Agent Status UI
+       ============================================================ */
+
+    :root {
+      --bg-primary: #0f1117;
+      --bg-secondary: #181924;
+      --bg-tertiary: #1e2130;
+      --border: #2a2d3e;
+      --text-primary: #f4f4f5;
+      --text-secondary: #a1a1aa;
+      --text-muted: #52525b;
+      --accent: #f59e0b;
+      --accent-muted: rgba(245, 158, 11, 0.15);
+      --success: #22c55e;
+      --success-muted: rgba(34, 197, 94, 0.15);
+      --error: #ef4444;
+      --error-muted: rgba(239, 68, 68, 0.15);
+      --info: #3b82f6;
+      --info-muted: rgba(59, 130, 246, 0.15);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ---- Layout ---- */
+    .app {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    /* ---- Header ---- */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 24px;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-secondary);
+      -webkit-app-region: drag;
+    }
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .logo {
+      width: 28px;
+      height: 28px;
+      background: var(--accent);
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 14px;
+      color: #000;
+    }
+
+    .header-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .header-version {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      -webkit-app-region: no-drag;
+    }
+
+    /* ---- Status Indicator ---- */
+    .status-badge {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .status-badge.connected {
+      background: var(--success-muted);
+      color: var(--success);
+    }
+
+    .status-badge.disconnected {
+      background: var(--error-muted);
+      color: var(--error);
+    }
+
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .status-badge.connected .status-dot {
+      animation: pulse-dot 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    /* ---- Main Content ---- */
+    .main {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    /* ---- Section ---- */
+    .section {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 18px 20px;
+    }
+
+    .section-title {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      margin-bottom: 14px;
+    }
+
+    /* ---- GPU Card ---- */
+    .gpu-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .gpu-stat {
+      background: var(--bg-tertiary);
+      border-radius: 8px;
+      padding: 12px;
+    }
+
+    .gpu-stat-label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+
+    .gpu-stat-value {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text-primary);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .gpu-stat-value.no-gpu {
+      color: var(--text-muted);
+      font-size: 13px;
+      font-weight: 400;
+    }
+
+    .gpu-name {
+      grid-column: 1 / -1;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--accent);
+    }
+
+    /* ---- Memory Bar ---- */
+    .memory-bar-container {
+      grid-column: 1 / -1;
+    }
+
+    .memory-bar-header {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 5px;
+    }
+
+    .memory-bar-label {
+      font-size: 10px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .memory-bar-values {
+      font-size: 10px;
+      color: var(--text-secondary);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .memory-bar-track {
+      height: 6px;
+      background: var(--bg-primary);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    .memory-bar-fill {
+      height: 100%;
+      border-radius: 3px;
+      transition: width 0.5s ease;
+    }
+
+    /* ---- Training Status ---- */
+    .training-idle {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 24px;
+      text-align: center;
+    }
+
+    .training-idle-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: var(--bg-tertiary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-muted);
+    }
+
+    .training-idle-text {
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
+    .training-running {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .training-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .training-job-id {
+      font-size: 12px;
+      color: var(--text-secondary);
+      font-family: monospace;
+    }
+
+    .training-time {
+      font-size: 12px;
+      color: var(--text-muted);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .progress-bar {
+      height: 8px;
+      background: var(--bg-tertiary);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), #fbbf24);
+      border-radius: 4px;
+      transition: width 0.5s ease;
+    }
+
+    .training-stats {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .training-stats-left {
+      display: flex;
+      gap: 16px;
+    }
+
+    .training-stat {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .training-stat-label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+    }
+
+    .training-stat-value {
+      font-size: 14px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .progress-percent {
+      font-size: 22px;
+      font-weight: 800;
+      color: var(--accent);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .training-actions {
+      display: flex;
+      justify-content: center;
+      padding-top: 4px;
+    }
+
+    /* ---- Buttons ---- */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 16px;
+      border-radius: 6px;
+      border: none;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s;
+      font-family: inherit;
+    }
+
+    .btn:active { transform: scale(0.97); }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #000;
+    }
+    .btn-primary:hover { background: #fbbf24; }
+
+    .btn-danger {
+      background: var(--error-muted);
+      color: var(--error);
+    }
+    .btn-danger:hover { background: rgba(239, 68, 68, 0.25); }
+
+    .btn-ghost {
+      background: var(--bg-tertiary);
+      color: var(--text-secondary);
+      border: 1px solid var(--border);
+    }
+    .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+
+    .btn-sm {
+      padding: 5px 10px;
+      font-size: 12px;
+    }
+
+    /* ---- Log Panel ---- */
+    .log-panel {
+      max-height: 200px;
+      overflow-y: auto;
+      background: var(--bg-primary);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      font-size: 11px;
+      line-height: 1.6;
+    }
+
+    .log-line {
+      white-space: pre-wrap;
+      word-break: break-all;
+      color: var(--text-secondary);
+    }
+
+    .log-line:last-child { color: var(--text-primary); }
+    .log-line.error { color: var(--error); }
+    .log-line.warn { color: #eab308; }
+
+    /* ---- Connection Setup ---- */
+    .setup-form {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .form-field {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .form-label {
+      font-size: 12px;
+      color: var(--text-secondary);
+      font-weight: 500;
+    }
+
+    .form-input {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 10px;
+      font-size: 13px;
+      color: var(--text-primary);
+      font-family: monospace;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    .form-input:focus {
+      border-color: var(--accent);
+    }
+
+    .form-input::placeholder { color: var(--text-muted); }
+
+    /* ---- Complete Banner ---- */
+    .complete-banner {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 14px 16px;
+      background: var(--success-muted);
+      border: 1px solid rgba(34, 197, 94, 0.3);
+      border-radius: 10px;
+    }
+
+    .complete-banner-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: var(--success);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #000;
+      flex-shrink: 0;
+    }
+
+    .complete-banner-text h3 {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--success);
+      margin-bottom: 2px;
+    }
+
+    .complete-banner-text p {
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    /* ---- Scrollbar ---- */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <!-- Header -->
+    <header class="header">
+      <div class="header-left">
+        <div class="logo">F</div>
+        <div>
+          <div class="header-title">Flowly Agent</div>
+          <div class="header-version">v<span id="appVersion">1.0.0</span></div>
+        </div>
+      </div>
+      <div class="header-right">
+        <div
+          id="statusBadge"
+          class="status-badge disconnected"
+        >
+          <span class="status-dot" />
+          <span id="statusText">未连接</span>
+        </div>
+        <button
+          class="btn btn-ghost btn-sm"
+          id="settingsBtn"
+        >设置</button>
+      </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main">
+
+      <!-- GPU Section -->
+      <section class="section">
+        <div class="section-title">GPU 状态</div>
+        <div
+          id="gpuCard"
+          class="gpu-grid"
+        >
+          <div class="gpu-name" id="gpuName">检测中...</div>
+          <div class="gpu-stat">
+            <div class="gpu-stat-label">设备数</div>
+            <div
+              class="gpu-stat-value"
+              id="gpuCount"
+            >—</div>
+          </div>
+          <div class="gpu-stat">
+            <div class="gpu-stat-label">显存总量</div>
+            <div
+              class="gpu-stat-value"
+              id="gpuMemory"
+            >—</div>
+          </div>
+          <div class="memory-bar-container">
+            <div class="memory-bar-header">
+              <span class="memory-bar-label">显存使用</span>
+              <span
+                class="memory-bar-values"
+                id="memoryValues"
+              >— / —</span>
+            </div>
+            <div class="memory-bar-track">
+              <div
+                class="memory-bar-fill"
+                id="memoryBar"
+                style="width: 0%; background: #67c23a;"
+              />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Cloud Connection Section -->
+      <section class="section">
+        <div class="section-title">云端连接</div>
+        <div id="setupForm" class="setup-form">
+          <div class="form-field">
+            <label class="form-label">服务器地址</label>
+            <input
+              id="cloudUrlInput"
+              class="form-input"
+              placeholder="http://127.0.0.1:8000"
+              type="url"
+            />
+          </div>
+          <div class="form-field">
+            <label class="form-label">Agent ID</label>
+            <input
+              id="agentIdInput"
+              class="form-input"
+              placeholder="agent-xxxxxxxx"
+              type="text"
+            />
+          </div>
+          <div class="form-field">
+            <label class="form-label">API Token（可选）</label>
+            <input
+              id="apiTokenInput"
+              class="form-input"
+              placeholder="登录后从 Flowly 获取，可留空"
+              type="password"
+            />
+          </div>
+          <button
+            id="connectBtn"
+            class="btn btn-primary"
+          >连接云端</button>
+        </div>
+      </section>
+
+      <!-- Training Section -->
+      <section class="section">
+        <div class="section-title">训练状态</div>
+        <div id="trainingIdle" class="training-idle">
+          <div class="training-idle-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/><polygon points="10,8 16,12 10,16"/>
+            </svg>
+          </div>
+          <div class="training-idle-text">等待云端下发训练任务</div>
+        </div>
+        <div
+          id="trainingRunning"
+          class="training-running"
+          style="display: none;"
+        >
+          <div class="training-header">
+            <span
+              class="training-job-id"
+              id="trainJobId"
+            >—</span>
+            <span
+              class="training-time"
+              id="trainElapsed"
+            >00:00</span>
+          </div>
+          <div class="progress-bar">
+            <div
+              class="progress-fill"
+              id="progressFill"
+              style="width: 0%"
+            />
+          </div>
+          <div class="training-stats">
+            <div class="training-stats-left">
+              <div class="training-stat">
+                <span class="training-stat-label">Epoch</span>
+                <span
+                  class="training-stat-value"
+                  id="trainEpoch"
+                >0 / 0</span>
+              </div>
+              <div class="training-stat">
+                <span class="training-stat-label">Fitness</span>
+                <span
+                  class="training-stat-value"
+                  id="trainFitness"
+                >—</span>
+              </div>
+            </div>
+            <div
+              class="progress-percent"
+              id="progressPercent"
+            >0%</div>
+          </div>
+          <div class="training-actions">
+            <button
+              id="stopTrainingBtn"
+              class="btn btn-danger"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                <rect x="6" y="6" width="12" height="12"/>
+              </svg>
+              停止训练
+            </button>
+          </div>
+        </div>
+        <div
+          id="trainingComplete"
+          class="complete-banner"
+          style="display: none;"
+        >
+          <div class="complete-banner-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <polyline points="20,6 9,17 4,12"/>
+            </svg>
+          </div>
+          <div class="complete-banner-text">
+            <h3>训练完成</h3>
+            <p id="completeFitness">最佳适应度: —</p>
+          </div>
+          <button
+            id="newTrainingBtn"
+            class="btn btn-ghost btn-sm"
+            style="margin-left: auto;"
+          >新训练</button>
+        </div>
+      </section>
+
+      <!-- Log Section -->
+      <section class="section">
+        <div class="section-title">训练日志</div>
+        <div
+          id="logPanel"
+          class="log-panel"
+        >
+          <div class="log-line" style="color: var(--text-muted);">等待训练开始...</div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <script>
+    // ============================================================
+    // Flowly Agent — Renderer UI Controller
+    // ============================================================
+
+    const $ = (id) => document.getElementById(id);
+    const log = (msg) => console.log('[Agent UI]', msg);
+
+    // ---- State ----
+    let currentStatus = null;
+    let trainingTimer = null;
+
+    // ---- DOM References ----
+    const els = {
+      statusBadge: $('statusBadge'),
+      statusText: $('statusText'),
+      appVersion: $('appVersion'),
+      gpuName: $('gpuName'),
+      gpuCount: $('gpuCount'),
+      gpuMemory: $('gpuMemory'),
+      memoryValues: $('memoryValues'),
+      memoryBar: $('memoryBar'),
+      cloudUrlInput: $('cloudUrlInput'),
+      agentIdInput: $('agentIdInput'),
+      apiTokenInput: $('apiTokenInput'),
+      connectBtn: $('connectBtn'),
+      setupForm: $('setupForm'),
+      trainingIdle: $('trainingIdle'),
+      trainingRunning: $('trainingRunning'),
+      trainingComplete: $('trainingComplete'),
+      trainJobId: $('trainJobId'),
+      trainElapsed: $('trainElapsed'),
+      progressFill: $('progressFill'),
+      progressPercent: $('progressPercent'),
+      trainEpoch: $('trainEpoch'),
+      trainFitness: $('trainFitness'),
+      stopTrainingBtn: $('stopTrainingBtn'),
+      newTrainingBtn: $('newTrainingBtn'),
+      completeFitness: $('completeFitness'),
+      logPanel: $('logPanel'),
+    };
+
+    // ---- Initialization ----
+    async function init() {
+      log('Initializing...');
+
+      const appInfo = await window.agentAPI.getAppInfo();
+      els.appVersion.textContent = appInfo.version;
+
+      const savedConfig = await window.agentAPI.getConfig();
+      els.cloudUrlInput.value = savedConfig.cloudUrl || 'http://127.0.0.1:8000';
+      els.agentIdInput.value = savedConfig.agentId || '';
+      if (savedConfig.hasApiToken) {
+        els.apiTokenInput.placeholder = '已保存（留空则不修改）';
+      }
+
+      const gpu = await window.agentAPI.getGpuInfo();
+      renderGPU(gpu);
+
+      // Agent status
+      currentStatus = await window.agentAPI.getStatus();
+      renderStatus(currentStatus);
+
+      // Event listeners
+      els.connectBtn.addEventListener('click', handleConnect);
+      els.stopTrainingBtn.addEventListener('click', handleStopTraining);
+      els.newTrainingBtn.addEventListener('click', handleNewTraining);
+
+      // Subscribe to events
+      window.agentAPI.onAgentStatus((status) => {
+        currentStatus = status;
+        renderStatus(status);
+      });
+
+      window.agentAPI.onTrainingProgress((status) => {
+        renderTrainingProgress(status);
+      });
+
+      window.agentAPI.onTrainingComplete((status) => {
+        renderTrainingComplete(status);
+      });
+
+      window.agentAPI.onTrainingError((payload) => {
+        renderTrainingError(payload);
+      });
+    }
+
+    // ---- Connection ----
+    async function handleConnect() {
+      const cloudUrl = els.cloudUrlInput.value.trim();
+      const agentId = els.agentIdInput.value.trim();
+      const apiToken = els.apiTokenInput.value.trim();
+
+      if (!cloudUrl) {
+        alert('请填写服务器地址');
+        return;
+      }
+
+      if (!agentId) {
+        alert('Agent ID 不能为空');
+        return;
+      }
+
+      els.connectBtn.disabled = true;
+      els.connectBtn.textContent = '连接中...';
+
+      try {
+        const status = await window.agentAPI.connect({ cloudUrl, agentId, apiToken });
+        renderStatus(status);
+      } catch (err) {
+        alert('连接失败: ' + err.message);
+      } finally {
+        els.connectBtn.disabled = false;
+        els.connectBtn.textContent = '连接云端';
+      }
+    }
+
+    // ---- Training ----
+    async function handleStopTraining() {
+      const result = await window.agentAPI.stopTraining();
+      if (!result.success) {
+        alert('停止失败: ' + result.error);
+      }
+    }
+
+    function handleNewTraining() {
+      showTrainingIdle();
+    }
+
+    // ---- Rendering ----
+    function renderStatus(status) {
+      if (!status) return;
+      const connected = status.connected;
+      els.statusBadge.className = 'status-badge ' + (connected ? 'connected' : 'disconnected');
+      els.statusText.textContent = connected ? '已连接' : '未连接';
+
+      if (status.gpu) {
+        renderGPU(status.gpu);
+      }
+    }
+
+    function renderGPU(gpu) {
+      if (!gpu) return;
+
+      if (gpu.available) {
+        els.gpuName.textContent = gpu.name || 'GPU';
+        els.gpuCount.textContent = gpu.deviceCount;
+        els.gpuMemory.textContent = formatMB(gpu.memoryTotalMb);
+
+        const used = gpu.memoryTotalMb - gpu.memoryFreeMb;
+        const pct = gpu.memoryTotalMb > 0 ? Math.round((used / gpu.memoryTotalMb) * 100) : 0;
+        els.memoryValues.textContent = `${formatMB(used)} / ${formatMB(gpu.memoryTotalMb)}`;
+        els.memoryBar.style.width = pct + '%';
+        els.memoryBar.style.background = pct > 85 ? '#ef4444' : pct > 60 ? '#eab308' : '#67c23a';
+      } else {
+        els.gpuName.textContent = '未检测到 GPU';
+        els.gpuName.className = 'gpu-name no-gpu';
+        els.gpuCount.textContent = '0';
+        els.gpuMemory.textContent = '—';
+        els.memoryValues.textContent = '—';
+        els.memoryBar.style.width = '0%';
+      }
+    }
+
+    function renderTrainingProgress(status) {
+      if (!status) return;
+
+      showTrainingRunning();
+      els.trainJobId.textContent = status.jobId || '—';
+      els.progressFill.style.width = status.progress + '%';
+      els.progressPercent.textContent = status.progress + '%';
+      els.trainEpoch.textContent = `${status.currentEpoch || 0} / ${status.totalEpochs || 0}`;
+      els.trainFitness.textContent = status.bestFitness ? status.bestFitness.toFixed(4) : '—';
+
+      // Elapsed time
+      if (status.elapsedMs) {
+        els.trainElapsed.textContent = formatElapsed(status.elapsedMs);
+      }
+
+      // Logs
+      if (status.logs && status.logs.length) {
+        renderLogs(status.logs);
+      }
+    }
+
+    function renderTrainingComplete(status) {
+      showTrainingComplete();
+      els.completeFitness.textContent = `最佳适应度: ${status.bestFitness ? status.bestFitness.toFixed(4) : '—'}`;
+      stopTrainingTimer();
+    }
+
+    function renderTrainingError(payload) {
+      showTrainingComplete();
+      els.completeFitness.textContent = `错误: ${payload.error}`;
+      stopTrainingTimer();
+    }
+
+    function renderLogs(lines) {
+      const panel = els.logPanel;
+      // Only append new lines
+      const startIndex = Math.max(0, lines.length - 50);
+      panel.innerHTML = lines.slice(startIndex).map(line => {
+        const cls = line.startsWith('[ERR]') ? 'error' : line.includes('Warning') ? 'warn' : '';
+        return `<div class="log-line ${cls}">${escapeHtml(line)}</div>`;
+      }).join('');
+      panel.scrollTop = panel.scrollHeight;
+    }
+
+    function showTrainingIdle() {
+      els.trainingIdle.style.display = 'flex';
+      els.trainingRunning.style.display = 'none';
+      els.trainingComplete.style.display = 'none';
+    }
+
+    function showTrainingRunning() {
+      els.trainingIdle.style.display = 'none';
+      els.trainingRunning.style.display = 'flex';
+      els.trainingComplete.style.display = 'none';
+    }
+
+    function showTrainingComplete() {
+      els.trainingIdle.style.display = 'none';
+      els.trainingRunning.style.display = 'none';
+      els.trainingComplete.style.display = 'flex';
+    }
+
+    // ---- Training Timer ----
+    function startTrainingTimer() {
+      stopTrainingTimer();
+      trainingTimer = setInterval(async () => {
+        const status = await window.agentAPI.getTrainingStatus();
+        if (status.running && status.elapsedMs) {
+          els.trainElapsed.textContent = formatElapsed(status.elapsedMs);
+        }
+      }, 1000);
+    }
+
+    function stopTrainingTimer() {
+      if (trainingTimer) {
+        clearInterval(trainingTimer);
+        trainingTimer = null;
+      }
+    }
+
+    // ---- Utilities ----
+    function formatMB(mb) {
+      if (!mb) return '—';
+      return mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${mb} MB`;
+    }
+
+    function formatElapsed(ms) {
+      const s = Math.floor(ms / 1000);
+      const h = Math.floor(s / 3600);
+      const m = Math.floor((s % 3600) / 60);
+      const sec = s % 60;
+      if (h > 0) return `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+      return `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    // ---- Start ----
+    init().catch(err => log('Init error: ' + err.message));
+  </script>
+</body>
+</html>

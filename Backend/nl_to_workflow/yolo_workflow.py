@@ -157,109 +157,8 @@ def has_sufficient_yolo_detail(text: str) -> bool:
 
 
 def _fallback_yolo_workflow_nl() -> Dict[str, Any]:
-    """Hardcoded NL-format YOLO pipeline (matches seed template topology)."""
-    return {
-        "name": "YOLO 识别项目",
-        "description": "上传已标注数据集 → YOLO 训练 → 场景分析 → 建站 → 环境 → QA → 预览 → Agent",
-        "nodes": [
-            {
-                "id": "dataset_upload_1",
-                "type": "dataset_upload",
-                "name": "上传标注数据集",
-                "position": {"x": 80, "y": 200},
-                "config": {"format": "yolo", "sourceType": "upload"},
-            },
-            {
-                "id": "yolo_training_1",
-                "type": "yolo_training",
-                "name": "YOLO 训练",
-                "position": {"x": 280, "y": 200},
-                "config": {
-                    "trainingMode": "local",
-                    "yoloVersion": "v8",
-                    "modelVariant": "n",
-                    "epochs": 50,
-                    "batchSize": 16,
-                    "imageSize": 640,
-                    "dataSourceType": "upstream",
-                },
-            },
-            {
-                "id": "project_profiler_1",
-                "type": "project_profiler",
-                "name": "场景分析",
-                "position": {"x": 480, "y": 200},
-                "config": {"websiteType": "detection", "useLlmEnrich": False},
-            },
-            {
-                "id": "website_generator_1",
-                "type": "website_generator",
-                "name": "生成识别网站",
-                "position": {"x": 680, "y": 200},
-                "config": {
-                    "websiteType": "detection",
-                    "projectType": "detection",
-                    "framework": "ultralytics",
-                    "frontendFramework": "vue",
-                    "backendFramework": "flask",
-                    "qaProfile": "default",
-                    "wizard": {
-                        "siteName": "YOLO 识别系统",
-                        "usageDescription": "上传现场图片，查看目标检测框与置信度",
-                        "primaryColor": "#f59e0b",
-                        "qaProfile": "default",
-                        "websiteType": "detection",
-                        "wizardCompleted": True,
-                    },
-                },
-            },
-            {
-                "id": "environment_provision_1",
-                "type": "environment_provision",
-                "name": "环境配置",
-                "position": {"x": 880, "y": 200},
-                "config": {"runtimeMode": "desktop"},
-            },
-            {
-                "id": "site_qa_1",
-                "type": "site_qa",
-                "name": "站点自查",
-                "position": {"x": 1080, "y": 200},
-                "config": {
-                    "websiteType": "detection",
-                    "qaProfile": "default",
-                    "skipPlaywright": False,
-                },
-            },
-            {
-                "id": "site_preview_1",
-                "type": "site_preview",
-                "name": "站点预览",
-                "position": {"x": 1280, "y": 200},
-                "config": {"qaProfile": "default"},
-            },
-            {
-                "id": "project_agent_1",
-                "type": "project_agent",
-                "name": "项目 Agent",
-                "position": {"x": 1480, "y": 200},
-                "config": {
-                    "qaProfile": "default",
-                    "autoQaAfterEdit": True,
-                    "message": "",
-                },
-            },
-        ],
-        "edges": [
-            {"id": "e1", "source": "dataset_upload_1", "target": "yolo_training_1", "label": ""},
-            {"id": "e2", "source": "yolo_training_1", "target": "project_profiler_1", "label": ""},
-            {"id": "e3", "source": "project_profiler_1", "target": "website_generator_1", "label": ""},
-            {"id": "e4", "source": "website_generator_1", "target": "environment_provision_1", "label": ""},
-            {"id": "e5", "source": "environment_provision_1", "target": "site_qa_1", "label": ""},
-            {"id": "e6", "source": "site_qa_1", "target": "site_preview_1", "label": ""},
-            {"id": "e7", "source": "site_preview_1", "target": "project_agent_1", "label": ""},
-        ],
-    }
+    """Hardcoded NL-format YOLO pipeline — aliases to full Site Factory v2."""
+    return _fallback_yolo_v2_workflow_nl()
 
 
 def is_yolo_v2_site_factory_intent(text: str) -> bool:
@@ -271,23 +170,23 @@ def is_yolo_v2_site_factory_intent(text: str) -> bool:
 
 
 def _fallback_yolo_v2_workflow_nl() -> Dict[str, Any]:
-    """Hardcoded NL-format YOLO v2 pipeline with AI role agents."""
+    """Hardcoded NL-format YOLO v2 pipeline with AI role agents (matches FE template)."""
     return {
-        "name": "YOLO 识别项目 v2（AI 分工）",
-        "description": "训练 → 脚手架 → 后端/前端/UI Agent → 环境 → QA → 复查 → 预览 → Agent",
+        "name": "YOLO 识别项目",
+        "description": "数据集 → YOLO 训练 → 场景分析 → 建站(Flask+Vue+MySQL) → 后端/前端/UI → 环境授权 → QA自修 → 预览 → 项目 Agent",
         "nodes": [
             {
                 "id": "dataset_upload_1",
                 "type": "dataset_upload",
                 "name": "上传标注数据集",
-                "position": {"x": 80, "y": 200},
+                "position": {"x": 40, "y": 220},
                 "config": {"format": "yolo", "sourceType": "upload"},
             },
             {
                 "id": "yolo_training_1",
                 "type": "yolo_training",
                 "name": "YOLO 训练",
-                "position": {"x": 280, "y": 200},
+                "position": {"x": 240, "y": 220},
                 "config": {
                     "trainingMode": "local",
                     "yoloVersion": "v8",
@@ -302,79 +201,106 @@ def _fallback_yolo_v2_workflow_nl() -> Dict[str, Any]:
                 "id": "project_profiler_1",
                 "type": "project_profiler",
                 "name": "场景分析",
-                "position": {"x": 480, "y": 200},
-                "config": {"websiteType": "detection", "useLlmEnrich": False},
+                "position": {"x": 440, "y": 220},
+                "config": {"websiteType": "detection", "useLlmEnrich": True},
             },
             {
                 "id": "website_generator_1",
                 "type": "website_generator",
-                "name": "网站脚手架",
-                "position": {"x": 680, "y": 200},
+                "name": "生成识别网站",
+                "position": {"x": 640, "y": 220},
                 "config": {
                     "websiteType": "detection",
+                    "projectType": "detection",
+                    "framework": "ultralytics",
+                    "frontendFramework": "vue",
+                    "backendFramework": "flask",
+                    "dbEngine": "mysql",
+                    "qaProfile": "default",
                     "waitForCompletion": True,
                     "wizard": {
                         "siteName": "YOLO 识别系统",
-                        "usageDescription": "上传现场图片进行目标检测",
+                        "usageDescription": "上传现场图片，查看目标检测框与置信度",
+                        "primaryColor": "#f59e0b",
+                        "qaProfile": "default",
+                        "websiteType": "detection",
                         "wizardCompleted": True,
                     },
+                    "environmentConfig": {"dbEngine": "mysql"},
                 },
             },
             {
                 "id": "backend_setup_1",
                 "type": "backend_setup",
                 "name": "后端搭建",
-                "position": {"x": 880, "y": 200},
-                "config": {"agentMode": "auto", "allowCoreEdit": True},
+                "position": {"x": 840, "y": 120},
+                "config": {"agentMode": "auto", "allowCoreEdit": True, "autoQaAfterEdit": False},
             },
             {
                 "id": "frontend_setup_1",
                 "type": "frontend_setup",
                 "name": "前端搭建",
-                "position": {"x": 1080, "y": 200},
-                "config": {"agentMode": "auto"},
+                "position": {"x": 1040, "y": 120},
+                "config": {"agentMode": "auto", "autoQaAfterEdit": False},
             },
             {
                 "id": "ui_beautify_1",
                 "type": "ui_beautify",
                 "name": "UI 美化",
-                "position": {"x": 1280, "y": 200},
-                "config": {"agentMode": "auto"},
+                "position": {"x": 1240, "y": 120},
+                "config": {"agentMode": "auto", "autoQaAfterEdit": False},
             },
             {
                 "id": "environment_provision_1",
                 "type": "environment_provision",
                 "name": "环境配置",
-                "position": {"x": 1480, "y": 200},
-                "config": {"runtimeMode": "desktop"},
+                "position": {"x": 1040, "y": 320},
+                "config": {
+                    "runtimeMode": "desktop",
+                    "dbEngine": "mysql",
+                    "requirePathGrant": True,
+                    "customPaths": [],
+                },
             },
             {
                 "id": "site_qa_1",
                 "type": "site_qa",
                 "name": "站点自查",
-                "position": {"x": 1680, "y": 200},
-                "config": {"websiteType": "detection", "qaProfile": "default"},
+                "position": {"x": 1240, "y": 320},
+                "config": {
+                    "websiteType": "detection",
+                    "qaProfile": "default",
+                    "skipPlaywright": False,
+                    "autoFix": True,
+                    "maxFixRounds": 2,
+                },
             },
             {
                 "id": "site_code_review_1",
                 "type": "site_code_review",
                 "name": "代码复查",
-                "position": {"x": 1880, "y": 200},
-                "config": {"agentMode": "auto", "maxRounds": 2},
+                "position": {"x": 1440, "y": 220},
+                "config": {"agentMode": "auto", "maxRounds": 2, "autoQaAfterEdit": True},
             },
             {
                 "id": "site_preview_1",
                 "type": "site_preview",
                 "name": "站点预览",
-                "position": {"x": 2080, "y": 200},
+                "position": {"x": 1640, "y": 220},
                 "config": {"qaProfile": "default"},
             },
             {
                 "id": "project_agent_1",
                 "type": "project_agent",
                 "name": "项目 Agent",
-                "position": {"x": 2280, "y": 200},
-                "config": {"autoQaAfterEdit": True},
+                "position": {"x": 1840, "y": 220},
+                "config": {
+                    "qaProfile": "default",
+                    "autoQaAfterEdit": True,
+                    "syncSystemAgent": True,
+                    "agentMemoryEnabled": True,
+                    "message": "",
+                },
             },
         ],
         "edges": [
@@ -519,8 +445,16 @@ def _extract_model_variant(text: str) -> Optional[str]:
     return None
 
 
-def customize_yolo_workflow(workflow: Dict[str, Any], description: str) -> Dict[str, Any]:
+def customize_yolo_workflow(
+    workflow: Dict[str, Any],
+    description: str,
+    *,
+    hardware_profile: Optional[Dict[str, Any]] = None,
+    reusable_weight: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     """Apply user-stated preferences from conversation text to the template."""
+    from core.services.hardware_profile import merge_hardware_profile, recommend_yolo_training_config
+
     wf = copy.deepcopy(workflow)
     desc = description or ""
 
@@ -537,21 +471,66 @@ def customize_yolo_workflow(workflow: Dict[str, Any], description: str) -> Dict[
     site_name = _extract_site_name(desc)
     model_variant = _extract_model_variant(desc)
 
+    profile = hardware_profile or merge_hardware_profile()
+    hw_rec = recommend_yolo_training_config(profile)
+
     for node in wf.get("nodes", []):
         if node.get("type") == "yolo_training":
             config = node.setdefault("config", {})
             if epochs is not None:
                 config["epochs"] = epochs
+            elif "epochs" not in config:
+                config["epochs"] = hw_rec.get("epochs", 50)
             if model_variant:
                 config["modelVariant"] = model_variant
+            else:
+                config.setdefault("modelVariant", hw_rec.get("modelVariant", "n"))
+            config.setdefault("batchSize", hw_rec.get("batchSize", 16))
+            config.setdefault("imageSize", hw_rec.get("imageSize", 640))
+            config.setdefault("device", hw_rec.get("device", "cpu"))
+            config.setdefault("trainingMode", hw_rec.get("trainingMode", "local"))
+            config.setdefault("yoloVersion", hw_rec.get("yoloVersion", "v8"))
+            if reusable_weight:
+                config["reuseTrainingJobId"] = reusable_weight.get("id")
+                config["baseWeightUri"] = reusable_weight.get("best_weight_path") or config.get("baseWeightUri")
+                config["skipTrainingIfReused"] = True
+                node["name"] = node.get("name") or "YOLO 训练"
+                node.setdefault("_reuse_hint", f"复用已有权重: {reusable_weight.get('name')}")
         elif node.get("type") == "website_generator":
             config = node.setdefault("config", {})
             wizard = config.setdefault("wizard", {})
             if site_name:
                 wizard["siteName"] = site_name
                 node["name"] = f"生成 {site_name}"
+            if reusable_weight and reusable_weight.get("id"):
+                config.setdefault("trainingRunId", reusable_weight.get("id"))
 
+    wf["_hardware_profile"] = profile
+    wf["_yolo_training_recommendation"] = hw_rec
+    if reusable_weight:
+        wf["_reused_training_job_id"] = reusable_weight.get("id")
     return wf
+
+
+def build_yolo_workflow_with_context(
+    description: str,
+    *,
+    user_id: Optional[int] = None,
+    client_capabilities: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Build YOLO workflow with hardware tuning and optional weight reuse."""
+    from core.services.hardware_profile import merge_hardware_profile
+    from .user_assets_context import pick_reusable_yolo_weight
+
+    profile = merge_hardware_profile(client_capabilities)
+    reusable = pick_reusable_yolo_weight(user_id, description)
+    base = build_yolo_detection_workflow(description)
+    return customize_yolo_workflow(
+        base,
+        description,
+        hardware_profile=profile,
+        reusable_weight=reusable,
+    )
 
 
 def build_yolo_detection_v2_workflow(description: str) -> Dict[str, Any]:
@@ -561,15 +540,22 @@ def build_yolo_detection_v2_workflow(description: str) -> Dict[str, Any]:
 
 
 def build_yolo_detection_workflow(description: str) -> Dict[str, Any]:
-    """Build a customized YOLO MLOps workflow from user description."""
-    if is_yolo_v2_site_factory_intent(description):
-        return build_yolo_detection_v2_workflow(description)
-    base = load_yolo_template_workflow()
-    return customize_yolo_workflow(base, description)
+    """Build YOLO MLOps workflow — Site Factory v2 (AI 分工) is the default."""
+    # Prefer full role-agent chain unless user explicitly wants a minimal train-only path
+    lower = (description or "").lower()
+    minimal_hints = ("只要训练", "只训练", "不要建站", "不需要网站", "train only", "no website")
+    if any(h in lower for h in minimal_hints) and not is_yolo_v2_site_factory_intent(description):
+        base = load_yolo_template_workflow()
+        return customize_yolo_workflow(base, description)
+    return build_yolo_detection_v2_workflow(description)
 
 
 def should_use_yolo_v2_template(description: str) -> bool:
-    return is_yolo_v2_site_factory_intent(description)
+    """v2 is default for detection+site intents."""
+    lower = (description or "").lower()
+    if any(h in lower for h in ("只要训练", "只训练", "不要建站", "不需要网站", "train only", "no website")):
+        return False
+    return True
 
 
 def should_use_yolo_template(description: str) -> bool:

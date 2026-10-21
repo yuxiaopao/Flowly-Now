@@ -48,6 +48,7 @@
               <CheckCircle v-else-if="execution?.status === 'completed'" />
               <XCircle v-else-if="execution?.status === 'failed'" />
               <Pause v-else-if="execution?.status === 'paused'" />
+              <AlertTriangle v-else-if="execution?.status === 'interrupted'" />
               <Clock v-else />
             </span>
             {{ statusLabel(execution?.status) }}
@@ -71,15 +72,24 @@
             暂停
           </el-button>
           <el-button
-            v-if="execution?.status === 'paused'"
+            v-if="['paused', 'interrupted'].includes(execution?.status)"
             type="success"
             @click="handleResume"
           >
             <Play class="btn-icon" />
-            继续
+            {{ execution?.status === 'interrupted' ? '从断点继续' : '继续' }}
           </el-button>
           <el-button
-            v-if="['running', 'pending'].includes(execution?.status)"
+            v-if="canSmartContinue"
+            type="success"
+            plain
+            @click="handleSmartContinue"
+          >
+            <Play class="btn-icon" />
+            继续执行（补全结果）
+          </el-button>
+          <el-button
+            v-if="['running', 'pending', 'queued', 'paused', 'interrupted'].includes(execution?.status)"
             type="danger"
             @click="handleCancel"
           >
@@ -87,12 +97,21 @@
             取消
           </el-button>
           <el-button
-            v-if="execution?.status === 'failed'"
+            v-if="['failed', 'interrupted', 'timeout'].includes(execution?.status)"
             type="primary"
             @click="handleRetry"
           >
             <RotateCcw class="btn-icon" />
-            重试
+            {{ execution?.status === 'interrupted' ? '断点续跑/重试' : '整单重试' }}
+          </el-button>
+          <el-button
+            v-if="canPartialRetry"
+            type="warning"
+            plain
+            @click="handleRetryFailed"
+          >
+            <RotateCcw class="btn-icon" />
+            从失败点补跑
           </el-button>
           <el-button @click="downloadLogs">
             <Download class="btn-icon" />
@@ -103,7 +122,7 @@
 
       <!-- Progress Section -->
       <div
-        v-if="execution?.status === 'running' || execution?.status === 'pending'"
+        v-if="['running', 'pending', 'queued', 'paused', 'interrupted'].includes(execution?.status)"
         class="progress-section"
       >
         <div class="progress-header">
@@ -354,7 +373,7 @@ import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
   Loader, CheckCircle, XCircle, Pause, Play, Square,
-  RotateCcw, Download, Copy, Clock, Timer, Workflow
+  RotateCcw, Download, Copy, Clock, Timer, Workflow, AlertTriangle
 } from 'lucide-vue-next'
 import { useExecutionStore } from '@/stores/execution'
 import NodeExecutionTimeline from '@/components/ExecutionTimeline/NodeExecutionTimeline.vue'
@@ -459,6 +478,27 @@ const nodeStatusSummary = computed(() => {
   return summary
 })
 
+const canPartialRetry = computed(() => {
+  const st = execution.value?.status
+  if (!['completed', 'failed', 'interrupted', 'timeout', 'cancelled', 'paused'].includes(st)) {
+    return false
+  }
+  return (nodeStatusSummary.value.failed || 0) > 0
+})
+
+const canSmartContinue = computed(() => {
+  const st = execution.value?.status
+  if (!['completed', 'failed', 'interrupted', 'timeout', 'cancelled', 'paused'].includes(st)) {
+    return false
+  }
+  if (execution.value?.can_continue || execution.value?.canContinue) return true
+  const failed = nodeStatusSummary.value.failed || 0
+  const pending = nodeStatusSummary.value.pending || 0
+  const skipped = nodeStatusSummary.value.skipped || 0
+  // Soft-complete with holes, or unfinished interrupted run
+  return failed > 0 || pending > 0 || (st === 'interrupted') || (st === 'paused') || (st === 'completed' && skipped > 0)
+})
+
 const progressPercentage = computed(() => {
   const total = executionNodes.value.length
   if (total === 0) return 0
@@ -481,11 +521,14 @@ const currentNodeName = computed(() => {
 function statusLabel(status) {
   const labels = {
     pending: '待处理',
+    queued: '排队中',
     running: '执行中',
     completed: '已完成',
     failed: '失败',
     cancelled: '已取消',
-    paused: '已暂停'
+    paused: '已暂停',
+    interrupted: '已中断（可续跑）',
+    timeout: '超时'
   }
   return labels[status] || status || '-'
 }
@@ -564,11 +607,41 @@ async function handleCancel() {
 
 async function handleRetry() {
   try {
-    await executionStore.retryExecution(props.executionId)
-    ElMessage.success('重试已启动')
+    if (execution.value?.status === 'interrupted') {
+      await executionStore.resumeExecution(props.executionId)
+      ElMessage.success('已从断点继续')
+    } else {
+      await executionStore.retryExecution(props.executionId)
+      ElMessage.success('整单重试已启动')
+    }
     emit('refresh')
   } catch (error) {
     ElMessage.error('重试失败: ' + (error.message || '未知错误'))
+  }
+}
+
+async function handleRetryFailed() {
+  try {
+    await executionStore.retryFailedExecution(props.executionId, {
+      include_downstream: true,
+    })
+    ElMessage.success('已从失败点补跑：仅重跑失败节点及其下游')
+    emit('refresh')
+  } catch (error) {
+    ElMessage.error('从失败点补跑失败: ' + (error.message || '未知错误'))
+  }
+}
+
+async function handleSmartContinue() {
+  try {
+    const resp = await executionStore.continueExecution(props.executionId, {
+      mode: 'auto',
+      include_downstream: true,
+    })
+    ElMessage.success(resp?.message || '继续执行已启动，将补全未完成结果')
+    emit('refresh')
+  } catch (error) {
+    ElMessage.error('继续执行失败: ' + (error.message || '未知错误'))
   }
 }
 
@@ -745,6 +818,16 @@ onUnmounted(() => {
   &.paused {
     background: var(--warning-bg);
     color: var(--warning);
+  }
+
+  &.interrupted {
+    background: var(--warning-bg);
+    color: var(--warning);
+  }
+
+  &.queued {
+    background: var(--info-bg);
+    color: var(--info);
   }
 
   &.large {

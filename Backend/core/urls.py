@@ -9,6 +9,7 @@ from rest_framework.routers import DefaultRouter
 from .views.health_views import HealthCheckView, PingView
 from .views.notification_views import NotificationViewSet, NotificationPreferenceViewSet
 from .views.audit_views import AuditLogViewSet, LoginHistoryViewSet, DataExportViewSet
+from .views.system_views import SystemCapabilitiesView
 
 
 router = DefaultRouter()
@@ -22,5 +23,6 @@ router.register(r'data-export', DataExportViewSet, basename='data-export')
 urlpatterns = [
     path('health/', HealthCheckView.as_view(), name='health-check'),
     path('ping/', PingView.as_view(), name='ping'),
+    path('system/capabilities/', SystemCapabilitiesView.as_view(), name='system-capabilities'),
     path('', include(router.urls)),
 ]

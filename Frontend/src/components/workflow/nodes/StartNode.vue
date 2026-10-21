@@ -16,7 +16,7 @@
         />
       </div>
       <div class="node-text">
-        <span class="node-label">{{ localLabel || data.label || defaultLabel }}</span>
+        <span class="node-label">{{ displayLabel }}</span>
         <span class="node-sub">{{ subText }}</span>
       </div>
     </div>
@@ -28,9 +28,10 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
-import { Handle, Position, useVueFlow } from '@vue-flow/core'
+import { computed } from 'vue'
+import { Handle, Position } from '@vue-flow/core'
 import { PlayCircle, Circle } from 'lucide-vue-next'
+import { getBoundaryNodeLabel } from '@/config/dataTransformOperations'
 
 const props = defineProps({
   id: { type: String, default: '' },
@@ -40,13 +41,10 @@ const props = defineProps({
 
 const emit = defineEmits(['select'])
 
-const { updateNodeData } = useVueFlow()
-
 const nodeType = computed(() => props.data?.nodeType || 'start')
 const icon = computed(() => nodeType.value === 'start' ? PlayCircle : Circle)
-const defaultLabel = computed(() => nodeType.value === 'start' ? '开始' : '结束')
 const subText = computed(() => nodeType.value === 'start' ? '工作流入口' : '工作流终点')
-const localLabel = ref(props.data?.label || '')
+const displayLabel = computed(() => getBoundaryNodeLabel(props.data?.label, nodeType.value))
 
 function handleSelect() {
   emit('select')

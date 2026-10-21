@@ -1,5 +1,6 @@
 import axios from 'axios'
-import Cookies from 'js-cookie'
+import { AUTH } from '@/config/auth'
+import { authSession, saveAuthSession, clearAuthSession } from '@/utils/authSession'
 import router from '@/router'
 import { APP_CONFIG, getApiBaseUrl } from '@/config'
 import { reactive } from 'vue'
@@ -22,6 +23,8 @@ const api = axios.create({
     'Content-Type': 'application/json'
   }
 })
+
+export const sessionClient = axios.create({ timeout: APP_CONFIG.requestTimeout })
 
 // =============================================================================
 // 字段转换函数 (snake_case <-> camelCase)
@@ -61,9 +64,12 @@ api.interceptors.request.use(
     requestState.pending++
 
     // 添加认证 Token
-    const token = Cookies.get('access_token') || localStorage.getItem('access_token')
-    if (token) {
+    const token = authSession.access
+    if (token && !isAuthPublicRequest(config) && !config.url?.startsWith('/public/')) {
       config.headers.Authorization = `Bearer ${token}`
+      config._authAccess = token
+    } else {
+      delete config.headers.Authorization
     }
 
     // FormData / Blob 不做字段转换，并移除默认 JSON Content-Type 以便浏览器设置 boundary
@@ -71,7 +77,7 @@ api.interceptors.request.use(
       if (config.headers) {
         delete config.headers['Content-Type']
       }
-    } else if (config.data && typeof config.data === 'object') {
+    } else if (config.data && typeof config.data === 'object' && !config.preserveRequestKeys) {
       // 自动转换请求数据: camelCase -> snake_case
       config.data = toSnakeCaseKeys(config.data)
     }
@@ -156,19 +162,11 @@ function extractErrorMessage(data) {
 }
 
 /** 无需登录态的认证接口（401 应展示业务错误，而非「请先登录」） */
-const AUTH_PUBLIC_PATHS = [
-  '/auth/login/',
-  '/auth/register/',
-  '/auth/refresh/',
-  '/auth/password-reset/',
-  '/auth/password-reset/confirm/',
-  '/auth/verify-email/',
-  '/auth/verify-email/resend/',
-]
+const AUTH_PUBLIC_PATHS = Object.values(AUTH.endpoints)
 
 function isAuthPublicRequest(config) {
   const url = config?.url || ''
-  return AUTH_PUBLIC_PATHS.some((path) => url.includes(path))
+  return AUTH_PUBLIC_PATHS.some((path) => url.split('?')[0].endsWith(path))
 }
 
 function isAuthPageRoute() {
@@ -176,6 +174,22 @@ function isAuthPageRoute() {
   return ['/login', '/register', '/forgot-password', '/reset-password'].some(
     (authPath) => path === authPath || path.startsWith(`${authPath}/`)
   )
+}
+
+let refreshPromise = null
+async function refreshSession() {
+  if (!refreshPromise) {
+    const revision = authSession.revision
+    refreshPromise = sessionClient.post(AUTH.endpoints.refresh, { refresh: authSession.refresh }, {
+      baseURL: api.defaults.baseURL, timeout: APP_CONFIG.requestTimeout,
+    }).then(response => {
+      const data = toCamelCaseKeys(response.data?.data ?? response.data)
+      if (authSession.revision !== revision) throw new axios.CanceledError('登录状态已变化')
+      saveAuthSession(data)
+      return data.access
+    }).finally(() => { refreshPromise = null })
+  }
+  return refreshPromise
 }
 
 // =============================================================================
@@ -198,8 +212,15 @@ api.interceptors.response.use(
     }
 
     // 自动转换响应数据: snake_case -> camelCase
-    if (responseData && typeof responseData === 'object') {
+    if (responseData && typeof responseData === 'object' && !response.config?.preserveResponseKeys) {
+      const original = responseData
       responseData = toCamelCaseKeys(responseData)
+      // Workflow configuration is user data: changing its keys changes executable semantics.
+      if (response.config?.preserveWorkflowKeys) {
+        for (const key of ['workflow', 'workflow_json', 'messages']) {
+          if (original[key] !== undefined) responseData[toCamelCase(key)] = original[key]
+        }
+      }
     }
     return responseData
   },
@@ -208,27 +229,28 @@ api.interceptors.response.use(
 
     const { response, config, code } = error
 
+    // Canceled requests are expected when changing projects, searches, or files.
+    if (code === 'ERR_CANCELED') return Promise.reject(error)
+
     // 超时重试（仅重试一次）
-    if (code === 'ECONNABORTED' && !config._timeoutRetry) {
+    if (code === 'ECONNABORTED' && config && ['get', 'head', 'options'].includes(config.method) && !config._timeoutRetry) {
       config._timeoutRetry = true
-      requestState.pending++
       return api(config)
     }
 
     if (!response) {
       const retryableMethod = (config?.method || 'get').toLowerCase()
-      const canRetryNetwork = !config?._networkRetry && ['get', 'head', 'options'].includes(retryableMethod)
+      const canRetryNetwork = config && code !== 'ECONNABORTED' && !config._networkRetry && ['get', 'head', 'options'].includes(retryableMethod)
 
       if (canRetryNetwork) {
         config._networkRetry = true
-        await new Promise(resolve => setTimeout(resolve, 800))
-        requestState.pending++
+        await new Promise(resolve => setTimeout(resolve, AUTH.safeRetryDelay))
         return api(config)
       }
 
-      getAppStore()?.error(
+      if (!config?.skipErrorToast) getAppStore()?.error(
         error.code === 'ERR_NETWORK' || `${error.message || ''}`.includes('Network Error')
-          ? '无法连接后端服务，请确认 Django 已在 127.0.0.1:8000 启动'
+          ? '暂时无法连接服务，请检查网络后重试'
           : '网络连接失败，请检查网络',
       )
       return Promise.reject(error)
@@ -239,69 +261,40 @@ api.interceptors.response.use(
     const skipErrorToast = Boolean(originalRequest?.skipErrorToast)
     const errorMsg = extractErrorMessage(response.data)
 
+    if (skipErrorToast && status !== 401) return Promise.reject(error)
+
     switch (status) {
       case 400: {
-        const detail = response.data?.detail || response.data?.error || response.data?.message
-        if (detail) {
-          getAppStore()?.error(`请求参数错误: ${detail}`)
-        } else {
-          const errorValues = Object.values(response.data).flat()
-          if (errorValues.length > 0) {
-            getAppStore()?.error(`请求参数错误: ${errorValues.join('; ')}`)
-          } else {
-            getAppStore()?.error('请求参数错误')
-          }
-        }
+        getAppStore()?.error(errorMsg || '请求参数错误')
         break
       }
       case 401: {
         // 登录/注册等公开认证接口：直接展示后端返回的具体原因
         if (isAuthPublicRequest(originalRequest)) {
-          getAppStore()?.error(extractErrorMessage(response.data) || '认证失败，请检查输入')
+          if (!skipErrorToast) getAppStore()?.error(errorMsg || '认证失败，请检查输入')
           break
         }
 
         // 尝试刷新 Token
-        const refreshToken = Cookies.get('refresh_token') || localStorage.getItem('refresh_token')
+        const refreshToken = authSession.refresh
         if (refreshToken && !originalRequest._retry) {
           originalRequest._retry = true
           try {
-            const res = await axios.post(
-              `${APP_CONFIG.apiBaseUrl}${APP_CONFIG.apiPrefix}/auth/refresh/`,
-              { refresh: refreshToken }
-            )
-            let refreshData = res.data
-            if (refreshData && typeof refreshData === 'object' && 'code' in refreshData && 'data' in refreshData) {
-              refreshData = refreshData.data
-            }
-            const access = refreshData?.access
-            if (!access) {
-              throw new Error('refresh response missing access token')
-            }
-            Cookies.set('access_token', access, { expires: 1 })
-            localStorage.setItem('access_token', access)
+            const access = authSession.access !== originalRequest._authAccess
+              ? authSession.access : await refreshSession()
             originalRequest.headers.Authorization = `Bearer ${access}`
-            requestState.pending++
             return api(originalRequest)
           } catch (refreshError) {
-            Cookies.remove('access_token')
-            Cookies.remove('refresh_token')
-            localStorage.removeItem('access_token')
-            localStorage.removeItem('refresh_token')
-            if (!isAuthPageRoute()) {
-              router.push('/login')
+            if (![400, 401].includes(refreshError.response?.status)) {
+              if (refreshError.code !== 'ERR_CANCELED' && !skipErrorToast) getAppStore()?.error('暂时无法验证登录状态，请重试')
+              return Promise.reject(refreshError)
             }
-            getAppStore()?.error('登录已过期，请重新登录')
           }
-        } else {
-          Cookies.remove('access_token')
-          Cookies.remove('refresh_token')
-          localStorage.removeItem('access_token')
-          localStorage.removeItem('refresh_token')
-          if (!isAuthPageRoute()) {
-            router.push('/login')
-            getAppStore()?.error(extractErrorMessage(response.data) || '请先登录')
-          }
+        }
+        clearAuthSession()
+        if (!isAuthPageRoute() && !originalRequest.skipAuthRedirect) {
+          router.replace({ path: AUTH.routes.login, query: { redirect: router.currentRoute.value.fullPath } })
+          if (!skipErrorToast) getAppStore()?.error('登录已过期，请重新登录')
         }
         break
       }
@@ -374,7 +367,7 @@ export const request = {
 
   // 流式请求
   stream(url, data = {}, config = {}) {
-    const token = Cookies.get('access_token') || localStorage.getItem('access_token')
+    const token = authSession.access
 
     // 转换 camelCase -> snake_case
     const snakeData = toSnakeCaseKeys(data)

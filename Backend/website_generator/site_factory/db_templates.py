@@ -15,6 +15,44 @@ CREATE TABLE IF NOT EXISTS inference_logs (
     detections_json TEXT
 );
 
+CREATE TABLE IF NOT EXISTS uploaded_files (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at TEXT NOT NULL,
+    filename TEXT,
+    media_type TEXT,
+    storage_path TEXT,
+    metadata_json TEXT
+);
+
+CREATE TABLE IF NOT EXISTS model_versions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at TEXT NOT NULL,
+    model_path TEXT,
+    model_type TEXT,
+    framework TEXT,
+    labels_json TEXT,
+    manifest_json TEXT
+);
+
+CREATE TABLE IF NOT EXISTS fact_checks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at TEXT NOT NULL,
+    claim TEXT,
+    verdict TEXT,
+    confidence REAL,
+    evidence_json TEXT,
+    source_mode TEXT
+);
+
+CREATE TABLE IF NOT EXISTS agent_change_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at TEXT NOT NULL,
+    request_summary TEXT,
+    changed_files_json TEXT,
+    qa_gate TEXT,
+    qa_report_json TEXT
+);
+
 CREATE TABLE IF NOT EXISTS app_settings (
     key TEXT PRIMARY KEY,
     value TEXT
@@ -37,6 +75,44 @@ CREATE TABLE IF NOT EXISTS inference_logs (
     latency_ms DOUBLE,
     mode VARCHAR(32) DEFAULT 'image',
     detections_json TEXT
+);
+
+CREATE TABLE IF NOT EXISTS uploaded_files (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    created_at VARCHAR(64) NOT NULL,
+    filename TEXT,
+    media_type VARCHAR(64),
+    storage_path TEXT,
+    metadata_json TEXT
+);
+
+CREATE TABLE IF NOT EXISTS model_versions (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    created_at VARCHAR(64) NOT NULL,
+    model_path TEXT,
+    model_type VARCHAR(64),
+    framework VARCHAR(64),
+    labels_json TEXT,
+    manifest_json TEXT
+);
+
+CREATE TABLE IF NOT EXISTS fact_checks (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    created_at VARCHAR(64) NOT NULL,
+    claim TEXT,
+    verdict VARCHAR(64),
+    confidence DOUBLE,
+    evidence_json TEXT,
+    source_mode VARCHAR(64)
+);
+
+CREATE TABLE IF NOT EXISTS agent_change_logs (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    created_at VARCHAR(64) NOT NULL,
+    request_summary TEXT,
+    changed_files_json TEXT,
+    qa_gate VARCHAR(32),
+    qa_report_json TEXT
 );
 
 CREATE TABLE IF NOT EXISTS app_settings (
@@ -271,6 +347,89 @@ def get_inference_record(record_id):
     return item
 
 
+def log_fact_check(claim, verdict, confidence, evidence, source_mode='manual'):
+    import datetime
+    import json
+    init_db()
+    ts = datetime.datetime.utcnow().isoformat()
+    evidence_json = json.dumps(evidence or [], ensure_ascii=False)
+    if DB_ENGINE == 'mysql':
+        import pymysql
+        cfg = _mysql_config()
+        conn = pymysql.connect(
+            host=cfg['host'], port=cfg['port'], user=cfg['user'],
+            password=cfg['password'], database=cfg['database'], charset='utf8mb4',
+        )
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    'INSERT INTO fact_checks (created_at, claim, verdict, confidence, evidence_json, source_mode) VALUES (%s, %s, %s, %s, %s, %s)',
+                    (ts, claim, verdict, confidence, evidence_json, source_mode),
+                )
+            conn.commit()
+        finally:
+            conn.close()
+        return
+    import sqlite3
+    conn = sqlite3.connect(DB_PATH)
+    try:
+        conn.execute(
+            'INSERT INTO fact_checks (created_at, claim, verdict, confidence, evidence_json, source_mode) VALUES (?, ?, ?, ?, ?, ?)',
+            (ts, claim, verdict, confidence, evidence_json, source_mode),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def list_fact_checks(limit=50):
+    import json
+    init_db()
+    limit = max(1, min(int(limit or 50), 200))
+    if DB_ENGINE == 'mysql':
+        import pymysql
+        cfg = _mysql_config()
+        conn = pymysql.connect(
+            host=cfg['host'], port=cfg['port'], user=cfg['user'],
+            password=cfg['password'], database=cfg['database'], charset='utf8mb4',
+        )
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    'SELECT id, created_at, claim, verdict, confidence, evidence_json, source_mode FROM fact_checks ORDER BY id DESC LIMIT %s',
+                    (limit,),
+                )
+                rows = cur.fetchall()
+        finally:
+            conn.close()
+    else:
+        import sqlite3
+        conn = sqlite3.connect(DB_PATH)
+        try:
+            rows = conn.execute(
+                'SELECT id, created_at, claim, verdict, confidence, evidence_json, source_mode FROM fact_checks ORDER BY id DESC LIMIT ?',
+                (limit,),
+            ).fetchall()
+        finally:
+            conn.close()
+    items = []
+    for row in rows:
+        try:
+            evidence = json.loads(row[5] or '[]')
+        except Exception:
+            evidence = []
+        items.append({
+            'id': row[0],
+            'created_at': row[1],
+            'claim': row[2],
+            'verdict': row[3],
+            'confidence': row[4],
+            'evidence': evidence,
+            'source_mode': row[6],
+        })
+    return items
+
+
 def _row_to_history_item(row):
     return {
         'id': row[0],
@@ -285,8 +444,11 @@ def _row_to_history_item(row):
 
 
 def normalize_db_engine(value: Optional[str]) -> str:
-    engine = (value or 'sqlite').strip().lower()
-    return 'mysql' if engine == 'mysql' else 'sqlite'
+    """Site Factory contract: MySQL is the default; sqlite is opt-in."""
+    engine = (value or 'mysql').strip().lower()
+    if engine in ('sqlite', 'sqlite3'):
+        return 'sqlite'
+    return 'mysql'
 
 
 def get_schema_sql(db_engine: str = 'sqlite') -> str:
@@ -294,7 +456,8 @@ def get_schema_sql(db_engine: str = 'sqlite') -> str:
 
 
 def get_init_db_py(db_engine: str = 'sqlite') -> str:
-    return INIT_DB_PY.strip() + '\n'
+    default_engine = normalize_db_engine(db_engine)
+    return INIT_DB_PY.replace("os.environ.get('DB_ENGINE', 'sqlite')", f"os.environ.get('DB_ENGINE', '{default_engine}')").strip() + '\n'
 
 
 def extra_requirements(db_engine: str = 'sqlite') -> List[str]:

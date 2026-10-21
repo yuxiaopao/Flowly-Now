@@ -1,0 +1,18 @@
+# 来源: Modex SKILLS_CATALOG.json workflow_pipelines.comp_cumcm
+# docx-export 为 backend pyd 引擎步骤，非 skills/ 目录
+display_name: 国赛 CUMCM（LaTeX → PDF，Modex 主路径）
+pipeline_skill: comp-prob-analysis
+template_type: comp_cumcm
+sub_steps:
+  - skill_name: comp-prob-analysis
+    display_name: 问题分析
+  - skill_name: comp-modeling
+    display_name: 建模方案
+    has_checkpoint: true
+    checkpoint_type: approve
+  - skill_name: comp-code
+    display_name: 代码求解
+  - skill_name: comp-paper-zh
+    display_name: 论文撰写 (LaTeX)
+  - skill_name: comp-compile-zh
+    display_name: 编译 PDF

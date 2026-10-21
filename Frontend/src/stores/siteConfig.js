@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { getSiteConfig } from '@/api/public'
 import { applyRuntimeConfig } from '@/config'
+import { toSnakeCaseKeys } from '@/api'
 
 export const useSiteConfigStore = defineStore('siteConfig', {
   state: () => ({
@@ -49,9 +50,9 @@ export const useSiteConfigStore = defineStore('siteConfig', {
   },
 
   actions: {
-    async fetchPublicConfig() {
+    async fetchPublicConfig(options) {
       try {
-        const data = await getSiteConfig()
+        const data = toSnakeCaseKeys(await getSiteConfig(options))
         if (data.site) {
           this.site = {
             name: data.site.name || 'Flowly',
@@ -105,7 +106,7 @@ export const useSiteConfigStore = defineStore('siteConfig', {
           document.title = this.site.name
         }
       } catch {
-        this.loaded = true
+        this.loaded = false
       }
     },
   },

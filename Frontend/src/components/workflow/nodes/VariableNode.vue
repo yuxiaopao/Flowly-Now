@@ -24,8 +24,8 @@
     <div class="node-name-section">
       <input
         :id="id ? `node-label-${id}` : undefined"
-        name="node-label"
         v-model="localName"
+        name="node-label"
         class="node-name-input"
         placeholder="变量节点..."
         @blur="handleChange"
@@ -45,7 +45,7 @@
         >
           {{ opLabel }}
         </span>
-        <span class="var-name">{{ localConfig.variableName || '未命名' }}</span>
+        <span class="var-name">{{ localConfig.variableName || localConfig.assignments?.map(item => item.name).join('、') || '未命名' }}</span>
       </div>
     </div>
 
@@ -158,10 +158,9 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
-import { Variable as VariableIcon, ChevronDown, Loader, Check, X } from 'lucide-vue-next'
+import { ChevronDown, Loader, Check, X } from 'lucide-vue-next'
 import { useExecutionStore } from '@/stores/execution'
 import NodeTypeBadge from '@/components/workflow/nodes/NodeTypeBadge.vue'
-import { useNodePresentation } from '@/composables/useNodePresentation'
 
 
 const props = defineProps({
@@ -171,7 +170,6 @@ const props = defineProps({
 })
 
 const NODE_TYPE = 'variable'
-const { nodeIcon, nodeColor, nodeLabel } = useNodePresentation(NODE_TYPE)
 
 const emit = defineEmits(['select'])
 const { updateNodeData } = useVueFlow()
@@ -186,31 +184,34 @@ const isFailed = computed(() => nodeStatus.value === 'failed')
 const isExpanded = ref(false)
 const localName = ref(props.data.label || '变量')
 const localConfig = ref({
+  ...props.data.config,
   operation: props.data.config?.operation || 'set',
-  variableName: props.data.config?.variableName || '',
-  variableValue: props.data.config?.variableValue || '',
+  variableName: props.data.config?.variableName || props.data.config?.name || props.data.config?.variable_name || '',
+  variableValue: props.data.config?.variableValue ?? props.data.config?.value ?? '',
   scope: props.data.config?.scope || 'local',
 })
 
 const opLabel = computed(() => ({
-  set: 'SET', get: 'GET', delete: 'DEL'
-}[localConfig.value.operation] || 'SET'))
+  set: '设置', get: '读取', delete: '删除'
+}[localConfig.value.operation] || '设置'))
 
 watch(() => props.data, (d) => {
   if (d) {
     localName.value = d.label || '变量'
     localConfig.value = {
+      ...d.config,
       operation: d.config?.operation || 'set',
-      variableName: d.config?.variableName || '',
-      variableValue: d.config?.variableValue || '',
+      variableName: d.config?.variableName || d.config?.name || d.config?.variable_name || '',
+      variableValue: d.config?.variableValue ?? d.config?.value ?? '',
       scope: d.config?.scope || 'local',
     }
   }
 }, { deep: true })
 
 function toggleExpand() {
-  handleSelect()
-  isExpanded.value = !isExpanded.value
+  const expanded = !isExpanded.value
+  emit('select')
+  isExpanded.value = expanded
 }
 
 function handleChange() {

@@ -33,7 +33,7 @@ defineProps({
     }
 
     @media (max-width: $breakpoint-sm) {
-      grid-template-columns: 1fr;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
 

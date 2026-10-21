@@ -286,7 +286,8 @@ function validateNodeConfig(node) {
       break
 
     case 'code': {
-      if (!config.code || !config.code.trim()) {
+      const codeText = String(config.code || config.script || config.source || '').trim()
+      if (!codeText) {
         errors.push({
           type: 'code_missing',
           message: '代码节点未输入代码',
@@ -305,7 +306,7 @@ function validateNodeConfig(node) {
         { pattern: /open\s*\(/, msg: '禁止使用 open()' },
       ]
       for (const { pattern, msg } of dangerousPatterns) {
-        if (pattern.test(config.code)) {
+        if (pattern.test(codeText)) {
           errors.push({
             type: 'code_dangerous_pattern',
             message: `代码节点 ${msg}`,
@@ -458,19 +459,55 @@ function validateVariableReferences(nodes) {
   // 提取所有定义的变量名
   const definedVars = new Set()
   for (const node of nodes) {
+    const config = node.data?.config || {}
     if (node.type === 'variable') {
-      const assignments = node.data?.config?.assignments || []
+      const assignments = config.assignments || []
       for (const a of assignments) {
         if (a.name) definedVars.add(a.name)
       }
     }
     if (node.type === 'input') {
-      const varName = node.data?.config?.variableName
-        || node.data?.config?.input_name
-        || node.data?.config?.inputName
+      const varName = config.variableName
+        || config.input_name
+        || config.inputName
       if (varName) definedVars.add(varName)
     }
+    if (node.type === 'loop') {
+      const itemVar = config.item_variable || config.item_var || config.itemVar
+      if (itemVar) definedVars.add(itemVar)
+      const indexVar = config.index_variable || config.index_var || 'index'
+      if (indexVar) definedVars.add(indexVar)
+    }
+    if (node.type === 'json_transform' || node.type === 'json') {
+      if (config.target_field) definedVars.add(config.target_field)
+    }
+    if (node.type === 'set' || node.type === 'variable_set') {
+      if (config.name) definedVars.add(config.name)
+      if (config.key) definedVars.add(config.key)
+    }
+    // Common multimodal / pipeline outputs produced by executors
+    if (node.type === 'image_generation') {
+      definedVars.add('images')
+      definedVars.add('images.0.url')
+      definedVars.add('prompt')
+    }
+    if (node.type === 'video_generation') {
+      definedVars.add('video_url')
+      definedVars.add('images.0.url')
+    }
+    if (node.type === 'subtitle_generation') {
+      definedVars.add('subtitles')
+      definedVars.add('video_url')
+    }
+    if (node.type === 'code') {
+      definedVars.add('result')
+      definedVars.add('enriched_shots')
+    }
   }
+  // Built-in / edge-fed names commonly used across pipelines
+  ['input', 'output', 'result', 'data', 'prompt', 'text', 'content'].forEach((name) => {
+    definedVars.add(name)
+  })
 
   // 提取所有引用的变量
   const usedVars = new Set()
@@ -623,6 +660,7 @@ export function highlightErrorNodes(nodes, nodeErrors, updateNode) {
   for (const node of nodes) {
     const hasError = !!nodeErrors[node.id]
     const errorMessages = nodeErrors[node.id] || []
+    node.class = { ...(typeof node.class === 'object' ? node.class : Object.fromEntries(String(node.class || '').split(/\s+/).filter(Boolean).map(name => [name, true]))), 'has-error': hasError }
 
     if (updateNode) {
       // 如果提供了 updateNode 函数，使用它更新
@@ -647,6 +685,7 @@ export function highlightErrorNodes(nodes, nodeErrors, updateNode) {
  */
 export function clearNodeHighlights(nodes) {
   for (const node of nodes) {
+    if (node.class && typeof node.class === 'object') node.class = { ...node.class, 'has-error': false, 'has-warning': false }
     if (node.data?.hasError || node.data?.hasWarning) {
       node.data = {
         ...node.data,

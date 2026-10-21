@@ -43,13 +43,13 @@ function resolveCaptureRoot(vueFlowApi) {
   if (typeof vueFlowApi.getRootElement === 'function') {
     const root = vueFlowApi.getRootElement()
     if (root instanceof HTMLElement) {
-      return root.querySelector('.vue-flow__viewport') || root
+      return root.querySelector('.vue-flow') || root
     }
   }
 
   const rootEl = vueFlowApi?.$el || vueFlowApi
   if (rootEl instanceof HTMLElement) {
-    return rootEl.querySelector('.vue-flow__viewport') || rootEl
+    return rootEl.querySelector('.vue-flow') || rootEl
   }
 
   return null
@@ -92,15 +92,15 @@ export async function captureWorkflowCanvas(vueFlowApi, options = {}) {
     savedViewport = getViewport()
   }
 
-  if (fitView) {
-    await fitView({ padding: fitViewPadding, duration: 0, maxZoom: 1.25 })
-  }
-  await waitForPaint()
-
-  const captureEl = resolveCaptureRoot(vueFlowApi)
-  if (!(captureEl instanceof HTMLElement)) return null
-
   try {
+    if (fitView) {
+      await fitView({ padding: fitViewPadding, duration: 0, maxZoom: 1.25 })
+    }
+    await waitForPaint()
+
+    const captureEl = resolveCaptureRoot(vueFlowApi)
+    if (!(captureEl instanceof HTMLElement)) return null
+
     const dataUrl = await toPng(captureEl, {
       pixelRatio: 1,
       backgroundColor: DEFAULT_BG,

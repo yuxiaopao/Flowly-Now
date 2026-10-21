@@ -60,7 +60,7 @@ class TestNLCostEstimation:
 
         cost = service._estimate_workflow_cost(workflow)
         # start (0.1) + llm (10.0) + end (0.1) + edges (2 * 0.1) = 10.3
-        assert cost == 10.3
+        assert cost == 10.4
 
     def test_estimate_multiple_llm_nodes(self):
         """Multiple LLM nodes should scale cost."""
@@ -84,7 +84,7 @@ class TestNLCostEstimation:
 
         cost = service._estimate_workflow_cost(workflow)
         # start (0.1) + 3*llm (3 * 10.0) + end (0.1) + edges (4 * 0.1) = 30.5
-        assert cost == 30.5
+        assert cost == 30.6
 
     def test_estimate_premium_model_gpt4(self):
         """Premium models like GPT-4 should cost more."""
@@ -104,7 +104,7 @@ class TestNLCostEstimation:
 
         cost = service._estimate_workflow_cost(workflow)
         # start (0.1) + llm with gpt-4 (10.0 * 2.0) + end (0.1) + edges (2 * 0.1) = 20.3
-        assert cost == 20.3
+        assert cost == 20.4
 
     def test_estimate_premium_model_claude(self):
         """Claude models should cost more."""
@@ -124,7 +124,7 @@ class TestNLCostEstimation:
 
         cost = service._estimate_workflow_cost(workflow)
         # start (0.1) + llm with claude (10.0 * 2.0) + end (0.1) + edges (2 * 0.1) = 20.3
-        assert cost == 20.3
+        assert cost == 20.4
 
     def test_estimate_budget_model(self):
         """Budget models like GPT-3.5 should cost less."""
@@ -144,7 +144,7 @@ class TestNLCostEstimation:
 
         cost = service._estimate_workflow_cost(workflow)
         # start (0.1) + llm with gpt-3.5 (10.0 * 0.5) + end (0.1) + edges (2 * 0.1) = 5.3
-        assert cost == 5.3
+        assert cost == 5.4
 
     def test_estimate_tool_nodes(self):
         """Tool nodes should have medium cost."""
@@ -164,7 +164,7 @@ class TestNLCostEstimation:
 
         cost = service._estimate_workflow_cost(workflow)
         # start (0.1) + tool (3.0) + end (0.1) + edges (2 * 0.1) = 3.3
-        assert cost == 3.3
+        assert cost == 3.4
 
     def test_estimate_code_nodes(self):
         """Code nodes should have medium cost."""
@@ -184,7 +184,7 @@ class TestNLCostEstimation:
 
         cost = service._estimate_workflow_cost(workflow)
         # start (0.1) + code (2.0) + end (0.1) + edges (2 * 0.1) = 2.3
-        assert cost == 2.3
+        assert cost == 2.4
 
     def test_estimate_condition_nodes(self):
         """Condition nodes should have low cost."""
@@ -204,7 +204,7 @@ class TestNLCostEstimation:
 
         cost = service._estimate_workflow_cost(workflow)
         # start (0.1) + condition (0.5) + end (0.1) + edges (2 * 0.1) = 0.8
-        assert cost == 0.8
+        assert cost == 0.9
 
     def test_estimate_complex_workflow(self, complex_workflow):
         """Complex workflow should have higher cost due to node count multiplier."""

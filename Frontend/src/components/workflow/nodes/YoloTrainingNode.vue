@@ -1,7 +1,8 @@
 <template>
   <div
     ref="rootEl"
-    :style="{ '--node-accent': nodeColor, ...(isExpanded ? resize.sizeStyle.value : {}) }" class="domain-node yolo-training-node"
+    :style="{ '--node-accent': nodeColor, ...(isExpanded ? resize.sizeStyle.value : {}) }"
+    class="domain-node yolo-training-node"
     :class="{
       selected,
       expanded: isExpanded,
@@ -121,7 +122,38 @@
     </div>
 
     <div
-      v-if="isExpanded"
+      v-if="hasLocalMonitor"
+      class="panel-actions nodrag"
+    >
+      <el-button
+        :disabled="!isDesktop"
+        :data-testid="`yolo-training-details-${id}`"
+        @click.stop="detailsVisible = true"
+      >
+        查看训练详情
+      </el-button>
+      <span v-if="!isDesktop">请在桌面端查看本地记录</span>
+    </div>
+
+    <el-dialog
+      v-if="hasLocalMonitor"
+      v-model="detailsVisible"
+      :title="`${localName} · 训练详情`"
+      width="min(1320px, 96vw)"
+      class="yolo-run-dialog"
+      append-to-body
+      destroy-on-close
+      @keydown.stop
+    >
+      <LocalYoloRunMonitor
+        v-if="detailsVisible"
+        :binding="runBinding"
+        @snapshot="localSnapshot = $event"
+      />
+    </el-dialog>
+
+    <div
+      v-if="isExpanded && !hasLocalMonitor"
       class="expanded-panel"
       @click.stop
     >
@@ -247,6 +279,7 @@
 
 <script setup>
 import { ref, computed, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { Handle, Position } from '@vue-flow/core'
 import { ChevronDown, Loader } from 'lucide-vue-next'
 import { useAppStore } from '@/stores/app'
@@ -259,6 +292,8 @@ import YoloNativePlotsPanel from '@/components/workflow/yolo/YoloNativePlotsPane
 import YoloLogPanel from '@/components/workflow/yolo/YoloLogPanel.vue'
 import NodeTypeBadge from '@/components/workflow/nodes/NodeTypeBadge.vue'
 import { useNodePresentation } from '@/composables/useNodePresentation'
+import LocalYoloRunMonitor from '@/components/workflow/yolo/LocalYoloRunMonitor.vue'
+import trainingApi from '@/api/training'
 
 
 const props = defineProps({
@@ -273,6 +308,11 @@ const { nodeColor, nodeLabel } = useNodePresentation(NODE_TYPE)
 
 const emit = defineEmits(['select', 'change'])
 const appStore = useAppStore()
+const route = useRoute()
+const isDesktop = Boolean(window.flowlyDesktop?.training?.monitor)
+const detailsVisible = ref(false)
+const localSnapshot = ref(null)
+const linkedRun = ref(null)
 
 const isExpanded = ref(false)
 const localName = ref(props.data.label || props.data.name || nodeLabel)
@@ -292,30 +332,50 @@ watch(() => props.data.label, (v) => { localName.value = v || nodeLabel })
 const localConfig = computed(() => props.data.config || {})
 const nodeOutput = computed(() => props.data.output || props.data.result || {})
 
-const isRunning = computed(() => props.data.status === 'running')
-const isCompleted = computed(() => props.data.status === 'completed')
-const isFailed = computed(() => props.data.status === 'failed')
+const hasLocalMonitor = computed(() => Boolean(localConfig.value.localMonitor || localConfig.value.local_monitor))
+const runStatus = computed(() => hasLocalMonitor.value ? linkedRun.value?.status || props.data.status : props.data.status)
+const isRunning = computed(() => localSnapshot.value ? localSnapshot.value.running : runStatus.value === 'running')
+const isCompleted = computed(() => localSnapshot.value ? localSnapshot.value.trainingFinished : runStatus.value === 'completed')
+const isFailed = computed(() => localSnapshot.value ? localSnapshot.value.stage === 'failed' : runStatus.value === 'failed')
 
 const trainingRunId = computed(() => {
   const out = nodeOutput.value
-  return out.training_run_id || out.job_id || out.trainingRunId || props.data.trainingRunId || null
+  return out.training_run_id || out.job_id || out.trainingRunId || props.data.trainingRunId
+    || localConfig.value.reuseTrainingJobId || null
 })
+const runBinding = computed(() => ({ jobId: trainingRunId.value, nodeId: props.id, workflowId: String(route.params.id || '') }))
+watch(trainingRunId, async jobId => {
+  linkedRun.value = null
+  localSnapshot.value = null
+  if (!jobId || !hasLocalMonitor.value) return
+  try {
+    const run = await trainingApi.getYoloRun(jobId)
+    if (trainingRunId.value === jobId) linkedRun.value = run
+  } catch (error) {
+    appStore.error(error.message || '训练记录加载失败')
+  }
+}, { immediate: true })
 
-const monitor = useYoloTrainingMonitor(trainingRunId)
+const remoteRunId = computed(() => hasLocalMonitor.value ? null : trainingRunId.value)
+const monitor = useYoloTrainingMonitor(remoteRunId)
 
 const displayProgress = computed(() => {
+  if (localSnapshot.value) return Math.round(localSnapshot.value.progress)
+  if (linkedRun.value) return linkedRun.value.progress
   if (monitor.progressPercent.value) return Math.round(monitor.progressPercent.value)
   if (isRunning.value) return props.data.progress || 0
   return isCompleted.value ? 100 : 0
 })
 
 const displayFitness = computed(() => {
-  const v = monitor.bestFitness.value || nodeOutput.value.best_fitness || nodeOutput.value.bestFitness
+  const v = localSnapshot.value?.best?.top1 || linkedRun.value?.bestFitness
+    || monitor.bestFitness.value || nodeOutput.value.best_fitness || nodeOutput.value.bestFitness
   return v ? Number(v).toFixed(4) : ''
 })
 
 const displayWeightPath = computed(() => {
   return monitor.bestWeightPath.value
+    || linkedRun.value?.bestWeightPath
     || nodeOutput.value.best_weight_path
     || nodeOutput.value.bestWeightPath
     || ''
@@ -354,7 +414,7 @@ async function refreshTrainingArtifacts() {
 watch(
   [trainingRunId, () => props.data.status],
   ([jobId, statusValue], [, prevStatus]) => {
-    if (!jobId) return
+    if (!jobId || hasLocalMonitor.value) return
     if (statusValue === 'running' || statusValue === 'completed') {
       refreshTrainingArtifacts()
     }
@@ -391,6 +451,10 @@ function handleSelect() {
 
 function toggleExpand() {
   handleSelect()
+  if (hasLocalMonitor.value) {
+    detailsVisible.value = true
+    return
+  }
   isExpanded.value = !isExpanded.value
   if (isExpanded.value && !monitor.envChecks.value.length) {
     checkEnvironment()

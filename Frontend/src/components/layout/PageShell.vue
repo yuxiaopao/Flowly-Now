@@ -16,7 +16,3 @@ defineProps({
   },
 })
 </script>
-
-<style lang="scss" scoped>
-@use '@/assets/styles/page-layout.scss';
-</style>

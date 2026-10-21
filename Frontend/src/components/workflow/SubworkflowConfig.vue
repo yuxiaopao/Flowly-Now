@@ -309,7 +309,8 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, watch } from 'vue'
+import { getDefaultNodeConfig } from '@/config/nodeRegistry'
 import { Plus, Minus, Layers } from 'lucide-vue-next'
 import { getWorkflowList } from '@/api/workflow'
 
@@ -322,32 +323,19 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue', 'change'])
 
-const localData = computed({
-  get: () => props.modelValue,
-  set: (val) => emit('update:modelValue', val)
-})
-
-// 确保默认值
-watch(() => props.modelValue, (val) => {
-  if (!val.config) {
-    const newVal = {
-      label: val.label || '子工作流',
-      description: val.description || '',
-      config: {
-        subworkflowId: val.config?.subworkflowId || '',
-        subworkflowName: val.config?.subworkflowName || '',
-        version: val.config?.version || 'latest',
-        inputMapping: val.config?.inputMapping || [],
-        outputMapping: val.config?.outputMapping || [],
-        executionMode: val.config?.executionMode || 'sync',
-        timeout: val.config?.timeout || 300,
-        onError: val.config?.onError || 'stop',
-        fallbackValue: val.config?.fallbackValue || null
-      }
-    }
-    emit('update:modelValue', newVal)
+const localData = ref({})
+watch(() => props.modelValue, (value) => {
+  const data = value || {}
+  localData.value = {
+    ...data,
+    label: data.label ?? '子工作流',
+    description: data.description ?? '',
+    config: JSON.parse(JSON.stringify({
+      ...getDefaultNodeConfig('subworkflow'),
+      ...(data.config || {}),
+    })),
   }
-}, { immediate: true })
+}, { immediate: true, deep: true })
 
 const subworkflowOptions = ref([])
 const searching = ref(false)
@@ -379,6 +367,7 @@ function onWorkflowSelect(id) {
 }
 
 function markDirty() {
+  emit('update:modelValue', localData.value)
   emit('change')
 }
 

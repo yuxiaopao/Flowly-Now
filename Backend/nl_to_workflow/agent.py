@@ -13,17 +13,47 @@ import logging
 from typing import Dict, Any, Optional, List, Type, Callable
 from dataclasses import dataclass
 
+from django.conf import settings
 from langchain_core.tools import BaseTool, tool
-from langchain_core.callbacks import CallbackManagerForToolRun
-from langchain import hub
-from langchain.agents import AgentExecutor, create_react_agent
+from langchain_core.prompts import PromptTemplate
 from langchain_core.language_models import BaseChatModel
 
-from workflows.models import Workflow, WorkflowNode, WorkflowTemplate, DomainTemplate
-from workflows.services import WorkflowExecutionService
+try:
+    from langchain_classic.agents import AgentExecutor, create_react_agent
+except ImportError:  # pragma: no cover - older langchain layouts
+    try:
+        from langchain.agents import AgentExecutor, create_react_agent
+    except ImportError:
+        AgentExecutor = None  # type: ignore
+        create_react_agent = None  # type: ignore
+
+from workflows.models import Workflow, WorkflowTemplate
 from .models import NLSession
 
 logger = logging.getLogger(__name__)
+
+# Local ReAct prompt — avoid LangChain Hub network dependency
+_LOCAL_REACT_PROMPT = PromptTemplate.from_template(
+    """Answer the following questions as best you can. You have access to the following tools:
+
+{tools}
+
+Use the following format:
+
+Question: the input question you must answer
+Thought: you should always think about what to do
+Action: the action to take, should be one of [{tool_names}]
+Action Input: the input to the action
+Observation: the result of the action
+... (this Thought/Action/Action Input/Observation can repeat N times)
+Thought: I now know the final answer
+Final Answer: the final answer to the original input question
+
+Begin!
+
+Question: {input}
+Thought:{agent_scratchpad}"""
+)
 
 
 # ========================
@@ -49,23 +79,67 @@ def search_workflow_templates(
     """
     from django.db.models import Q
 
-    filters = Q(name__icontains=query) | Q(description__icontains=query)
+    filters = Q(is_active=True) & (
+        Q(name__icontains=query) | Q(description__icontains=query)
+    )
 
     if category:
-        filters &= Q(category__icontains=category)
+        filters &= (
+            Q(category__name__icontains=category)
+            | Q(category__slug__icontains=category)
+        )
 
-    templates = WorkflowTemplate.objects.filter(filters)[:limit]
+    templates = WorkflowTemplate.objects.filter(filters).select_related('category')[:limit]
 
     results = []
     for t in templates:
+        workflow_data = t.workflow_data if isinstance(t.workflow_data, dict) else {}
+        nodes = workflow_data.get('nodes') or []
         results.append({
             "id": str(t.id),
             "name": t.name,
-            "description": t.description,
-            "category": t.category or "",
-            "nodes_count": t.nodes.count() if hasattr(t, 'nodes') else 0
+            "description": t.description or "",
+            "category": getattr(t.category, 'name', '') or "",
+            "nodes_count": len(nodes) if isinstance(nodes, list) else 0,
         })
 
+    return json.dumps(results, ensure_ascii=False)
+
+
+@tool
+def search_n8n_training_examples(
+    query: str,
+    limit: int = 5,
+) -> str:
+    """
+    Search n8n open-source workflow training corpus for similar structures.
+
+    Use this when generating workflows to find proven node-type topologies from
+    community n8n workflows. Returns summaries only — never paste as final graph.
+
+    Args:
+        query: Natural language requirement / keywords
+        limit: Maximum number of examples (default 5)
+
+    Returns:
+        JSON string with matching n8n training examples
+    """
+    from .n8n_corpus import search_n8n_corpus
+
+    hits = search_n8n_corpus(query or '', limit=max(1, int(limit or 5)))
+    results = []
+    for entry, score in hits:
+        results.append({
+            'id': entry.id,
+            'name': entry.clean_name,
+            'category': entry.category,
+            'description': (entry.description or '')[:200],
+            'node_type_sequence': entry.node_type_sequence,
+            'node_count': entry.node_count,
+            'quality_score': entry.quality_score,
+            'score': round(score, 4),
+            'compact_example': entry.compact_example,
+        })
     return json.dumps(results, ensure_ascii=False)
 
 
@@ -91,8 +165,7 @@ def get_user_workflows(
         user = User.objects.get(id=user_id)
         workflows = Workflow.objects.filter(
             owner=user,
-            is_active=True
-        ).order_by('-updated_at')[:limit]
+        ).exclude(status='archived').order_by('-updated_at')[:limit]
 
         results = []
         for w in workflows:
@@ -125,13 +198,13 @@ def get_workflow_template_by_id(
         JSON string with template details
     """
     try:
-        template = WorkflowTemplate.objects.get(id=template_id)
+        template = WorkflowTemplate.objects.select_related('category').get(id=template_id)
         return json.dumps({
             "id": str(template.id),
             "name": template.name,
-            "description": template.description,
-            "category": template.category or "",
-            "definition": template.definition or {}
+            "description": template.description or "",
+            "category": getattr(template.category, 'name', '') or "",
+            "definition": template.workflow_data or {},
         }, ensure_ascii=False)
 
     except WorkflowTemplate.DoesNotExist:
@@ -144,7 +217,7 @@ def get_domain_templates(
     limit: int = 5
 ) -> str:
     """
-    Get domain-specific workflow templates.
+    Get domain-specific workflow templates (via category / tags).
 
     Args:
         domain: Domain name (e.g., 'customer_service', 'data_processing')
@@ -153,20 +226,27 @@ def get_domain_templates(
     Returns:
         JSON string with domain templates
     """
-    filters = {}
-    if domain:
-        filters['domain__icontains'] = domain
+    from django.db.models import Q
 
-    templates = DomainTemplate.objects.filter(**filters)[:limit]
+    qs = WorkflowTemplate.objects.filter(is_active=True).select_related('category')
+    if domain:
+        qs = qs.filter(
+            Q(category__name__icontains=domain)
+            | Q(category__slug__icontains=domain)
+            | Q(name__icontains=domain)
+            | Q(description__icontains=domain)
+        )
+    templates = qs.order_by('-use_count', '-rating')[:limit]
 
     results = []
     for t in templates:
+        cat = getattr(t.category, 'name', '') or ''
         results.append({
             "id": str(t.id),
             "name": t.name,
-            "domain": t.domain or "",
-            "description": t.description,
-            "use_count": t.use_count
+            "domain": cat,
+            "description": t.description or "",
+            "use_count": t.use_count,
         })
 
     return json.dumps(results, ensure_ascii=False)
@@ -314,6 +394,7 @@ class WorkflowAgentTools:
     def __init__(self):
         self._tools: List[BaseTool] = [
             search_workflow_templates,
+            search_n8n_training_examples,
             get_user_workflows,
             get_workflow_template_by_id,
             get_domain_templates,
@@ -376,8 +457,21 @@ class WorkflowAgentBuilder:
         Returns:
             Configured AgentExecutor instance
         """
-        # Get the ReAct prompt from LangChain hub
-        prompt = hub.pull("hwchase17/react")
+        if AgentExecutor is None or create_react_agent is None:
+            raise RuntimeError(
+                'ReAct AgentExecutor unavailable; install langchain-classic '
+                'or use gather_generation_context tool retrieval instead'
+            )
+
+        # Prefer local ReAct prompt; optionally try hub if explicitly enabled
+        prompt = _LOCAL_REACT_PROMPT
+        if getattr(settings, 'NL_WORKFLOW_USE_HUB_REACT_PROMPT', False):
+            try:
+                from langchain import hub
+                prompt = hub.pull("hwchase17/react")
+            except Exception as exc:
+                logger.warning('hub.pull react prompt failed, using local: %s', exc)
+                prompt = _LOCAL_REACT_PROMPT
 
         # Create the agent
         agent = create_react_agent(
@@ -412,6 +506,12 @@ class WorkflowAgentBuilder:
         Returns:
             AgentExecutor with custom prompt
         """
+        if AgentExecutor is None or create_react_agent is None:
+            raise RuntimeError(
+                'ReAct AgentExecutor unavailable; install langchain-classic '
+                'or use gather_generation_context tool retrieval instead'
+            )
+
         from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
         prompt = ChatPromptTemplate.from_messages([

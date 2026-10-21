@@ -1,192 +1,63 @@
-"""
-Celery tasks for RAG app.
-"""
-
+"""Background entry points use the same transactional processor as HTTP ingestion."""
+from datetime import timedelta
 from celery import shared_task
 from django.utils import timezone
-from datetime import timedelta
-import logging
 
-logger = logging.getLogger(__name__)
+from .models import Document, DocumentCollection
+from .pipeline import DocumentProcessor, RAGService, refresh_collection_stats
 
 
 @shared_task
 def process_document_async(document_id):
-    """Process a document asynchronously - chunk and embed."""
-    from .models import Document, Chunk
-    
-    try:
-        document = Document.objects.get(id=document_id)
-        document.status = 'processing'
-        document.save()
-        
-        # Import document processor
-        from rag.services import DocumentProcessor
-        
-        processor = DocumentProcessor(document.collection)
-        chunks = processor.process_document(document)
-        
-        # Create chunk records
-        chunk_count = 0
-        for i, chunk_text in enumerate(chunks):
-            Chunk.objects.create(
-                document=document,
-                content=chunk_text,
-                chunk_index=i,
-                metadata={'source': document.source_url or 'text'}
-            )
-            chunk_count += 1
-        
-        # Update document
-        document.status = 'completed'
-        document.chunk_count = chunk_count
-        document.processed_at = timezone.now()
-        document.save()
-        
-        # Update collection stats
-        collection = document.collection
-        collection.chunk_count = Chunk.objects.filter(document__collection=collection).count()
-        collection.document_count = Document.objects.filter(collection=collection, status='completed').count()
-        collection.save()
-        
-        return {
-            'document_id': document_id,
-            'chunks_created': chunk_count
-        }
-        
-    except Exception as e:
-        logger.error(f"Failed to process document {document_id}: {e}")
-        Document.objects.filter(id=document_id).update(
-            status='failed',
-            error_message=str(e)
-        )
-        raise
+    document = Document.objects.select_related('collection__vector_store').filter(id=document_id).first()
+    if not document:
+        return {'success': False, 'document_id': str(document_id), 'error': '文档不存在或已删除。'}
+    result = DocumentProcessor(document.collection).process_document(document)
+    return {**result, 'chunks_created': result.get('chunks', 0)}
 
 
 @shared_task
 def batch_process_documents(collection_id):
-    """Process all pending documents in a collection."""
-    from .models import Document
-    
-    documents = Document.objects.filter(
-        collection_id=collection_id,
-        status='pending'
-    )
-    
-    results = []
-    for doc in documents:
-        try:
-            result = process_document_async.delay(doc.id)
-            results.append({
-                'document_id': doc.id,
-                'task_id': result.id
-            })
-        except Exception as e:
-            logger.error(f"Failed to queue document {doc.id}: {e}")
-    
-    return results
+    return [{'document_id': str(doc.id), 'task_id': str(process_document_async.delay(str(doc.id)).id)}
+            for doc in Document.objects.filter(collection_id=collection_id, status='pending')]
 
 
 @shared_task
 def delete_document_vectors(document_id):
-    """Delete document vectors from vector store."""
-    from .models import Document, Chunk
-    
-    try:
-        document = Document.objects.get(id=document_id)
-        
-        # Delete chunks
-        chunks = Chunk.objects.filter(document=document)
-        chunk_ids = [c.id for c in chunks]
-        
-        # Delete from vector store
-        from rag.services import VectorStoreService
-        service = VectorStoreService(document.collection.vector_store)
-        
-        for chunk in chunks:
-            if chunk.vector_id:
-                service.delete_vector(chunk.vector_id)
-        
-        # Delete chunk records
-        chunks.delete()
-        
-        # Update document
-        document.chunk_count = 0
-        document.vector_ids = []
-        document.save()
-        
-        return {
-            'document_id': document_id,
-            'chunks_deleted': len(chunk_ids)
-        }
-        
-    except Exception as e:
-        logger.error(f"Failed to delete document vectors: {e}")
-        raise
+    document = Document.objects.select_related('collection__vector_store').get(id=document_id)
+    from django.db import transaction
+    with transaction.atomic():
+        DocumentCollection.objects.select_for_update().get(id=document.collection_id)
+        if Document.objects.get(id=document_id).status == 'processing':
+            raise ValueError('文档正在处理中，请稍后重试。')
+        count = document.chunks.count()
+        RAGService(document.collection).delete_vectors(list(document.chunks.exclude(embedding=[]).values_list('vector_id', flat=True)))
+        document.chunks.all().delete()
+        Document.objects.filter(id=document_id).update(status='pending', chunk_count=0, token_count=0, processed_at=None)
+        refresh_collection_stats(document.collection_id)
+    return {'document_id': str(document_id), 'chunks_deleted': count}
 
 
 @shared_task
 def rebuild_collection_index(collection_id):
-    """Rebuild the entire collection index."""
-    from .models import DocumentCollection, Document, Chunk
-    
-    try:
-        collection = DocumentCollection.objects.get(id=collection_id)
-        documents = Document.objects.filter(
-            collection=collection,
-            status='completed'
-        )
-        
-        total_chunks = 0
-        for doc in documents:
-            # Re-process each document
-            process_document_async.delay(doc.id)
-            total_chunks += doc.chunk_count
-        
-        return {
-            'collection_id': collection_id,
-            'documents': documents.count(),
-            'chunks': total_chunks
-        }
-        
-    except Exception as e:
-        logger.error(f"Failed to rebuild collection index: {e}")
-        raise
+    collection = DocumentCollection.objects.get(id=collection_id)
+    processor = DocumentProcessor(collection)
+    results = [processor.process_document(doc) for doc in collection.documents.all()]
+    return {'collection_id': str(collection_id), 'documents': len(results),
+            'completed': sum(r['success'] for r in results), 'results': results}
 
 
 @shared_task
 def cleanup_failed_documents(days=7):
-    """Clean up documents that failed processing."""
-    from .models import Document
-    
-    cutoff = timezone.now() - timedelta(days=days)
-    failed = Document.objects.filter(
-        status='failed',
-        updated_at__lt=cutoff
-    )
-    
+    failed = Document.objects.filter(status='failed', updated_at__lt=timezone.now() - timedelta(days=days))
     count = failed.count()
     failed.delete()
-    
-    logger.info(f"Cleaned up {count} failed documents")
     return count
 
 
 @shared_task
 def update_collection_stats():
-    """Update statistics for all collections."""
-    from .models import DocumentCollection, Document, Chunk
-    
-    collections = DocumentCollection.objects.all()
-    
-    for collection in collections:
-        collection.document_count = Document.objects.filter(
-            collection=collection,
-            status='completed'
-        ).count()
-        collection.chunk_count = Chunk.objects.filter(
-            document__collection=collection
-        ).count()
-        collection.save()
-    
-    return collections.count()
+    ids = list(DocumentCollection.objects.values_list('id', flat=True))
+    for collection_id in ids:
+        refresh_collection_stats(collection_id)
+    return len(ids)

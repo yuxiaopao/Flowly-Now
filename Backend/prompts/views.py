@@ -3,6 +3,7 @@ Prompt template API views.
 """
 
 from django.db.models import Q, Avg
+from uuid import UUID
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -60,7 +61,12 @@ class PromptTemplateViewSet(viewsets.ModelViewSet):
         # Filter by category
         category = self.request.query_params.get('category')
         if category:
-            queryset = queryset.filter(category_id=category)
+            try:
+                category_id = UUID(category)
+            except (ValueError, AttributeError):
+                queryset = queryset.filter(category__slug=category)
+            else:
+                queryset = queryset.filter(category_id=category_id)
 
         # Filter by type
         prompt_type = self.request.query_params.get('type')
@@ -87,11 +93,11 @@ class PromptTemplateViewSet(viewsets.ModelViewSet):
         # Sorting
         sort = self.request.query_params.get('sort', '-use_count')
         if sort == 'rating':
-            queryset = queryset.order_by('-avg_rating', '-rating_count')
+            queryset = queryset.order_by('-avg_rating', '-rating_count', 'id')
         elif sort == 'newest':
-            queryset = queryset.order_by('-created_at')
+            queryset = queryset.order_by('-created_at', 'id')
         else:
-            queryset = queryset.order_by('-use_count')
+            queryset = queryset.order_by('-use_count', 'id')
 
         return queryset.select_related('category', 'created_by')
 

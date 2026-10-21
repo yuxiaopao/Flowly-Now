@@ -163,7 +163,7 @@ from .serializers import (
     APICredentialSerializer, APICredentialCreateSerializer,
     AuditLogSerializer,
     TemplateCategorySerializer, WorkflowTemplateListSerializer,
-    WorkflowTemplateDetailSerializer, WorkflowTemplateCreateFromSerializer,
+    WorkflowTemplateDetailSerializer, WorkflowTemplateWriteSerializer, WorkflowTemplateCreateFromSerializer,
     TemplateInstallSerializer, TemplateRatingRecordSerializer,
     TemplateReportSerializer,
     TemplateReportCreateSerializer,
@@ -255,6 +255,23 @@ class WorkflowViewSet(viewsets.ModelViewSet):
         trigger_type = serializer.validated_data.get('trigger_type', 'manual')
         async_execute = serializer.validated_data.get('is_async', False)
 
+        from .services.workflow_validation import validate_workflow
+        preflight = validate_workflow(workflow, input_data)
+        if not preflight['valid']:
+            return Response({
+                'error': '工作流执行前检查未通过：' + '；'.join(preflight['errors']),
+                'code': 'workflow_validation',
+                **preflight,
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        from .execution_control import check_concurrency_allowed
+        ok_limit, limit_msg = check_concurrency_allowed(workflow.id)
+        if not ok_limit:
+            return Response(
+                {'error': limit_msg, 'code': 'concurrency_limit'},
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+            )
+
         # Create execution record with version tracking
         execution = WorkflowExecution.objects.create(
             workflow=workflow,
@@ -289,14 +306,17 @@ class WorkflowViewSet(viewsets.ModelViewSet):
         # Execute synchronously
         try:
             executor = WorkflowExecutor(workflow, execution)
-            result = executor.execute()
+            executor.execute()
 
-            return Response({
+            payload = {
                 'execution_id': execution.id,
                 'status': execution.status,
                 'output_data': execution.output_data,
-                'message': '工作流执行完成'
-            })
+                'message': '工作流执行完成' if execution.status == 'completed' else '工作流执行失败',
+            }
+            if execution.status == 'failed':
+                payload['error'] = execution.error_message
+            return Response(payload, status=status.HTTP_400_BAD_REQUEST if execution.status == 'failed' else status.HTTP_200_OK)
         except Exception as e:
             import traceback
             execution.mark_failed(
@@ -460,45 +480,8 @@ class WorkflowViewSet(viewsets.ModelViewSet):
         """Validate workflow structure."""
         workflow = self.get_object()
 
-        errors = []
-        warnings = []
-
-        # Check for start nodes
-        start_nodes = workflow.nodes.filter(node_type='start')
-        if not start_nodes.exists():
-            errors.append('缺少开始节点')
-
-        # Check for end nodes
-        end_nodes = workflow.nodes.filter(node_type='end')
-        if not end_nodes.exists():
-            warnings.append('缺少结束节点')
-
-        # Check for orphan nodes (no connections)
-        nodes_with_edges = set()
-        for edge in workflow.edges.all():
-            nodes_with_edges.add(edge.source_node_id)
-            nodes_with_edges.add(edge.target_node_id)
-
-        orphan_nodes = workflow.nodes.exclude(id__in=nodes_with_edges)
-        if orphan_nodes.exists():
-            warnings.append(f'存在未连接的节点: {", ".join([n.name for n in orphan_nodes])}')
-
-        # Check for unconnected starts/ends
-        for start in start_nodes:
-            has_outgoing = workflow.edges.filter(source_node=start).exists()
-            if not has_outgoing:
-                errors.append(f'开始节点 "{start.name}" 没有连接')
-
-        for end in end_nodes:
-            has_incoming = workflow.edges.filter(target_node=end).exists()
-            if not has_incoming:
-                warnings.append(f'结束节点 "{end.name}" 没有输入连接')
-
-        return Response({
-            'valid': len(errors) == 0,
-            'errors': errors,
-            'warnings': warnings
-        })
+        from .services.workflow_validation import validate_workflow
+        return Response(validate_workflow(workflow))
 
 
 class NodeViewSet(viewsets.ModelViewSet):
@@ -533,14 +516,15 @@ class NodeViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def available_types(self, request):
         """Get available node types."""
-        from config.constants import NodeType
-        node_types = []
-        for attr in dir(NodeType):
-            if not attr.startswith('_') and attr.isupper():
-                value = getattr(NodeType, attr)
-                label = attr.replace('_', ' ').title()
-                node_types.append({'type': value, 'label': label})
-        return Response(node_types)
+        from .services.langchain_service import LangChainService
+        from .services.workflow_validation import UNIMPLEMENTED_INTEGRATIONS
+        registered = set(LangChainService(user_id=request.user.id).get_node_executors())
+        labels = dict(Node.NODE_TYPE_CHOICES)
+        labels.update({'trigger': '触发输入', 'http': 'HTTP 请求', 'transform': '数据转换'})
+        return Response([
+            {'type': value, 'label': label, 'supported': value in registered and value not in UNIMPLEMENTED_INTEGRATIONS}
+            for value, label in labels.items()
+        ])
 
     @action(detail=False, methods=['post'])
     def batch_update_positions(self, request):
@@ -605,7 +589,7 @@ class EdgeViewSet(viewsets.ModelViewSet):
         if workflow_id:
             queryset = queryset.filter(workflow_id=workflow_id)
 
-        return queryset.select_related('workflow', 'source_node', 'target_node')
+        return queryset.select_related('workflow', 'source_node', 'target_node').order_by('id')
 
     def get_serializer_class(self):
         """Return appropriate serializer based on action."""
@@ -666,33 +650,36 @@ class WorkflowExecutionViewSet(viewsets.ReadOnlyModelViewSet):
                 Q(workflow__owner=self.request.user) |
                 Q(triggered_by=self.request.user) |
                 Q(workflow__tenant_id__in=get_accessible_tenant_ids(self.request.user))
-            ).distinct()
+            )
 
         status_filter = self.request.query_params.get('status')
         if status_filter:
             queryset = queryset.filter(status=status_filter)
 
-        return queryset.select_related('workflow', 'triggered_by')
+        return queryset.select_related('workflow', 'triggered_by').prefetch_related('node_executions__node')
 
     @action(detail=True, methods=['post'])
     def cancel(self, request, pk=None):
-        """Cancel running execution."""
+        """Cancel running execution (cooperative — worker polls DB and stops)."""
         execution = self.get_object()
 
-        if execution.status not in ['pending', 'running', 'paused']:
+        if execution.status not in ['pending', 'queued', 'running', 'paused', 'interrupted']:
             return Response(
-                {'error': '只能取消等待中、运行中或已暂停的执行'},
+                {'error': '只能取消等待中、运行中、已暂停或已中断的执行'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
         execution.cancel()
 
-        # Cancel Celery task if exists
+        # Soft revoke only — avoid terminate=True killing mid-node without checkpoint.
+        # Worker exits on next control poll when status=cancelled.
         if execution.task_id:
-            from celery.result import AsyncResult
-            AsyncResult(execution.task_id).revoke(terminate=True)
+            try:
+                from celery.result import AsyncResult
+                AsyncResult(execution.task_id).revoke(terminate=False)
+            except Exception as e:
+                logger.warning("Failed to soft-revoke task %s: %s", execution.task_id, e)
 
-        # Broadcast cancellation
         self._broadcast_execution_event(execution, 'execution_cancelled', {
             'execution_id': execution.id,
             'status': 'cancelled'
@@ -700,19 +687,45 @@ class WorkflowExecutionViewSet(viewsets.ReadOnlyModelViewSet):
 
         return Response({
             'status': 'cancelled',
-            'message': '执行已取消'
+            'message': '执行已取消（协作式；当前节点结束后停止）'
         })
+
 
     @action(detail=True, methods=['post'])
     def retry(self, request, pk=None):
-        """Retry a failed or cancelled execution."""
-        execution = self.get_object()
+        """Retry a failed or cancelled execution.
 
-        if execution.status not in ['failed', 'cancelled', 'completed']:
+        Body options:
+          - mode=full (default): create a brand-new full run
+          - mode=failed_only: keep successes, re-run failed (+ downstream) then resume
+          - node_ids: optional list limiting which seeds to re-run
+          - include_downstream: bool (default true) when mode=failed_only
+        """
+        execution = self.get_object()
+        mode = (request.data.get('mode') or 'full').strip().lower()
+        if mode in ('failed_only', 'partial', 'local', 'failed'):
+            return self.retry_failed(request, pk=pk)
+
+        if execution.status not in ['failed', 'cancelled', 'completed', 'interrupted', 'timeout']:
             return Response(
-                {'error': '只能重试失败、已取消或已完成的执行'},
+                {'error': '只能重试失败、已取消、已中断、超时或已完成的执行'},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+        # Prefer resume when a checkpoint exists (interrupted/paused with snapshot)
+        from .execution_control import has_resumable_snapshot
+        if execution.status == 'interrupted' and has_resumable_snapshot(execution):
+            from .tasks import resume_workflow_task
+            task = resume_workflow_task.delay(str(execution.id))
+            execution.task_id = task.id
+            execution.save(update_fields=['task_id'])
+            return Response({
+                'execution_id': execution.id,
+                'task_id': task.id,
+                'status': execution.status,
+                'message': '已从断点恢复（非新建执行）',
+                'resumed': True,
+            })
 
         # Create a new execution based on the failed one
         new_execution = WorkflowExecution.objects.create(
@@ -736,6 +749,137 @@ class WorkflowExecutionViewSet(viewsets.ReadOnlyModelViewSet):
             'message': '重试已启动'
         })
 
+    @action(detail=True, methods=['post'], url_path='retry_failed')
+    def retry_failed(self, request, pk=None):
+        """Partial retry: re-run failed (or selected) nodes + optional downstream.
+
+        Preserves successful node outputs so short-drama merges can finish with a
+        complete film after repairing only the broken shot branches.
+        """
+        execution = self.get_object()
+        raw_ids = request.data.get('node_ids') or request.data.get('nodeIds') or []
+        if isinstance(raw_ids, str):
+            raw_ids = [raw_ids]
+        include_downstream = request.data.get('include_downstream', True)
+        if isinstance(include_downstream, str):
+            include_downstream = include_downstream.strip().lower() not in ('0', 'false', 'no')
+
+        try:
+            from .services.partial_retry import prepare_partial_retry
+            prepared = prepare_partial_retry(
+                execution,
+                node_ids=list(raw_ids) if raw_ids else None,
+                include_downstream=bool(include_downstream),
+            )
+        except ValueError as exc:
+            return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as exc:
+            logger.exception('partial retry prepare failed: %s', exc)
+            return Response(
+                {'error': f'局部重试准备失败: {exc}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        execution.refresh_from_db()
+        from .tasks import resume_workflow_task
+        task = resume_workflow_task.delay(str(execution.id))
+        execution.task_id = task.id
+        execution.save(update_fields=['task_id'])
+
+        self._broadcast_execution_event(execution, 'execution_partial_retry', {
+            'execution_id': str(execution.id),
+            'task_id': task.id,
+            'seeds': prepared.get('seeds'),
+            'invalidated': prepared.get('invalidated'),
+        })
+
+        return Response({
+            'execution_id': str(execution.id),
+            'task_id': task.id,
+            'status': execution.status,
+            'message': (
+                f"局部重试已启动：重跑 {len(prepared.get('seeds') or [])} 个失败节点"
+                f"，连同下游共 {len(prepared.get('invalidated') or [])} 个节点"
+            ),
+            'partial': True,
+            **prepared,
+        })
+
+    @action(detail=True, methods=['get', 'post'], url_path='continue')
+    def continue_execution(self, request, pk=None):
+        """Smart continue: failure-point retry and/or unfinished-node resume.
+
+        GET  → analyze what is left (can_continue / strategy / failed / incomplete)
+        POST → auto prepare + queue resume_workflow_task
+
+        POST body:
+          - mode: auto | failed | resume | incomplete  (default auto)
+          - node_ids: optional seed list
+          - include_downstream: bool (default true)
+          - force: bool — orphan recovery when status stuck as running
+        """
+        execution = self.get_object()
+        from .services.partial_retry import analyze_continue, prepare_continue
+
+        if request.method == 'GET':
+            return Response(analyze_continue(execution))
+
+        mode = request.data.get('mode') or 'auto'
+        raw_ids = request.data.get('node_ids') or request.data.get('nodeIds') or []
+        if isinstance(raw_ids, str):
+            raw_ids = [raw_ids]
+        include_downstream = request.data.get('include_downstream', True)
+        if isinstance(include_downstream, str):
+            include_downstream = include_downstream.strip().lower() not in ('0', 'false', 'no')
+        force = request.data.get('force', False)
+        if isinstance(force, str):
+            force = force.strip().lower() in ('1', 'true', 'yes')
+
+        try:
+            strategy, prepared = prepare_continue(
+                execution,
+                mode=mode,
+                node_ids=list(raw_ids) if raw_ids else None,
+                include_downstream=bool(include_downstream),
+                force=bool(force),
+            )
+        except ValueError as exc:
+            return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as exc:
+            logger.exception('continue prepare failed: %s', exc)
+            return Response(
+                {'error': f'继续执行准备失败: {exc}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        execution.refresh_from_db()
+        from .tasks import resume_workflow_task
+        task = resume_workflow_task.delay(str(execution.id))
+        execution.task_id = task.id
+        execution.save(update_fields=['task_id'])
+
+        messages = {
+            'retry_failed': '已从失败点继续：补跑失败节点及其下游',
+            'continue_incomplete': '已从未完成处继续：补跑剩余节点以保证结果完整',
+            'resume': '已从断点继续执行',
+        }
+        self._broadcast_execution_event(execution, 'execution_continue', {
+            'execution_id': str(execution.id),
+            'task_id': task.id,
+            'strategy': strategy,
+            'seeds': prepared.get('seeds'),
+        })
+
+        return Response({
+            'execution_id': str(execution.id),
+            'task_id': task.id,
+            'status': execution.status,
+            'strategy': strategy,
+            'message': messages.get(strategy, '继续执行已启动'),
+            'continued': True,
+            **prepared,
+        })
+
     @action(detail=True, methods=['delete'])
     def delete(self, request, pk=None):
         """Delete an execution record."""
@@ -756,7 +900,7 @@ class WorkflowExecutionViewSet(viewsets.ReadOnlyModelViewSet):
 
     @action(detail=True, methods=['post'])
     def pause(self, request, pk=None):
-        """Pause running execution."""
+        """Pause running execution (cooperative checkpoint; does not wipe snapshot)."""
         execution = self.get_object()
 
         if execution.status != 'running':
@@ -765,49 +909,125 @@ class WorkflowExecutionViewSet(viewsets.ReadOnlyModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
+        # Signal only — running executor polls DB, writes checkpoint, then exits task
         execution.pause()
 
-        # Save context snapshot for resume
-        # Note: In a real implementation, you would get the current context from the executor
-        execution.save_context_snapshot({})
-
-        # Broadcast pause
-        self._broadcast_execution_event(execution, 'execution_paused', {
+        self._broadcast_execution_event(execution, 'execution_pause_requested', {
             'execution_id': execution.id,
             'status': 'paused'
         })
 
         return Response({
             'status': 'paused',
-            'message': '执行已暂停'
+            'message': '已请求暂停；执行器将在当前节点/波次结束后保存断点并停止'
         })
 
     @action(detail=True, methods=['post'])
     def resume(self, request, pk=None):
-        """Resume paused execution."""
+        """Resume paused/interrupted, or smart-continue incomplete/failed executions."""
         execution = self.get_object()
 
-        if execution.status != 'paused':
+        # Broader continue: failed/completed-with-holes/timeout also go through continue
+        if execution.status not in ('paused', 'interrupted'):
+            if execution.status in ('failed', 'completed', 'timeout', 'cancelled'):
+                from .services.partial_retry import analyze_continue, prepare_continue
+                analysis = analyze_continue(execution)
+                if not analysis.get('can_continue'):
+                    return Response(
+                        {
+                            'error': '只能恢复已暂停或已中断的执行',
+                            'hint': analysis.get('hint') or '当前没有可继续的缺口',
+                            'analysis': analysis,
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                try:
+                    strategy, prepared = prepare_continue(
+                        execution,
+                        mode='auto',
+                        include_downstream=True,
+                    )
+                except ValueError as exc:
+                    return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+                execution.refresh_from_db()
+                from .tasks import resume_workflow_task
+                task = resume_workflow_task.delay(str(execution.id))
+                execution.task_id = task.id
+                execution.save(update_fields=['task_id'])
+                return Response({
+                    'status': execution.status,
+                    'task_id': task.id,
+                    'execution_id': str(execution.id),
+                    'strategy': strategy,
+                    'message': '已从未完成/失败处继续执行',
+                    'continued': True,
+                    **prepared,
+                })
             return Response(
-                {'error': '只能恢复已暂停的执行'},
+                {'error': '只能恢复已暂停或已中断的执行'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Get context snapshot
-        context_snapshot = execution.get_context_snapshot()
+        snapshot = execution.get_context_snapshot() or {}
+        from .execution_control import has_resumable_snapshot
+        if not has_resumable_snapshot(execution) and not (
+            snapshot.get('visited') is not None or snapshot.get('node_results')
+        ):
+            # Try rebuild + continue incomplete
+            from .services.partial_retry import analyze_continue, prepare_continue
+            analysis = analyze_continue(execution)
+            if analysis.get('can_continue') or analysis.get('incomplete') or analysis.get('failed'):
+                try:
+                    strategy, prepared = prepare_continue(execution, mode='auto')
+                except ValueError as exc:
+                    return Response(
+                        {
+                            'error': '没有可用的断点快照，无法恢复',
+                            'hint': str(exc),
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                execution.refresh_from_db()
+                from .tasks import resume_workflow_task
+                task = resume_workflow_task.delay(str(execution.id))
+                execution.task_id = task.id
+                execution.save(update_fields=['task_id'])
+                return Response({
+                    'status': execution.status,
+                    'task_id': task.id,
+                    'execution_id': str(execution.id),
+                    'strategy': strategy,
+                    'message': '已重建断点并继续执行',
+                    'continued': True,
+                    **prepared,
+                })
+            return Response(
+                {
+                    'error': '没有可用的断点快照，无法恢复',
+                    'hint': '请重新运行工作流，或确认暂停前已执行过节点',
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-        execution.resume()
+        from .tasks import resume_workflow_task
 
-        # Broadcast resume
-        self._broadcast_execution_event(execution, 'execution_resumed', {
+        # Keep status paused/interrupted until worker claims — avoids double-run races
+        task = resume_workflow_task.delay(str(execution.id))
+        execution.task_id = task.id
+        execution.save(update_fields=['task_id'])
+
+        self._broadcast_execution_event(execution, 'execution_resume_requested', {
             'execution_id': execution.id,
-            'status': 'running',
-            'context_snapshot': context_snapshot
+            'status': execution.status,
+            'task_id': task.id,
+            'visited_count': len(snapshot.get('visited') or []),
         })
 
         return Response({
-            'status': 'running',
-            'message': '执行已恢复'
+            'status': execution.status,
+            'task_id': task.id,
+            'execution_id': str(execution.id),
+            'message': '已排队从断点恢复（worker 认领后变为 running）'
         })
 
     @action(detail=True, methods=['get'])
@@ -1197,6 +1417,7 @@ class WorkflowImportView(APIView):
         """
         Import workflow from JSON data.
         Accepts either JSON body or multipart/form-data with workflow_json file.
+        Supports Flowly format and n8n workflow exports (auto-converted).
         """
         # Handle JSON body
         if request.content_type and 'application/json' in request.content_type:
@@ -1218,6 +1439,20 @@ class WorkflowImportView(APIView):
                 return Response(
                     {'error': 'No workflow data provided'},
                     status=status.HTTP_400_BAD_REQUEST
+                )
+
+        from .services.n8n_import import convert_n8n_workflow, is_n8n_workflow
+
+        if is_n8n_workflow(data):
+            try:
+                data = convert_n8n_workflow(
+                    data,
+                    source_path=request.data.get('source_path', '') if isinstance(request.data, dict) else '',
+                )
+            except Exception as exc:
+                return Response(
+                    {'error': f'n8n conversion failed: {exc}'},
+                    status=status.HTTP_400_BAD_REQUEST,
                 )
 
         # Create workflow
@@ -1759,7 +1994,7 @@ class WorkflowTemplateViewSet(viewsets.ModelViewSet):
 
     def get_serializer_class(self):
         if self.action in ['create', 'partial_update']:
-            return WorkflowTemplateDetailSerializer
+            return WorkflowTemplateWriteSerializer
         if self.action == 'list':
             return WorkflowTemplateListSerializer
         return WorkflowTemplateDetailSerializer

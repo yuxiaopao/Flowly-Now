@@ -16,10 +16,11 @@ from tenants.access import can_view_resource, get_accessible_workflow_queryset
 logger = logging.getLogger(__name__)
 
 from .models import ExecutionLog, AlertRule, Alert, Metric, NotificationChannel, Notification
+from .constants import DEFAULT_LOOKBACK_HOURS
 from .serializers import (
     ExecutionLogSerializer, AlertRuleSerializer, AlertRuleCreateSerializer,
     AlertSerializer, AlertCreateSerializer,
-    MetricSerializer, MetricAggregateSerializer,
+    MetricSerializer, MetricAggregateSerializer, MetricQuerySerializer,
     NotificationChannelSerializer, NotificationChannelCreateSerializer,
     NotificationSerializer
 )
@@ -167,9 +168,11 @@ class MetricViewSet(viewsets.ReadOnlyModelViewSet):
             queryset = queryset.filter(metric_type=metric_type)
 
         # Filter by time range
-        hours = self.request.query_params.get('hours')
-        if hours:
-            cutoff = timezone.now() - timedelta(hours=int(hours))
+        query = MetricQuerySerializer(data=self.request.query_params)
+        query.is_valid(raise_exception=True)
+        hours = query.validated_data.get('hours')
+        if hours is not None:
+            cutoff = timezone.now() - timedelta(hours=hours)
             queryset = queryset.filter(timestamp__gte=cutoff)
 
         return queryset.order_by('-timestamp')
@@ -184,8 +187,10 @@ class MetricViewSet(viewsets.ReadOnlyModelViewSet):
         if metric_type:
             queryset = queryset.filter(metric_type=metric_type)
 
-        hours = request.query_params.get('hours', 24)
-        cutoff = timezone.now() - timedelta(hours=int(hours))
+        query = MetricQuerySerializer(data=request.query_params)
+        query.is_valid(raise_exception=True)
+        hours = query.validated_data.get('hours', DEFAULT_LOOKBACK_HOURS)
+        cutoff = timezone.now() - timedelta(hours=hours)
         queryset = queryset.filter(timestamp__gte=cutoff)
 
         # Aggregate by period

@@ -238,6 +238,11 @@ class TestNLSessionAPI:
         """POST /api/v1/nl-workflow/analyze-intent/ analyzes user intent."""
         with patch('nl_to_workflow.views.get_nl_service_for_request') as mock_service:
             mock_instance = MagicMock()
+            mock_instance.resolve_intent.return_value = {
+                'intent': 'create', 'subtype': 'qa_bot',
+                'source': 'keyword', 'confidence': 1.0,
+                'ready_to_generate': True,
+            }
             mock_instance._get_intent_details.return_value = {'intent': 'create', 'targets': []}
             mock_service.return_value = mock_instance
 
@@ -247,8 +252,8 @@ class TestNLSessionAPI:
             )
 
         assert response.status_code == status.HTTP_200_OK
-        assert 'intent' in response.data
-        assert 'details' in response.data
+        assert response.data['intent'] == 'create'
+        assert response.data['details']['targets'] == []
 
     def test_suggest_endpoint(self, authenticated_client):
         """POST /api/v1/nl-workflow/suggest/ returns suggestions."""

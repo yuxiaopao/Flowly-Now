@@ -23,6 +23,26 @@ class TestTrainingStrategyApi:
         weight_ids = {item['id'] for item in yolo['base_weights']}
         assert {'yolov8n.pt', 'yolo11x.pt'}.issubset(weight_ids)
 
+    def test_yolo_training_script_prefers_explicit_base_weight_uri(self):
+        from training.yolo_weights import resolve_yolo_model_source
+
+        assert resolve_yolo_model_source({
+            'base_weight_uri': 'yolo11x.pt',
+            'yolo_version': 'v8',
+            'model_variant': 'n',
+        }) == 'yolo11x.pt'
+
+        assert resolve_yolo_model_source({
+            'config': {'base_weight_uri': 'yolov8s.pt'},
+            'yolo_version': 'v11',
+            'model_variant': 'x',
+        }) == 'yolov8s.pt'
+
+        assert resolve_yolo_model_source({
+            'yolo_version': 'v11',
+            'model_variant': 'x',
+        }) == 'yolo11x.pt'
+
     def test_analyze_dataset_reads_yolo_yaml_classes(self, authenticated_client):
         import tempfile
         from pathlib import Path
@@ -90,3 +110,36 @@ class TestTrainingStrategyApi:
         assert job.framework == expected_framework
         assert job.config['base_weight_uri'] == payload['base_weight_uri']
         delay_mock.assert_called_once()
+
+    @patch('training.views.run_training_task.delay')
+    def test_training_job_exposes_model_artifact_manifest(self, delay_mock, authenticated_client):
+        create_response = authenticated_client.post(
+            '/api/v1/training/training-jobs/',
+            {
+                'name': 'helmet-manifest',
+                'training_kind': 'trusformer',
+                'model_type': 'classification',
+                'class_names': ['helmet', 'vest'],
+                'base_weight_uri': 'bert-base-uncased',
+                'total_epochs': 1,
+            },
+            format='json',
+        )
+        assert create_response.status_code == status.HTTP_201_CREATED
+
+        job = TrainingJob.objects.get(id=create_response.data['id'])
+        job.best_weight_path = 'E:/models/helmet/best.safetensors'
+        job.metrics = {'accuracy': 0.91}
+        job.save(update_fields=['best_weight_path', 'metrics'])
+
+        response = authenticated_client.get(f'/api/v1/training/training-jobs/{job.id}/artifact-manifest/')
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data['schemaVersion'] == 'flowly.modelArtifactManifest/v1'
+        assert response.data['trainingKind'] == 'transformer'
+        assert response.data['baseModel'] == 'bert-base-uncased'
+        assert response.data['bestWeightPath'] == 'E:/models/helmet/best.safetensors'
+        assert response.data['labels'] == ['helmet', 'vest']
+        assert response.data['siteHints']['requiredFeatures'] == [
+            'imageRecognition', 'videoRecognition', 'factRecognition', 'historyRecords'
+        ]

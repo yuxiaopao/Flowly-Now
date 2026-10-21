@@ -28,7 +28,6 @@ class TestVectorStoreSerializer:
         assert response.status_code == 400
 
     def test_create_serializer_validates_port_range(self, authenticated_client):
-        # Backend does not validate port range - test passes anyway
         response = authenticated_client.post(
             '/api/v1/rag/vector-stores/',
             data={
@@ -39,7 +38,7 @@ class TestVectorStoreSerializer:
             },
             format='json'
         )
-        assert response.status_code in (200, 201, 400)
+        assert response.status_code == 400
 
     def test_create_serializer_dimension_required_for_pinecone(self, authenticated_client):
         response = authenticated_client.post(
@@ -73,13 +72,20 @@ class TestVectorStoreSerializer:
 class TestDocumentCollectionSerializer:
     """Test DocumentCollection serializers validation."""
 
-    def test_create_requires_name(self, authenticated_client):
-        # Skip test - backend bug: vector_store is required but not set by perform_create
-        pass
+    def test_create_requires_name(self, authenticated_client, user):
+        from rag.models import VectorStore
+        store = VectorStore.objects.create(name='测试向量', store_type='memory', owner=user)
+        response = authenticated_client.post('/api/v1/rag/collections/', {'vector_store': str(store.id)}, format='json')
+        assert response.status_code == 400
+        assert 'name' in str(response.data)
 
-    def test_create_requires_embedding_model(self, authenticated_client):
-        # Skip test - backend bug: vector_store is required but not set by perform_create
-        pass
+    def test_create_uses_default_embedding_model(self, authenticated_client, user):
+        from rag.models import DocumentCollection, VectorStore
+        store = VectorStore.objects.create(name='测试向量', store_type='memory', owner=user)
+        response = authenticated_client.post('/api/v1/rag/collections/', {'name': '默认模型知识库', 'vector_store': str(store.id)}, format='json')
+        assert response.status_code == 201
+        collection = DocumentCollection.objects.get(id=response.data['id'])
+        assert collection.embedding_model == DocumentCollection._meta.get_field('embedding_model').get_default()
 
     def test_create_validates_chunk_size(self, authenticated_client):
         response = authenticated_client.post(

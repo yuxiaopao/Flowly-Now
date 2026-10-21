@@ -3,7 +3,9 @@ Integration serializers.
 """
 
 from rest_framework import serializers
-from .models import Webhook, WebhookDelivery, Integration, IntegrationTemplate
+from .models import Webhook, WebhookDelivery, Integration, IntegrationTemplate, IntegrationDelivery
+from .catalog import CONNECTORS
+from .services import validate_config, ConnectorError
 
 
 class WebhookDeliverySerializer(serializers.ModelSerializer):
@@ -60,14 +62,88 @@ class IntegrationSerializer(serializers.ModelSerializer):
         source='get_integration_type_display',
         read_only=True
     )
+    config = serializers.JSONField(required=False)
+    credentials = serializers.JSONField(write_only=True, required=False)
+    configured_fields = serializers.SerializerMethodField()
 
     class Meta:
         model = Integration
         fields = [
             'id', 'name', 'integration_type', 'integration_type_display',
             'is_active', 'is_connected', 'last_sync_at', 'sync_status',
-            'total_syncs', 'failed_syncs', 'created_at', 'updated_at'
+            'total_syncs', 'failed_syncs', 'created_at', 'updated_at',
+            'config', 'credentials', 'configured_fields', 'last_checked_at',
+            'verification_status', 'last_error', 'last_result'
         ]
+        read_only_fields = ['is_active', 'is_connected', 'last_sync_at', 'sync_status',
+                            'total_syncs', 'failed_syncs', 'last_checked_at',
+                            'verification_status', 'last_error', 'last_result']
+
+    def get_configured_fields(self, obj):
+        try:
+            return [key for key, value in obj.get_secrets().items() if value]
+        except ValueError:
+            return []
+
+    def validate(self, attrs):
+        kind = attrs.get('integration_type', getattr(self.instance, 'integration_type', None))
+        connector = CONNECTORS.get(kind)
+        if not connector:
+            raise serializers.ValidationError('不支持的集成类型。')
+        if self.instance and kind != self.instance.integration_type:
+            raise serializers.ValidationError('不能变更现有连接的服务类型，请新建连接。')
+        config = attrs.get('config', self.instance.config if self.instance else {})
+        credentials = attrs.get('credentials', {})
+        if not isinstance(config, dict) or not isinstance(credentials, dict):
+            raise serializers.ValidationError('配置和凭证必须是对象。')
+        secret_keys = {f['key'] for f in connector['fields'] if f['secret']}
+        if set(config) & secret_keys or set(credentials) - secret_keys:
+            raise serializers.ValidationError('敏感字段必须放在凭证中，普通配置不能包含密钥。')
+        try:
+            try:
+                saved = self.instance.get_secrets() if self.instance else {}
+            except ValueError:
+                # A rotated encryption key must not prevent supplying fresh credentials.
+                required = {f['key'] for f in connector['fields'] if f['secret'] and f['required']}
+                if not all(credentials.get(key) for key in required):
+                    raise
+                saved = {}
+            # Omitted keys are preserved; an explicit empty value clears an optional secret.
+            secrets = {**saved, **credentials}
+            validate_config(connector, config, secrets)
+        except (ConnectorError, ValueError) as exc:
+            raise serializers.ValidationError(str(exc))
+        attrs['config'] = config
+        attrs['credentials'] = secrets
+        return attrs
+
+    def create(self, validated_data):
+        secrets = validated_data.pop('credentials')
+        instance = Integration(**validated_data)
+        instance.set_secrets(secrets)
+        instance.save()
+        return instance
+
+    def update(self, instance, validated_data):
+        secrets = validated_data.pop('credentials')
+        try:
+            changed = instance.config != validated_data.get('config', instance.config) or instance.get_secrets() != secrets
+        except ValueError:
+            changed = True
+        instance.set_secrets(secrets)
+        if changed:
+            instance.is_connected = False
+            instance.verification_status = 'untested'
+            instance.last_checked_at = None
+            instance.last_error = ''
+            instance.last_result = {}
+        return super().update(instance, validated_data)
+
+
+class IntegrationDeliverySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = IntegrationDelivery
+        fields = ['id', 'event', 'status', 'message', 'status_code', 'duration_ms', 'created_at', 'completed_at']
 
 
 class IntegrationTemplateSerializer(serializers.ModelSerializer):

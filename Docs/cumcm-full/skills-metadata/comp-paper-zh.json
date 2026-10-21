@@ -1,0 +1,58 @@
+{
+  "skill_name": "comp-paper-zh",
+  "category": "08_competition_modeling",
+  "tier": null,
+  "encrypted": true,
+  "scan": {
+    "name": "comp-paper-zh",
+    "path": "resources/app/skills/comp-paper-zh",
+    "has_skill_md_enc": true,
+    "has_skill_md_plain": false,
+    "encrypted": true,
+    "files": {
+      "enc": 24,
+      "plain": 48,
+      "total": 72
+    },
+    "subdirs": [
+      "templates"
+    ],
+    "extensions": {
+      ".enc": 24,
+      ".cfg": 1,
+      ".cls": 13,
+      ".ttf": 27,
+      ".ttc": 3,
+      ".pdf": 2,
+      ".otf": 1,
+      ".png": 1
+    },
+    "readable_assets": [
+      "templates/apmcm/apmcmthesis.cls",
+      "templates/apmcm_zh/MathorCupmodeling.cls",
+      "templates/changsanjiao/yrdmcm.cls",
+      "templates/cumcm/cumcmthesis.cls",
+      "templates/diangongbei/neepumcm.cls",
+      "templates/dongsansheng/nemcmthesis.cls",
+      "templates/huashubei/JXUSTmodeling.cls",
+      "templates/huawei/gmcmthesis.cls",
+      "templates/huazhong/cumcmthesis.cls",
+      "templates/mathorcup/MathorCupmodeling.cls",
+      "templates/mcm/mcmthesis.cls",
+      "templates/shuweibei/nmmcm.cls",
+      "templates/wuyi/cumcmthesis.cls"
+    ]
+  },
+  "artifacts": [
+    "paper/main.tex",
+    "paper/main.pdf"
+  ],
+  "runtime_prompts": [
+    "paper_figure_lang_zh.md"
+  ],
+  "used_in_templates": [
+    "comp_cumcm"
+  ],
+  "flowly_status": "pending",
+  "replication_strategy": "decrypt_and_port"
+}

@@ -1,6 +1,7 @@
 <template>
   <div
-    :style="{ '--node-accent': nodeColor }" class="domain-node"
+    :style="{ '--node-accent': nodeColor }"
+    class="domain-node"
     :class="{ selected, expanded: isExpanded, 'is-running': isRunning, 'is-completed': isCompleted, 'is-failed': isFailed }"
     @click.stop="handleSelect"
   >
@@ -25,8 +26,8 @@
     <div class="node-name-section">
       <input
         :id="id ? `node-label-${id}` : undefined"
-        name="node-label"
         v-model="localName"
+        name="node-label"
         class="node-name-input"
         placeholder="节点名称..."
         @blur="handleChange"
@@ -41,13 +42,13 @@
         class="info-row"
       >
         <span class="info-label">操作</span>
-        <span class="info-value">{{ localConfig.transformType || localConfig.operation || '-' }}</span>
+        <span class="info-value">{{ getDataTransformOperationLabel(localConfig.operation, 'csv') }}</span>
       </div>
       <div
         v-if="localConfig.description || localConfig.operation"
         class="preview-row"
       >
-        <span class="preview-text">{{ truncate(localConfig.description || localConfig.operation, 35) }}</span>
+        <span class="preview-text">{{ truncate(localConfig.description || getDataTransformOperationLabel(localConfig.operation, 'csv'), 35) }}</span>
       </div>
     </div>
 
@@ -60,37 +61,15 @@
         <div class="config-section">
           <label class="config-label">转换操作</label>
           <el-select
-            v-model="localConfig.transformType"
+            v-model="localConfig.operation"
             size="small"
             @change="handleChange"
           >
             <el-option
-              value="csv_to_json"
-              label="CSV → JSON"
-            />
-            <el-option
-              value="csv_to_excel"
-              label="CSV → Excel"
-            />
-            <el-option
-              value="filter"
-              label="数据过滤"
-            />
-            <el-option
-              value="aggregate"
-              label="数据聚合"
-            />
-            <el-option
-              value="sort"
-              label="数据排序"
-            />
-            <el-option
-              value="join"
-              label="数据连接"
-            />
-            <el-option
-              value="pivot"
-              label="数据透视"
+              v-for="operation in CSV_OPERATIONS"
+              :key="operation.value"
+              :value="operation.value"
+              :label="operation.label"
             />
           </el-select>
         </div>
@@ -177,10 +156,11 @@
 <script setup>
 import { ref, watch, computed } from 'vue'
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
-import { Table, ChevronDown, Loader, Check, X } from 'lucide-vue-next'
+import { ChevronDown, Loader, Check, X } from 'lucide-vue-next'
 import { useExecutionStore } from '@/stores/execution'
 import NodeTypeBadge from '@/components/workflow/nodes/NodeTypeBadge.vue'
 import { useNodePresentation } from '@/composables/useNodePresentation'
+import { CSV_OPERATIONS, createDataTransformConfig, getDataTransformOperationLabel } from '@/config/dataTransformOperations'
 
 
 const props = defineProps({
@@ -190,7 +170,7 @@ const props = defineProps({
 })
 
 const NODE_TYPE = 'csv_transform'
-const { nodeIcon, nodeColor, nodeLabel } = useNodePresentation(NODE_TYPE)
+const { nodeColor } = useNodePresentation(NODE_TYPE)
 
 const emit = defineEmits(['select'])
 const { updateNodeData } = useVueFlow()
@@ -204,15 +184,15 @@ const isFailed = computed(() => nodeStatus.value === 'failed')
 
 const resultSummary = computed(() => {
   if (!nodeOutput.value) return '完成'
-  const rows = nodeOutput.value.rows || nodeOutput.value.row_count || 0
-  return `${rows} 行已处理`
+  const rows = nodeOutput.value.rows ?? nodeOutput.value.row_count ?? (Array.isArray(nodeOutput.value.data) ? nodeOutput.value.data.length : null)
+  return rows == null ? '处理完成' : `${rows} 行已处理`
 })
 
 const isExpanded = ref(false)
 
 const localName = ref(props.data.label || 'CSV转换')
 const localConfig = ref({
-  transformType: props.data.config?.transformType || 'csv_to_json',
+  ...createDataTransformConfig(props.data.config, 'csv'),
   source: props.data.config?.source || '',
   columns: props.data.config?.columns || '',
   delimiter: props.data.config?.delimiter || ',',
@@ -228,24 +208,24 @@ watch(() => props.data, (d) => {
   if (d) {
     localName.value = d.label || 'CSV转换'
     localConfig.value = {
-      transformType: d.config?.transformType || 'csv_to_json',
       source: d.config?.source || '',
       columns: d.config?.columns || '',
       delimiter: d.config?.delimiter || ',',
       description: d.config?.description || '',
-      ...d.config
+      ...createDataTransformConfig(d.config, 'csv')
     }
   }
 }, { deep: true })
 
 function toggleExpand() {
-  handleSelect()
-  isExpanded.value = !isExpanded.value
+  const expanded = !isExpanded.value
+  emit('select')
+  isExpanded.value = expanded
 }
 
 function handleChange() {
   if (props.id) {
-    updateNodeData(props.id, { label: localName.value, config: { ...localConfig.value } })
+    updateNodeData(props.id, { label: localName.value, config: { ...localConfig.value, transformType: localConfig.value.operation } })
   }
 }
 

@@ -1,1 +1,0 @@
-{"job_id": "646a56d1-2458-4ba3-a72e-ebd3a833882d", "framework": "pytorch", "model_type": "retrieval", "training_kind": "clip_ret", "config": {"base_weight_uri": "ViT-B-32/openai"}, "dataset_id": "", "dataset_path": "", "hyperparameters": {}}

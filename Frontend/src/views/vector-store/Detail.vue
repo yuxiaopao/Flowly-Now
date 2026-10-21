@@ -1,5 +1,8 @@
 <template>
-  <div class="vector-store-detail">
+  <PageShell
+    width="wide"
+    class="vector-store-detail"
+  >
     <div class="page-header">
       <div class="header-left">
         <el-button
@@ -376,10 +379,11 @@
         </el-button>
       </template>
     </el-dialog>
-  </div>
+  </PageShell>
 </template>
 
 <script setup>
+import PageShell from '@/components/layout/PageShell.vue'
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
@@ -518,11 +522,6 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.vector-store-detail {
-  padding: 24px;
-  max-width: 1400px;
-  margin: 0 auto;
-}
 
 .page-header {
   display: flex;

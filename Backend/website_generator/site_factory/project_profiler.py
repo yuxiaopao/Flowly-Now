@@ -148,8 +148,8 @@ def _default_page_sections(website_type: str, profile: Dict[str, Any]) -> List[s
     if wtype in ('clip_retrieval', 'retrieval'):
         return ['hero', 'text_search', 'image_search', 'gallery', 'api_docs']
     if wtype == 'classification':
-        return ['hero', 'upload', 'result_panel', 'disclaimer']
-    return ['hero', 'upload', 'detection_canvas', 'metrics_hint', 'disclaimer']
+        return ['hero', 'upload', 'result_panel', 'class_legend', 'disclaimer']
+    return ['hero', 'class_legend', 'upload', 'detection_canvas', 'class_filter', 'metrics_hint', 'history', 'disclaimer']
 
 
 def _default_api_endpoints(website_type: str) -> List[str]:
@@ -158,7 +158,49 @@ def _default_api_endpoints(website_type: str) -> List[str]:
         return ['/health', '/search/text', '/search/image']
     if wtype == 'classification':
         return ['/health', '/predict']
-    return ['/health', '/predict']
+    return ['/health', '/predict', '/api/history', '/api/fact-check']
+
+
+def _build_class_entities(class_names: List[str], display_names: Dict[str, str]) -> List[Dict[str, Any]]:
+    """Per-class UI/API contract used by website generators."""
+    entities = []
+    for idx, name in enumerate(class_names):
+        display = display_names.get(name) or name.replace('_', ' ')
+        entities.append({
+            'id': f'cls_{idx}',
+            'name': name,
+            'display_name': display,
+            'filter_key': name,
+            'color_index': idx % 6,
+            'required_fields': ['label', 'confidence', 'bbox'],
+            'description': f'检测类别：{display}',
+        })
+    return entities
+
+
+def _required_node_configs(website_type: str, class_names: List[str]) -> List[Dict[str, str]]:
+    """Describe configs/docs nodes downstream should fill for learning UX."""
+    base = [
+        {'node': 'website_generator', 'field': 'wizard.siteName', 'reason': '站点品牌名称，影响页头与 README'},
+        {'node': 'website_generator', 'field': 'wizard.usageDescription', 'reason': '使用说明，指导用户如何上传与解读结果'},
+        {'node': 'environment_provision', 'field': 'customPaths', 'reason': '自定义数据集/权重路径授权'},
+        {'node': 'environment_provision', 'field': 'dbEngine', 'reason': '固定 Flask+Vue+MySQL 栈中的数据库引擎'},
+        {'node': 'site_qa', 'field': 'autoFix', 'reason': 'QA 失败时自动触发复查修复再测'},
+        {'node': 'project_agent', 'field': 'syncSystemAgent', 'reason': '对话记忆同步到系统 Agent / 知识库'},
+    ]
+    if class_names:
+        base.append({
+            'node': 'project_profiler',
+            'field': 'class_entities',
+            'reason': f'已根据 {len(class_names)} 个训练类别生成页面图例与筛选契约',
+        })
+    if (website_type or '') == 'detection':
+        base.append({
+            'node': 'website_generator',
+            'field': 'required_features',
+            'reason': '图片/视频/实时/事实/历史能力开关',
+        })
+    return base
 
 
 def build_project_profile(
@@ -214,13 +256,26 @@ def build_project_profile(
         profile['scenario'] = wizard_scenario
     profile['page_sections'] = _default_page_sections(wtype, profile)
     profile['api_endpoints'] = _default_api_endpoints(wtype)
-    profile['profiler_version'] = '1.1-rules'
+    profile['class_entities'] = _build_class_entities(names, profile.get('class_display_names') or {})
+    profile['required_node_configs'] = _required_node_configs(wtype, names)
+    profile['stack_contract'] = {
+        'frontend': 'vue',
+        'backend': 'flask',
+        'database': 'mysql',
+        'notes': 'Site Factory 固定技术栈，禁止随意替换为其它框架',
+    }
+    profile['profiler_version'] = '1.2-class-contract'
 
     if use_llm:
         enriched = _try_llm_enrich(profile, names, metrics=profile.get('metrics'))
         if enriched:
             profile.update(enriched)
-            profile['profiler_version'] = '1.1-rules+llm'
+            profile['profiler_version'] = '1.2-class-contract+llm'
+            # Recompute entities if display names changed
+            if 'class_display_names' in enriched:
+                profile['class_entities'] = _build_class_entities(
+                    names, profile.get('class_display_names') or {}
+                )
 
     return profile
 

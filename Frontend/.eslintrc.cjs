@@ -51,6 +51,8 @@ module.exports = {
     },
   ],
   ignorePatterns: [
+    'avatar-studio/src/',
+    'public/avatar-studio/',
     'dist/',
     'node_modules/',
     'coverage/',

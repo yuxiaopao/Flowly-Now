@@ -76,20 +76,7 @@ def send_to_user(user_id, event_type, data):
             logger.error(f"Failed to send WebSocket event: {e}")
 
 
-def broadcast_to_monitoring(data):
-    """Broadcast to monitoring channel."""
-    channel_layer = get_channel_layer_safe()
-    if channel_layer:
-        try:
-            async_to_sync(channel_layer.group_send)(
-                'monitoring',
-                {
-                    'type': 'metric_update',
-                    'data': data
-                }
-            )
-        except Exception as e:
-            logger.error(f"Failed to send WebSocket event: {e}")
+from monitoring.broadcasts import broadcast_to_monitoring
 
 
 @receiver(execution_started)

@@ -195,9 +195,11 @@
 import { reactive, onMounted } from 'vue'
 import { useAppStore } from '@/stores/app'
 import PageHeader from '@/components/layout/PageHeader.vue'
+import { readPreferences } from '@/stores/preferences'
+import { PREFERENCE_CONFIG } from '@/config/personalCenter'
 
 const STORAGE_KEY = 'system_notification_settings'
-const USER_PREFERENCES_KEY = 'user_preferences'
+const USER_PREFERENCES_KEY = PREFERENCE_CONFIG.storageKey
 
 const appStore = useAppStore()
 
@@ -252,17 +254,17 @@ function applyProvider(provider) {
 }
 
 function saveSettings() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(settings))
-
-  const savedPreferences = localStorage.getItem(USER_PREFERENCES_KEY)
-  const currentPreferences = savedPreferences ? JSON.parse(savedPreferences) : {}
-  localStorage.setItem(USER_PREFERENCES_KEY, JSON.stringify({
-    ...currentPreferences,
-    notifyOnComplete: settings.notifyOnComplete,
-    notifyOnError: settings.notifyOnError
-  }))
-
-  appStore.success('通知与邮件设置已保存')
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(settings))
+    localStorage.setItem(USER_PREFERENCES_KEY, JSON.stringify({
+      ...readPreferences(),
+      notifyOnComplete: settings.notifyOnComplete,
+      notifyOnError: settings.notifyOnError
+    }))
+    appStore.success('通知与邮件设置已保存')
+  } catch {
+    appStore.error(PREFERENCE_CONFIG.error)
+  }
 }
 
 function resetSettings() {

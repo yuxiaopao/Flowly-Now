@@ -513,8 +513,33 @@ export async function cancelExecution(executionId) {
  * @example
  * const result = await retryExecution(123)
  */
-export async function retryExecution(executionId) {
-  return request.post(`/workflows/executions/${executionId}/retry/`)
+export async function retryExecution(executionId, data = {}) {
+  return request.post(`/workflows/executions/${executionId}/retry/`, data)
+}
+
+/**
+ * 局部重试失败节点（保留已成功节点产物，重跑失败节点及其下游）
+ * @param {number|string} executionId
+ * @param {{ node_ids?: string[], include_downstream?: boolean }} [data]
+ */
+export async function retryFailedExecution(executionId, data = {}) {
+  return request.post(`/workflows/executions/${executionId}/retry_failed/`, data)
+}
+
+/**
+ * 分析是否可继续（失败点 / 未跑完）
+ */
+export async function analyzeContinueExecution(executionId) {
+  return request.get(`/workflows/executions/${executionId}/continue/`)
+}
+
+/**
+ * 智能继续：从失败点补跑，或从未完成处续跑，保证结果完整
+ * @param {number|string} executionId
+ * @param {{ mode?: 'auto'|'failed'|'resume'|'incomplete', node_ids?: string[], include_downstream?: boolean, force?: boolean }} [data]
+ */
+export async function continueExecution(executionId, data = {}) {
+  return request.post(`/workflows/executions/${executionId}/continue/`, data)
 }
 
 /**
@@ -972,6 +997,9 @@ export const workflowApi = {
   getAllExecutions,
   cancelExecution,
   retryExecution,
+  retryFailedExecution,
+  analyzeContinueExecution,
+  continueExecution,
   deleteExecution,
   pauseExecution,
   resumeExecution,

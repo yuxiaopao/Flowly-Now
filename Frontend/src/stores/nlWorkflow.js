@@ -1,7 +1,7 @@
 /**
- * NL Workflow Store - Natural Language to Workflow
+ * 语创（FlowSpeak）Store — 对话生成工作流
  *
- * Manages NL-to-workflow conversation state.
+ * Manages conversation → workflow generation state.
  * Used by components that need centralized state management.
  */
 
@@ -153,6 +153,10 @@ export const useNLWorkflowStore = defineStore('nlWorkflow', {
       }
     },
 
+    setSelectedModel(modelId) {
+      this.selectedModel = modelId
+    },
+
     setAssistantMode(mode) {
       this.assistantMode = mode
     },
@@ -204,18 +208,22 @@ export const useNLWorkflowStore = defineStore('nlWorkflow', {
 
     // ==================== Session Management ====================
 
-    async createSession(description, name) {
+    async createSession(description, name, options = {}) {
       this.isGenerating = true
       this.generationError = null
       this.streamingProgress = 0
       this.streamingStage = ''
 
       try {
+        this.addUserMessage(description)
+        this.addAssistantMessage('', { isStreaming: true })
+
         const response = await nlWorkflowApi.createSession({
           description,
-          name: name || `NL Workflow ${Date.now()}`,
+          name: name || `语创 ${Date.now()}`,
           model: this.selectedModel,
-          temperature: this.settings.temperature
+          temperature: this.settings.temperature,
+          async: options.async === true
         })
 
         // Handle both session_id and id field names
@@ -227,13 +235,24 @@ export const useNLWorkflowStore = defineStore('nlWorkflow', {
           return response
         }
 
+        // Async Celery path — poll until completed/failed
+        if (response.status === 'processing' || response.async) {
+          this.updateLastAssistantMessage('正在后台生成工作流，请稍候...', { isStreaming: true })
+          const polled = await this.pollSessionTask(this.currentSessionId, {
+            taskId: response.task_id,
+            maxAttempts: options.maxPollAttempts || 90,
+            intervalMs: options.pollIntervalMs || 2000
+          })
+          return polled
+        }
+
         // Handle both workflow_json and workflow field names
         const workflowData = response.workflow_json || response.workflow
         if (workflowData && Object.keys(workflowData).length > 0) {
           this.generatedWorkflow = workflowData
           this.updateLastAssistantMessage(
             response.message || '我已根据您的描述生成了工作流',
-            { workflow: workflowData }
+            { workflow: workflowData, isStreaming: false }
           )
         } else {
           this.updateLastAssistantMessage(response.message || '正在处理您的请求...')
@@ -247,6 +266,71 @@ export const useNLWorkflowStore = defineStore('nlWorkflow', {
       } finally {
         this.isGenerating = false
       }
+    },
+
+    /**
+     * Poll session task endpoint until completed / failed / timeout
+     */
+    async pollSessionTask(sessionId, options = {}) {
+      const maxAttempts = options.maxAttempts || 90
+      const intervalMs = options.intervalMs || 2000
+      const taskId = options.taskId
+      let retried = false
+
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        const statusPayload = await nlWorkflowApi.getTaskStatus(sessionId, taskId ? { task_id: taskId } : {})
+        const status = statusPayload.status
+
+        if (status === 'completed') {
+          const workflowData = statusPayload.workflow_json || statusPayload.workflow
+          if (workflowData && Object.keys(workflowData).length > 0) {
+            this.generatedWorkflow = workflowData
+          }
+          this.updateLastAssistantMessage(
+            statusPayload.message || '我已根据您的描述生成了工作流',
+            { workflow: workflowData || this.generatedWorkflow, isStreaming: false }
+          )
+          this.streamingProgress = 100
+          return statusPayload
+        }
+
+        if (status === 'failed') {
+          // One automatic requeue if never started
+          if (!retried && (statusPayload.celeryState === 'PENDING' || statusPayload.celery_state === 'PENDING')) {
+            retried = true
+            await nlWorkflowApi.retryTask(sessionId, { model: this.selectedModel })
+            continue
+          }
+          const err = statusPayload.error_message || statusPayload.errorMessage || statusPayload.message || '生成失败'
+          this.generationError = err
+          this.updateLastAssistantMessage(`抱歉，生成工作流时遇到了问题：${err}`, { error: true, isStreaming: false })
+          return statusPayload
+        }
+
+        // If stuck PENDING too long, try one requeue
+        const celeryState = statusPayload.celeryState || statusPayload.celery_state
+        if (!retried && attempt === 15 && (celeryState === 'PENDING' || !celeryState)) {
+          retried = true
+          try {
+            await nlWorkflowApi.retryTask(sessionId, { model: this.selectedModel })
+          } catch {
+            // ignore retry errors and keep polling
+          }
+        }
+
+        this.streamingProgress = Math.min(90, 10 + attempt * 2)
+        this.streamingStage = celeryState || 'processing'
+        this.updateLastAssistantMessage(
+          `正在后台生成工作流（${celeryState || status}）...`,
+          { isStreaming: true }
+        )
+        await new Promise((resolve) => setTimeout(resolve, intervalMs))
+      }
+
+      const timeoutError = '生成超时，请稍后在会话列表中查看结果'
+      this.generationError = timeoutError
+      this.updateLastAssistantMessage(timeoutError, { error: true, isStreaming: false })
+      return { status: 'timeout', error: timeoutError, session_id: sessionId }
     },
 
     /**
@@ -268,7 +352,7 @@ export const useNLWorkflowStore = defineStore('nlWorkflow', {
       try {
         this.addAssistantMessage('', { isStreaming: true })
 
-        const sessionName = name || `NL Workflow ${Date.now()}`
+        const sessionName = name || `语创 ${Date.now()}`
         
         // Use fetch API for SSE streaming with POST
         const response = await nlWorkflowApi.streamWorkflow({

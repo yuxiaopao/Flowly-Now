@@ -17,6 +17,7 @@ class User(AbstractUser):
 
     # Additional fields
     avatar = models.URLField(max_length=500, blank=True, verbose_name='头像')
+    avatar_preferences = models.JSONField(default=dict, blank=True, verbose_name='动态头像设置')
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='user', verbose_name='角色')
     phone = models.CharField(max_length=20, blank=True, verbose_name='手机号')
     bio = models.TextField(max_length=500, blank=True, verbose_name='个人简介')
@@ -47,3 +48,10 @@ class User(AbstractUser):
     @property
     def is_admin(self):
         return self.role == 'admin' or self.is_superuser
+
+
+class RevokedSession(models.Model):
+    """Keep a logout effective for every JWT in that session until expiry."""
+
+    session_id = models.CharField(max_length=36, primary_key=True)
+    expires_at = models.DateTimeField(db_index=True)

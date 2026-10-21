@@ -1,5 +1,4 @@
-// Flowly Black & White Theme System
-// 黑白主题设计系统 — 严格遵循：黑底白字 / 白底黑字
+// Flowly 产品主题系统：冷调中性色、单一操作强调色与无障碍主题
 
 // ============================================
 // 全局派生 CSS 变量（在所有基础变量定义之后）
@@ -41,31 +40,31 @@
 // ============================================
 
 :root {
-  --bg-primary:   #0a0a0b;
-  --bg-secondary: #141418;
-  --bg-tertiary:  #1c1c21;
-  --bg-elevated:  #222228;
-  --bg-hover:     #2a2a32;
-  --bg-active:    #32323c;
+  --bg-primary: oklch(18% 0.012 255);
+  --bg-secondary: oklch(22% 0.012 255);
+  --bg-tertiary: oklch(25% 0.014 255);
+  --bg-elevated: oklch(28% 0.015 255);
+  --bg-hover: oklch(30% 0.016 255);
+  --bg-active: oklch(34% 0.018 255);
   --bg-overlay:   rgba(0, 0, 0, 0.7);
 
-  --border-primary:   #2e2e38;
-  --border-secondary: #3a3a48;
-  --border-hover:     #4a4a5c;
+  --border-primary: oklch(32% 0.016 255);
+  --border-secondary: oklch(38% 0.018 255);
+  --border-hover: oklch(49% 0.02 255);
 
   // 黑底 → 白字
-  --text-primary:   #fafafa;
-  --text-secondary: #a1a1aa;
-  --text-tertiary:  #71717a;
-  --text-disabled:  #52525b;
-  --text-inverse:   #0a0a0b;
-  --text-color:     #fafafa;
+  --text-primary: oklch(96% 0.005 255);
+  --text-secondary: oklch(77% 0.016 255);
+  --text-tertiary: oklch(68% 0.018 255);
+  --text-disabled: oklch(54% 0.014 255);
+  --text-inverse: var(--bg-primary);
+  --text-color: var(--text-primary);
 
   --surface-muted: rgba(255, 255, 255, 0.04);
   --surface-strong: rgba(255, 255, 255, 0.09);
   --surface-accent: rgba(255, 255, 255, 0.12);
   --overlay-backdrop: rgba(0, 0, 0, 0.68);
-  --focus-ring: rgba(255, 255, 255, 0.34);
+  --focus-ring: var(--color-primary-light);
   --hero-glow: rgba(255, 255, 255, 0.14);
   --hero-grid: rgba(255, 255, 255, 0.055);
   --decorative-line: rgba(255, 255, 255, 0.08);
@@ -75,18 +74,18 @@
 
   --radius-card: 12px;
   --app-bg-gradient: var(--bg-primary);
-  --app-noise-opacity: 0.035;
-  --glass-bg: rgba(20, 20, 24, 0.78);
-  --glass-border: rgba(255, 255, 255, 0.08);
-  --glass-blur: 16px;
-  --glass-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
+  --app-noise-opacity: 0;
+  --glass-bg: var(--bg-secondary);
+  --glass-border: var(--border-primary);
+  --glass-blur: 0px;
+  --glass-shadow: none;
   --sidebar-edge-glow: transparent;
-  --topbar-edge-glow: rgba(0, 0, 0, 0.25);
-  --card-inner-highlight: linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, transparent 40%);
+  --topbar-edge-glow: transparent;
+  --card-inner-highlight: none;
   --shadow-glow-primary: none;
   --text-gradient-brand: linear-gradient(135deg, #fafafa 0%, #a1a1aa 100%);
-  --button-primary-hover-bg: #e4e4e7;
-  --button-primary-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  --button-primary-hover-bg: oklch(50% 0.18 255);
+  --button-primary-shadow: 0 1px 2px oklch(10% 0.02 255 / 0.18);
 
   --success:    #22c55e;
   --success-bg: rgba(34, 197, 94, 0.12);
@@ -97,21 +96,21 @@
   --info:       #3b82f6;
   --info-bg:    rgba(59, 130, 246, 0.12);
 
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
-  --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.55);
-  --shadow-lg: 0 10px 20px rgba(0, 0, 0, 0.55);
-  --shadow-xl: 0 20px 30px rgba(0, 0, 0, 0.65);
+  --shadow-sm: 0 1px 2px oklch(10% 0.015 255 / 0.12);
+  --shadow-md: 0 4px 12px oklch(10% 0.015 255 / 0.18);
+  --shadow-lg: 0 12px 32px oklch(10% 0.015 255 / 0.24);
+  --shadow-xl: 0 20px 48px oklch(10% 0.015 255 / 0.32);
 
-  --card-bg:     #141418;
-  --card-border: #2e2e38;
-  --input-bg:           #1c1c21;
-  --input-border:       #2e2e38;
-  --input-focus-border: #ffffff;
-  --button-primary-bg:      #ffffff;
-  --button-primary-text:    #0a0a0b;
+  --card-bg: var(--bg-secondary);
+  --card-border: var(--border-primary);
+  --input-bg: var(--bg-secondary);
+  --input-border: var(--border-secondary);
+  --input-focus-border: var(--color-primary-light);
+  --button-primary-bg: oklch(55% 0.18 255);
+  --button-primary-text: oklch(98% 0.003 255);
   --button-secondary-bg:    transparent;
-  --button-secondary-text:  #fafafa;
-  --button-secondary-border: #3a3a48;
+  --button-secondary-text: var(--text-primary);
+  --button-secondary-border: var(--border-secondary);
 
   --scrollbar-track:       #141418;
   --scrollbar-thumb:       #3a3a48;
@@ -274,30 +273,30 @@
   --el-disabled-border-color: var(--border-primary);
   --el-mask-color: var(--bg-overlay);
 
-  --bg-primary:   #0a0a0b;
-  --bg-secondary: #141418;
-  --bg-tertiary:  #1c1c21;
-  --bg-elevated:  #222228;
-  --bg-hover:     #2a2a32;
-  --bg-active:    #32323c;
+  --bg-primary: oklch(18% 0.012 255);
+  --bg-secondary: oklch(22% 0.012 255);
+  --bg-tertiary: oklch(25% 0.014 255);
+  --bg-elevated: oklch(28% 0.015 255);
+  --bg-hover: oklch(30% 0.016 255);
+  --bg-active: oklch(34% 0.018 255);
   --bg-overlay:   rgba(0, 0, 0, 0.7);
 
-  --border-primary:   #2e2e38;
-  --border-secondary: #3a3a48;
-  --border-hover:     #4a4a5c;
+  --border-primary: oklch(32% 0.016 255);
+  --border-secondary: oklch(38% 0.018 255);
+  --border-hover: oklch(49% 0.02 255);
 
-  --text-primary:   #fafafa;
-  --text-secondary: #a1a1aa;
-  --text-tertiary:  #71717a;
-  --text-disabled:  #52525b;
-  --text-inverse:   #0a0a0b;
-  --text-color:     #fafafa;
+  --text-primary: oklch(96% 0.005 255);
+  --text-secondary: oklch(77% 0.016 255);
+  --text-tertiary: oklch(68% 0.018 255);
+  --text-disabled: oklch(54% 0.014 255);
+  --text-inverse: var(--bg-primary);
+  --text-color: var(--text-primary);
 
   --surface-muted: rgba(255, 255, 255, 0.04);
   --surface-strong: rgba(255, 255, 255, 0.09);
   --surface-accent: rgba(255, 255, 255, 0.12);
   --overlay-backdrop: rgba(0, 0, 0, 0.68);
-  --focus-ring: rgba(255, 255, 255, 0.34);
+  --focus-ring: var(--color-primary-light);
   --hero-glow: rgba(255, 255, 255, 0.14);
   --hero-grid: rgba(255, 255, 255, 0.055);
   --decorative-line: rgba(255, 255, 255, 0.08);
@@ -307,18 +306,18 @@
 
   --radius-card: 12px;
   --app-bg-gradient: var(--bg-primary);
-  --app-noise-opacity: 0.035;
-  --glass-bg: rgba(20, 20, 24, 0.78);
-  --glass-border: rgba(255, 255, 255, 0.08);
-  --glass-blur: 16px;
-  --glass-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
+  --app-noise-opacity: 0;
+  --glass-bg: var(--bg-secondary);
+  --glass-border: var(--border-primary);
+  --glass-blur: 0px;
+  --glass-shadow: none;
   --sidebar-edge-glow: transparent;
-  --topbar-edge-glow: rgba(0, 0, 0, 0.25);
-  --card-inner-highlight: linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, transparent 40%);
+  --topbar-edge-glow: transparent;
+  --card-inner-highlight: none;
   --shadow-glow-primary: none;
   --text-gradient-brand: linear-gradient(135deg, #fafafa 0%, #a1a1aa 100%);
-  --button-primary-hover-bg: #e4e4e7;
-  --button-primary-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  --button-primary-hover-bg: oklch(50% 0.18 255);
+  --button-primary-shadow: 0 1px 2px oklch(10% 0.02 255 / 0.18);
 
   --success:    #22c55e;
   --success-bg: rgba(34, 197, 94, 0.12);
@@ -329,21 +328,21 @@
   --info:       #3b82f6;
   --info-bg:    rgba(59, 130, 246, 0.12);
 
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
-  --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.55);
-  --shadow-lg: 0 10px 20px rgba(0, 0, 0, 0.55);
-  --shadow-xl: 0 20px 30px rgba(0, 0, 0, 0.65);
+  --shadow-sm: 0 1px 2px oklch(10% 0.015 255 / 0.12);
+  --shadow-md: 0 4px 12px oklch(10% 0.015 255 / 0.18);
+  --shadow-lg: 0 12px 32px oklch(10% 0.015 255 / 0.24);
+  --shadow-xl: 0 20px 48px oklch(10% 0.015 255 / 0.32);
 
-  --card-bg:     #141418;
-  --card-border: #2e2e38;
-  --input-bg:           #1c1c21;
-  --input-border:       #2e2e38;
-  --input-focus-border: #ffffff;
-  --button-primary-bg:       #ffffff;
-  --button-primary-text:     #0a0a0b;
+  --card-bg: var(--bg-secondary);
+  --card-border: var(--border-primary);
+  --input-bg: var(--bg-secondary);
+  --input-border: var(--border-secondary);
+  --input-focus-border: var(--color-primary-light);
+  --button-primary-bg: oklch(55% 0.18 255);
+  --button-primary-text: oklch(98% 0.003 255);
   --button-secondary-bg:     transparent;
-  --button-secondary-text:   #fafafa;
-  --button-secondary-border: #3a3a48;
+  --button-secondary-text: var(--text-primary);
+  --button-secondary-border: var(--border-secondary);
 
   --scrollbar-track:       #141418;
   --scrollbar-thumb:       #3a3a48;
@@ -388,6 +387,8 @@
 [data-theme="light"],
 .light {
   color-scheme: light;
+  --color-primary: oklch(50% 0.18 255);
+  --color-primary-light: oklch(50% 0.18 255);
 
   // Element Plus — 必须在基础变量之后，覆盖 el-input/select 背景色
   --el-fill-color-blank: var(--bg-secondary);
@@ -410,31 +411,31 @@
   --el-disabled-border-color: var(--border-primary);
   --el-mask-color: var(--bg-overlay);
 
-  --bg-primary:   #ffffff;
-  --bg-secondary: #fafafa;
-  --bg-tertiary:  #f4f4f5;
-  --bg-elevated:  #ffffff;
-  --bg-hover:     #e4e4e7;
-  --bg-active:    #d4d4d8;
+  --bg-primary: oklch(97% 0.006 255);
+  --bg-secondary: oklch(99% 0.003 255);
+  --bg-tertiary: oklch(95% 0.008 255);
+  --bg-elevated: oklch(99% 0.003 255);
+  --bg-hover: oklch(93% 0.012 255);
+  --bg-active: oklch(90% 0.016 255);
   --bg-overlay:   rgba(0, 0, 0, 0.45);
 
-  --border-primary:   #e4e4e7;
-  --border-secondary: #d4d4d8;
-  --border-hover:     #a1a1aa;
+  --border-primary: oklch(89% 0.012 255);
+  --border-secondary: oklch(83% 0.017 255);
+  --border-hover: oklch(70% 0.027 255);
 
   // 白底 → 黑字
-  --text-primary:   #0f0f0f;
-  --text-secondary: #3f3f46;
-  --text-tertiary:  #71717a;
-  --text-disabled:  #a1a1aa;
-  --text-inverse:   #ffffff;
-  --text-color:     #0f0f0f;
+  --text-primary: oklch(27% 0.024 255);
+  --text-secondary: oklch(44% 0.024 255);
+  --text-tertiary: oklch(50% 0.026 255);
+  --text-disabled: oklch(65% 0.014 255);
+  --text-inverse: var(--bg-secondary);
+  --text-color: var(--text-primary);
 
   --surface-muted: rgba(0, 0, 0, 0.03);
   --surface-strong: rgba(0, 0, 0, 0.06);
   --surface-accent: rgba(0, 0, 0, 0.09);
   --overlay-backdrop: rgba(15, 15, 15, 0.38);
-  --focus-ring: rgba(15, 15, 15, 0.18);
+  --focus-ring: var(--color-primary);
   --hero-glow: rgba(15, 15, 15, 0.08);
   --hero-grid: rgba(15, 15, 15, 0.05);
   --decorative-line: rgba(15, 15, 15, 0.12);
@@ -444,18 +445,18 @@
 
   --radius-card: 12px;
   --app-bg-gradient: var(--bg-primary);
-  --app-noise-opacity: 0.02;
-  --glass-bg: rgba(255, 255, 255, 0.82);
-  --glass-border: rgba(15, 15, 15, 0.08);
-  --glass-blur: 20px;
-  --glass-shadow: 0 4px 24px rgba(15, 15, 15, 0.06);
+  --app-noise-opacity: 0;
+  --glass-bg: var(--bg-secondary);
+  --glass-border: var(--border-primary);
+  --glass-blur: 0px;
+  --glass-shadow: none;
   --sidebar-edge-glow: transparent;
-  --topbar-edge-glow: rgba(15, 15, 15, 0.04);
-  --card-inner-highlight: linear-gradient(180deg, rgba(255, 255, 255, 0.9) 0%, transparent 50%);
+  --topbar-edge-glow: transparent;
+  --card-inner-highlight: none;
   --shadow-glow-primary: none;
   --text-gradient-brand: linear-gradient(135deg, #0f0f0f 0%, #71717a 100%);
-  --button-primary-hover-bg: #27272a;
-  --button-primary-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+  --button-primary-hover-bg: oklch(45% 0.18 255);
+  --button-primary-shadow: 0 1px 2px oklch(25% 0.02 255 / 0.1);
 
   --success:    #15803d;
   --success-bg: rgba(21, 128, 61, 0.1);
@@ -466,21 +467,21 @@
   --info:       #1d4ed8;
   --info-bg:    rgba(29, 78, 216, 0.1);
 
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06);
-  --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.08);
-  --shadow-lg: 0 10px 20px rgba(0, 0, 0, 0.10);
-  --shadow-xl: 0 20px 30px rgba(0, 0, 0, 0.14);
+  --shadow-sm: 0 1px 2px oklch(25% 0.02 255 / 0.04);
+  --shadow-md: 0 4px 12px oklch(25% 0.02 255 / 0.06);
+  --shadow-lg: 0 12px 32px oklch(25% 0.02 255 / 0.09);
+  --shadow-xl: 0 20px 48px oklch(25% 0.02 255 / 0.12);
 
-  --card-bg:     #ffffff;
-  --card-border: #e4e4e7;
-  --input-bg:           #ffffff;
-  --input-border:       #d4d4d8;
-  --input-focus-border: #0f0f0f;
-  --button-primary-bg:       #0f0f0f;
-  --button-primary-text:     #ffffff;
+  --card-bg: var(--bg-secondary);
+  --card-border: var(--border-primary);
+  --input-bg: var(--bg-secondary);
+  --input-border: var(--border-secondary);
+  --input-focus-border: var(--color-primary);
+  --button-primary-bg: oklch(50% 0.18 255);
+  --button-primary-text: oklch(98% 0.003 255);
   --button-secondary-bg:     transparent;
-  --button-secondary-text:   #0f0f0f;
-  --button-secondary-border: #d4d4d8;
+  --button-secondary-text: var(--text-primary);
+  --button-secondary-border: var(--border-secondary);
 
   --scrollbar-track:       #f4f4f5;
   --scrollbar-thumb:       #d4d4d8;
@@ -552,7 +553,7 @@
   // 纯黑底 → 纯白字
   --text-primary:   #ffffff;
   --text-secondary: #b8b8b8;
-  --text-tertiary:  #787878;
+  --text-tertiary:  #8a8a8a;
   --text-disabled:  #484848;
   --text-inverse:   #000000;
   --text-color:     #ffffff;
@@ -871,9 +872,9 @@ p, span, label, li, td, th,
     --el-button-bg-color:           var(--button-primary-bg);
     --el-button-border-color:       var(--button-primary-bg);
     --el-button-text-color:         var(--button-primary-text);
-    --el-button-hover-bg-color:     var(--accent-secondary);
-    --el-button-hover-border-color: var(--accent-secondary);
-    --el-button-hover-text-color:   var(--text-inverse);
+    --el-button-hover-bg-color:     var(--button-primary-hover-bg);
+    --el-button-hover-border-color: var(--button-primary-hover-bg);
+    --el-button-hover-text-color:   var(--button-primary-text);
   }
 }
 
@@ -1166,16 +1167,16 @@ p, span, label, li, td, th,
 // ============================================
 [data-theme="dark"],
 .dark {
-  --canvas-bg: #0a0a0f;
+  --canvas-bg: var(--bg-primary);
   --canvas-pattern: rgba(255, 255, 255, 0.06);
-  --canvas-minimap-bg: #0f0f1a;
+  --canvas-minimap-bg: var(--bg-secondary);
 }
 
 [data-theme="light"],
 .light {
-  --canvas-bg: #f4f4f5;
+  --canvas-bg: var(--bg-primary);
   --canvas-pattern: rgba(0, 0, 0, 0.06);
-  --canvas-minimap-bg: #e4e4e7;
+  --canvas-minimap-bg: var(--bg-secondary);
 }
 
 [data-theme="pure-bw"],

@@ -1,0 +1,65 @@
+{
+  "comp-prob-analysis": {
+    "runtime_prompts": [],
+    "outputs": [
+      "PROBLEM_ANALYSIS.md"
+    ]
+  },
+  "comp-modeling": {
+    "runtime_prompts": [],
+    "outputs": [
+      "MODELING_REPORT.md"
+    ]
+  },
+  "comp-code": {
+    "runtime_prompts": [],
+    "outputs": [
+      "code/"
+    ],
+    "references_enc": [
+      "references/error_prevention_code.md.enc",
+      "references/checks/*.md.enc"
+    ]
+  },
+  "comp-paper-zh": {
+    "runtime_prompts": [
+      "paper_figure_lang_zh.md"
+    ],
+    "outputs": [
+      "paper/main.tex",
+      "paper/main.pdf"
+    ]
+  },
+  "comp-compile-zh": {
+    "runtime_prompts": [],
+    "outputs": []
+  },
+  "comp-review": {
+    "runtime_prompts": [],
+    "outputs": []
+  },
+  "comp-paper-zh-docx": {
+    "runtime_prompts": [
+      "docx_write_markdown.md",
+      "paper_figure_lang_zh.md"
+    ],
+    "outputs": [
+      "paper/main.md"
+    ]
+  },
+  "paper-figure": {
+    "runtime_prompts": [
+      "paper_figure_lang_zh.md"
+    ],
+    "outputs": [
+      "figures/"
+    ]
+  },
+  "docx-format-check": {
+    "runtime_prompts": [
+      "academic_docx_traps.md",
+      "docx_write_markdown.md"
+    ],
+    "outputs": []
+  }
+}

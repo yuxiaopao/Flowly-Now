@@ -129,6 +129,7 @@ def synthesize_pyttsx3(
     output_path: Path,
     voice_id: Optional[str] = None,
     rate: Optional[int] = None,
+    language: Optional[str] = None,
 ) -> Path:
     """Offline TTS via Windows SAPI / espeak (pyttsx3)."""
     if not str(text or '').strip():
@@ -139,16 +140,69 @@ def synthesize_pyttsx3(
         raise MediaServiceError('pyttsx3 未安装。请执行: pip install pyttsx3') from exc
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    engine = pyttsx3.init()
-    if voice_id:
-        engine.setProperty('voice', voice_id)
-    if rate:
-        engine.setProperty('rate', int(rate))
-    engine.save_to_file(text, str(output_path))
-    engine.runAndWait()
-    if not output_path.exists() or output_path.stat().st_size == 0:
-        raise MediaServiceError('pyttsx3 未生成有效音频文件')
+    try:
+        engine = pyttsx3.init()
+        selected = voice_id or (_pick_sapi_voice(engine, language) if language else None)
+        if selected:
+            try:
+                engine.setProperty('voice', selected)
+            except Exception:
+                logger.warning('Failed to set pyttsx3 voice=%s', selected)
+        if rate:
+            engine.setProperty('rate', int(rate))
+        engine.save_to_file(text, str(output_path))
+        engine.runAndWait()
+    except Exception as exc:
+        logger.warning('pyttsx3 synthesis failed lang=%s: %s', language, exc)
+        if output_path.exists():
+            try:
+                output_path.unlink()
+            except OSError:
+                pass
+
+    if output_path.exists() and output_path.stat().st_size >= 500:
+        return output_path
+
+    # No matching language voice / synthesis failed — emit silent WAV so pipeline continues
+    duration = max(0.5, min(8.0, len(str(text)) / 6.0))
+    logger.warning(
+        'pyttsx3 empty audio for lang=%s text_len=%s; using silent placeholder (%.1fs)',
+        language, len(str(text)), duration,
+    )
+    from workflows.services.video_postprocess import create_silent_audio
+    fmt = 'wav' if output_path.suffix.lower() == '.wav' else 'mp3'
+    create_silent_audio(duration, output_path, fmt=fmt)
+    if not output_path.exists() or output_path.stat().st_size < 100:
+        raise MediaServiceError(
+            f'pyttsx3 无法为语言 {language or "?"} 生成音频，且静音占位失败。'
+            f'请安装 Windows 对应语言语音包。'
+        )
     return output_path
+
+
+def _pick_sapi_voice(engine, language: str) -> Optional[str]:
+    """Pick a SAPI voice matching language code (zh/en/ja/ko...)."""
+    lang = (language or '').lower().split('-')[0]
+    aliases = {
+        'zh': ('zh', 'chinese', 'huihui'),
+        'en': ('en', 'english', 'zira', 'david'),
+        'ja': ('ja', 'jp', 'japanese'),
+        'ko': ('ko', 'kr', 'korean'),
+    }
+    needles = aliases.get(lang, (lang,))
+    try:
+        voices = engine.getProperty('voices') or []
+    except Exception:
+        return None
+    for voice in voices:
+        blob = ' '.join([
+            str(getattr(voice, 'id', '') or ''),
+            str(getattr(voice, 'name', '') or ''),
+            ' '.join(str(x) for x in (getattr(voice, 'languages', None) or [])),
+        ]).lower()
+        if any(n in blob for n in needles):
+            return voice.id
+    return None
 
 
 def synthesize_pyttsx3_to_work_dir(

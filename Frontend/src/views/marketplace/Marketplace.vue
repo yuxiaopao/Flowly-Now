@@ -6,29 +6,31 @@
     <PageHeader
       title="模板市场"
       subtitle="浏览社区和 Flowly 团队精心制作的模板，快速落地你的工作流"
-    >
-      <template #actions>
-        <div class="search-bar">
-          <Search
-            :size="18"
-            class="search-icon"
-          />
-          <input
-            v-model="searchQuery"
-            type="text"
-            placeholder="按名称、分类或功能搜索模板..."
-            @input="debouncedSearch"
-          >
-          <button
-            v-if="searchQuery"
-            class="clear-btn"
-            @click="clearSearch"
-          >
-            <X :size="16" />
-          </button>
-        </div>
-      </template>
-    </PageHeader>
+    />
+
+    <PageToolbar>
+      <div class="search-bar">
+        <Search
+          :size="18"
+          class="search-icon"
+        />
+        <input
+          v-model="searchQuery"
+          type="text"
+          placeholder="按名称、分类或功能搜索模板..."
+          aria-label="搜索模板"
+          @input="debouncedSearch"
+        >
+        <button
+          v-if="searchQuery"
+          class="clear-btn"
+          aria-label="清除模板搜索"
+          @click="clearSearch"
+        >
+          <X :size="16" />
+        </button>
+      </div>
+    </PageToolbar>
 
     <!-- Categories -->
     <div class="categories-section">
@@ -49,7 +51,7 @@
             :is="getCategoryIcon(cat.icon)"
             :size="14"
           />
-          <span>{{ cat.name }}</span>
+          <span>{{ resolveCategoryLabel(cat) }}</span>
           <span class="chip-count">{{ cat.count || 0 }}</span>
         </button>
       </div>
@@ -82,18 +84,20 @@
           v-for="template in featuredTemplates"
           :key="template.id"
           class="featured-card"
+          tabindex="0"
+          role="link"
+          :aria-label="`查看模板：${template.name}`"
+          @keydown.enter.self="openTemplate(template)"
           @click="openTemplate(template)"
         >
           <div class="card-preview">
             <div
               class="preview-gradient"
-              :style="{ background: getTemplatePresentation(template).gradient }"
             >
               <component
                 :is="getTemplatePresentation(template).icon"
                 :size="40"
                 class="preview-icon"
-                :style="{ color: getTemplatePresentation(template).color }"
               />
             </div>
             <div class="preview-badge">
@@ -103,10 +107,6 @@
           <div class="card-info">
             <div
               class="card-category-tag"
-              :style="{
-                backgroundColor: getTemplatePresentation(template).color + '22',
-                color: getTemplatePresentation(template).color,
-              }"
             >
               {{ getTemplatePresentation(template).name }}
             </div>
@@ -155,6 +155,7 @@
           <select
             v-model="sortBy"
             class="sort-select"
+            aria-label="模板排序方式"
             @change="onSortChange"
           >
             <option value="popular">
@@ -245,12 +246,14 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import PageToolbar from '@/components/layout/PageToolbar.vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   Search, X, Zap, ArrowRight, GitBranch,
   Download, Star, Layers, Loader,
 } from 'lucide-vue-next'
+import { PRODUCT_UI } from '@/config/productUi'
 import { useMarketplaceStore } from '@/stores/marketplace'
 import PageShell from '@/components/layout/PageShell.vue'
 import PageHeader from '@/components/layout/PageHeader.vue'
@@ -259,6 +262,7 @@ import {
   getTemplateCategoryPresentation,
   getTemplateCategorySlug,
   resolveCategoryIcon,
+  resolveCategoryLabel,
 } from '@/composables/useTemplateCategoryPresentation'
 import {
   getTemplateCategory,
@@ -318,7 +322,7 @@ const hasMore = computed(() => store.hasMore)
 
 const activeCategoryName = computed(() => {
   const cat = categoriesWithCount.value.find(c => getCategoryKey(c) === activeCategory.value)
-  return cat?.name || '全部模板'
+  return resolveCategoryLabel(cat) || '全部模板'
 })
 
 function getCategoryIcon(icon) {
@@ -341,8 +345,10 @@ function debouncedSearch() {
   clearTimeout(searchTimeout)
   searchTimeout = setTimeout(() => {
     onSearch()
-  }, 300)
+  }, PRODUCT_UI.searchDebounceMs)
 }
+
+onUnmounted(() => clearTimeout(searchTimeout))
 
 function clearSearch() {
   searchQuery.value = ''
@@ -439,9 +445,11 @@ onMounted(async () => {
   background: var(--surface-muted);
   border: 1px solid var(--border-primary);
   border-radius: $radius-lg;
-  padding: 10px 16px;
-  min-width: 280px;
-  max-width: 360px;
+  padding: 0 $spacing-3;
+  min-height: var(--control-height);
+  min-width: 0;
+  width: var(--content-search-width);
+  max-width: 100%;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 
   &:focus-within {
@@ -493,7 +501,7 @@ onMounted(async () => {
   padding: 0 0 $spacing-6;
 
   .categories-header {
-    max-width: 1280px;
+    max-width: 100%;
     margin: 0 auto 16px;
 
     .section-label {
@@ -510,7 +518,7 @@ onMounted(async () => {
     gap: 10px;
     overflow-x: auto;
     padding-bottom: 8px;
-    max-width: 1280px;
+    max-width: 100%;
     margin: 0 auto;
 
     &::-webkit-scrollbar {
@@ -576,8 +584,8 @@ onMounted(async () => {
 // Section Styling
 .featured-section,
 .templates-section {
-  padding: 0 24px 48px;
-  max-width: 1280px;
+  padding: 0 0 var(--page-section-gap);
+  max-width: 100%;
   margin: 0 auto;
 
   .section-header {
@@ -655,14 +663,14 @@ onMounted(async () => {
 // Featured Grid
 .featured-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-  gap: 24px;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--content-card-min-width)), 1fr));
+  gap: 16px;
 
   .featured-card {
     position: relative;
     background: var(--card-bg);
     border: 1px solid var(--border-primary);
-    border-radius: 20px;
+    border-radius: var(--radius-card);
     cursor: pointer;
     overflow: hidden;
     transition:
@@ -670,17 +678,17 @@ onMounted(async () => {
       box-shadow 0.25s cubic-bezier(0.22, 1, 0.36, 1);
 
     &:hover {
-      transform: translateY(-3px);
-      box-shadow: var(--shadow-lg);
+      border-color: var(--border-hover);
     }
 
     .card-preview {
       position: relative;
-      height: 160px;
-      border-radius: 20px 20px 0 0;
+      height: 88px;
+      border-bottom: 1px solid var(--border-primary);
       overflow: hidden;
 
       .preview-gradient {
+        background: var(--bg-tertiary);
         width: 100%;
         height: 100%;
         display: flex;
@@ -708,9 +716,12 @@ onMounted(async () => {
     }
 
     .card-info {
-      padding: 20px;
+      padding: 16px;
 
       .card-category-tag {
+        color: var(--text-secondary);
+        background: var(--surface-muted);
+        border: 1px solid var(--border-primary);
         display: inline-block;
         padding: 4px 10px;
         border-radius: 6px;
@@ -721,7 +732,7 @@ onMounted(async () => {
       }
 
       .card-title {
-        font-size: 17px;
+        font-size: 15px;
         font-weight: 600;
         color: var(--text-primary);
         margin-bottom: 6px;
@@ -759,14 +770,14 @@ onMounted(async () => {
 // Templates Grid
 .templates-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--content-card-min-width)), 1fr));
+  gap: 16px;
 }
 
 // Loading State
 .loading-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--content-card-min-width)), 1fr));
   gap: 20px;
 
   .skeleton-card {

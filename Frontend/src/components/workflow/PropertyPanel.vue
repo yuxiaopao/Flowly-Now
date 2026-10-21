@@ -7,6 +7,17 @@
       v-if="selectedNode"
       class="panel-content"
     >
+      <div class="property-panel-header">
+        <strong>节点属性</strong>
+        <el-button
+          text
+          circle
+          aria-label="关闭节点属性"
+          @click="emit('close')"
+        >
+          <X />
+        </el-button>
+      </div>
       <!-- 节点基本信息 -->
       <div class="property-section">
         <h4 class="section-title">
@@ -370,7 +381,7 @@
           <div class="form-group">
             <label>参数 (JSON)</label>
             <el-input
-              v-model="nodeData.config.parameters"
+              v-model="toolParametersText"
               type="textarea"
               :rows="4"
               placeholder="{&quot;query&quot;: &quot;{input}&quot;}"
@@ -973,8 +984,8 @@
         <!-- 子工作流 / 网站生成 -->
         <template v-else-if="selectedNode.type === 'subworkflow'">
           <SubworkflowConfig
-            :model-value="nodeData.config"
-            @update:model-value="handleConfigUpdate"
+            :model-value="{ label: nodeData.name, description: nodeData.description, config: nodeData.config }"
+            @update:model-value="handleSubworkflowDataUpdate"
             @change="handleConfigChange"
           />
         </template>
@@ -1109,13 +1120,20 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['change', 'delete'])
+const emit = defineEmits(['change', 'delete', 'close'])
 
 const nodeData = reactive({
   name: '',
   type: '',
   description: '',
   config: {}
+})
+
+const toolParametersText = computed({
+  get: () => typeof nodeData.config.parameters === 'string'
+    ? nodeData.config.parameters
+    : JSON.stringify(nodeData.config.parameters || {}, null, 2),
+  set: (value) => { nodeData.config.parameters = value }
 })
 
 // 可用的模型和工具列表（从 API 获取）
@@ -1359,6 +1377,12 @@ function handleConfigUpdate(newConfig) {
   nodeData.config = newConfig
 }
 
+function handleSubworkflowDataUpdate(data) {
+  nodeData.name = data.label
+  nodeData.description = data.description
+  nodeData.config = data.config
+}
+
 function handleConfigChange() {
   handleChange()
 }
@@ -1435,6 +1459,19 @@ function removeAssignment(index) {
 .panel-content {
   flex: 1;
   overflow-y: auto;
+}
+
+.property-panel-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: $spacing-2 $spacing-4;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-primary);
+  font-size: $font-size-sm;
 }
 
 .property-section {

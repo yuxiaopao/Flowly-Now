@@ -27,6 +27,10 @@ ENV/
 env/
 .venv/
 
+# Node / frontend dependencies
+node_modules/
+**/node_modules/
+
 # Django
 *.log
 local_settings.py
@@ -41,6 +45,13 @@ logs/
 # IDE
 .vscode/
 .idea/
+.vs/
+.trae/
+.claude/settings.local.json
+.codex/config.toml
+.cursor/mcp.json
+.cursor/mcp.json.*
+.mcp.json
 *.swp
 *.swo
 *~
@@ -55,6 +66,8 @@ htmlcov/
 .pytest_cache/
 coverage/
 .tox/
+test-results/
+test_results/
 
 # Environment / secrets
 .env
@@ -81,13 +94,31 @@ Thesis/
 PPT/
 Docs/reference/
 Docs/reports/
+Docs/2025年/
+Docs/verification/
+Docs/cumcm-full/skills-encrypted/
+Docs/cumcm-full/templates/
 
 # Local desktop builds & large artifacts
-Desktop/
+Desktop/renderer/
 Frontend/dist/
 Frontend/dist-electron/
 test-reports/
 tests/artifacts/
+.uploads/
+.cache/
+.playwright-mcp/
+_external/
+output/
+.tmp-pkgs/
+_tmp_*
+Backend/outputs/
+Backend/runs/
+Backend/reports/
+Backend/data/
+Backend/figures/
+Backend/paper/
+Backend/other_code/
 
 # ML model weights (large / local-only)
 *.pt

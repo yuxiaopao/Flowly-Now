@@ -578,11 +578,6 @@ const revokeKey = (key) => {
 </script>
 
 <style lang="scss" scoped>
-.api-sdk-page {
-  padding: 24px;
-  max-width: 1200px;
-  margin: 0 auto;
-}
 
 .btn-icon {
   width: 16px;

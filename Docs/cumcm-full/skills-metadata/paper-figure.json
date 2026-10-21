@@ -1,0 +1,36 @@
+{
+  "skill_name": "paper-figure",
+  "category": "05_figures_visualization",
+  "tier": "tier1_must_have",
+  "encrypted": true,
+  "scan": {
+    "name": "paper-figure",
+    "path": "resources/app/skills/paper-figure",
+    "has_skill_md_enc": true,
+    "has_skill_md_plain": false,
+    "encrypted": true,
+    "files": {
+      "enc": 1,
+      "plain": 0,
+      "total": 1
+    },
+    "subdirs": [],
+    "extensions": {
+      ".enc": 1
+    },
+    "readable_assets": []
+  },
+  "artifacts": [
+    "figures/"
+  ],
+  "runtime_prompts": [
+    "paper_figure_lang_zh.md"
+  ],
+  "used_in_templates": [
+    "paper_writing",
+    "paper_writing_zh",
+    "full_pipeline"
+  ],
+  "flowly_status": "pending",
+  "replication_strategy": "decrypt_and_port"
+}

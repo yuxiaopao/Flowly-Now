@@ -7,17 +7,18 @@
         class="assistant-trigger"
         :class="[themeClass, { 'is-dragging': triggerDragging }]"
         :style="triggerStyle"
-        title="AI 工作流助手（可拖动）"
+        title="语创助手（可拖动）"
         @click="handleTriggerClick"
         @mousedown="startTriggerDrag"
       >
         <div class="trigger-inner">
           <div class="trigger-logo-wrap">
-            <img
-              :src="currentLogo"
-              alt="AI"
-              class="trigger-avatar"
-            >
+            <FlowlyBot
+              :state="nlStore.isGenerating ? 'thinking' : 'idle'"
+              :size="TRIGGER_SIZE * BOT_AVATAR.compactScale"
+              follow
+              decorative
+            />
           </div>
         </div>
         <div class="trigger-ring" />
@@ -176,14 +177,13 @@
               class="welcome-state"
             >
               <div class="welcome-avatar">
-                <img
-                  :src="currentLogo"
-                  alt="AI"
-                  class="welcome-img"
-                >
+                <FlowlyBot
+                  :size="BOT_AVATAR.welcomeSize"
+                  follow
+                />
               </div>
               <h4 class="welcome-title">
-                你好，我是工作流助手
+                你好，我是语创助手
               </h4>
               <p class="welcome-desc">
                 我可以帮助你：
@@ -220,28 +220,20 @@
                   v-if="msg.role === 'assistant'"
                   class="msg-avatar"
                 >
-                  <img
-                    :src="currentLogo"
-                    alt="AI"
-                    class="avatar-img"
-                  >
+                  <NlAvatar
+                    size="sm"
+                    :state="getAssistantAvatarState(msg)"
+                    :animated="Boolean(msg.loading || msg.isStreaming)"
+                  />
                 </div>
                 <div
                   v-else
                   class="msg-avatar msg-user-avatar"
                 >
-                  <img
-                    v-if="authStore.user?.avatar"
-                    :src="authStore.user.avatar"
-                    :alt="authStore.user?.username"
-                    class="avatar-img"
-                  >
-                  <span
-                    v-else
-                    class="avatar-initial"
-                  >
-                    {{ authStore.user?.username?.[0]?.toUpperCase() || 'U' }}
-                  </span>
+                  <AccountAvatar
+                    :size="BOT_AVATAR.sizes.sm"
+                    :animated="false"
+                  />
                 </div>
 
                 <!-- Content -->
@@ -562,7 +554,6 @@
 <script setup>
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { useAppStore } from '@/stores/app'
-import { useAuthStore } from '@/stores/auth'
 import { useNLWorkflowStore } from '@/stores/nlWorkflow'
 import {
   Trash2, Minus, X, Send, Loader2, Copy,
@@ -572,8 +563,11 @@ import {
 } from 'lucide-vue-next'
 import { ElMessage } from 'element-plus'
 import { optimizeWorkflow } from '@/api/workflow'
-import logoBlack from '@/assets/logos/logo.png'
-import logoWhite from '@/assets/logos/logow.png'
+import FlowlyBot from '@/components/common/FlowlyBot.vue'
+import NlAvatar from '@/components/nl-workflow/NlAvatar.vue'
+import AccountAvatar from '@/components/common/AccountAvatar.vue'
+import { BOT_AVATAR } from '@/config/botAvatar'
+import { getAssistantAvatarState } from '@/utils/botAvatar'
 import { ElMessageBox } from 'element-plus'
 import { nlWorkflowApi } from '@/api/nl-workflow'
 import { vueFlowToNlWorkflow } from '@/utils/workflowTransform'
@@ -600,7 +594,6 @@ const props = defineProps({
 const emit = defineEmits(['update:modelValue', 'apply-workflow', 'highlight-nodes', 'apply-fix'])
 
 const appStore = useAppStore()
-const authStore = useAuthStore()
 const nlStore = useNLWorkflowStore()
 
 // State
@@ -631,20 +624,11 @@ const TRIGGER_SIZE = 48
 const TRIGGER_DRAG_THRESHOLD = 5
 
 // Computed
-const isDarkTheme = computed(() => {
-  const darkThemes = ['dark', 'pure-bw', 'high-contrast']
-  return darkThemes.includes(appStore.theme)
-})
-
-const currentLogo = computed(() =>
-  isDarkTheme.value ? logoWhite : logoBlack
-)
-
 const messages = computed(() => nlStore.messages)
 
 const conversationTitle = computed(() => {
   const userMsg = nlStore.lastUserMessage
-  if (!userMsg) return '工作流助手'
+  if (!userMsg) return '语创助手'
   const text = userMsg.content || ''
   return text.length > 20 ? text.slice(0, 20) + '...' : text
 })
@@ -1231,7 +1215,7 @@ function getTypeLabel(type) {
 function scrollToBottom() {
   nextTick(() => {
     if (messagesContainer.value) {
-      messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
+      messagesContainer.value.scrollTop = messages.value.length ? messagesContainer.value.scrollHeight : 0
     }
   })
 }
@@ -1656,19 +1640,10 @@ onUnmounted(() => {
   padding: 20px 0;
 
   .welcome-avatar {
-    width: 56px;
-    height: 56px;
-    border-radius: 50%;
-    overflow: hidden;
-    border: 2px solid var(--assistant-border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
     margin-bottom: 14px;
-    box-shadow: var(--shadow-md);
-  }
-
-  .welcome-img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
   }
 
   .welcome-title {
@@ -1736,8 +1711,7 @@ onUnmounted(() => {
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  overflow: hidden;
-  border: 1px solid var(--assistant-border-subtle);
+  overflow: visible;
   flex-shrink: 0;
 
   // 修复：原写法 .msg-avatar .msg-user-avatar 为后代选择器，永远不匹配同一元素
@@ -1748,30 +1722,7 @@ onUnmounted(() => {
     justify-content: center;
     border: none;
 
-    .avatar-img {
-      border-radius: 50%;
-      object-fit: contain;
-      max-width: 70%;
-      max-height: 70%;
-    }
-
-    .avatar-initial {
-      font-size: 12px;
-      font-weight: 700;
-      color: var(--assistant-text-secondary);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
   }
-}
-
-.avatar-img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  max-width: 70%;
-  max-height: 70%;
 }
 
 .msg-content {
@@ -2377,15 +2328,6 @@ onUnmounted(() => {
     display: flex;
     align-items: center;
     justify-content: center;
-  }
-
-  .trigger-avatar {
-    width: 100%;
-    height: 100%;
-    border-radius: 50%;
-    object-fit: contain;
-    max-width: 70%;
-    max-height: 70%;
   }
 
   .trigger-ring {

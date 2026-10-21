@@ -9,6 +9,12 @@ from .models import ExecutionLog, AlertRule, Alert, Metric, NotificationChannel,
 User = get_user_model()
 
 
+class MetricQuerySerializer(serializers.Serializer):
+    hours = serializers.IntegerField(required=False, min_value=1, error_messages={
+        'invalid': '查询小时数必须是整数', 'min_value': '查询小时数必须大于零',
+    })
+
+
 class ExecutionLogSerializer(serializers.ModelSerializer):
     """Serializer for ExecutionLog."""
 

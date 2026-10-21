@@ -260,11 +260,13 @@ const defaultModels = {
 
 watch(() => props.modelValue, (newVal) => {
   if (newVal) {
+    for (const key of Object.keys(localData)) delete localData[key]
     Object.assign(localData, {
+      ...newVal,
       label: newVal.label || '',
       description: newVal.description || '',
       provider: newVal.provider || 'openai',
-      model: newVal.model || defaultModels[localData.provider] || '',
+      model: newVal.model || defaultModels[newVal.provider || 'openai'] || '',
       prompt: newVal.prompt || '',
       size: newVal.size || '1024x1024',
       quality: newVal.quality || 'standard',
@@ -282,8 +284,9 @@ const handleProviderChange = () => {
 }
 
 const handleChange = () => {
-  emit('update:modelValue', { ...localData })
-  emit('change', { ...localData })
+  const config = { ...props.modelValue, ...localData }
+  emit('update:modelValue', config)
+  emit('change', config)
 }
 </script>
 

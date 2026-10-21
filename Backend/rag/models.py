@@ -9,6 +9,11 @@ from django.contrib.auth import get_user_model
 
 User = get_user_model()
 
+from .constants import (
+    CHUNK_STRATEGIES, RETRIEVAL_MODES, DEFAULT_CHUNK_SIZE, DEFAULT_CHUNK_OVERLAP,
+    DEFAULT_TOP_K, DEFAULT_MIN_SIMILARITY, DEFAULT_SYSTEM_PROMPT,
+)
+
 # Import constants for default values
 from config.constants import (
     VECTOR_STORE_DEFAULT_HOST,
@@ -23,7 +28,7 @@ class VectorStore(models.Model):
     """Vector store configuration."""
 
     TYPE_CHOICES = [
-        ('memory', '内存存储'),
+        ('memory', '本地持久化存储'),
         ('qdrant', 'Qdrant'),
         ('milvus', 'Milvus'),
         ('chroma', 'Chroma'),
@@ -113,8 +118,10 @@ class DocumentCollection(models.Model):
         default=DEFAULT_EMBEDDING_MODEL,
         verbose_name='Embedding 模型'
     )
-    chunk_size = models.IntegerField(default=1000, verbose_name='分块大小')
-    chunk_overlap = models.IntegerField(default=200, verbose_name='分块重叠')
+    chunk_size = models.IntegerField(default=DEFAULT_CHUNK_SIZE, verbose_name='分块大小')
+    chunk_overlap = models.IntegerField(default=DEFAULT_CHUNK_OVERLAP, verbose_name='分块重叠')
+    chunk_strategy = models.CharField(max_length=20, choices=CHUNK_STRATEGIES, default='recursive')
+    retrieval_mode = models.CharField(max_length=20, choices=RETRIEVAL_MODES, default='keyword')
 
     # Stats
     document_count = models.IntegerField(default=0, verbose_name='文档数')
@@ -238,6 +245,7 @@ class Chunk(models.Model):
 
     # Vector
     vector_id = models.CharField(max_length=200, blank=True, verbose_name='向量ID')
+    embedding = models.JSONField(default=list, blank=True, verbose_name='持久化向量')
 
     # Metadata
     metadata = models.JSONField(default=dict, verbose_name='元数据')
@@ -272,12 +280,12 @@ class RAGPipeline(models.Model):
     )
 
     # Retrieval settings
-    top_k = models.IntegerField(default=5, verbose_name='返回数量')
-    min_similarity = models.FloatField(default=0.7, verbose_name='最低相似度')
+    top_k = models.IntegerField(default=DEFAULT_TOP_K, verbose_name='返回数量')
+    min_similarity = models.FloatField(default=DEFAULT_MIN_SIMILARITY, verbose_name='最低相似度')
 
     # Generation settings
     system_prompt = models.TextField(
-        default='你是一个有帮助的助手。使用以下上下文信息回答用户问题。',
+        default=DEFAULT_SYSTEM_PROMPT,
         verbose_name='系统提示词'
     )
     include_sources = models.BooleanField(default=True, verbose_name='包含来源')

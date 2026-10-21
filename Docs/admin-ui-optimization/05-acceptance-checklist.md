@@ -1,102 +1,124 @@
-﻿# 05 鈥?绠＄悊绔?UI 缁熶竴楠屾敹娓呭崟
+# 05 - 管理端 UI 统一验收清单
 
-> 鍏ㄩ樁娈靛畬鎴愬悗浣跨敤锛涗篃鍙垎 Phase 閮ㄥ垎鍕鹃€夈€? 
-> 鏈€鍚庢洿鏂帮細2026-06-18锛堢浜岃疆澶嶉獙锛?
----
-
-## 涓€銆佷娇鐢ㄨ鏄?
-- 姣忛」娴嬭瘯閫氳繃鎵?`[x]`
-- 澶辫触椤硅褰曞埌 [`PROGRESS.md`](PROGRESS.md) 鏇存柊鏃ュ織
-- 娴忚鍣ㄨ嚜鍔ㄥ寲娴嬭瘯 **蹇呴』** 浣跨敤 `chrome-devtools` MCP锛?*绂佹** `cursor-ide-browser`锛堣 [`AGENTS.md`](../../AGENTS.md)锛?
----
-
-## 浜屻€佷俊鎭灦鏋勶紙Phase A锛?
-- [x] **A-01** 渚ф爮鏃犱笌 Tab 鍚?URL 鐨?custom_links
-- [x] **A-02** 銆屽姛鑳藉紑鍏炽€峊ab 涓庨厤缃腑蹇?features 妯″潡鏈夋槑纭枃妗堝尯鍒?+ 浜ゅ弶閾炬帴
-- [x] **A-03** 娆㈣繋椤?Bento 涓嶅惈 Tab 宸茶鐩栫殑 7 妯″潡閲嶅鍏ュ彛
-- [x] **A-04** 鏂扮敤鎴?30 绉掑唴鑳芥壘鍒帮細鏀圭珯鐐瑰悕銆佸紑鍏冲姛鑳姐€佺湅绯荤粺鐘舵€?
----
-
-## 涓夈€佽瑙夌粺涓€锛圥hase B锛?
-- [x] **B-01** 涓昏壊 `#1d4ed8` 鍦?Panel銆丣azzmin 鍒楄〃銆佽〃鍗曘€佹寜閽笂涓€鑷?- [x] **B-02** 鏃犵传鑹蹭富鑹层€佹棤 gradient text 缁熻鏁板瓧
-- [x] **B-03** 宸ヤ綔娴?changelist 涓庢帶鍒跺彴 Panel 鍦嗚/闂磋窛鍚岀骇
-- [x] **B-04** 宸ヤ綔娴?changeform 淇濆瓨鏍忎笌 `f-btn-primary` 瑙嗚涓€鑷?鈥?`input[name="_save"]` 涓昏壊钃?#1d4ed8
-- [x] **B-05** 鐧诲綍椤?鈫?娆㈣繋椤垫棤鍝佺墝鏂眰
-- [x] **B-06** `flowly_tokens.css` 鍗曠偣鏀硅壊鍏ㄥ眬鐢熸晥锛圥anel 澶栫疆 + Jazzmin `custom_admin.css` 鍐呰仈锛?
----
-
-## 鍥涖€佷氦浜掍綋楠岋紙Phase C锛?
-- [x] **C-01** Tab 鐐瑰嚮鏈?loading 鏉★紝椤甸潰鍔犺浇鍚庢秷澶?- [x] **C-02** 鎺у埗鍙?API 澶辫触鍙偣閲嶈瘯 鈥?缁熻/鍥捐〃/娲诲姩鍧囨湁閲嶈瘯鎸夐挳
-- [x] **C-03** 閰嶇疆涓績鏈繚瀛樺垏鎹㈡ā鍧楁湁鎻愮ず
-- [x] **C-04** 閰嶇疆涓績 URL 鍚?`?module=` 涓斿彲鍒嗕韩
-- [x] **C-05** 鍚?Panel 鍒楄〃/鍥捐〃鏈夌┖鎬?鈥?鍔熻兘寮€鍏?seed 鍚?41 椤规甯稿姞杞?- [x] **C-06** 淇濆瓨鎿嶄綔鏈?toast
-- [x] **C-07** 鍗遍櫓鎿嶄綔鏈?confirm
+> 全阶段完成后使用；也可分 Phase 部分勾选。
+> 最后更新：2026-06-18（第二轮复验）
 
 ---
 
-## 浜斻€佹灦鏋勪笌閰嶇疆锛圥hase D锛?
-- [x] **D-01** 鐢熶骇鐜鏃犳ā鏉跨‖缂栫爜 `localhost:5200`锛堥粯璁?env 寮€鍙戝彲鎺ュ彈锛?- [x] **D-02** `FRONTEND_URL` 鐜鍙橀噺鎺у埗鐢ㄦ埛绔摼鎺?- [x] **D-03** 闈欐€佽祫婧愭棤鏈娇鐢ㄧ殑 duplicate 鏂囦欢
-- [x] **D-04** 绔欑偣鍚嶅湪鐧诲綍椤?娆㈣繋椤靛彲閰嶇疆涓€鑷?- [x] **D-05** Panel 椤?`body.flowly-panel-page` 鐢熸晥
+## 一、使用说明
+
+- 每项测试通过后勾选 `[x]`
+- 失败项记录到 [`PROGRESS.md`](PROGRESS.md) 更新日志
+- 浏览器自动化测试 **必须** 使用 `chrome-devtools` MCP；**禁止** `cursor-ide-browser`（见 [`AGENTS.md`](../../AGENTS.md)）
 
 ---
 
-## 鍏€佹棤闅滅涓庡搷搴斿紡
+## 二、信息架构（Phase A）
 
-- [x] **A11Y-01** Tab 鍙敭鐩樿仛鐒︼紝鈫?鈫?鍒囨崲鐒︾偣
-- [x] **A11Y-02** 浜や簰鍏冪礌 `:focus-visible` 鍙
-- [x] **A11Y-03** 璺宠繃閾炬帴鍙烦鍒?`#flowly-main`
-- [x] **A11Y-04** Tab 鏈€灏忚Е鎺ч珮搴?鈮?44px
-- [x] **RESP-01** 375px 瀹藉害 Tab 鍙í婊?- [x] **RESP-02** 閰嶇疆涓績 900px 浠ヤ笅渚ф爮鎹㈣
-
----
-
-## 涓冦€佺鍒扮鐢ㄦ埛璺緞锛堝繀娴嬶級
-
-1. [x] **E2E-01** 鐧诲綍 鈫?娆㈣繋
-2. [x] **E2E-02** Tab銆屾帶鍒跺彴銆嶁啋 鏁版嵁鍔犺浇
-3. [x] **E2E-03** Tab銆岄厤缃腑蹇冦€嶁啋 module URL + 妯″潡琛ㄥ崟
-4. [x] **E2E-04** Tab銆屽姛鑳藉紑鍏炽€嶁啋 toggle 鈥?seed 鍚?toggle + toast銆屽姛鑳藉凡寮€鍚€?5. [x] **E2E-05** 渚ф爮宸ヤ綔娴?鈫?缂栬緫 changeform
-6. [x] **E2E-06** Tab銆岀郴缁熴€嶁啋 鍋ュ悍妫€鏌?7. [x] **E2E-07** Tab銆岀敤鎴风銆嶁啋 `FRONTEND_URL`
+- [x] **A-01** 侧栏无与 Tab 同 URL 的 custom_links
+- [x] **A-02** 「功能开关」Tab 与配置中心 features 模块有明确文案区分 + 交叉链接
+- [x] **A-03** 欢迎页 Bento 不含 Tab 已覆盖的 7 模块重复入口
+- [x] **A-04** 新用户 30 秒内能找到：改站点名、开关功能、看系统状态
 
 ---
 
-## 鍏€佷笟鍔′笌瑙勮寖
+## 三、视觉统一（Phase B）
 
-- [x] **GOV-01** 閰嶇疆鍙樻洿鍐欏叆瀹¤ 鈥?toggle 鍚?`FeatureAuditLog` 鏈夎褰?- [x] **GOV-02** 鏃?dead code / orphan 寮曠敤
-- [x] **GOV-03** 纭紪鐮?URL/鑹插€煎凡鎶界
-- [x] **GOV-04** API 500 涓嶇櫧灞忥紙浠ｇ爜灞傚叿澶囧弽棣堬級
+- [x] **B-01** 主色 `#1d4ed8` 在 Panel、Jazzmin 列表、表单、按钮上一致
+- [x] **B-02** 无紫色主色、无 gradient text 统计数字
+- [x] **B-03** 工作流 changelist 与控制台 Panel 圆角/间距同级
+- [x] **B-04** 工作流 changeform 保存栏与 `f-btn-primary` 视觉一致，`input[name="_save"]` 主色为 `#1d4ed8`
+- [x] **B-05** 登录页到欢迎页无品牌断层
+- [x] **B-06** `flowly_tokens.css` 单点改色全局生效（Panel 外置 + Jazzmin `custom_admin.css` 内联）
 
 ---
 
-## 涔濄€侀獙鏀剁粨璁?
-| 瀛楁 | 鍐呭 |
+## 四、交互体验（Phase C）
+
+- [x] **C-01** Tab 点击有 loading 条，页面加载后消失
+- [x] **C-02** 控制台 API 失败可点重试，统计/图表/活动均有重试按钮
+- [x] **C-03** 配置中心未保存切换模块有提示
+- [x] **C-04** 配置中心 URL 含 `?module=` 且可分享
+- [x] **C-05** 各 Panel 列表/图表有空态；功能开关 seed 后 41 项正常加载
+- [x] **C-06** 保存操作有 toast
+- [x] **C-07** 危险操作有 confirm
+
+---
+
+## 五、架构与配置（Phase D）
+
+- [x] **D-01** 生产环境无模板硬编码 `localhost:5200`（默认 env 开发可接受）
+- [x] **D-02** `FRONTEND_URL` 环境变量控制用户端链接
+- [x] **D-03** 静态资源无未使用的 duplicate 文件
+- [x] **D-04** 站点名在登录页、欢迎页可配置一致
+- [x] **D-05** Panel 页 `body.flowly-panel-page` 生效
+
+---
+
+## 六、无障碍与响应式
+
+- [x] **A11Y-01** Tab 可键盘聚焦，方向键切换焦点
+- [x] **A11Y-02** 交互元素 `:focus-visible` 可见
+- [x] **A11Y-03** 跳过链接可跳到 `#flowly-main`
+- [x] **A11Y-04** Tab 最小触控高度 >= 44px
+- [x] **RESP-01** 375px 宽度 Tab 可横向滚动
+- [x] **RESP-02** 配置中心 900px 以下侧栏换行
+
+---
+
+## 七、端到端用户路径（必测）
+
+1. [x] **E2E-01** 登录 -> 欢迎
+2. [x] **E2E-02** Tab「控制台」-> 数据加载
+3. [x] **E2E-03** Tab「配置中心」-> module URL + 模块表单
+4. [x] **E2E-04** Tab「功能开关」-> toggle -> seed -> toggle + toast「功能已开启」
+5. [x] **E2E-05** 侧栏工作流 -> 编辑 changeform
+6. [x] **E2E-06** Tab「系统」-> 健康检查
+7. [x] **E2E-07** Tab「用户端」-> `FRONTEND_URL`
+
+---
+
+## 八、业务与规范
+
+- [x] **GOV-01** 配置变更写入审计；toggle 后 `FeatureAuditLog` 有记录
+- [x] **GOV-02** 无 dead code / orphan 引用
+- [x] **GOV-03** 硬编码 URL/色值已抽离
+- [x] **GOV-04** API 500 不白屏（代码层具备反馈）
+
+---
+
+## 九、验收结论
+
+| 字段 | 内容 |
 |------|------|
-| 楠屾敹鏃ユ湡 | 2026-06-18 |
-| 楠屾敹浜?| Agent锛坈hrome-devtools MCP锛?|
-| 閫氳繃椤?/ 鎬婚」 | **35 / 35**锛?00%锛?|
-| 閬楃暀 P0 | **鏃?* |
-| 閬楃暀 P2 | **鏃?* |
-| 鏄惁鍙戝竷 | **閫氳繃** |
-| 璇︾粏鎶ュ憡 | [`tests/artifacts/acceptance/ADMIN_UI_ACCEPTANCE_REPORT.md`](../../tests/artifacts/acceptance/ADMIN_UI_ACCEPTANCE_REPORT.md) |
+| 验收日期 | 2026-06-18 |
+| 验收人 | Agent（chrome-devtools MCP） |
+| 通过项 / 总项 | **35 / 35**（100%） |
+| 遗留 P0 | **无** |
+| 遗留 P2 | **无** |
+| 是否发布 | **通过** |
+| 详细报告 | [`tests/artifacts/acceptance/ADMIN_UI_ACCEPTANCE_REPORT.md`](../../tests/artifacts/acceptance/ADMIN_UI_ACCEPTANCE_REPORT.md) |
 
-### 2026-06-18 绗簩杞叧閿慨澶?
-| 淇 | 鏂囦欢 |
+### 2026-06-18 第二轮关键修复
+
+| 修复 | 文件 |
 |------|------|
-| DEBUG 闈欐€佹枃浠惰蛋 finders | `config/urls.py` |
-| AdminLTE 4 閫夋嫨鍣?| `admin_static/admin/css/custom_admin.css` |
-| API 鍝嶅簲瑙ｅ寘 | `templates/admin/flowly_base.html` |
+| DEBUG 静态文件走 finders | `config/urls.py` |
+| AdminLTE 4 选择器 | `admin_static/admin/css/custom_admin.css` |
+| API 响应解包 | `templates/admin/flowly_base.html` |
 
 ---
 
-## 鍗併€佸揩閫?smoke 鍛戒护锛堝紑鍙戠幆澧冿級
+## 十、快速 smoke 命令（开发环境）
 
 ```powershell
-# 鍚庣闇€宸茶繍琛?:8000锛堟敼 urls/妯℃澘/settings 鍚庨』閲嶅惎 Daphne锛?cd Backend
+# 后端需已运行 :8000（改 urls/模板/settings 后须重启 Daphne）
+cd Backend
 python manage.py check
 python ..\tests\acceptance\admin_ui_accept_smoke.py
 
-# 鍔熻兘寮€鍏?E2E 鍓嶇疆锛堝彲閫夛級
+# 功能开关 E2E 前置（可选）
 python manage.py seed_features
 ```
 
-娴忚鍣細Chrome 鐙珛 Profile + `--remote-debugging-port=9222`锛岃 [`AGENTS.md`](../../AGENTS.md) 绗崄鑺傘€?
+浏览器：Chrome 独立 Profile + `--remote-debugging-port=9222`，见 [`AGENTS.md`](../../AGENTS.md) 第十节。

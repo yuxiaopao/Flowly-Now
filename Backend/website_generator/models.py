@@ -23,6 +23,19 @@ class GeneratedSite(models.Model):
         ('iterating', '迭代中'),
     ]
 
+    STATUS_CHOICES += [
+        ('profiling', 'Profiling'),
+        ('environment_ready', 'Environment ready'),
+        ('backend_ready', 'Backend ready'),
+        ('frontend_ready', 'Frontend ready'),
+        ('ui_polished', 'UI polished'),
+        ('reviewing', 'Reviewing'),
+        ('qa_running', 'QA running'),
+        ('repairing', 'Repairing'),
+        ('preview_ready', 'Preview ready'),
+        ('failed_with_report', 'Failed with report'),
+    ]
+
     PREVIEW_STATUS_CHOICES = [
         ('', '未知'),
         ('live', '可预览'),
@@ -78,6 +91,8 @@ class GeneratedSite(models.Model):
     last_weight_path = models.CharField(max_length=500, blank=True, verbose_name='最终权重路径')
     class_names = models.JSONField(default=list, verbose_name='类别名称')
 
+    model_artifact_manifest = models.JSONField(default=dict, blank=True, verbose_name='Model artifact manifest')
+
     # Generated code
     output_dir = models.CharField(max_length=500, verbose_name='输出目录')
     status = models.CharField(
@@ -109,6 +124,12 @@ class GeneratedSite(models.Model):
         default='flask',
         verbose_name='后端框架'
     )
+
+    site_brief = models.JSONField(default=dict, blank=True, verbose_name='Site brief')
+    required_features = models.JSONField(default=list, blank=True, verbose_name='Required features')
+    theme_profile = models.JSONField(default=dict, blank=True, verbose_name='Theme profile')
+    environment_config = models.JSONField(default=dict, blank=True, verbose_name='Environment config')
+    agent_memory_enabled = models.BooleanField(default=True, verbose_name='Agent memory enabled')
 
     # Deployment info
     inference_endpoint = models.CharField(max_length=500, blank=True, verbose_name='推理端点')

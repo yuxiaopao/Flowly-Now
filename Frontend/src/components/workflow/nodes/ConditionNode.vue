@@ -231,7 +231,7 @@
 <script setup>
 import { ref, watch, computed } from 'vue'
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
-import { GitBranch, ChevronDown, Plus, X, Loader, Check } from 'lucide-vue-next'
+import { ChevronDown, Plus, X, Loader, Check } from 'lucide-vue-next'
 import { useExecutionStore } from '@/stores/execution'
 import NodeTypeBadge from '@/components/workflow/nodes/NodeTypeBadge.vue'
 import { useNodePresentation } from '@/composables/useNodePresentation'
@@ -244,7 +244,7 @@ const props = defineProps({
 })
 
 const NODE_TYPE = 'condition'
-const { nodeIcon, nodeColor, nodeLabel } = useNodePresentation(NODE_TYPE)
+const { nodeColor } = useNodePresentation(NODE_TYPE)
 
 const emit = defineEmits(['select'])
 
@@ -275,8 +275,9 @@ watch(() => props.data, (d) => {
 }, { deep: true })
 
 function toggleExpand() {
-  handleSelect()
-  isExpanded.value = !isExpanded.value
+  const expanded = !isExpanded.value
+  emit('select')
+  isExpanded.value = expanded
 }
 
 function handleChange() {

@@ -71,6 +71,10 @@ export default defineConfig({
       '/predict': {
         target: 'http://localhost:""" + str(self.port) + """',
         changeOrigin: true,
+      },
+      '/api': {
+        target: 'http://localhost:""" + str(self.port) + """',
+        changeOrigin: true,
       }
     }
   }
@@ -85,6 +89,8 @@ export default defineConfig({
             upload_hint=upload_hint,
             labels=self.labels or [],
             disclaimer_html=disclaimer_html,
+            class_entities=(self.profile or {}).get('class_entities') or [],
+            display_names=(self.profile or {}).get('class_display_names') or {},
         )
         files.append(self._write_file('frontend/index.html', index_html))
         return files
@@ -101,6 +107,7 @@ export default defineConfig({
             "pillow>=10.0.0",
             "numpy>=1.24.0",
             "opencv-python>=4.8.0",
+            "ultralytics>=8.3.0",
         ]
         reqs.extend(extra_requirements(self.get_db_engine()))
         files.append(self._write_file('backend/requirements.txt', '\n'.join(reqs)))
@@ -117,6 +124,8 @@ export default defineConfig({
             'port': self.port,
             'model_type': 'detection',
             'db_engine': self.get_db_engine(),
+            'required_features': self.config.get('required_features') or [],
+            'model_artifact_manifest': self.config.get('model_artifact_manifest') or {},
         }
         files.append(self._write_file('backend/config.json', json.dumps(cfg, indent=2)))
 

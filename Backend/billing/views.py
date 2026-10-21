@@ -18,7 +18,7 @@ from .models import (
 )
 from .serializers import (
     PriceTierSerializer, SubscriptionSerializer, UsageRecordSerializer,
-    InvoiceSerializer, PaymentSerializer, CouponSerializer,
+    InvoiceSerializer, PaymentSerializer, CouponSerializer, SubscriptionCreateSerializer,
     CouponValidateSerializer, UsageSummarySerializer
 )
 
@@ -26,7 +26,7 @@ from .serializers import (
 class PriceTierViewSet(viewsets.ReadOnlyModelViewSet):
     """ViewSet for price tiers."""
 
-    queryset = PriceTier.objects.filter(is_active=True)
+    queryset = PriceTier.objects.filter(is_active=True).order_by('plan_type', 'billing_cycle', 'id')
     serializer_class = PriceTierSerializer
     permission_classes = [IsAuthenticated]
 
@@ -77,8 +77,10 @@ class SubscriptionViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['post'])
     def subscribe(self, request):
         """Create or update subscription."""
-        plan_type = request.data.get('plan_type', PlanType.FREE)
-        billing_cycle = request.data.get('billing_cycle', 'monthly')
+        serializer = SubscriptionCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        plan_type = serializer.validated_data.get('plan_type', PlanType.FREE)
+        billing_cycle = serializer.validated_data.get('billing_cycle', 'monthly')
 
         subscription, created = Subscription.objects.update_or_create(
             user=request.user,
@@ -97,6 +99,9 @@ class SubscriptionViewSet(viewsets.ModelViewSet):
             SubscriptionSerializer(subscription).data,
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK
         )
+
+    def create(self, request, *args, **kwargs):
+        return self.subscribe(request)
 
     @action(detail=False, methods=['post'])
     def cancel(self, request):
@@ -129,6 +134,7 @@ class SubscriptionViewSet(viewsets.ModelViewSet):
 
         subscription.cancel_at_period_end = False
         subscription.status = SubscriptionStatus.ACTIVE
+        subscription.canceled_at = None
         subscription.save()
 
         return Response({'status': 'Subscription reactivated'})

@@ -1,0 +1,22 @@
+@use './variables.scss' as *;
+
+$personal-center-nav-breakpoint: 960px;
+$personal-center-profile-breakpoint: 960px;
+$personal-center-fields-breakpoint: 560px;
+$personal-center-security-width: 320px;
+$personal-center-form-breakpoint: 1200px;
+
+.section-heading {
+  margin-bottom: $spacing-5;
+  h2 { display: flex; align-items: center; gap: $spacing-2; margin: 0; font-size: $font-size-base; font-weight: $font-weight-semibold; color: var(--text-primary); }
+  p { margin: $spacing-2 0 0; color: var(--text-secondary); font-size: $font-size-sm; line-height: $line-height-normal; }
+}
+.field-hint { display: block; margin: $spacing-2 0 0; color: var(--text-secondary); font-size: $font-size-xs; line-height: $line-height-normal; }
+.inline-error { margin-block: $spacing-3; color: var(--error); font-size: $font-size-sm; line-height: $line-height-normal; overflow-wrap: anywhere; }
+.form-footer { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: $spacing-3; padding-top: $spacing-3; }
+.form-actions { display: flex; flex-wrap: wrap; gap: $spacing-2; }
+.save-status { color: var(--text-secondary); font-size: $font-size-xs; }
+@media (max-width: $breakpoint-sm) {
+  .field-hint, .save-status { font-size: $font-size-sm; }
+  .form-actions { width: 100%; }
+}

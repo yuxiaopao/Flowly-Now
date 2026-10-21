@@ -10,7 +10,7 @@ export const APP_CONFIG = {
   appFullName: 'Flowly - AI Agent 工作流编排平台',
 
   // API 配置 - 从环境变量读取，默认为本地开发服务器
-  apiBaseUrl: import.meta.env.VITE_API_URL || 'http://localhost:8000',
+  apiBaseUrl: (import.meta.env.DEV && import.meta.env.VITE_DEV_BACKEND_URL) || import.meta.env.VITE_API_URL || 'http://localhost:8000',
   apiPrefix: import.meta.env.VITE_API_PREFIX || '/api/v1',
 
   // 请求超时配置 (毫秒) - 从环境变量读取
@@ -23,7 +23,7 @@ export const APP_CONFIG = {
   maxRetries: Number(import.meta.env.VITE_API_MAX_RETRIES) || 1,
 
   // WebSocket 配置
-  wsUrl: import.meta.env.VITE_WS_URL || '',
+  wsUrl: (import.meta.env.DEV && import.meta.env.VITE_DEV_BACKEND_URL?.replace(/^http/, 'ws')) || import.meta.env.VITE_WS_URL || '',
 
   // 向量存储默认配置
   vectorStore: {
@@ -111,12 +111,44 @@ export const APP_CONFIG = {
 
 // 生成完整的 API URL
 export function getApiUrl(path = '') {
-  return `${APP_CONFIG.apiBaseUrl}${APP_CONFIG.apiPrefix}${path}`
+  return `${getApiBaseUrl()}${path}`
 }
 
 // 生成完整的 API Base URL
 export function getApiBaseUrl() {
-  return `${APP_CONFIG.apiBaseUrl}${APP_CONFIG.apiPrefix}`
+  // An explicit local proxy target must survive public runtime configuration.
+  if (import.meta.env.DEV && import.meta.env.VITE_DEV_BACKEND_URL && typeof window !== 'undefined') {
+    return `${window.location.origin}${APP_CONFIG.apiPrefix}`
+  }
+  let origin = APP_CONFIG.apiBaseUrl || ''
+  // Docker FE (5200/nginx): dev .env.local may bake :5210; use same-origin /api via nginx.
+  if (typeof window !== 'undefined') {
+    const loc = window.location
+    const onDockerFe = loc.port === '5200' || (loc.port === '' && loc.hostname !== 'localhost')
+    if (onDockerFe && (origin.includes(':5210') || origin.includes('localhost:5173'))) {
+      origin = loc.origin
+    }
+  }
+  if (!origin && typeof window !== 'undefined') {
+    origin = window.location.origin
+  }
+  return `${origin}${APP_CONFIG.apiPrefix}`
+}
+
+/** Sync axios/fetch base URL after runtime or env override. */
+export function syncApiClientBaseUrl() {
+  const nextBase = getApiBaseUrl()
+  try {
+    // Lazy import avoids circular dependency at module init.
+    import('@/api/index.js').then(({ api }) => {
+      if (api?.defaults) {
+        api.defaults.baseURL = nextBase
+      }
+    })
+  } catch {
+    // Non-fatal: callers may invoke before api module is ready.
+  }
+  return nextBase
 }
 
 /** 从后端 public site-config 合并运行时默认值（模型、API 地址等） */
@@ -152,6 +184,12 @@ export function applyRuntimeConfig(runtime) {
       APP_CONFIG.vectorStore.defaultProtocol = runtime.vector_store.default_protocol
     }
   }
+
+  if (import.meta.env.DEV && import.meta.env.VITE_DEV_BACKEND_URL) {
+    APP_CONFIG.apiBaseUrl = import.meta.env.VITE_DEV_BACKEND_URL
+    APP_CONFIG.wsUrl = import.meta.env.VITE_DEV_BACKEND_URL.replace(/^http/, 'ws')
+  }
+  syncApiClientBaseUrl()
 }
 
 function resolveApiHost() {
@@ -176,7 +214,10 @@ export function getWebSocketUrl(path = '') {
   const configured = (APP_CONFIG.wsUrl || '').trim()
 
   let wsUrl
-  if (configured) {
+  if (import.meta.env.DEV && import.meta.env.VITE_DEV_BACKEND_URL) {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    wsUrl = `${protocol}//${window.location.host}${normalizedPath}`
+  } else if (configured) {
     if (configured.startsWith('ws://') || configured.startsWith('wss://')) {
       wsUrl = `${configured.replace(/\/$/, '')}${normalizedPath}`
     } else {

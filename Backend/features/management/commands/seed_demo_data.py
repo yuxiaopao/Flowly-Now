@@ -25,7 +25,7 @@ from billing.models import (
     Subscription,
     SubscriptionStatus,
 )
-from integrations.models import Integration, IntegrationTemplate
+from integrations.models import IntegrationTemplate
 from prompts.models import PromptCategory, PromptTemplate
 from training.models import TrainingJob, Dataset as TrainingDataset
 from training.serializers import _get_user_tenant
@@ -169,95 +169,18 @@ class Command(BaseCommand):
         return PriceTier.objects.filter(is_active=True).count()
 
     def _seed_integration_templates(self):
-        templates = [
-            {
-                "name": "Zapier 自动化",
-                "description": "将 Flowly 工作流与 Zapier 连接，触发数千种第三方应用。",
-                "integration_type": Integration.IntegrationType.ZAPIER,
-                "category": "automation",
-                "icon": "zap",
-                "color": "#ff4a00",
-                "is_featured": True,
-                "config_template": {"api_key": "", "webhook_url": ""},
-                "required_config": ["api_key"],
-                "trigger_events": ["workflow.completed", "execution.failed"],
-                "supported_actions": ["trigger_workflow", "send_notification"],
-            },
-            {
-                "name": "Make (Integromat)",
-                "description": "可视化自动化平台，编排跨系统业务流程。",
-                "integration_type": Integration.IntegrationType.MAKE,
-                "category": "automation",
-                "icon": "workflow",
-                "color": "#6366f1",
-                "is_featured": True,
-                "config_template": {"scenario_id": "", "api_token": ""},
-                "required_config": ["api_token"],
-                "trigger_events": ["workflow.started", "workflow.completed"],
-                "supported_actions": ["run_scenario", "sync_data"],
-            },
-            {
-                "name": "n8n 自托管",
-                "description": "连接自托管 n8n 实例，实现开源工作流编排。",
-                "integration_type": Integration.IntegrationType.n8n,
-                "category": "automation",
-                "icon": "git-branch",
-                "color": "#ea580c",
-                "is_featured": True,
-                "config_template": {"base_url": "", "api_key": ""},
-                "required_config": ["base_url", "api_key"],
-                "trigger_events": ["execution.completed"],
-                "supported_actions": ["execute_workflow"],
-            },
-            {
-                "name": "Microsoft Power Automate",
-                "description": "与 Microsoft 365 生态集成，自动化办公流程。",
-                "integration_type": Integration.IntegrationType.POWERAUTOMATE,
-                "category": "automation",
-                "icon": "cloud",
-                "color": "#0078d4",
-                "is_featured": False,
-                "config_template": {"tenant_id": "", "flow_id": ""},
-                "required_config": ["tenant_id"],
-                "trigger_events": ["workflow.completed"],
-                "supported_actions": ["trigger_flow"],
-            },
-            {
-                "name": "Slack 通知",
-                "description": "工作流执行完成后向 Slack 频道发送通知。",
-                "integration_type": Integration.IntegrationType.CUSTOM,
-                "category": "communication",
-                "icon": "message-square",
-                "color": "#4a154b",
-                "is_featured": True,
-                "config_template": {"webhook_url": "", "channel": "#general"},
-                "required_config": ["webhook_url"],
-                "trigger_events": ["execution.completed", "execution.failed"],
-                "supported_actions": ["send_message"],
-            },
-            {
-                "name": "Webhook 自定义集成",
-                "description": "通过 HTTP Webhook 与任意外部系统对接。",
-                "integration_type": Integration.IntegrationType.CUSTOM,
-                "category": "data",
-                "icon": "link",
-                "color": "#10b981",
-                "is_featured": False,
-                "config_template": {"url": "", "method": "POST", "headers": {}},
-                "required_config": ["url"],
-                "trigger_events": ["workflow.started", "workflow.completed"],
-                "supported_actions": ["http_request"],
-            },
-        ]
-
-        for index, item in enumerate(templates, start=1):
+        from integrations.catalog import public_catalog
+        for item in public_catalog():
             IntegrationTemplate.objects.update_or_create(
-                name=item["name"],
+                name=item['name'],
                 defaults={
-                    **item,
-                    "usage_count": 100 - index * 5,
-                    "is_active": True,
-                    "setup_guide": f"按照文档配置 {item['name']} 即可开始使用。",
+                    'description': item['description'], 'integration_type': item['id'],
+                    'category': item['category'], 'setup_guide': item['setup_guide'],
+                    'documentation_url': item['documentation_url'],
+                    'required_config': [f['key'] for f in item['fields'] if f['required']],
+                    'optional_config': [f['key'] for f in item['fields'] if not f['required']],
+                    'trigger_events': item['events'], 'supported_actions': item['capabilities'],
+                    'is_active': True, 'is_featured': item['is_featured'], 'usage_count': 0,
                 },
             )
         return IntegrationTemplate.objects.filter(is_active=True).count()

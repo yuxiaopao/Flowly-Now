@@ -85,7 +85,15 @@ class BaseGenerator(ABC):
 
     def get_db_engine(self) -> str:
         from ..site_factory.db_templates import normalize_db_engine
-        return normalize_db_engine(self.config.get('dbEngine') or self.config.get('db_engine'))
+        env_cfg = self.config.get('environment_config') or self.config.get('environmentConfig') or {}
+        raw = (
+            self.config.get('dbEngine')
+            or self.config.get('db_engine')
+            or env_cfg.get('dbEngine')
+            or env_cfg.get('db_engine')
+            or 'mysql'
+        )
+        return normalize_db_engine(raw)
 
     def write_db_scaffold(self, extra_sql: str = '', extra_sql_mysql: str = '') -> List[str]:
         """Write schema.sql + init_db.py for configured DB engine."""
@@ -289,14 +297,26 @@ class BaseGenerator(ABC):
         env_example = self._get_env_example_content()
         files.append(self._write_file('.env.example', env_example))
         
-        # backend/config.json
-        config_json = json.dumps({
+        config_path = os.path.join(self.output_dir, 'backend', 'config.json')
+        config_data = {
             'model_path': os.path.basename(self.model_path),
             'labels': self.labels,
             'framework': self.framework,
             'website_type': self.website_type,
-            'port': self.port
-        }, indent=2)
+            'port': self.port,
+            'db_engine': self.get_db_engine(),
+            'required_features': self.config.get('required_features') or [],
+            'model_artifact_manifest': self.config.get('model_artifact_manifest') or {},
+        }
+        if os.path.isfile(config_path):
+            try:
+                with open(config_path, 'r', encoding='utf-8') as existing:
+                    current = json.load(existing) or {}
+                current.update({k: v for k, v in config_data.items() if v not in ('', [], {})})
+                config_data = current
+            except Exception:
+                pass
+        config_json = json.dumps(config_data, indent=2, ensure_ascii=False)
         files.append(self._write_file('backend/config.json', config_json))
         
         return files
@@ -349,10 +369,44 @@ CMD ["python", "app.py"]
         """Get docker-compose.yml content."""
         backend_port = self.port
         frontend_port = 3000
+        db_engine = self.get_db_engine()
+        mysql_service = ''
+        mysql_depends = ''
+        mysql_env = ''
+        if db_engine == 'mysql':
+            mysql_service = '''
+  mysql:
+    image: mysql:8.0
+    container_name: ai_website_mysql
+    environment:
+      - MYSQL_ROOT_PASSWORD=${MYSQL_PASSWORD:-flowly_dev_password}
+      - MYSQL_DATABASE=${MYSQL_DATABASE:-flowly_site}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+'''
+            mysql_depends = '''
+      mysql:
+        condition: service_healthy'''
+            mysql_env = '''
+      - DB_ENGINE=mysql
+      - MYSQL_HOST=mysql
+      - MYSQL_PORT=3306
+      - MYSQL_USER=root
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-flowly_dev_password}
+      - MYSQL_DATABASE=${MYSQL_DATABASE:-flowly_site}'''
 
         return f'''version: '3.8'
 
 services:
+{mysql_service}
   backend:
     build:
       context: .
@@ -364,9 +418,11 @@ services:
       - MODEL_PATH=/app/model.pth
       - LABELS={json.dumps(self.labels)}
       - PORT={self.port}
+{mysql_env}
     volumes:
       - ./backend:/app
       - model_data:/app/model
+    depends_on:{mysql_depends if mysql_depends else ' []'}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:{self.port}/health"]
       interval: 30s
@@ -390,6 +446,7 @@ services:
 
 volumes:
   model_data:
+  mysql_data:
 '''
 
     def _get_dockerignore_content(self) -> str:
@@ -438,6 +495,14 @@ HOST=0.0.0.0
 
 # Model Framework
 FRAMEWORK={self.framework}
+
+# Database Configuration
+DB_ENGINE={self.get_db_engine()}
+MYSQL_HOST=127.0.0.1
+MYSQL_PORT=3306
+MYSQL_USER=root
+MYSQL_PASSWORD=
+MYSQL_DATABASE=flowly_site
 
 # Frontend API URL (used by frontend)
 VITE_API_URL=http://localhost:{self.port}

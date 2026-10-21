@@ -1,0 +1,54 @@
+{
+  "name": "蝶羽共生纹｜AI直接生成60秒三维刺绣视频",
+  "duration_seconds": 60,
+  "clip_seconds": 10,
+  "image_model": "agnes-image-2.5-flash",
+  "video_model": "agnes-video-2.5-flash",
+  "image_size": "2K",
+  "ratio": "16:9",
+  "resolution": "720p",
+  "fps": 24,
+  "timeout_seconds": 1200,
+  "image_attempts": 2,
+  "video_submit_attempts": 3,
+  "reference_source_size": [1914, 1089],
+  "reference_crops": {"motif": [1455, 405, 1672, 585], "garment": [1706, 417, 1869, 586]},
+  "seed": 26841,
+  "disclosure": "AI生成概念演示 · 非实物成品 · 非工艺验证",
+  "style": "AI generated three-dimensional digital embroidery film, physical volumetric cotton and silk threads with fine fiber texture, visible satin and long-short stitching, gentle cast shadows on warm ivory woven linen, restrained dark indigo and blue-grey threads, soft warm grazing studio light, shallow depth of field during close-ups. No people, hands, needles, human embroiderer, living insect, text, diagrams, infographic, flat motion graphic or split-screen. EXACTLY FOUR butterfly wings and bilateral symmetry around a vertical body. Preserve nested diamond compartments from Miao butterfly embroidery. Phoenix contributes tapered S-shaped feather curves and layered feather tips, integrated into the SAME four-wing contour rather than a separate bird. Keep the original ornament's identity, geometry and colors throughout. Landscape 16:9, keep bottom caption area clear.",
+  "motif_image": "The uploaded close-up is the ONE finished original butterfly-feather symbiotic ornament from the user's design board. Convert this exact outline into realistic raised cotton-thread embroidery on ivory linen. Preserve the central body, FOUR diamond wing compartments, curled S feathers and the shared feathered contour of ALL FOUR wings. Center ONE large complete ornament, filling about 65 percent of the image, at a slight three-quarter angle that reveals stitch thickness and overlapping feather layers. Empty ivory linen surrounds it. Only one motif; no repeated miniature, inset, diagram, text, grids or loose thread coils. Keep the original outline and make every visible strand a volumetric textile stitch with fine fibers and contact shadows. No metal or plastic.",
+  "garment_image": "The first uploaded close-up is the user's original white blouse drawing. Faithfully reconstruct THIS garment and its exact embroidery PLACEMENT in three dimensions. The second input supplies indigo thread material and butterfly-diamond plus phoenix-feather vocabulary only; do not copy its large centered composition onto the chest. One complete ivory Chinese blouse floats alone in an ivory studio, without person or mannequin body. Preserve the stand collar and clearly visible overlapping DIAGONAL front opening with frog-button fasteners. A NARROW CONNECTED S-shaped embroidery band traces that diagonal placket from the collar toward the lower front edge, with small butterfly diamond units embedded among tapered phoenix feathers. Matching small bands decorate BOTH cuffs. Keep most of the ivory chest PLAIN and empty. No giant centered butterfly or chest badge. Follow the silhouette and embroidery placement in input one exactly. Entire blouse and both long sleeves within frame, visible fabric weave, seams, folds, cotton stitch loft and soft shadows, refined warm studio lighting. No board, text, collage, head or body.",
+  "shots": [
+    {
+      "name": "平面图扩展成三维骨架",
+      "caption": "01 平面图 → 三维蝴蝶骨架",
+      "motion": "Use <Picture 1> only as the completed ornament and textile style reference. Begin with a large flat outline of this four-wing butterfly on ivory linen. During ten seconds, indigo thread traces itself along the central axis and four nested diamond wing compartments, lifting from the surface into rounded three-dimensional thread stitches. Clearly show the transformation from a flat drawing to raised thread geometry. The wing outline remains geometric in this stage. Slow oblique camera push reveals thread thickness. No hands, no needle, no stitching person; thread paths grow autonomously."
+    },
+    {
+      "name": "凤凰羽线取形与组合",
+      "caption": "02 保留菱格 · S形凤凰羽线生长",
+      "motion": "Use <Picture 1> as the identity reference. Begin with the raised central butterfly body and four diamond compartments already stitched. The angular closed outer wing boundaries gently recede while long curved blue-grey threads sweep outward from the SAME central body. Each trajectory forms an S-shaped phoenix-tail curve, gradually tapering into feather tips around the diamonds. Demonstrate the combination process clearly with slight spatial separation of feather strands, then bring them toward the butterfly skeleton. Keep a single connected four-wing composition, no separate bird. Smooth continuous ten-second animation."
+    },
+    {
+      "name": "逐针填充与共生融合",
+      "caption": "03 逐针铺线 · 蝶骨与凤羽共用轮廓",
+      "motion": "Use <Picture 1> as the completed design reference. Start with the butterfly skeleton and newly drawn S-feather outer contours. Satin stitches grow sequentially along the feather curvature, each visible strand laying itself across adjacent strands without human intervention. The feather layers fill from their roots toward tapered tips while the inner diamond compartments stay readable. Show the serrated geometric edge transforming into overlapping feather points. Finish with ONE complete volumetric butterfly-feather embroidery. Begin in a macro close-up of thread walking, then pull back so the entire large fused ornament is clearly visible by the last two seconds."
+    },
+    {
+      "name": "完整纹样三维旋转",
+      "caption": "04 三维环绕 · 展示针脚厚度与羽片层叠",
+      "motion": "Use <Picture 1> for exact motif and linen identity. Present the complete large four-wing embroidered ornament, centered and fully inside the frame. Slowly orbit the camera from frontal to a thirty-degree side view and return toward frontal over ten seconds. Show genuine-looking volumetric thread loft, tiny fiber highlights, soft contact shadows, nested diamond compartments and layered S-feather silhouettes. Briefly separate two feather layers by a few millimeters to expose the butterfly skeleton, then settle them back into the fused contour. Stable elegant motion, no geometry melting or extra wings."
+    },
+    {
+      "name": "大纹样渐进映射服装",
+      "caption": "05 大纹样 → 斜襟服装曲面映射",
+      "motion": "Use <Picture 1> as the original completed large embroidery and <Picture 2> as the garment destination. Start on a full large embroidery on linen. During one smooth ten-second transition, pull the camera back as the ivory mandarin-collar diagonal-placket blouse emerges in the studio. The same indigo thread ornament gently lifts, reduces in scale and bends continuously to follow the fabric curvature along the diagonal placket. Clearly display the travel and gradual conforming process, not a jump cut or image crossfade. Preserve the butterfly skeleton and phoenix feather contour as it settles on the garment. No person or hands; the blouse floats alone."
+    },
+    {
+      "name": "袖口生长与服饰最终呈现",
+      "caption": "06 袖口呼应 · 完整三维服饰效果",
+      "motion": "Use <Picture 1> for embroidery identity and <Picture 2> for the exact ivory Chinese blouse. Begin with the central placket ornament already conformed to the blouse. Blue-grey stitches autonomously trace and fill small matching butterfly-feather elements on both cuffs, visibly following sleeve curvature. Move from a brief cuff close-up to a complete full-garment view, then turn the floating blouse gently by twenty degrees to reveal fabric volume and raised embroidery. Hold the finished garment clearly for the last three seconds. Keep collar, diagonal frog-button closure, both sleeves and the same four-wing motif consistent. No human, no mannequin head, no text."
+    }
+  ],
+  "video_submit_interval_seconds": 65
+}

@@ -1,5 +1,8 @@
 <template>
-  <div class="workflow-execute">
+  <div
+    class="workflow-execute"
+    :class="{ 'history-detail': isHistoryDetail }"
+  >
     <div class="execute-container">
       <!-- 顶部信息栏 -->
       <header class="execute-header">
@@ -12,15 +15,28 @@
           </el-button>
           <div class="workflow-info">
             <h1 class="workflow-name">
-              {{ workflow?.name || '执行工作流' }}
+              {{ isHistoryDetail ? '执行详情' : (workflow?.name || '执行工作流') }}
             </h1>
             <span
               v-if="executionId"
               class="execution-id"
             >执行 ID: {{ executionId }}</span>
+            <el-tag
+              v-if="isMediaExecution"
+              type="info"
+              size="small"
+            >
+              {{ getMediaExecutionLabel({ triggerSource: executionSource }) }}
+            </el-tag>
           </div>
         </div>
         <div class="header-actions">
+          <el-button
+            v-if="isHistoryDetail && workflowId"
+            @click="openOnCanvas"
+          >
+            在工作流中查看
+          </el-button>
           <el-button
             v-if="isRunning"
             type="danger"
@@ -29,7 +45,7 @@
             取消执行
           </el-button>
           <el-button
-            v-if="executionStatus === 'completed' || executionStatus === 'failed'"
+            v-if="!isMediaExecution && (executionStatus === 'completed' || executionStatus === 'failed')"
             @click="handleRetry"
           >
             <RefreshCw class="btn-icon" />
@@ -46,61 +62,99 @@
       </header>
 
       <div class="execute-content">
-        <!-- 左侧：输入参数 -->
-        <aside class="input-panel">
-          <h3 class="panel-title">
-            输入参数
-          </h3>
+        <!-- 上层：上传文件 + 输入文本（含执行历史） -->
+        <section class="input-panel">
+          <div class="input-panel-main">
+            <h3 class="panel-title">
+              输入参数
+            </h3>
 
-          <el-form
-            ref="inputFormRef"
-            :model="inputData"
-            label-position="top"
-          >
-            <el-form-item
-              v-for="param in inputParams"
-              :key="param.name"
-              :label="param.label || param.name"
+            <div
+              v-if="!isHistoryDetail"
+              class="upload-row"
             >
-              <el-input
-                v-if="param.type === 'string' || !param.type"
-                v-model="inputData[param.name]"
-                :placeholder="param.placeholder || `输入 ${param.label || param.name}`"
+              <input
+                ref="fileInputRef"
+                type="file"
+                accept=".txt,.json,.md,.csv,.tex"
+                class="hidden-file-input"
+                @change="handleFileUpload"
+              >
+              <el-button
                 :disabled="isRunning"
-              />
-              <el-input-number
-                v-else-if="param.type === 'number'"
-                v-model="inputData[param.name]"
-                :disabled="isRunning"
-              />
-              <el-switch
-                v-else-if="param.type === 'boolean'"
-                v-model="inputData[param.name]"
-              />
-              <el-input
-                v-else-if="param.type === 'textarea'"
-                v-model="inputData[param.name]"
-                type="textarea"
-                :rows="3"
-                :disabled="isRunning"
-              />
-            </el-form-item>
-          </el-form>
+                @click="fileInputRef?.click()"
+              >
+                <FileText class="btn-icon" />
+                上传文件
+              </el-button>
+              <span
+                v-if="uploadedFileName"
+                class="uploaded-file-name"
+              >已载入：{{ uploadedFileName }}</span>
+              <span
+                v-else
+                class="upload-hint"
+              >支持 .txt / .json / .md / .csv / .tex，内容将填入输入文本</span>
+            </div>
 
-          <div class="panel-actions">
-            <AppButton
-              variant="primary"
-              :loading="isRunning"
-              :disabled="!canExecute"
-              @click="handleExecute"
+            <el-form
+              ref="inputFormRef"
+              :model="inputData"
+              label-position="top"
+              class="input-form"
             >
-              <Play class="btn-icon" />
-              {{ isRunning ? '执行中...' : '开始执行' }}
-            </AppButton>
+              <el-form-item
+                v-for="param in inputParams"
+                :key="param.name"
+                :label="param.label || param.name"
+              >
+                <el-input
+                  v-if="param.type === 'string' || !param.type"
+                  v-model="inputData[param.name]"
+                  :placeholder="param.placeholder || `输入 ${param.label || param.name}`"
+                  :disabled="isRunning || isHistoryDetail"
+                />
+                <el-input-number
+                  v-else-if="param.type === 'number'"
+                  v-model="inputData[param.name]"
+                  :disabled="isRunning || isHistoryDetail"
+                />
+                <el-switch
+                  v-else-if="param.type === 'boolean'"
+                  v-model="inputData[param.name]"
+                  :disabled="isHistoryDetail"
+                />
+                <el-input
+                  v-else-if="param.type === 'textarea'"
+                  v-model="inputData[param.name]"
+                  type="textarea"
+                  :autosize="{ minRows: 4, maxRows: 8 }"
+                  :disabled="isRunning || isHistoryDetail"
+                />
+              </el-form-item>
+            </el-form>
+
+            <div
+              v-if="!isHistoryDetail"
+              class="panel-actions"
+            >
+              <AppButton
+                variant="primary"
+                :loading="isRunning"
+                :disabled="!canExecute"
+                @click="handleExecute"
+              >
+                <Play class="btn-icon" />
+                {{ isRunning ? '执行中...' : '开始执行' }}
+              </AppButton>
+            </div>
           </div>
 
           <!-- 执行历史 -->
-          <div class="history-section">
+          <div
+            v-if="!isHistoryDetail"
+            class="history-section"
+          >
             <h4 class="section-title">
               执行历史
             </h4>
@@ -127,9 +181,53 @@
               </div>
             </div>
           </div>
-        </aside>
+        </section>
 
-        <!-- 中间：执行状态和输出 -->
+        <!-- 中层：执行日志 -->
+        <section class="log-panel">
+          <div class="panel-header">
+            <h3 class="panel-title">
+              执行日志
+            </h3>
+            <div class="panel-actions">
+              <el-button
+                text
+                size="small"
+                @click="autoScroll = !autoScroll"
+              >
+                {{ autoScroll ? '自动滚动' : '固定' }}
+              </el-button>
+              <el-button
+                text
+                size="small"
+                @click="clearLogs"
+              >
+                清除
+              </el-button>
+            </div>
+          </div>
+          <div
+            ref="logContainer"
+            class="log-content"
+          >
+            <div
+              v-for="(log, index) in logs"
+              :key="index"
+              :class="['log-item', `log-${log.level}`]"
+            >
+              <span class="log-time">{{ formatLogTime(log.timestamp) }}</span>
+              <span class="log-message">{{ log.message }}</span>
+            </div>
+            <div
+              v-if="logs.length === 0"
+              class="no-logs"
+            >
+              暂无日志
+            </div>
+          </div>
+        </section>
+
+        <!-- 下层：执行状态和输出 -->
         <main class="output-panel">
           <div class="panel-header">
             <h3 class="panel-title">
@@ -164,12 +262,23 @@
             </el-steps>
           </div>
 
+          <ExecutionWorkflowGraph
+            v-if="!isMediaExecution"
+            :nodes="workflowGraphNodes"
+            :edges="workflowGraphEdges"
+            :node-status="nodeStatus"
+            :selected-node-id="selectedExecNodeId"
+            @select="selectExecNode"
+          />
+
           <!-- 节点执行状态 -->
           <div class="node-status-list">
             <div
               v-for="(status, nodeId) in nodeStatus"
               :key="nodeId"
-              :class="['node-status-item', `status-${status.status}`]"
+              :class="['node-status-item', `status-${status.status}`, { active: selectedExecNodeId === nodeId }]"
+              :data-node-id="nodeId"
+              @click="selectExecNode(nodeId)"
             >
               <div class="node-info">
                 <component
@@ -224,7 +333,7 @@
               v-if="Object.keys(nodeStatus).length === 0"
               class="no-nodes"
             >
-              点击"开始执行"按钮开始执行工作流
+              {{ isMediaExecution ? '这是独立媒体任务，产物见下方；未运行画布节点。' : (isHistoryDetail ? '此记录暂无节点明细，产物见下方。' : '点击"开始执行"按钮开始执行工作流') }}
             </div>
           </div>
 
@@ -297,51 +406,15 @@
             </div>
           </div>
         </main>
-
-        <!-- 右侧：日志 -->
-        <aside class="log-panel">
-          <div class="panel-header">
-            <h3 class="panel-title">
-              执行日志
-            </h3>
-            <div class="panel-actions">
-              <el-button
-                text
-                size="small"
-                @click="autoScroll = !autoScroll"
-              >
-                {{ autoScroll ? '自动滚动' : '固定' }}
-              </el-button>
-              <el-button
-                text
-                size="small"
-                @click="clearLogs"
-              >
-                清除
-              </el-button>
-            </div>
-          </div>
-          <div
-            ref="logContainer"
-            class="log-content"
-          >
-            <div
-              v-for="(log, index) in logs"
-              :key="index"
-              :class="['log-item', `log-${log.level}`]"
-            >
-              <span class="log-time">{{ formatLogTime(log.timestamp) }}</span>
-              <span class="log-message">{{ log.message }}</span>
-            </div>
-            <div
-              v-if="logs.length === 0"
-              class="no-logs"
-            >
-              暂无日志
-            </div>
-          </div>
-        </aside>
       </div>
+
+      <section class="output-viewer-section">
+        <ExecutionOutputViewer
+          :node-status="outputViewerNodeStatus"
+          :workflow-nodes="workflowGraphNodes"
+          :output-data="outputData"
+        />
+      </section>
     </div>
 
     <!-- 错误详情对话框 -->
@@ -374,6 +447,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useWorkflowStore } from '@/stores/workflow'
 import { useExecutionStore } from '@/stores/execution'
 import { useAppStore } from '@/stores/app'
+import { MEDIA_EXECUTION_KIND, getMediaExecutionLabel } from '@/config/executionMedia'
 import { workflowApi } from '@/api/workflow'
 import { nodeExecutionsFromStatus } from '@/utils/executionArtifacts'
 import { getWebSocketUrl } from '@/config'
@@ -384,6 +458,8 @@ import {
 } from 'lucide-vue-next'
 import AppButton from '@/components/common/AppButton.vue'
 import ExecutionArtifactsPanel from '@/components/workflow/ExecutionArtifactsPanel.vue'
+import ExecutionOutputViewer from '@/components/workflow/ExecutionOutputViewer.vue'
+import ExecutionWorkflowGraph from '@/components/workflow/ExecutionWorkflowGraph.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -391,8 +467,11 @@ const workflowStore = useWorkflowStore()
 const executionStore = useExecutionStore()
 const appStore = useAppStore()
 
-const workflowId = computed(() => route.params.id)
-
+const isHistoryDetail = computed(() => route.name === 'ExecutionDetail')
+const resolvedWorkflowId = ref('')
+const workflowId = computed(() => (
+  isHistoryDetail.value ? resolvedWorkflowId.value : route.params.id
+))
 const workflow = computed(() => workflowStore.currentWorkflow)
 const isRunning = computed(() => ['running', 'pending', 'queued'].includes(executionStatus.value))
 const canExecute = computed(() => workflow.value?.id)
@@ -404,11 +483,15 @@ const nodeStatus = ref({})
 const rawNodeStatus = ref({})
 const nodeExecutionsList = ref([])
 const outputData = ref(null)
+const executionSource = ref(null)
+const isMediaExecution = computed(() => executionSource.value?.kind === MEDIA_EXECUTION_KIND)
 const streamingOutput = ref('')
 const errorMessage = ref('')
 const executionHistory = ref([])
 
 const inputFormRef = ref(null)
+const fileInputRef = ref(null)
+const uploadedFileName = ref('')
 const outputContainer = ref(null)
 const logContainer = ref(null)
 const showFullError = ref(false)
@@ -457,14 +540,89 @@ const formattedOutput = computed(() => {
 
 const workflowNodeNameMap = computed(() => buildWorkflowNodeLookup().nameById)
 
+const workflowGraphNodes = computed(() => workflowStore.nodes || workflow.value?.nodes || [])
+const workflowGraphEdges = computed(() => workflowStore.edges || workflow.value?.edges || [])
+const selectedExecNodeId = ref('')
+
+const outputViewerNodeStatus = computed(() => {
+  const merged = {}
+  Object.entries(rawNodeStatus.value || {}).forEach(([nodeId, value]) => {
+    if (value && typeof value === 'object') {
+      merged[nodeId] = {
+        ...value,
+        name: value.name || value.node_name || value.nodeName,
+        output: value.output ?? value.output_data ?? value.outputData ?? value,
+      }
+    } else {
+      merged[nodeId] = { status: value }
+    }
+  })
+  Object.entries(nodeStatus.value || {}).forEach(([nodeId, value]) => {
+    const prev = merged[nodeId] || {}
+    merged[nodeId] = {
+      ...prev,
+      ...(value || {}),
+      name: value?.name || prev.name,
+      output: value?.output ?? prev.output,
+    }
+  })
+  return merged
+})
+
+function extractWorkflowId(execution) {
+  if (!execution) return ''
+  const nested = execution.workflow
+  if (typeof nested === 'string' || typeof nested === 'number') return String(nested)
+  if (nested && typeof nested === 'object') {
+    const nestedId = nested.id || nested.pk
+    if (nestedId) return String(nestedId)
+  }
+  const direct = execution.workflowId || execution.workflow_id
+  if (direct && typeof direct !== 'object') return String(direct)
+  return ''
+}
+
+function applyInputData(execution) {
+  const raw = execution?.inputData ?? execution?.input_data
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return
+  Object.assign(inputData, raw)
+  if (isHistoryDetail.value && !raw.input) {
+    inputData.input = JSON.stringify(raw, null, 2)
+  }
+}
+
+function selectExecNode(nodeId) {
+  if (!nodeId) return
+  selectedExecNodeId.value = String(nodeId)
+  nextTick(() => {
+    const el = document.querySelector(`[data-node-id="${CSS.escape(String(nodeId))}"]`)
+    el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  })
+}
+
 onMounted(async () => {
   try {
+    if (isHistoryDetail.value) {
+      const execId = String(route.params.id)
+      const execution = await workflowApi.getExecution(execId)
+      resolvedWorkflowId.value = extractWorkflowId(execution)
+      applyExecutionDetail(execution, null, execId)
+      executionStore.registerEditorSnapshotListener(resolvedWorkflowId.value, handleStoreExecutionSnapshot)
+      await Promise.all([
+        resolvedWorkflowId.value
+          ? workflowStore.fetchWorkflow(resolvedWorkflowId.value)
+          : Promise.resolve(),
+        loadExecution(execId),
+      ])
+      return
+    }
+
     await workflowStore.fetchWorkflow(workflowId.value)
     executionStore.registerEditorSnapshotListener(workflowId.value, handleStoreExecutionSnapshot)
     await fetchExecutionHistory()
     await resumeExecutePageState()
   } catch {
-    appStore.error('加载工作流失败')
+    appStore.error(isHistoryDetail.value ? '加载执行详情失败' : '加载工作流失败')
   }
 })
 
@@ -551,7 +709,9 @@ function applyExecutionDetail(execution, timeline = null, execId = null) {
   executionId.value = resolvedId
   executionStatus.value = execution.status || null
   outputData.value = execution.outputData ?? execution.output_data ?? null
+  executionSource.value = execution.triggerSource ?? execution.trigger_source ?? null
   rawNodeStatus.value = execution.nodeStatus ?? execution.node_status ?? {}
+  applyInputData(execution)
   errorMessage.value = execution.errorMessage ?? execution.error_message ?? ''
   nodeStatus.value = buildNodeStatusView(
     execution,
@@ -848,7 +1008,22 @@ async function handleCancel() {
 }
 
 async function handleRetry() {
+  if (isHistoryDetail.value && workflowId.value) {
+    router.push({
+      path: `/workflows/${workflowId.value}/edit`,
+      query: executionId.value ? { execution: executionId.value } : {},
+    })
+    return
+  }
   await handleExecute()
+}
+
+function openOnCanvas() {
+  if (!workflowId.value) return
+  router.push({
+    path: `/workflows/${workflowId.value}/edit`,
+    query: executionId.value ? { execution: executionId.value } : {},
+  })
 }
 
 function handleSaveOutput() {
@@ -869,6 +1044,10 @@ function handleSaveOutput() {
 }
 
 function handleBack() {
+  if (isHistoryDetail.value) {
+    router.push('/executions')
+    return
+  }
   router.push(`/workflows/${workflowId.value}`)
 }
 
@@ -889,6 +1068,26 @@ function addLog(level, message) {
 
 function clearLogs() {
   logs.value = []
+}
+
+function handleFileUpload(event) {
+  const file = event.target?.files?.[0]
+  if (!file) return
+  const reader = new FileReader()
+  reader.onload = () => {
+    const firstTextParam = inputParams.value.find(p => p.type === 'textarea' || p.type === 'string' || !p.type)
+    if (firstTextParam) {
+      inputData[firstTextParam.name] = String(reader.result || '')
+      uploadedFileName.value = file.name
+      appStore.success(`已载入文件：${file.name}（${String(reader.result || '').length} 字符）`)
+      addLog('info', `已载入输入文件 ${file.name}`)
+    }
+  }
+  reader.onerror = () => {
+    appStore.error('文件读取失败')
+  }
+  reader.readAsText(file, 'utf-8')
+  event.target.value = ''
 }
 
 function scrollOutputToBottom() {
@@ -974,18 +1173,55 @@ function getNodeIcon(type) {
 @use '@/assets/styles/variables.scss' as *;
 
 .workflow-execute {
-  min-height: calc(100vh - #{$header-height} - #{$spacing-12});
+  height: calc(100vh - #{$header-height});
+  overflow: hidden;
+}
+
+.workflow-execute.history-detail {
+  height: auto;
+  overflow: visible;
+
+  .execute-container {
+    height: auto;
+  }
+
+  .execute-content {
+    overflow: visible;
+
+    > * {
+      flex: none;
+    }
+  }
+
+  .output-panel {
+    order: -1;
+    min-height: 0;
+    overflow: visible;
+  }
+
+  .log-panel .log-content {
+    max-height: $spacing-12 * 4;
+  }
+
+  .output-viewer-section {
+    flex: none;
+  }
 }
 
 .execute-container {
-  padding: $spacing-6;
+  height: 100%;
+  padding: $spacing-4 $spacing-6 $spacing-5;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .execute-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: $spacing-6;
+  margin-bottom: $spacing-4;
+  flex-shrink: 0;
 }
 
 .header-left {
@@ -1028,10 +1264,78 @@ function getNodeIcon(type) {
 }
 
 .execute-content {
-  display: grid;
-  grid-template-columns: 300px 1fr 300px;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
   gap: $spacing-4;
-  min-height: calc(100vh - 200px);
+  overflow: auto;
+}
+
+.input-panel {
+  flex: 0 0 auto;
+  max-height: 34vh;
+  flex-direction: row !important;
+  gap: $spacing-6;
+
+  .input-panel-main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .history-section {
+    width: 280px;
+    flex-shrink: 0;
+    margin-top: 0;
+    padding-top: 0;
+    border-top: none;
+    border-left: 1px solid var(--border-primary);
+    padding-left: $spacing-4;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+}
+
+.upload-row {
+  display: flex;
+  align-items: center;
+  gap: $spacing-3;
+  margin-bottom: $spacing-4;
+
+  .hidden-file-input {
+    display: none;
+  }
+
+  .uploaded-file-name {
+    font-size: $font-size-sm;
+    color: var(--text-secondary);
+  }
+
+  .upload-hint {
+    font-size: $font-size-xs;
+    color: var(--text-tertiary);
+  }
+}
+
+.log-panel {
+  flex: 1 1 42%;
+  min-height: 220px;
+
+  .log-content {
+    flex: 1;
+    min-height: 0;
+    max-height: none;
+  }
+}
+
+.output-panel {
+  flex: 1 1 32%;
+  min-height: 460px;
+  overflow: auto;
 }
 
 .input-panel,
@@ -1044,6 +1348,11 @@ function getNodeIcon(type) {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+}
+
+.output-panel {
+  overflow: auto;
+  min-height: 460px;
 }
 
 .panel-title {
@@ -1082,6 +1391,12 @@ function getNodeIcon(type) {
   .el-form-item {
     margin-bottom: $spacing-3;
   }
+
+  .input-form {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+  }
 }
 
 .panel-actions {
@@ -1103,7 +1418,9 @@ function getNodeIcon(type) {
 }
 
 .history-list {
-  max-height: 200px;
+  flex: 1;
+  min-height: 0;
+  max-height: none;
   overflow-y: auto;
 }
 
@@ -1139,16 +1456,20 @@ function getNodeIcon(type) {
 }
 
 .execution-progress {
-  margin-bottom: $spacing-6;
+  margin-bottom: $spacing-4;
   padding: $spacing-4 0;
+}
+
+.execution-graph {
+  margin-bottom: $spacing-4;
 }
 
 .node-status-list {
   display: flex;
   flex-direction: column;
   gap: $spacing-2;
-  margin-bottom: $spacing-6;
-  max-height: 300px;
+  margin-bottom: $spacing-4;
+  max-height: 220px;
   overflow-y: auto;
 }
 
@@ -1159,6 +1480,16 @@ function getNodeIcon(type) {
   background-color: var(--bg-tertiary);
   border-radius: $radius-md;
   border-left: 3px solid transparent;
+  cursor: pointer;
+  transition: background-color 0.15s ease, outline-color 0.15s ease;
+
+  &:hover {
+    background-color: var(--bg-hover, var(--bg-tertiary));
+  }
+
+  &.active {
+    outline: 1px solid color-mix(in srgb, var(--color-primary, #3b82f6) 40%, transparent);
+  }
 
   &.status-pending {
     border-left-color: var(--border-primary);
@@ -1214,6 +1545,18 @@ function getNodeIcon(type) {
   padding: $spacing-6;
 }
 
+.output-viewer-section {
+  flex: 1;
+  min-height: 360px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: $radius-xl;
+  padding: $spacing-4;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
 .artifacts-section,
 .output-section,
 .error-section {
@@ -1243,7 +1586,7 @@ function getNodeIcon(type) {
   background-color: var(--bg-tertiary);
   border-radius: $radius-md;
   padding: $spacing-4;
-  max-height: 300px;
+  max-height: 220px;
   overflow: auto;
 
   pre {
@@ -1361,13 +1704,43 @@ function getNodeIcon(type) {
   border-radius: $radius-md;
 }
 
-@media (max-width: 1200px) {
-  .execute-content {
-    grid-template-columns: 1fr;
+@media (max-width: 960px) {
+  .input-panel {
+    flex-direction: column !important;
+    max-height: none;
+
+    .history-section {
+      width: 100%;
+      border-left: none;
+      padding-left: 0;
+      border-top: 1px solid var(--border-primary);
+      padding-top: $spacing-3;
+    }
   }
 
-  .log-panel {
-    max-height: 300px;
+  .workflow-execute {
+    height: auto;
+    overflow: auto;
+  }
+
+  .execute-content {
+    min-height: auto;
+  }
+
+  .log-panel,
+  .output-panel {
+    flex: none;
+    min-height: 240px;
+  }
+
+  .output-viewer-section {
+    flex: none;
+    min-height: 360px;
+    height: auto;
+  }
+
+  .log-panel .log-content {
+    max-height: 360px;
   }
 }
 </style>

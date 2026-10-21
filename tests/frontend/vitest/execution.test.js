@@ -147,6 +147,15 @@ describe('Execution Store', () => {
       expect(executionStore.executionStatus).toBeTruthy()
     })
 
+    it('keeps the failed execution ID and actual node error for viewing its history', async () => {
+      const error = Object.assign(new Error('请求失败'), { response: { data: { code: 400, data: { execution_id: 'failed-run', status: 'failed', error: '字段映射缺少来源字段' } } } })
+      workflowApi.executeSync.mockRejectedValueOnce(error)
+      await expect(executionStore.initExecution('workflow', {})).rejects.toBe(error)
+      expect(executionStore.currentExecution.id).toBe('failed-run')
+      expect(executionStore.executionStatus).toBe('failed')
+      expect(executionStore.errorMessage).toBe('字段映射缺少来源字段')
+    })
+
     it('should update state from status response', () => {
       executionStore.updateFromStatus(mockExecutionStatus)
 
@@ -260,7 +269,7 @@ describe('Execution Store', () => {
 
       const result = await executionStore.retryExecution()
 
-      expect(workflowApi.retryExecution).toHaveBeenCalledWith(1)
+      expect(workflowApi.retryExecution).toHaveBeenCalledWith(1, {})
       expect(executionStore.executionStatus).toBe('pending')
       expect(executionStore.executionProgress).toBe(0)
     })
@@ -389,7 +398,7 @@ describe('Execution Store', () => {
   describe('Execution Logs', () => {
     beforeEach(() => {
       workflowApi.getExecutionLogs.mockResolvedValue({
-        executionLogs: mockExecution.execution_logs
+        results: mockExecution.execution_logs
       })
     })
 
@@ -413,7 +422,8 @@ describe('Execution Store', () => {
       await executionStore.fetchExecutionLogs(1)
 
       expect(workflowApi.getExecutionLogs).toHaveBeenCalledWith(1)
-      expect(executionStore.executionLogs).toEqual(mockExecution.execution_logs)
+      expect(executionStore.executionLogs).toMatchObject(mockExecution.execution_logs)
+      expect(executionStore.executionLogs.every(log => typeof log.level === 'string')).toBe(true)
     })
   })
 

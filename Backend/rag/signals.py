@@ -1,57 +1,17 @@
-"""
-Django signals for RAG app.
-"""
-
+"""Keep admin, cascade and scheduled deletion consistent with API deletion."""
+from django.db.models.signals import pre_delete, post_delete
 from django.dispatch import receiver
-from django.db.models.signals import post_save
+from .models import Document
+from .pipeline import RAGService, refresh_collection_stats
 
 
-@receiver(post_save, sender='rag.Document')
-def document_processed(sender, instance, **kwargs):
-    """Handle document processing completion."""
-    if instance.status == 'completed' and instance.processed_at:
-        # Update collection stats
-        from .models import DocumentCollection, Chunk
-        
-        collection = instance.collection
-        collection.document_count = Document.objects.filter(
-            collection=collection,
-            status='completed'
-        ).count()
-        collection.chunk_count = Chunk.objects.filter(
-            document__collection=collection
-        ).count()
-        collection.save(update_fields=['document_count', 'chunk_count', 'updated_at'])
+@receiver(pre_delete, sender=Document)
+def remove_document_index(sender, instance, **kwargs):
+    if Document.objects.filter(pk=instance.pk, status='processing').exists():
+        raise ValueError('文档正在处理中，无法删除。')
+    RAGService(instance.collection).delete_chunk_vectors(instance.chunks.all())
 
 
-def get_channel_layer_safe():
-    """Safely get channel layer."""
-    try:
-        from channels.layers import get_channel_layer
-        return get_channel_layer()
-    except Exception:
-        return None
-
-
-def notify_collection_progress(collection_id, progress, status):
-    """Send progress update for document processing."""
-    channel_layer = get_channel_layer_safe()
-    if not channel_layer:
-        return
-    
-    from asgiref.sync import async_to_sync
-    
-    try:
-        async_to_sync(channel_layer.group_send)(
-            f'collection_{collection_id}',
-            {
-                'type': 'processing_progress',
-                'data': {
-                    'collection_id': collection_id,
-                    'progress': progress,
-                    'status': status
-                }
-            }
-        )
-    except Exception:
-        pass
+@receiver(post_delete, sender=Document)
+def update_document_statistics(sender, instance, **kwargs):
+    refresh_collection_stats(instance.collection_id)

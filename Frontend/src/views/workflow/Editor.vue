@@ -18,6 +18,7 @@
         >
           <el-button
             :icon="ArrowLeft"
+            aria-label="返回工作流列表"
             class="toolbar-back-btn"
             @click="handleBack"
           />
@@ -26,6 +27,7 @@
           <input
             v-model="workflowName"
             class="workflow-name-input"
+            aria-label="工作流名称"
             placeholder="输入工作流名称..."
             @blur="handleNameBlur"
           >
@@ -45,6 +47,7 @@
           >
             <el-button
               :icon="ZoomIn"
+              aria-label="放大画布"
               @click="handleZoomIn"
             />
           </el-tooltip>
@@ -54,6 +57,7 @@
           >
             <el-button
               :icon="ZoomOut"
+              aria-label="缩小画布"
               @click="handleZoomOut"
             />
           </el-tooltip>
@@ -63,6 +67,7 @@
           >
             <el-button
               :icon="Maximize2"
+              aria-label="适应窗口"
               @click="handleFitView"
             />
           </el-tooltip>
@@ -74,6 +79,7 @@
           >
             <el-button
               :icon="Undo"
+              aria-label="撤销"
               :disabled="!canUndo"
               @click="handleUndo"
             />
@@ -84,6 +90,7 @@
           >
             <el-button
               :icon="Redo"
+              aria-label="重做"
               :disabled="!canRedo"
               @click="handleRedo"
             />
@@ -97,6 +104,7 @@
             <el-button
               :type="autoConnectMode ? 'primary' : 'default'"
               :icon="Link2"
+              aria-label="切换连线模式"
               size="small"
               @click="autoConnectMode ? cancelAutoConnect() : enableAutoConnectMode()"
             >
@@ -109,6 +117,7 @@
           >
             <el-button
               :icon="Plus"
+              aria-label="添加节点"
               size="small"
               @click="openQuickAddMenuFromToolbar"
             >
@@ -151,6 +160,7 @@
           >
             <el-button
               :icon="Clock"
+              aria-label="触发器配置"
               size="small"
               @click="openTriggerConfig"
             >
@@ -169,6 +179,8 @@
         >
           <el-button
             :icon="AlertCircle"
+            aria-label="验证工作流"
+            :loading="isValidating"
             class="toolbar-core-btn"
             @click="handleValidate"
           >
@@ -181,6 +193,7 @@
         >
           <el-button
             :icon="Save"
+            aria-label="保存工作流"
             :loading="isSaving"
             :disabled="!canEditWorkflow"
             class="toolbar-core-btn"
@@ -196,6 +209,7 @@
           <el-button
             type="primary"
             :icon="Play"
+            aria-label="运行工作流"
             :loading="isExecuting"
             :disabled="isExecuting"
             class="toolbar-core-btn toolbar-core-btn--primary"
@@ -211,12 +225,16 @@
         >
           <el-button
             :icon="PanelBottomOpen"
+            aria-label="查看执行结果"
             class="toolbar-core-btn"
             @click="reopenExecutionPanel"
           >
             <span class="btn-label">查看执行</span>
           </el-button>
         </el-tooltip>
+
+        <!-- 主题切换（编辑器布局无 AppLayout 的 ThemeSwitcher） -->
+        <ThemeSwitcher variant="compact" />
 
         <!-- 折叠按钮：小屏幕时显示展开菜单 -->
         <el-dropdown
@@ -273,6 +291,7 @@
             <el-input
               v-model="nodeSearchQuery"
               placeholder="搜索节点..."
+              aria-label="搜索流程节点"
               :prefix-icon="Search"
               clearable
               size="small"
@@ -293,13 +312,16 @@
               <span>{{ category.label }}</span>
               <span class="category-count">{{ category.nodes.length }}</span>
             </div>
-            <div
+            <button
               v-for="node in category.nodes"
               :key="node.type"
               class="node-item"
+              type="button"
               :style="{ '--node-color': node.color }"
               draggable="true"
               :title="node.description"
+              :aria-label="`添加${node.label}节点`"
+              @click="addNodeFromPanel(node.type)"
               @dragstart="onDragStart($event, node)"
             >
               <div
@@ -321,7 +343,7 @@
                 class="node-shortcut"
                 :style="{ backgroundColor: node.bgColor, color: node.color, borderColor: node.color }"
               >{{ node.shortcut }}</kbd>
-            </div>
+            </button>
           </div>
 
           <!-- 空状态 -->
@@ -378,17 +400,14 @@
               :extra-props="{ runtimeState: executionNodeStateMap[id] }"
             />
           </template>
-          <Background
-            pattern-color="#1a1a2e"
-            :gap="16"
-          />
+          <Background :gap="16" />
           <Controls />
           <MiniMap
-            v-show="showMiniMap"
+            v-show="showMiniMap && preferencesStore.editor.showMinimap"
             :node-types="nodeTypes"
             :node-color="minimapNodeColor"
             :node-stroke-width="3"
-            mask-color="rgba(15, 15, 30, 0.7)"
+            :mask-color="minimapMaskColor"
             class="editor-minimap"
           />
         </VueFlow>
@@ -426,6 +445,7 @@
             <span>快速添加节点</span>
             <button
               class="close-btn"
+              aria-label="关闭快速添加节点"
               @click="closeQuickAddMenu"
             >
               <X class="btn-icon" />
@@ -505,6 +525,7 @@
         :selected-node="selectedNode"
         @change="handleNodePropertyChange"
         @delete="handleDeleteNodeById"
+        @close="selectedNode = null"
       />
     </div>
 
@@ -513,6 +534,7 @@
       v-model="showValidateDialog"
       title="工作流验证"
       width="500px"
+      class="workflow-validation-dialog"
       :close-on-click-modal="false"
       :close-on-press-escape="true"
     >
@@ -521,7 +543,7 @@
         class="validate-success"
       >
         <CheckCircle class="success-icon" />
-        <p>工作流结构验证通过</p>
+        <p>当前检查通过，请实际运行验证业务结果</p>
       </div>
       <div
         v-else
@@ -541,20 +563,20 @@
             </li>
           </ul>
         </div>
-        <div
-          v-if="validationResult.warnings?.length"
-          class="warning-list"
-        >
-          <h4>警告</h4>
-          <ul>
-            <li
-              v-for="(warning, index) in validationResult.warnings"
-              :key="index"
-            >
-              {{ warning }}
-            </li>
-          </ul>
-        </div>
+      </div>
+      <div
+        v-if="validationResult.warnings?.length"
+        class="warning-list"
+      >
+        <h4>提示</h4>
+        <ul>
+          <li
+            v-for="(warning, index) in validationResult.warnings"
+            :key="index"
+          >
+            {{ warning }}
+          </li>
+        </ul>
       </div>
       <template #footer>
         <el-button @click="showValidateDialog = false">
@@ -576,7 +598,7 @@
       :nodes="nodes"
     />
 
-    <!-- AI 工作流助手 -->
+    <!-- 语创助手 -->
     <WorkflowAssistant
       v-model="showAssistant"
       :nodes="nodes"
@@ -593,12 +615,19 @@
         v-if="showExecutionPanel"
         class="execution-bottom-panel"
         :class="{ 'is-dragging': isDraggingPanel }"
-        :style="{ height: executionPanelHeight + 'px' }"
+        :style="{
+          height: `${executionPanelHeight}px`,
+          minHeight: `${WORKFLOW_EXECUTION_PANEL.minHeight}px`,
+          maxHeight: `calc(100vh - ${WORKFLOW_EXECUTION_PANEL.maxViewportOffset}px)`,
+        }"
       >
         <!-- 拖拽把手（双击折叠，拖拽调整高度） -->
         <div
           class="exec-panel-handle"
-          title="拖拽调整高度 / 双击折叠"
+          role="separator"
+          aria-orientation="horizontal"
+          aria-label="向上拖拽可拉高预览，查看完整代码和文档"
+          title="向上拖拽可拉高预览，查看完整代码 / 文档；双击折叠"
           @mousedown.prevent="onPanelDragStart"
           @touchstart.prevent="onPanelDragStart"
           @dblclick="closeExecutionPanel"
@@ -624,6 +653,13 @@
               v-if="executionElapsed"
               class="exec-elapsed"
             >{{ executionElapsed }}</span>
+            <el-button
+              v-if="executionId"
+              size="small"
+              @click="openExecutionRecord"
+            >
+              完整记录
+            </el-button>
             <el-button
               v-if="executionStatus === 'running'"
               type="danger"
@@ -724,9 +760,16 @@
                   v-else-if="selectedExecNode.status === 'completed'"
                   class="output-success"
                 >
-                  <Check class="output-check success" />
-                  <span>执行完成</span>
-                  <pre class="output-data">{{ formatNodeOutput(selectedExecNode.output) }}</pre>
+                  <div class="output-status-row">
+                    <Check class="output-check success" />
+                    <span>执行完成</span>
+                  </div>
+                  <ExecutionOutputViewer
+                    class="output-viewer-inline"
+                    :node-status="selectedExecNodeStatus"
+                    :workflow-nodes="selectedExecWorkflowNodes"
+                    :output-data="null"
+                  />
                 </div>
                 <div
                   v-else-if="selectedExecNode.status === 'failed'"
@@ -833,7 +876,9 @@ import { useExecutionStore } from '@/stores/execution'
 import { autoLayoutWorkflow, applyWorkflowLayout, needsAutoLayout, resolveNodeCollision } from '@/utils/workflowLayout'
 import { captureWorkflowCanvas, buildVueFlowCaptureApi } from '@/utils/workflowCanvasCapture'
 import { resolveWorkflowCanvasPreview } from '@/utils/workflowPreview'
-import { nlWorkflowToVueFlow, normalizeNodeConfig, syncCanvasAfterSave, ensureMultimodalWorkflowGraph } from '@/utils/workflowTransform'
+import { nlWorkflowToVueFlow, normalizeNodeConfig, syncCanvasAfterSave, ensureMultimodalWorkflowGraph, getBackendNodeType } from '@/utils/workflowTransform'
+import { mergeWorkflowValidation } from '@/utils/workflowValidation'
+import { wireNodesOnConnect } from '@/utils/nodeVariableWiring'
 import {
   migrateNodeRuntimeCache,
   remapExecutionStoreNodeIds,
@@ -870,10 +915,23 @@ import VariablePanel from '@/views/workflow/VariablePanel.vue'
 import PropertyPanel from '@/components/workflow/PropertyPanel.vue'
 import TriggerConfig from './TriggerConfig.vue'
 import WorkflowAssistant from '@/components/workflow/WorkflowAssistant.vue'
+import ExecutionOutputViewer from '@/components/workflow/ExecutionOutputViewer.vue'
+import ThemeSwitcher from '@/components/common/ThemeSwitcher.vue'
 import { YOLO_WORKFLOW_TEMPLATE } from '@/config/yoloWorkflowTemplate'
 import { CLIP_RETRIEVAL_WORKFLOW_TEMPLATE } from '@/config/clipRetrievalWorkflowTemplate'
-import { WORKFLOW_CANVAS_VIEWPORT, WORKFLOW_CANVAS_ZOOM, WORKFLOW_SELECT_NODE_KEY } from '@/config/workflowCanvas'
+import {
+  WORKFLOW_CANVAS_VIEWPORT,
+  WORKFLOW_CANVAS_ZOOM,
+  WORKFLOW_SELECT_NODE_KEY,
+  WORKFLOW_FOCUS_EXECUTION_NODE_KEY,
+  WORKFLOW_EXECUTION_PANEL,
+  clampExecutionPanelHeight,
+  readExecutionPanelHeight,
+  writeExecutionPanelHeight,
+} from '@/config/workflowCanvas'
 import workflowApi from '@/api/workflow'
+import { usePreferencesStore } from '@/stores/preferences'
+import { PREFERENCE_CONFIG } from '@/config/personalCenter'
 import { prepareDesktopClipIndexes } from '@/composables/useClipIndexDesktop'
 import '@vue-flow/core/dist/style.css'
 import '@vue-flow/controls/dist/style.css'
@@ -885,6 +943,7 @@ const workflowStore = useWorkflowStore()
 const appStore = useAppStore()
 const authStore = useAuthStore()
 const executionStore = useExecutionStore()
+const preferencesStore = usePreferencesStore()
 
 const workflowId = computed(() => route.params.id)
 const isNewWorkflow = computed(() => workflowId.value === 'new' || !workflowId.value)
@@ -903,16 +962,21 @@ const canEditWorkflow = computed(() => {
 
 const workflowName = ref('未命名工作流')
 const isDirty = ref(false)
-const isSaving = computed(() => workflowStore.isSaving)
+const saveInFlight = ref(false)
+const isSaving = computed(() => saveInFlight.value || workflowStore.isSaving)
 const showValidateDialog = ref(false)
 const validationResult = ref({ valid: true, errors: [], warnings: [] })
+const isValidating = ref(false)
 const triggerConfigVisible = ref(false)
 const variablePanelVisible = ref(false)
 const showAssistant = ref(false)
 
 // 执行面板状态
 const showExecutionPanel = ref(false)
-const executionPanelHeight = ref(320) // 可拖拽调整高度
+const executionPanelHeight = ref(readExecutionPanelHeight(
+  typeof localStorage === 'undefined' ? null : localStorage,
+  typeof window === 'undefined' ? 900 : window.innerHeight,
+))
 const isDraggingPanel = ref(false)
 const executionId = ref(null)
 const executionStatus = ref('idle') // idle | running | completed | failed | cancelled
@@ -933,7 +997,7 @@ const executionNodeList = computed(() => {
       name: n.data?.label || n.label || n.id,
       type: n.type,
       status: runtimeState.status || 'pending',
-      output: runtimeState.output ?? null,
+      output: runtimeState.output ?? executionStore.nodeOutputs?.[n.id] ?? null,
       error: runtimeState.error ?? null
     }
   })
@@ -976,10 +1040,42 @@ const executeButtonLabel = computed(() => {
   return '执行'
 })
 
-function formatNodeOutput(output) {
-  if (!output) return ''
-  if (typeof output === 'string') return output
-  try { return JSON.stringify(output, null, 2) } catch { return String(output) }
+const selectedExecNodeStatus = computed(() => {
+  const node = selectedExecNode.value
+  if (!node?.id) return {}
+  return {
+    [node.id]: {
+      name: node.name,
+      status: node.status,
+      output: node.output ?? executionStore.nodeOutputs?.[node.id] ?? null,
+    },
+  }
+})
+
+const selectedExecWorkflowNodes = computed(() => {
+  const node = selectedExecNode.value
+  if (!node?.id) return []
+  const canvasNode = nodes.value.find((item) => item.id === node.id)
+  return canvasNode ? [canvasNode] : []
+})
+
+function focusExecutionNode(nodeId) {
+  if (!nodeId) return
+  const canvasNode = nodes.value.find((item) => item.id === nodeId)
+  if (canvasNode) {
+    selectedNode.value = canvasNode
+    selectedEdge.value = null
+  }
+  const execNode = executionNodeList.value.find((item) => item.id === nodeId)
+  if (execNode) {
+    selectedExecNode.value = execNode
+  }
+  showExecutionPanel.value = true
+}
+
+function openExecutionRecord() {
+  if (!executionId.value) return
+  router.push(`/executions/${executionId.value}`)
 }
 
 function formatExecutionDuration(durationMs) {
@@ -1125,6 +1221,24 @@ async function resumeWorkflowExecution() {
 
   executionStore.registerEditorSnapshotListener(workflowId.value, handleEditorExecutionSnapshot)
 
+  const requestedExecutionId = route.query.execution || route.query.replay
+  if (requestedExecutionId) {
+    try {
+      const exec = await executionStore.applyEditorExecutionSnapshot(workflowId.value, String(requestedExecutionId))
+      executionId.value = String(requestedExecutionId)
+      executionStatus.value = exec?.status || executionStore.executionStatus
+      applyExecutionSnapshotLocal(exec, executionStore.canvasNodeRuntime)
+      appendExecutionLogsFromSnapshot(exec)
+      showExecutionPanel.value = true
+      if (['running', 'pending', 'paused', 'queued'].includes(executionStatus.value)) {
+        startExecutionElapsedTimer()
+      }
+      return
+    } catch (error) {
+      console.warn('[Editor] load requested execution failed:', error)
+    }
+  }
+
   try {
     const resumed = await executionStore.resumeEditorExecution(workflowId.value)
     if (!resumed) {
@@ -1250,13 +1364,20 @@ function onPanelDragMove(e) {
   if (!isDraggingPanel.value) return
   const clientY = e.type === 'touchmove' ? e.touches[0].clientY : e.clientY
   const delta = panelDragStartY - clientY
-  const newHeight = Math.max(160, Math.min(window.innerHeight - 200, panelDragStartHeight + delta))
-  executionPanelHeight.value = Math.round(newHeight)
+  executionPanelHeight.value = clampExecutionPanelHeight(
+    panelDragStartHeight + delta,
+    window.innerHeight,
+  )
   e.preventDefault()
 }
 
 function onPanelDragEnd() {
   isDraggingPanel.value = false
+  executionPanelHeight.value = writeExecutionPanelHeight(
+    executionPanelHeight.value,
+    localStorage,
+    window.innerHeight,
+  )
   document.removeEventListener('mousemove', onPanelDragMove)
   document.removeEventListener('mouseup', onPanelDragEnd)
   document.removeEventListener('touchmove', onPanelDragMove)
@@ -1275,7 +1396,8 @@ const showMiniMap = ref(false)
 let minimapHideTimer = null
 const MINIMAP_BASE_ZOOM = 1
 const MINIMAP_HIDE_DELAY_MS = 1800
-const snapToGrid = ref(true)
+const snapToGrid = computed(() => preferencesStore.editor.snapToGrid)
+let autoSaveTimer = null
 const vueFlowRef = ref(null)
 const previewSyncInFlight = ref(false)
 let previewSyncTimer = null
@@ -1289,6 +1411,54 @@ function getVueFlowCaptureApi() {
   })
 }
 
+function normalizeCanvasCoordinate(value) {
+  const number = Number(value)
+  if (!Number.isFinite(number)) return 0
+  return Number(number.toFixed(2))
+}
+
+function normalizeCanvasPosition(position) {
+  return {
+    x: normalizeCanvasCoordinate(position?.x),
+    y: normalizeCanvasCoordinate(position?.y),
+  }
+}
+
+function rememberSavedNodePositions(sourceNodes = nodes.value) {
+  savedNodePositions.value = Object.fromEntries(
+    (sourceNodes || []).map((node) => [node.id, normalizeCanvasPosition(node.position)])
+  )
+  userPositionEditedNodeIds.value = new Set()
+}
+
+function rememberSavedNodePositionsFromPayload(saveNodes = [], idMap = {}) {
+  savedNodePositions.value = Object.fromEntries(
+    (saveNodes || []).map((node) => [
+      idMap[node.id] || node.id,
+      { x: normalizeCanvasCoordinate(node.position_x), y: normalizeCanvasCoordinate(node.position_y) },
+    ])
+  )
+  userPositionEditedNodeIds.value = new Set()
+}
+
+function markNodePositionEdited(nodeId) {
+  if (!nodeId) return
+  userPositionEditedNodeIds.value = new Set([...userPositionEditedNodeIds.value, nodeId])
+}
+
+function markAllNodePositionsEdited(sourceNodes = nodes.value) {
+  userPositionEditedNodeIds.value = new Set((sourceNodes || []).map((node) => node.id).filter(Boolean))
+}
+
+function getPositionForSave(node) {
+  if (!node?.id) return normalizeCanvasPosition(node?.position)
+  const savedPosition = savedNodePositions.value[node.id]
+  if (!userPositionEditedNodeIds.value.has(node.id) && savedPosition) {
+    return savedPosition
+  }
+  return normalizeCanvasPosition(node.position)
+}
+
 const selectedNode = ref(null)
 const selectedEdge = ref(null)
 const execPanelBodyRef = ref(null)
@@ -1296,6 +1466,8 @@ const elapsedTimer = ref(null)
 
 const nodes = shallowRef([])
 const edges = shallowRef([])
+const savedNodePositions = ref({})
+const userPositionEditedNodeIds = ref(new Set())
 
 // 可用的模型和工具列表（从 API 获取）
 const availableModels = ref([])
@@ -1486,6 +1658,22 @@ function hasEdgeBetween(source, target) {
   return edges.value.some((e) => e.source === source && e.target === target)
 }
 
+/** 连线后自动把上游输出接到目标空配置字段（不覆盖已填内容） */
+function applyAutoWireOnConnect(sourceId, targetId) {
+  const sourceNode = nodes.value.find((n) => n.id === sourceId)
+  const targetNode = nodes.value.find((n) => n.id === targetId)
+  const { node, changed, hints } = wireNodesOnConnect(sourceNode, targetNode)
+  if (!changed || !node) return
+  nodes.value = nodes.value.map((n) => (n.id === targetId ? node : n))
+  if (selectedNode.value?.id === targetId) {
+    selectedNode.value = node
+  }
+  if (hints.length) {
+    const extra = hints.length > 1 ? `（共 ${hints.length} 项）` : ''
+    appStore.info(`${hints[0]}${extra}`)
+  }
+}
+
 // 自动创建连线
 function createAutoConnect(source, target, label = '自动连线') {
   if (hasEdgeBetween(source, target)) {
@@ -1504,9 +1692,16 @@ function createAutoConnect(source, target, label = '自动连线') {
     style: 'stroke: #3b82f6; stroke-dasharray: 5,5;'
   }
   edges.value = [...edges.value, newEdge]
+  applyAutoWireOnConnect(source, target)
   markDirty()
   saveHistory()
   return true
+}
+
+function addNodeFromPanel(type) {
+  const canvas = document.querySelector('.canvas-wrapper')?.getBoundingClientRect()
+  if (!canvas) return
+  addNodeAtPosition(type, project({ x: canvas.width / 2, y: canvas.height / 2 }))
 }
 
 // 在画布指定位置添加节点（带自动连线）
@@ -1535,6 +1730,7 @@ function addNodeAtPosition(type, position) {
   }
 
   nodes.value = [...nodes.value, newNode]
+  markNodePositionEdited(newNode.id)
   saveHistory()
 
   // 自动连线逻辑
@@ -1690,6 +1886,12 @@ function onPaneDoubleClick(event) {
 
 onMounted(() => {
   document.addEventListener('keydown', handleGlobalKeyDown)
+  autoSaveTimer = setInterval(() => {
+    if (preferencesStore.editor.autoSave && !isNewWorkflow.value && isDirty.value
+      && canEditWorkflow.value && !isSaving.value && !executionStore.isRunning) {
+      handleSave({ automatic: true })
+    }
+  }, PREFERENCE_CONFIG.autoSaveIntervalMs)
 })
 
 onActivated(async () => {
@@ -1699,6 +1901,8 @@ onActivated(async () => {
 })
 
 onUnmounted(() => {
+  clearInterval(autoSaveTimer)
+  clearTimeout(minimapHideTimer)
   document.removeEventListener('keydown', handleGlobalKeyDown)
   document.body.style.cursor = 'default'
   stopExecutionElapsedTimer()
@@ -1726,6 +1930,11 @@ const quickAddCategories = computed(() =>
 
 const nodeTypes = buildNodeTypesMap()
 const minimapNodeColor = (node) => getMinimapNodeColor(node.type)
+const minimapMaskColor = computed(() => (
+  appStore.theme === 'light'
+    ? 'rgba(244, 244, 245, 0.72)'
+    : 'rgba(10, 10, 15, 0.72)'
+))
 
 function scheduleMiniMapHide() {
   clearTimeout(minimapHideTimer)
@@ -1738,7 +1947,7 @@ function onViewportChange(nextViewport) {
   const prevZoom = viewport.value?.zoom ?? MINIMAP_BASE_ZOOM
   viewport.value = nextViewport
   const zoom = nextViewport?.zoom ?? MINIMAP_BASE_ZOOM
-  if (Math.abs(zoom - prevZoom) > 0.001) {
+  if (preferencesStore.editor.showMinimap && Math.abs(zoom - prevZoom) > 0.001) {
     showMiniMap.value = true
   }
   scheduleMiniMapHide()
@@ -1779,6 +1988,7 @@ function handleNodeClick({ node }) {
 
   selectedNode.value = node
   selectedEdge.value = null
+  focusExecutionNode(node.id)
 }
 
 provide(WORKFLOW_SELECT_NODE_KEY, (nodeId) => {
@@ -1788,6 +1998,8 @@ provide(WORKFLOW_SELECT_NODE_KEY, (nodeId) => {
     handleNodeClick({ node })
   }
 })
+
+provide(WORKFLOW_FOCUS_EXECUTION_NODE_KEY, focusExecutionNode)
 
 // 撤销/重做
 const canUndo = computed(() => historyIndex.value > 0)
@@ -1866,6 +2078,7 @@ function onDrop(event) {
   }
 
   nodes.value = [...nodes.value, newNode]
+  markNodePositionEdited(newNode.id)
   saveHistory()
   markDirty()
 }
@@ -1894,6 +2107,7 @@ function onConnect(params) {
     markerEnd: MarkerType.ArrowClosed
   }
   edges.value = [...edges.value, newEdge]
+  applyAutoWireOnConnect(params.source, params.target)
   markDirty()
   saveHistory()
 }
@@ -1924,9 +2138,6 @@ function onNodesInitialized() {
   if (!isNewWorkflow.value && nodes.value.length > 0) {
     nextTick(() => {
       nextTick(() => {
-        if (vueFlowRef.value) {
-          vueFlowRef.value.fitView({ padding: 0.2, duration: 400 })
-        }
         scheduleCanvasPreviewSync()
       })
     })
@@ -2018,11 +2229,12 @@ function onNodeDragStop({ node }) {
   updated[idx] = {
     ...updated[idx],
     position: {
-      x: Math.round(resolved.x),
-      y: Math.round(resolved.y),
+      x: normalizeCanvasCoordinate(resolved.x),
+      y: normalizeCanvasCoordinate(resolved.y),
     },
   }
   nodes.value = updated
+  markNodePositionEdited(node.id)
   markDirty()
 }
 
@@ -2099,6 +2311,7 @@ function handleAssistantApplyWorkflow(workflow) {
 
   selectedNode.value = null
   selectedEdge.value = null
+  markAllNodePositionsEdited()
   saveHistory()
   markDirty()
 
@@ -2133,6 +2346,7 @@ function handleAutoLayout(direction = 'horizontal') {
     direction
   })
   nodes.value = layouted
+  markAllNodePositionsEdited(layouted)
   markDirty()
   saveHistory()
   nextTick(() => {
@@ -2152,8 +2366,10 @@ function handleToolbarCommand(cmd) {
       showAssistant.value = true
       break
     case 'theme': {
-      const themeBtn = document.querySelector('[data-theme-switcher]')
-      if (themeBtn) themeBtn.click()
+      // EditorLayout 不挂载 ThemeSwitcher；直接切换全局主题
+      appStore.toggleTheme()
+      const name = appStore.currentTheme?.name || appStore.theme
+      appStore.success(`已切换为${name}`)
       break
     }
   }
@@ -2208,6 +2424,8 @@ function handleNameBlur() {
 
 // 验证工作流
 async function handleValidate() {
+  if (isValidating.value) return
+  isValidating.value = true
   try {
     const { validateWorkflowSchema, highlightErrorNodes, showValidationResult } = await import('@/utils/workflow-schema')
 
@@ -2215,7 +2433,12 @@ async function handleValidate() {
     clearErrorHighlights()
 
     // 执行验证
-    const result = validateWorkflowSchema(nodes.value, edges.value)
+    let result = validateWorkflowSchema(nodes.value, edges.value)
+    if (!isNewWorkflow.value && !isDirty.value) {
+      result = mergeWorkflowValidation(result, await workflowApi.validate(workflowId.value))
+    } else {
+      result.warnings.push({ message: '请保存后再次验证，以核查后端执行器和导入兼容性', severity: 'warning' })
+    }
 
     // 高亮错误节点
     highlightErrorNodes(nodes.value, result.nodeErrors)
@@ -2233,12 +2456,15 @@ async function handleValidate() {
   } catch (err) {
     console.error('验证失败:', err)
     appStore.error('验证失败')
+  } finally {
+    isValidating.value = false
   }
 }
 
 // 清除错误高亮
 function clearErrorHighlights() {
   for (const node of nodes.value) {
+    if (node.class && typeof node.class === 'object') node.class = { ...node.class, 'has-error': false }
     if (node.data?.hasError) {
       node.data = {
         ...node.data,
@@ -2259,42 +2485,60 @@ function openTriggerConfig() {
 }
 
 // 保存
-async function handleSave() {
+function getEditorSaveSignature() {
+  return JSON.stringify({
+    name: workflowName.value,
+    nodes: nodes.value.map(node => ({ id: node.id, type: node.type, position: node.position, label: node.data?.label, config: node.data?.config, description: node.data?.description, uiSize: node.data?.uiSize })),
+    edges: edges.value.map(edge => ({ id: edge.id, source: edge.source, target: edge.target, label: edge.label })),
+  })
+}
+
+async function handleSave(options = {}) {
+  if (isSaving.value) return false
   if (!canEditWorkflow.value) {
     appStore.warning('您没有此工作流的编辑权限，请先复制工作流后再编辑')
     return false
   }
+  const automatic = options?.automatic === true
+  saveInFlight.value = true
   try {
     const graphPatch = ensureMultimodalWorkflowGraph(nodes.value, edges.value)
     if (graphPatch.patched) {
       nodes.value = graphPatch.nodes
       edges.value = graphPatch.edges
     }
-    const saveNodes = nodes.value.map((n, index) => ({
-      id: n.id,
-      node_type: n.type,
-      name: n.data.label,
-      description: n.data.description || '',
-      position_x: Math.round(Number(n.position?.x) || 0),
-      position_y: Math.round(Number(n.position?.y) || 0),
-      sort_order: index,
-      config: normalizeNodeConfig(n.data.config || {}, n.type),
-      style: {
-        ...(n.data?.style || n.style || {}),
-        ...(n.data?.uiSize ? { uiSize: n.data.uiSize } : {}),
-        ...(n.data?._runtime ? { _runtime: n.data._runtime } : {}),
-      },
-    }))
+    const saveNodes = nodes.value.map((n, index) => {
+      const savePosition = getPositionForSave(n)
+      return {
+        id: n.id,
+        node_type: getBackendNodeType(n),
+        name: n.data.label,
+        description: n.data.description || '',
+        position_x: savePosition.x,
+        position_y: savePosition.y,
+        sort_order: index,
+        config: normalizeNodeConfig(n.data.config || {}, n.type),
+        style: {
+          ...(n.data?.style || n.style || {}),
+          ...(n.data?.uiSize ? { uiSize: n.data.uiSize } : {}),
+          ...(n.data?._runtime ? { _runtime: n.data._runtime } : {}),
+        },
+      }
+    })
     const saveEdges = edges.value.map(e => ({
       source_node: e.source,
       target_node: e.target,
       label: e.label || '',
       animated: e.animated || false
     }))
+    const sentNodes = JSON.parse(JSON.stringify(nodes.value))
+    const sentEdges = JSON.parse(JSON.stringify(edges.value))
+    const sentSignature = getEditorSaveSignature()
+    let editedDuringSave = false
 
     let canvasPreview = null
     try {
-      canvasPreview = await captureWorkflowCanvas(getVueFlowCaptureApi())
+      if (!automatic) canvasPreview = await captureWorkflowCanvas(getVueFlowCaptureApi())
     } catch (captureErr) {
       console.warn('[handleSave] workflow preview capture failed:', captureErr)
     }
@@ -2318,8 +2562,9 @@ async function handleSave() {
       router.replace(`/workflows/${result.id}/edit`)
     } else {
       const response = await workflowStore.updateWorkflow(workflowId.value, savePayload)
+      editedDuringSave = getEditorSaveSignature() !== sentSignature
       if (response?.nodes?.length) {
-        const synced = syncCanvasAfterSave(nodes.value, edges.value, response)
+        const synced = syncCanvasAfterSave(editedDuringSave ? sentNodes : nodes.value, editedDuringSave ? sentEdges : edges.value, response)
         if (synced.idMap && Object.keys(synced.idMap).length > 0) {
           try {
             migrateNodeRuntimeCache(workflowId.value, synced.idMap)
@@ -2329,20 +2574,26 @@ async function handleSave() {
             console.warn('[handleSave] node runtime migration failed:', migrateErr)
           }
         }
-        nodes.value = synced.nodes
+        if (editedDuringSave) {
+          nodes.value = nodes.value.map(node => ({ ...node, id: String(synced.idMap[node.id] || node.id) }))
+          synced.edges = edges.value.map(edge => ({ ...edge, source: String(synced.idMap[edge.source] || edge.source), target: String(synced.idMap[edge.target] || edge.target) }))
+        } else {
+          nodes.value = synced.nodes
+        }
         edges.value = synced.edges.map((e) => ({
           ...e,
           markerEnd: MarkerType.ArrowClosed,
         }))
+        rememberSavedNodePositionsFromPayload(saveNodes, synced.idMap || {})
         saveHistory()
       }
       if (canvasPreview) {
         applyCanvasPreviewLocally(canvasPreview)
       }
-      appStore.success('工作流已保存')
+      if (!automatic) appStore.success('工作流已保存')
     }
 
-    isDirty.value = false
+    isDirty.value = editedDuringSave
     return true
   } catch (err) {
     const resp = err?.response?.data
@@ -2361,10 +2612,14 @@ async function handleSave() {
     }
 
     console.error('[handleSave] Failed to save workflow:', err, { responseData: resp })
-    if (errorMsg) {
+    if (automatic) {
+      appStore.error(PREFERENCE_CONFIG.autosaveError)
+    } else if (errorMsg) {
       appStore.error(`保存失败: ${errorMsg}`)
     }
     return false
+  } finally {
+    saveInFlight.value = false
   }
 }
 
@@ -2557,6 +2812,7 @@ function applyWorkflowTemplate(template) {
     id: e.id || `e-${e.source}-${e.target}`,
     markerEnd: MarkerType.ArrowClosed,
   }))
+  markAllNodePositionsEdited()
   saveHistory()
   isDirty.value = true
   nextTick(() => {
@@ -2592,6 +2848,7 @@ onMounted(async () => {
 
       // Store already has Vue Flow format data from backendWorkflowToFrontend
       nodes.value = [...(workflowStore.nodes || [])]
+      rememberSavedNodePositions(nodes.value)
 
       // 仅对未定位节点做布局，已保存坐标原样保留
       const layoutEdges = workflowStore.edges || []
@@ -2600,6 +2857,9 @@ onMounted(async () => {
         nodes.value = applyWorkflowLayout(nodes.value, layoutEdges, nodes.value)
       }
       const autoLayoutApplied = positionsBefore !== JSON.stringify(nodes.value.map(n => n.position))
+      if (autoLayoutApplied) {
+        markAllNodePositionsEdited()
+      }
 
       edges.value = (workflowStore.edges || [])
         .map(e => ({
@@ -2635,10 +2895,7 @@ onMounted(async () => {
       // 使用 vueFlowRef.value.fitView() 调用实例方法
       // nodes-initialized 事件会再次触发 fitView，双重保障
       await nextTick()
-      await nextTick()
-      if (vueFlowRef.value) {
-        vueFlowRef.value.fitView({ padding: 0.2, duration: 600 })
-      }
+      scheduleCanvasPreviewSync()
 
       await resumeWorkflowExecution()
     } catch (err) {
@@ -2646,11 +2903,6 @@ onMounted(async () => {
     }
   }
 })
-
-// 监听节点和连线变化
-watch([nodes, edges], () => {
-  if (!isDirty.value) return
-}, { deep: true })
 
 // 执行日志自动滚动到底部
 watch(executionLogs, async () => {
@@ -2670,7 +2922,7 @@ watch(selectedExecNode, (newNode) => {
 <style lang="scss" scoped>
 @use '@/assets/styles/variables.scss' as *;
 
-@import '@/styles/workflow-domain-node.scss';
+@use '@/styles/workflow-domain-node.scss';
 
 .workflow-editor {
   position: fixed;
@@ -2707,7 +2959,8 @@ watch(selectedExecNode, (newNode) => {
 
   &--left {
     flex-shrink: 0;
-    max-width: 100%;
+    max-width: 28%;
+    min-width: 0;
   }
 
   &--center {
@@ -2778,7 +3031,8 @@ watch(selectedExecNode, (newNode) => {
   color: var(--text-primary);
   padding: $spacing-2 $spacing-3;
   border-radius: $radius-md;
-  min-width: 200px;
+  min-width: 0;
+  width: 100%;
   max-width: 360px;
 
   &:hover,
@@ -2809,81 +3063,25 @@ watch(selectedExecNode, (newNode) => {
   padding: 6px 8px !important;
 }
 
-// 响应式断点
-// 1. 1200px 以下：隐藏核心按钮文字
-@media (max-width: 1200px) {
-  .toolbar-core-btn {
-    .btn-label {
-      display: none;
-    }
-
-    padding: 6px 10px !important;
-    min-width: auto;
-  }
+@media (max-width: 1250px) {
+  .editor-toolbar { height: auto; min-height: 56px; flex-wrap: wrap; padding-block: $spacing-2; }
+  .toolbar-section--left { flex: 1; max-width: none; }
+  .toolbar-section--center { order: 3; flex-basis: 100%; justify-content: flex-start; flex-wrap: nowrap; overflow-x: auto; padding-bottom: $spacing-1; }
+  .toolbar-btn-group { flex-shrink: 0; }
+  .toolbar-section--right { gap: $spacing-1; }
+  .toolbar-core-btn .btn-label { display: none; }
+  .workflow-name-input { max-width: 360px; }
 }
-
-// 2. 1000px 以下：隐藏中心区域的触发器文字
-@media (max-width: 1000px) {
-  .toolbar-section--center {
-    .toolbar-btn-group--single .el-button {
-      padding: 6px 8px;
-
-      span:not(.el-icon) {
-        display: none;
-      }
-    }
-  }
+@media (max-width: 600px) {
+  .editor-toolbar { padding-inline: $spacing-2; gap: $spacing-2; }
+  .toolbar-section--left { flex-basis: 100%; }
+  .toolbar-section--right { width: 100%; justify-content: flex-end; }
+  .toolbar-core-btn .btn-label { display: inline; }
+  .toolbar-section--center .el-button { min-height: var(--control-height-large); }
 }
-
-// 3. 850px 以下：隐藏验证/保存/执行的文字，折叠到图标
-@media (max-width: 850px) {
-  .toolbar-core-btn {
-    .btn-label {
-      display: none;
-    }
-  }
-
-  .workflow-name-input {
-    min-width: 150px;
-    max-width: 250px;
-  }
-}
-
-// 4. 700px 以下：隐藏中心区域所有文字，仅保留图标按钮
-@media (max-width: 700px) {
-  .toolbar-section--center {
-    .el-button {
-      span:not(.el-icon) {
-        display: none;
-      }
-    }
-  }
-
-  .workflow-name-input {
-    min-width: 100px;
-    max-width: 160px;
-  }
-}
-
-// 5. 500px 以下：隐藏连线文字，仅图标
-@media (max-width: 500px) {
-  .toolbar-section--center {
-    .toolbar-btn-group--single .el-button span {
-      display: none;
-    }
-  }
-
-  .workflow-name-input {
-    min-width: 80px;
-    max-width: 120px;
-  }
-}
-
-// 超小屏幕完全隐藏中间区域（保留画布操作）
 @media (max-width: 380px) {
-  .toolbar-section--center {
-    display: none;
-  }
+  .toolbar-core-btn .btn-label { display: none; }
+  .toolbar-core-btn { min-width: var(--control-height-large); }
 }
 
 .editor-container {
@@ -2963,6 +3161,11 @@ watch(selectedExecNode, (newNode) => {
 }
 
 .node-item {
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: var(--text-primary);
+  border: 1px solid transparent;
   display: flex;
   align-items: center;
   gap: $spacing-3;
@@ -3064,19 +3267,32 @@ watch(selectedExecNode, (newNode) => {
   min-height: 0;
   width: 100%;
   position: relative;
-  background-color: var(--bg-primary);
+  background-color: var(--canvas-bg, var(--bg-primary));
+  transition: background-color 0.25s ease;
 
   :deep(.vue-flow) {
     width: 100%;
     height: 100%;
+    background-color: var(--canvas-bg, var(--bg-primary));
+  }
+
+  // 网格点跟随主题（覆盖 Background 默认色）
+  :deep(.vue-flow__background) {
+    pattern circle,
+    pattern path {
+      fill: var(--canvas-pattern);
+      stroke: var(--canvas-pattern);
+    }
   }
 
   :deep(.vue-flow__minimap.editor-minimap) {
     margin: 12px;
     border-radius: 8px;
     overflow: hidden;
+    background-color: var(--canvas-minimap-bg, var(--bg-elevated));
+    border: 1px solid var(--border-primary);
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
-    transition: opacity 0.2s ease, transform 0.2s ease;
+    transition: opacity 0.2s ease, transform 0.2s ease, background-color 0.25s ease;
   }
 
   :deep(.vue-flow__minimap.editor-minimap:not([style*="display: none"])) {
@@ -3393,8 +3609,15 @@ watch(selectedExecNode, (newNode) => {
 // ============================================================
 // 错误节点高亮样式
 // ============================================================
+:deep(.workflow-validation-dialog .el-dialog__body) {
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
 :deep(.vue-flow__node) {
   &.has-error {
+    .domain-node,
+    .variable-node,
     .node-card,
     .node-wrapper {
       background: rgba(239, 68, 68, 0.15) !important;
@@ -3594,13 +3817,12 @@ watch(selectedExecNode, (newNode) => {
   align-items: center;
   gap: $spacing-4;
   padding: $spacing-2 $spacing-4;
-  background: rgba(15, 15, 26, 0.85);
-  backdrop-filter: blur(12px);
+  background: var(--bg-secondary);
   border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-primary);
   font-size: 12px;
   color: var(--text-secondary);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255,255,255,0.03) inset;
+  box-shadow: var(--shadow-sm);
 
   .status-item {
     display: flex;
@@ -3652,53 +3874,13 @@ watch(selectedExecNode, (newNode) => {
 }
 
 @media (max-width: 768px) {
-  .editor-header {
-    padding: $spacing-3 $spacing-4;
-
-    .header-left,
-    .header-right {
-      gap: $spacing-2;
-    }
-  }
-
-  .toolbar-center {
-    display: none;
-  }
-
-  .node-panel {
-    position: absolute;
-    left: 0;
-    top: 0;
-    bottom: 0;
-    z-index: 10;
-    width: 260px;
-    transform: translateX(-100%);
-    transition: transform $transition-normal;
-    box-shadow: $shadow-lg;
-
-    &.open {
-      transform: translateX(0);
-    }
-  }
-
-  .canvas-wrapper {
-    width: 100%;
-  }
-}
-
-@media (max-width: 480px) {
-  .editor-header {
-    padding: $spacing-2 $spacing-3;
-  }
-
-  .header-title {
-    font-size: $font-size-base;
-  }
-
-  .el-button {
-    padding: $spacing-2 $spacing-3;
-    font-size: $font-size-sm;
-  }
+  .node-panel { width: 64px; flex-shrink: 0; }
+  .node-panel .panel-section { padding: $spacing-2; }
+  .node-panel .panel-title, .node-panel .node-search, .node-panel .category-header,
+  .node-panel .node-item-info, .node-panel .node-shortcut { display: none; }
+  .node-panel .node-item { justify-content: center; padding: $spacing-1; margin-bottom: $spacing-2; min-height: var(--control-height-large); }
+  .node-panel .node-category { margin-bottom: $spacing-2; }
+  .canvas-wrapper { min-width: 0; flex: 1; }
 }
 
 // =============================================================================
@@ -3719,9 +3901,6 @@ watch(selectedExecNode, (newNode) => {
   bottom: 0;
   left: 0;
   right: 0;
-  height: 320px;
-  min-height: 160px;
-  max-height: calc(100vh - 100px);
   background: var(--bg-secondary);
   border-top: 1px solid var(--border-primary);
   display: flex;
@@ -3739,30 +3918,35 @@ watch(selectedExecNode, (newNode) => {
 }
 
 .exec-panel-handle {
-  height: 6px;
+  height: 12px;
   cursor: ns-resize;
   background: transparent;
   border-radius: 3px 3px 0 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-top: 2px;
   flex-shrink: 0;
   transition: background 0.2s;
 
   &::after {
     content: '';
     display: block;
-    width: 36px;
-    height: 3px;
-    border-radius: 2px;
+    width: 48px;
+    height: 4px;
+    border-radius: 999px;
     background: var(--border-primary);
     transition: background 0.2s, width 0.2s;
   }
 
-  &:hover::after {
-    background: var(--text-tertiary);
-    width: 60px;
+  &:hover,
+  &:focus-visible {
+    background: color-mix(in srgb, var(--color-primary, #6366f1) 12%, transparent);
+  }
+
+  &:hover::after,
+  &:focus-visible::after {
+    background: var(--text-secondary);
+    width: 72px;
   }
 }
 
@@ -3946,7 +4130,10 @@ watch(selectedExecNode, (newNode) => {
 
   .output-content {
     flex: 1;
-    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
     padding: 12px 16px;
 
     &::-webkit-scrollbar { width: 6px; }
@@ -3973,8 +4160,18 @@ watch(selectedExecNode, (newNode) => {
   .output-success, .output-error {
     display: flex;
     flex-direction: column;
+    flex: 1;
+    min-height: 0;
     gap: 8px;
     font-size: 12px;
+  }
+
+  .output-status-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+    color: var(--text-secondary);
   }
 
   .output-check { width: 16px; height: 16px; &.success { color: #10b981; } &.error { color: #ef4444; } }
@@ -3992,6 +4189,32 @@ watch(selectedExecNode, (newNode) => {
     max-height: 200px;
     overflow-y: auto;
     margin-top: 8px;
+  }
+
+  .output-viewer-inline {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+
+    :deep(.output-viewer__header h4) {
+      display: none;
+    }
+
+    :deep(.output-viewer) {
+      flex: 1;
+      min-height: 0;
+    }
+
+    :deep(.output-viewer__header) {
+      flex-shrink: 0;
+    }
+
+    :deep(.output-viewer__body) {
+      flex: 1;
+      min-height: 0;
+      max-height: none;
+    }
   }
 
   .output-err-detail {

@@ -1,0 +1,33 @@
+{
+  "skill_name": "comp-prob-analysis",
+  "category": "08_competition_modeling",
+  "tier": null,
+  "encrypted": true,
+  "scan": {
+    "name": "comp-prob-analysis",
+    "path": "resources/app/skills/comp-prob-analysis",
+    "has_skill_md_enc": true,
+    "has_skill_md_plain": false,
+    "encrypted": true,
+    "files": {
+      "enc": 1,
+      "plain": 0,
+      "total": 1
+    },
+    "subdirs": [],
+    "extensions": {
+      ".enc": 1
+    },
+    "readable_assets": []
+  },
+  "artifacts": [
+    "PROBLEM_ANALYSIS.md"
+  ],
+  "runtime_prompts": [],
+  "used_in_templates": [
+    "comp_cumcm",
+    "comp_mcm"
+  ],
+  "flowly_status": "pending",
+  "replication_strategy": "decrypt_and_port"
+}

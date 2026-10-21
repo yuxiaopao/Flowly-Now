@@ -1,15 +1,9 @@
 <template>
   <div class="api-explorer">
-    <div class="page-header">
-      <div class="header-content">
-        <h1 class="page-title">
-          API 测试工具
-        </h1>
-        <p class="page-description">
-          测试和调试 Flowly API 接口
-        </p>
-      </div>
-    </div>
+    <PageHeader
+      title="API 测试工具"
+      subtitle="测试和调试 Flowly API 接口"
+    />
 
     <div class="explorer-layout">
       <!-- 左侧: API 端点列表 -->
@@ -19,6 +13,7 @@
           <el-input
             v-model="endpointSearch"
             placeholder="搜索端点..."
+            aria-label="搜索 API 端点"
             :prefix-icon="Search"
             clearable
             size="small"
@@ -33,6 +28,11 @@
           >
             <div
               class="category-header"
+              role="button"
+              tabindex="0"
+              :aria-expanded="expandedCategories.includes(category.name)"
+              @keydown.enter.self="toggleCategory(category.name)"
+              @keydown.space.self.prevent="toggleCategory(category.name)"
               @click="toggleCategory(category.name)"
             >
               <el-icon :class="{ expanded: expandedCategories.includes(category.name) }">
@@ -55,7 +55,12 @@
                 v-for="endpoint in category.endpoints"
                 :key="endpoint.path"
                 class="endpoint-item"
+                role="button"
+                tabindex="0"
+                :aria-label="`${endpoint.method} ${endpoint.path}`"
                 :class="{ active: selectedEndpoint?.path === endpoint.path }"
+                @keydown.enter.self="selectEndpoint(endpoint)"
+                @keydown.space.self.prevent="selectEndpoint(endpoint)"
                 @click="selectEndpoint(endpoint)"
               >
                 <el-tag
@@ -108,6 +113,7 @@
             <el-input
               v-model="requestConfig.url"
               placeholder="输入请求 URL"
+              aria-label="请求 URL"
               size="large"
               class="url-input"
             />
@@ -242,16 +248,16 @@
               <div class="body-editor">
                 <div class="body-type-selector">
                   <el-radio-group v-model="requestConfig.bodyType">
-                    <el-radio label="none">
+                    <el-radio value="none">
                       无
                     </el-radio>
-                    <el-radio label="json">
+                    <el-radio value="json">
                       JSON
                     </el-radio>
-                    <el-radio label="form">
+                    <el-radio value="form">
                       Form Data
                     </el-radio>
-                    <el-radio label="raw">
+                    <el-radio value="raw">
                       Raw
                     </el-radio>
                   </el-radio-group>
@@ -365,16 +371,16 @@
                   v-model="requestConfig.authType"
                   class="auth-type-selector"
                 >
-                  <el-radio label="none">
+                  <el-radio value="none">
                     无认证
                   </el-radio>
-                  <el-radio label="bearer">
+                  <el-radio value="bearer">
                     Bearer Token
                   </el-radio>
-                  <el-radio label="apiKey">
+                  <el-radio value="apiKey">
                     API Key
                   </el-radio>
-                  <el-radio label="basic">
+                  <el-radio value="basic">
                     Basic Auth
                   </el-radio>
                 </el-radio-group>
@@ -592,6 +598,7 @@
 </template>
 
 <script setup>
+import PageHeader from '@/components/layout/PageHeader.vue'
 import { ref, computed, reactive, onMounted } from 'vue'
 import { useAppStore } from '@/stores/app'
 import {
@@ -653,7 +660,7 @@ const endpoints = [
   },
   {
     name: 'nl-workflow',
-    label: 'NL 生成工作流',
+    label: '语创',
     endpoints: [
       { path: '/nl-workflow/generate/', method: 'POST', description: '生成工作流' },
       { path: '/nl-workflow/generate/stream/', method: 'POST', description: '流式生成工作流' },
@@ -948,25 +955,10 @@ onMounted(() => {
   flex-direction: column;
 }
 
-.page-header {
-  margin-bottom: 16px;
-}
-
-.page-title {
-  font-size: 24px;
-  font-weight: 600;
-  margin: 0 0 4px 0;
-}
-
-.page-description {
-  color: var(--text-secondary);
-  margin: 0;
-}
-
 .explorer-layout {
   flex: 1;
   display: grid;
-  grid-template-columns: 280px 1fr 400px;
+  grid-template-columns: 240px minmax(0, 1fr) minmax(280px, 360px);
   gap: 16px;
   min-height: 0;
 }
@@ -982,7 +974,7 @@ onMounted(() => {
 
 .sidebar-header {
   padding: 16px;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-primary);
 }
 
 .sidebar-header h3 {
@@ -997,7 +989,7 @@ onMounted(() => {
 }
 
 .endpoint-category {
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-primary);
 }
 
 .category-header {
@@ -1040,7 +1032,7 @@ onMounted(() => {
 }
 
 .endpoint-item.active {
-  background: var(--primary-light-9);
+  background: var(--bg-active);
 }
 
 .endpoint-path {
@@ -1111,7 +1103,7 @@ onMounted(() => {
   padding: 8px 0;
   font-size: 12px;
   color: var(--text-secondary);
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-primary);
 }
 
 .kv-row {
@@ -1172,7 +1164,7 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   padding: 16px;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-primary);
 }
 
 .response-header h3 {
@@ -1233,7 +1225,7 @@ onMounted(() => {
 
 .headers-table td {
   padding: 8px 0;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-primary);
 }
 
 .header-key {
@@ -1256,7 +1248,7 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   padding: 12px 0;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-primary);
 }
 
 .info-label {
@@ -1272,5 +1264,23 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+@media (max-width: 1250px) {
+  .api-explorer { height: auto; min-height: calc(100dvh - var(--header-height)); }
+  .explorer-layout { grid-template-columns: 220px minmax(0, 1fr); }
+  .endpoints-sidebar { grid-row: span 2; max-height: 900px; }
+  .response-panel { grid-column: 2; min-height: 280px; }
+}
+@media (max-width: 768px) {
+  .explorer-layout { grid-template-columns: minmax(0, 1fr); }
+  .endpoints-sidebar { grid-row: auto; max-height: 280px; }
+  .request-panel { min-height: 240px; }
+  .response-panel { grid-column: 1; }
+  .request-content, .response-header, .key-value-editor, .body-editor, .auth-editor { padding: 12px; }
+  .url-bar { flex-wrap: wrap; }
+  .url-input { flex: 1 0 100%; order: -1; min-width: 0; }
+  .kv-header, .kv-row { grid-template-columns: repeat(3, minmax(0, 1fr)) 32px; gap: 4px; }
+  .response-header, .response-meta { flex-wrap: wrap; gap: 8px; }
+  .header-key { width: auto; padding-right: 12px; }
 }
 </style>

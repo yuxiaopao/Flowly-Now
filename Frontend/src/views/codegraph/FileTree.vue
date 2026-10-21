@@ -2,7 +2,7 @@
   <div class="file-tree">
     <div class="tree-header">
       <span class="tree-title">文件树</span>
-      <span class="file-count">{{ nodes.length }} 文件</span>
+      <span class="file-count">{{ files.length }} 文件</span>
     </div>
 
     <div class="tree-content">
@@ -38,6 +38,7 @@
 
 <script setup>
 import { ref, computed, watch } from 'vue'
+import { fileNodes } from '@/utils/codeGraph'
 import {
   Folder,
   FileCode,
@@ -61,6 +62,7 @@ const emit = defineEmits(['select'])
 
 const treeRef = ref(null)
 const expandedKeys = ref([])
+const files = computed(() => fileNodes(props.nodes))
 
 const treeProps = {
   children: 'children',
@@ -69,9 +71,9 @@ const treeProps = {
 
 const treeData = computed(() => {
   // 按模块组织文件
-  const modules = {}
+  const modules = Object.create(null)
 
-  props.nodes.forEach(node => {
+  files.value.forEach(node => {
     const moduleName = node.module || 'root'
     if (!modules[moduleName]) {
       modules[moduleName] = {
@@ -144,15 +146,19 @@ function getNodeIcon(data) {
 // 监听选中节点变化
 watch(() => props.selectedNode, (newNode) => {
   if (newNode) {
-    const moduleKey = `module-${newNode.module}`
+    const moduleKey = `module-${newNode.module || 'root'}`
     if (!expandedKeys.value.includes(moduleKey)) {
       expandedKeys.value.push(moduleKey)
     }
     if (treeRef.value) {
       treeRef.value.setCurrentKey(newNode.id)
+      const parent = treeRef.value.getNode(moduleKey)
+      if (parent) parent.expanded = true
     }
+  } else {
+    treeRef.value?.setCurrentKey(null)
   }
-})
+}, { flush: 'post' })
 </script>
 
 <style lang="scss" scoped>
@@ -160,47 +166,56 @@ watch(() => props.selectedNode, (newNode) => {
   display: flex;
   flex-direction: column;
   flex: 1;
-  min-height: 200px;
-  border-bottom: 1px solid var(--border-color);
+  min-height: 160px;
 }
 
 .tree-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px;
+  padding: 12px 14px 8px;
   font-size: 13px;
   color: var(--text-secondary);
 }
 
 .tree-title {
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text-primary);
 }
 
 .file-count {
-  font-size: 12px;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(34, 211, 238, 0.25);
+  color: #67e8f9;
+  background: rgba(34, 211, 238, 0.08);
 }
 
 .tree-content {
   flex: 1;
   overflow-y: auto;
-  padding: 0 12px 12px;
+  padding: 0 10px 12px;
 
   :deep(.el-tree) {
     background: transparent;
+    --el-tree-node-hover-bg-color: transparent;
 
     .el-tree-node__content {
-      height: 28px;
-      border-radius: 4px;
+      height: 30px;
+      border-radius: 8px;
+      border: 1px solid transparent;
+      transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 
       &:hover {
-        background: var(--bg-hover);
+        background: rgba(34, 211, 238, 0.06);
+        border-color: rgba(34, 211, 238, 0.18);
       }
     }
 
     .el-tree-node.is-current > .el-tree-node__content {
-      background: var(--color-primary-light-9);
+      background: rgba(34, 211, 238, 0.1);
+      border-color: rgba(34, 211, 238, 0.3);
     }
   }
 }
@@ -215,7 +230,7 @@ watch(() => props.selectedNode, (newNode) => {
   .node-icon {
     width: 14px;
     height: 14px;
-    color: var(--text-secondary);
+    color: #22d3ee;
     flex-shrink: 0;
   }
 
@@ -229,7 +244,7 @@ watch(() => props.selectedNode, (newNode) => {
   .node-count {
     font-size: 11px;
     color: var(--text-secondary);
-    background: var(--bg-hover);
+    background: rgba(255, 255, 255, 0.05);
     padding: 0 6px;
     border-radius: 10px;
   }

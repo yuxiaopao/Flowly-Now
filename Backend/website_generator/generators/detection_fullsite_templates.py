@@ -1,12 +1,14 @@
-"""Full-featured detection site templates: image / video / realtime / history."""
+"""Full-featured detection site templates: image / video / realtime / fact / history."""
 
 from __future__ import annotations
 
-from typing import List
+import html
+import json
+from typing import Any, Dict, List, Optional
 
 from .modern_templates import get_modern_css_block
 
-DETECTION_MODES = ('image', 'video', 'realtime', 'history')
+DETECTION_MODES = ('image', 'video', 'realtime', 'fact', 'history')
 
 
 def build_detection_extra_css(primary: str) -> str:
@@ -19,7 +21,7 @@ def build_detection_extra_css(primary: str) -> str:
     .mode-tab {{
       padding: 10px 18px; border-radius: 999px; border: 1px solid var(--color-border, #2e2e42);
       background: transparent; color: var(--color-text-muted, #a1a1aa); cursor: pointer; font-size: 14px;
-      transition: all 0.2s;
+      transition: all 0.2s; min-height: 40px;
     }}
     .mode-tab:hover {{ border-color: {primary}; color: var(--color-text, #f4f4f5); }}
     .mode-tab.active {{
@@ -32,13 +34,14 @@ def build_detection_extra_css(primary: str) -> str:
     .upload-zone.video {{ padding: 40px; }}
     .media-stage {{
       position: relative; width: 100%; background: #0a0a0f; border-radius: 12px; overflow: hidden;
-      border: 1px solid var(--color-border, #2e2e42);
+      border: 1px solid var(--color-border, #2e2e42); min-height: 240px;
     }}
     .media-stage img, .media-stage video {{ display: block; width: 100%; max-height: 520px; object-fit: contain; }}
     .media-stage canvas {{ position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }}
     .toolbar {{ display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }}
     .btn {{
       padding: 10px 18px; border-radius: 8px; border: none; cursor: pointer; font-size: 14px; font-weight: 600;
+      min-height: 40px;
     }}
     .btn-primary {{ background: {primary}; color: #0f0f14; }}
     .btn-secondary {{ background: var(--color-surface-elevated, #1f1f2e); color: var(--color-text, #f4f4f5); border: 1px solid var(--color-border, #2e2e42); }}
@@ -63,7 +66,7 @@ def build_detection_extra_css(primary: str) -> str:
     .history-grid {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; width: 100%; }}
     .history-card {{
       background: var(--color-surface, #18181f); border: 1px solid var(--color-border, #2e2e42);
-      border-radius: 12px; padding: 16px; cursor: pointer; transition: border-color 0.2s;
+      border-radius: 8px; padding: 16px; cursor: pointer; transition: border-color 0.2s;
     }}
     .history-card:hover {{ border-color: {primary}; }}
     .history-card h4 {{ font-size: 14px; margin-bottom: 8px; color: var(--color-text, #f4f4f5); }}
@@ -73,9 +76,66 @@ def build_detection_extra_css(primary: str) -> str:
       background: color-mix(in srgb, {primary} 20%, transparent); color: {primary};
     }}
     .empty-state {{ text-align: center; padding: 48px 24px; color: var(--color-text-muted, #a1a1aa); }}
+    .class-legend {{
+      display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; padding: 12px 24px 0;
+      max-width: 1100px; margin: 0 auto; width: 100%;
+    }}
+    .class-chip {{
+      display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px;
+      border: 1px solid var(--color-border, #2e2e42); background: var(--color-surface, #18181f);
+      color: var(--color-text, #f4f4f5); font-size: 12px; cursor: pointer; user-select: none;
+    }}
+    .class-chip .swatch {{ width: 10px; height: 10px; border-radius: 50%; }}
+    .class-chip.active {{ border-color: {primary}; color: {primary}; }}
+    .class-chip.dim {{ opacity: 0.45; }}
+    .class-filter-bar {{
+      display: flex; flex-wrap: wrap; gap: 8px; align-items: center; width: 100%;
+      padding: 0 4px; margin-bottom: 4px;
+    }}
+    .class-filter-bar .hint {{ font-size: 12px; color: #71717a; }}
     input[type="file"] {{ display: none; }}
-    @media (max-width: 640px) {{ .mode-nav {{ padding: 8px 12px; }} .mode-tab {{ padding: 8px 12px; font-size: 13px; }} }}
+    @media (max-width: 640px) {{
+      .mode-nav {{ padding: 8px 12px; justify-content: flex-start; }}
+      .mode-tab {{ padding: 8px 12px; font-size: 13px; }}
+      .site-main {{ padding: 16px !important; }}
+    }}
 """
+
+
+def _normalize_class_entities(
+    labels: List[str],
+    class_entities: Optional[List[Dict[str, Any]]] = None,
+    display_names: Optional[Dict[str, str]] = None,
+) -> List[Dict[str, Any]]:
+    display_names = display_names or {}
+    if class_entities:
+        out = []
+        for idx, ent in enumerate(class_entities):
+            if not isinstance(ent, dict):
+                continue
+            name = str(ent.get('name') or ent.get('filter_key') or '').strip()
+            if not name:
+                continue
+            out.append({
+                'id': ent.get('id') or f'cls_{idx}',
+                'name': name,
+                'display_name': ent.get('display_name') or display_names.get(name) or name.replace('_', ' '),
+                'filter_key': ent.get('filter_key') or name,
+                'color_index': int(ent.get('color_index') if ent.get('color_index') is not None else idx % 6),
+            })
+        if out:
+            return out
+    names = labels or ['目标1', '目标2', '目标3']
+    return [
+        {
+            'id': f'cls_{i}',
+            'name': n,
+            'display_name': display_names.get(n) or n.replace('_', ' '),
+            'filter_key': n,
+            'color_index': i % 6,
+        }
+        for i, n in enumerate(names)
+    ]
 
 
 def build_detection_index_html(
@@ -85,15 +145,23 @@ def build_detection_index_html(
     upload_hint: str,
     labels: List[str],
     disclaimer_html: str = '',
+    class_entities: Optional[List[Dict[str, Any]]] = None,
+    display_names: Optional[Dict[str, str]] = None,
 ) -> str:
     modern_css = get_modern_css_block().replace('--site-primary, #f59e0b', primary)
-    labels_json = ','.join(f'"{l}"' for l in labels) if labels else '"目标1","目标2","目标3"'
+    entities = _normalize_class_entities(labels, class_entities, display_names)
+    labels_for_json = [e['name'] for e in entities] or (labels or ['目标1', '目标2', '目标3'])
+    labels_json = json.dumps(labels_for_json, ensure_ascii=False).replace('</', '<\\/')
+    entities_json = json.dumps(entities, ensure_ascii=False).replace('</', '<\\/')
+    safe_title = html.escape(title or 'AI 识别系统')
+    safe_subtitle = html.escape(subtitle or 'AI-powered recognition service')
+    safe_upload_hint = html.escape(upload_hint or '点击或拖拽上传图片进行识别')
 
     return f"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
-  <title>{title}</title>
+  <title>{safe_title}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
     :root {{ --site-primary: {primary}; --color-primary: {primary}; }}
@@ -108,41 +176,59 @@ def build_detection_index_html(
 <body>
   <div id="app" class="app-layout">
     <header class="site-header">
-      <h1>{title}</h1>
-      <p>{subtitle}</p>
+      <h1>{safe_title}</h1>
+      <p>{safe_subtitle}</p>
     </header>
+    <div class="class-legend" aria-label="训练类别图例">
+      <button
+        v-for="ent in classEntities"
+        :key="ent.id"
+        type="button"
+        class="class-chip"
+        :class="{{ active: isFilterActive(ent.filter_key), dim: activeFilters.length && !isFilterActive(ent.filter_key) }}"
+        @click="toggleFilter(ent.filter_key)"
+      >
+        <span class="swatch" :style="{{ background: COLORS[ent.color_index % COLORS.length] }}"></span>
+        {{{{ ent.display_name }}}}
+      </button>
+    </div>
     <nav class="mode-nav" role="tablist" aria-label="识别模式">
-      <button class="mode-tab active" role="tab" :aria-selected="mode==='image'" @click="setMode('image')">图片识别</button>
-      <button class="mode-tab" role="tab" :aria-selected="mode==='video'" @click="setMode('video')">视频识别</button>
-      <button class="mode-tab" role="tab" :aria-selected="mode==='realtime'" @click="setMode('realtime')">实时识别</button>
-      <button class="mode-tab" role="tab" :aria-selected="mode==='history'" @click="setMode('history')">历史记录</button>
+      <button class="mode-tab" :class="{{ active: mode === 'image' }}" role="tab" :aria-selected="mode==='image'" @click="setMode('image')">图片识别</button>
+      <button class="mode-tab" :class="{{ active: mode === 'video' }}" role="tab" :aria-selected="mode==='video'" @click="setMode('video')">视频识别</button>
+      <button class="mode-tab" :class="{{ active: mode === 'realtime' }}" role="tab" :aria-selected="mode==='realtime'" @click="setMode('realtime')">实时识别</button>
+      <button class="mode-tab" :class="{{ active: mode === 'fact' }}" role="tab" :aria-selected="mode==='fact'" @click="setMode('fact')">事实识别</button>
+      <button class="mode-tab" :class="{{ active: mode === 'history' }}" role="tab" :aria-selected="mode==='history'" @click="setMode('history')">历史记录</button>
     </nav>
     <main class="site-main">
-      <!-- 图片识别 -->
       <section class="panel" :class="{{ active: mode === 'image' }}" role="tabpanel">
-        <div class="upload-zone" :class="{{dragover: isDragover}}" @click="$refs.imageInput.click()" @dragover.prevent="isDragover=true" @dragleave="isDragover=false" @drop.prevent="onImageDrop">
+        <div class="class-filter-bar">
+          <span class="hint">类别筛选（点击图例切换，空=全部）</span>
+          <button type="button" class="btn btn-secondary" style="min-height:32px;padding:4px 12px;font-size:12px" @click="clearFilters">清除筛选</button>
+        </div>
+        <div class="upload-zone" :class="{{ dragover: isDragover }}" @click="$refs.imageInput.click()" @dragover.prevent="isDragover=true" @dragleave="isDragover=false" @drop.prevent="onImageDrop">
           <input type="file" ref="imageInput" accept="image/*" @change="onImageSelect" />
-          <p>{upload_hint}</p>
-          <p class="hint" style="font-size:12px;margin-top:8px;color:#71717a">支持 JPG、PNG、WEBP</p>
+          <p>{safe_upload_hint}</p>
+          <p class="hint" style="font-size:12px;margin-top:8px;color:#71717a">支持 JPG、PNG、WEBP · 已学习 {{{{ classEntities.length }}}} 个类别</p>
         </div>
         <div v-if="imageUrl" class="result-panel" style="width:100%">
           <div class="media-stage">
-            <img :src="imageUrl" ref="imageEl" @load="drawImageBoxes" />
+            <img :src="imageUrl" ref="imageEl" @load="drawImageBoxes" alt="待识别图片" />
             <canvas ref="imageCanvas"></canvas>
           </div>
           <div v-if="imageLoading" class="loading">正在识别图片...</div>
-          <template v-else-if="imageDetections.length">
-            <div class="detection-stats"><div class="stat-item"><span class="stat-value">{{{{ imageDetections.length }}}}</span><span class="stat-label">检测到目标</span></div></div>
-            <div class="detection-list"><div v-for="(d,i) in imageDetections" :key="i" class="detection-item">
-              <span class="detection-label">{{{{ d.label }}}}</span><div class="confidence-bar"><div class="confidence-fill" :style="{{width: (d.confidence*100)+'%'}}"></div></div>
+          <template v-else-if="filteredImageDetections.length">
+            <div class="detection-stats"><div class="stat-item"><span class="stat-value">{{{{ filteredImageDetections.length }}}}</span><span class="stat-label">检测到目标</span></div>
+            <div class="stat-item" v-if="imageDetections.length !== filteredImageDetections.length"><span class="stat-value">{{{{ imageDetections.length }}}}</span><span class="stat-label">筛选前</span></div></div>
+            <div class="detection-list"><div v-for="(d,i) in filteredImageDetections" :key="i" class="detection-item">
+              <span class="detection-label">{{{{ displayLabel(d.label) }}}}</span><div class="confidence-bar"><div class="confidence-fill" :style="{{ width: (d.confidence*100)+'%' }}"></div></div>
               <span style="font-size:13px;color:#a1a1aa">{{{{ (d.confidence*100).toFixed(1) }}}}%</span>
             </div></div>
           </template>
           <div v-else-if="imageError" style="color:#ef4444;padding:16px;text-align:center">{{{{ imageError }}}}</div>
+          <div v-else-if="imageDetections.length" class="empty-state">当前筛选下无匹配目标</div>
         </div>
       </section>
 
-      <!-- 视频识别 -->
       <section class="panel" :class="{{ active: mode === 'video' }}" role="tabpanel">
         <div class="upload-zone video" @click="$refs.videoInput.click()">
           <input type="file" ref="videoInput" accept="video/*" @change="onVideoSelect" />
@@ -163,18 +249,17 @@ def build_detection_index_html(
             <div class="detection-stats"><div class="stat-item"><span class="stat-value">{{{{ currentVideoFrame.boxes.length }}}}</span><span class="stat-label">当前帧目标</span></div>
             <div class="stat-item"><span class="stat-value">{{{{ currentVideoFrame.time_sec.toFixed(1) }}}}s</span><span class="stat-label">时间戳</span></div></div>
             <div class="detection-list"><div v-for="(d,i) in currentVideoFrame.boxes" :key="i" class="detection-item">
-              <span class="detection-label">{{{{ d.label }}}}</span><div class="confidence-bar"><div class="confidence-fill" :style="{{width: (d.confidence*100)+'%'}}"></div></div>
+              <span class="detection-label">{{{{ d.label }}}}</span><div class="confidence-bar"><div class="confidence-fill" :style="{{ width: (d.confidence*100)+'%' }}"></div></div>
               <span style="font-size:13px;color:#a1a1aa">{{{{ (d.confidence*100).toFixed(1) }}}}%</span>
             </div></div>
           </template>
         </div>
       </section>
 
-      <!-- 实时识别 -->
       <section class="panel" :class="{{ active: mode === 'realtime' }}" role="tabpanel">
         <div class="toolbar">
           <button class="btn btn-primary" @click="toggleCamera">{{{{ cameraOn ? '停止摄像头' : '开启摄像头' }}}}</button>
-          <span class="status-pill"><span class="status-dot" :class="{{live: cameraOn}}"></span>{{{{ cameraOn ? '实时识别中' : '摄像头未开启' }}}}</span>
+          <span class="status-pill"><span class="status-dot" :class="{{ live: cameraOn }}"></span>{{{{ cameraOn ? '实时识别中' : '摄像头未开启' }}}}</span>
           <span v-if="realtimeFps" class="status-pill">{{{{ realtimeFps }}}} FPS</span>
         </div>
         <div class="result-panel" style="width:100%">
@@ -182,25 +267,24 @@ def build_detection_index_html(
             <video ref="cameraEl" autoplay playsinline muted style="width:100%"></video>
             <canvas ref="cameraCanvas"></canvas>
           </div>
-          <div v-if="!cameraOn" class="empty-state">点击「开启摄像头」开始实时目标检测</div>
+          <div v-if="!cameraOn" class="empty-state">点击“开启摄像头”开始实时目标检测</div>
           <template v-else-if="realtimeDetections.length">
             <div class="detection-stats"><div class="stat-item"><span class="stat-value">{{{{ realtimeDetections.length }}}}</span><span class="stat-label">当前画面目标</span></div></div>
             <div class="detection-list"><div v-for="(d,i) in realtimeDetections" :key="i" class="detection-item">
-              <span class="detection-label">{{{{ d.label }}}}</span><div class="confidence-bar"><div class="confidence-fill" :style="{{width: (d.confidence*100)+'%'}}"></div></div>
+              <span class="detection-label">{{{{ d.label }}}}</span><div class="confidence-bar"><div class="confidence-fill" :style="{{ width: (d.confidence*100)+'%' }}"></div></div>
               <span style="font-size:13px;color:#a1a1aa">{{{{ (d.confidence*100).toFixed(1) }}}}%</span>
             </div></div>
           </template>
         </div>
       </section>
 
-      <!-- 历史记录 -->
       <section class="panel" :class="{{ active: mode === 'history' }}" role="tabpanel">
         <div class="toolbar">
           <button class="btn btn-secondary" @click="loadHistory">刷新记录</button>
           <span class="status-pill">共 {{{{ historyItems.length }}}} 条</span>
         </div>
         <div v-if="historyLoading" class="loading">加载历史记录...</div>
-        <div v-else-if="!historyItems.length" class="empty-state">暂无识别记录，完成一次图片/视频/实时识别后将自动保存</div>
+        <div v-else-if="!historyItems.length" class="empty-state">暂无识别记录，完成一次图片、视频或实时识别后将自动保存</div>
         <div v-else class="history-grid">
           <article v-for="item in historyItems" :key="item.id" class="history-card" @click="selectHistory(item)">
             <h4><span class="mode-badge">{{{{ modeLabel(item.mode) }}}}</span> {{{{ item.input_summary }}}}</h4>
@@ -216,6 +300,34 @@ def build_detection_index_html(
           <pre style="font-size:12px;color:#a1a1aa;white-space:pre-wrap;word-break:break-all">{{{{ JSON.stringify(selectedHistory.detections || [], null, 2) }}}}</pre>
         </div>
       </section>
+
+      <section class="panel" :class="{{ active: mode === 'fact' }}" role="tabpanel">
+        <div class="result-panel" style="width:100%;padding:20px">
+          <h3 style="margin-bottom:12px;font-size:18px;color:{primary}">事实识别</h3>
+          <p style="margin-bottom:14px;color:#a1a1aa;font-size:13px">基于当前模型标签、模型信息和最近识别历史，对用户输入的判断进行一致性检查并保存依据记录。</p>
+          <textarea v-model="factClaim" rows="4" style="width:100%;resize:vertical;border-radius:8px;border:1px solid #2e2e42;background:#0f0f14;color:#f4f4f5;padding:12px" placeholder="输入需要核查的事实、识别结论或业务规则"></textarea>
+          <div class="toolbar" style="margin-top:12px">
+            <button class="btn btn-primary" :disabled="factLoading || !factClaim.trim()" @click="runFactCheck">{{{{ factLoading ? '核查中...' : '开始核查' }}}}</button>
+            <button class="btn btn-secondary" @click="loadFactHistory">刷新记录</button>
+          </div>
+          <div v-if="factLoading" class="loading">正在进行事实一致性检查...</div>
+          <div v-if="factResult" class="history-card" style="margin-top:14px">
+            <h4>{{{{ factResult.verdict }}}} - {{{{ Math.round((factResult.confidence || 0) * 100) }}}}%</h4>
+            <div class="history-meta">
+              <span v-for="(line, idx) in factResult.evidence" :key="idx">{{{{ line }}}}</span>
+            </div>
+          </div>
+          <div v-if="factHistory.length" class="history-grid" style="margin-top:16px">
+            <article v-for="item in factHistory" :key="item.id" class="history-card">
+              <h4>{{{{ item.verdict }}}}</h4>
+              <div class="history-meta">
+                <span>{{{{ item.claim }}}}</span>
+                <span>{{{{ formatTime(item.created_at) }}}}</span>
+              </div>
+            </article>
+          </div>
+        </div>
+      </section>
     </main>
     {disclaimer_html}
   </div>
@@ -223,27 +335,46 @@ def build_detection_index_html(
   <script src="https://unpkg.com/axios@1.6.0/dist/axios.min.js"></script>
   <script>
     const {{ createApp, ref, computed, watch, onUnmounted, nextTick }} = Vue
+    const LABELS = {labels_json}
+    const CLASS_ENTITIES = {entities_json}
     const COLORS = ['{primary}', '#10b981', '#3b82f6', '#ef4444', '#8b5cf6', '#ec4899']
-    const MODE_LABELS = {{ image: '图片', video: '视频', realtime: '实时' }}
+    const MODE_LABELS = {{ image: '图片', video: '视频', realtime: '实时', fact: '事实', history: '历史' }}
+    const DISPLAY_MAP = Object.fromEntries(CLASS_ENTITIES.map(e => [e.name, e.display_name]))
 
     createApp({{
       setup() {{
         const mode = ref('image')
         const isDragover = ref(false)
+        const classEntities = ref(CLASS_ENTITIES)
+        const activeFilters = ref([])
         const imageUrl = ref(''); const imageLoading = ref(false); const imageDetections = ref([]); const imageError = ref('')
         const imageEl = ref(null); const imageCanvas = ref(null)
-        const videoUrl = ref(''); const videoLoading = ref(false); const videoFrames = ref([]); const videoEl = ref(null); const videoCanvas = ref(null)
+        const videoUrl = ref(''); const videoLoading = ref(false); const videoFrames = ref([]); const videoInput = ref(null); const videoEl = ref(null); const videoCanvas = ref(null)
         const currentVideoFrame = computed(() => videoFrames.value.length ? videoFrames.value[videoFrames.value.length - 1] : null)
         const cameraOn = ref(false); const cameraEl = ref(null); const cameraCanvas = ref(null)
         const realtimeDetections = ref([]); const realtimeFps = ref(0); let cameraStream = null; let realtimeTimer = null; let frameCount = 0; let lastFpsTs = Date.now()
         const historyItems = ref([]); const historyLoading = ref(false); const selectedHistory = ref(null)
+        const factClaim = ref(''); const factLoading = ref(false); const factResult = ref(null); const factHistory = ref([])
+
+        function displayLabel(label) {{ return DISPLAY_MAP[label] || label }}
+        function isFilterActive(key) {{ return activeFilters.value.includes(key) }}
+        function toggleFilter(key) {{
+          const i = activeFilters.value.indexOf(key)
+          if (i >= 0) activeFilters.value = activeFilters.value.filter(k => k !== key)
+          else activeFilters.value = [...activeFilters.value, key]
+          drawImageBoxes()
+        }}
+        function clearFilters() {{ activeFilters.value = []; drawImageBoxes() }}
+        function filterBoxes(boxes) {{
+          if (!activeFilters.value.length) return boxes || []
+          return (boxes || []).filter(d => activeFilters.value.includes(d.label))
+        }}
+        const filteredImageDetections = computed(() => filterBoxes(imageDetections.value))
 
         function setMode(m) {{
           mode.value = m
-          document.querySelectorAll('.mode-tab').forEach((el, i) => {{
-            el.classList.toggle('active', ['image','video','realtime','history'][i] === m)
-          }})
           if (m === 'history') loadHistory()
+          if (m === 'fact') loadFactHistory()
           if (m !== 'realtime' && cameraOn.value) stopCamera()
         }}
 
@@ -255,12 +386,13 @@ def build_detection_index_html(
           canvas.width = w; canvas.height = h
           const ctx = canvas.getContext('2d')
           ctx.clearRect(0, 0, w, h)
-          ;(boxes || []).forEach((det, i) => {{
-            const color = COLORS[i % COLORS.length]
+          ;(filterBoxes(boxes) || []).forEach((det, i) => {{
+            const ent = CLASS_ENTITIES.find(e => e.name === det.label)
+            const color = COLORS[(ent ? ent.color_index : i) % COLORS.length]
             const x1 = det.x1 * w, y1 = det.y1 * h, x2 = det.x2 * w, y2 = det.y2 * h
             ctx.strokeStyle = color; ctx.fillStyle = color + '33'; ctx.lineWidth = 3
             ctx.fillRect(x1, y1, x2-x1, y2-y1); ctx.strokeRect(x1, y1, x2-x1, y2-y1)
-            const label = det.label + ' ' + (det.confidence * 100).toFixed(0) + '%'
+            const label = displayLabel(det.label) + ' ' + (det.confidence * 100).toFixed(0) + '%'
             ctx.font = 'bold 14px sans-serif'
             const tw = ctx.measureText(label).width + 8
             ctx.fillStyle = color; ctx.fillRect(x1, Math.max(0, y1-22), tw, 22)
@@ -302,8 +434,7 @@ def build_detection_index_html(
         function onVideoMeta() {{ drawBoxes(videoCanvas.value, videoEl.value, []) }}
 
         async function analyzeVideo() {{
-          const input = document.querySelector('input[accept="video/*"]')
-          const file = input?.files?.[0]
+          const file = videoInput.value?.files?.[0]
           if (!file) return
           videoLoading.value = true; videoFrames.value = []
           try {{
@@ -372,6 +503,25 @@ def build_detection_index_html(
           }} catch (e) {{ selectedHistory.value = item }}
         }}
 
+        async function runFactCheck() {{
+          if (!factClaim.value.trim()) return
+          factLoading.value = true
+          try {{
+            const r = await axios.post('/api/fact-check', {{ claim: factClaim.value, source_mode: mode.value, labels: LABELS }})
+            factResult.value = r.data
+            await loadFactHistory()
+          }} catch (e) {{
+            factResult.value = {{ verdict: 'error', confidence: 0, evidence: [(e.response?.data?.error) || e.message || '事实识别失败'] }}
+          }} finally {{ factLoading.value = false }}
+        }}
+
+        async function loadFactHistory() {{
+          try {{
+            const r = await axios.get('/api/fact-checks?limit=20')
+            factHistory.value = r.data.items || []
+          }} catch (e) {{ factHistory.value = [] }}
+        }}
+
         function modeLabel(m) {{ return MODE_LABELS[m] || m || '未知' }}
         function formatTime(ts) {{
           if (!ts) return ''
@@ -379,14 +529,17 @@ def build_detection_index_html(
         }}
 
         onUnmounted(() => stopCamera())
-        watch(mode, (m) => {{ if (m === 'history') loadHistory() }})
+        watch(mode, (m) => {{ if (m === 'history') loadHistory(); if (m === 'fact') loadFactHistory() }})
+        watch(activeFilters, () => drawImageBoxes(), {{ deep: true }})
 
         return {{
-          mode, setMode, isDragover, imageUrl, imageLoading, imageDetections, imageError, imageEl, imageCanvas,
-          onImageSelect, onImageDrop, drawImageBoxes, videoUrl, videoLoading, videoFrames, videoEl, videoCanvas,
+          mode, setMode, isDragover, imageUrl, imageLoading, imageDetections, filteredImageDetections, imageError, imageEl, imageCanvas,
+          onImageSelect, onImageDrop, drawImageBoxes, videoUrl, videoLoading, videoFrames, videoInput, videoEl, videoCanvas,
           onVideoSelect, onVideoMeta, analyzeVideo, currentVideoFrame, cameraOn, cameraEl, cameraCanvas,
           realtimeDetections, realtimeFps, toggleCamera, historyItems, historyLoading, selectedHistory,
-          loadHistory, selectHistory, modeLabel, formatTime
+          loadHistory, selectHistory, factClaim, factLoading, factResult, factHistory,
+          runFactCheck, loadFactHistory, modeLabel, formatTime,
+          classEntities, activeFilters, toggleFilter, clearFilters, isFilterActive, displayLabel, COLORS
         }}
       }}
     }}).mount('#app')
@@ -400,10 +553,7 @@ def build_detection_backend_extensions() -> str:
     """Python helpers appended to generated detection app.py via backend agent or generator."""
     return '''
 
-# --- Flowly detection extensions: video / history ---
-import base64
-from datetime import datetime
-
+# --- Flowly detection extensions: video / fact / history ---
 HISTORY_DIR = os.path.join(os.path.dirname(__file__), 'data', 'history')
 os.makedirs(HISTORY_DIR, exist_ok=True)
 
@@ -469,7 +619,7 @@ def predict_video():
             return jsonify({'error': 'Cannot open video'}), 400
         fps = cap.get(cv2.CAP_PROP_FPS) or 25
         total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
-        step = max(1, int(fps // 2))  # ~2 samples per second
+        step = max(1, int(fps // 2))
         max_samples = 30
         idx = 0
         sampled = 0
@@ -526,4 +676,52 @@ def api_history_detail(record_id):
         return jsonify(row)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/fact-check', methods=['POST'])
+def api_fact_check():
+    data = request.get_json(silent=True) or {}
+    claim = str(data.get('claim') or '').strip()
+    source_mode = str(data.get('source_mode') or 'manual').strip() or 'manual'
+    if not claim:
+        return jsonify({'error': 'claim is required'}), 400
+    claim_l = claim.lower()
+    label_hits = [label for label in LABELS if str(label).lower() in claim_l]
+    evidence = []
+    if label_hits:
+        evidence.append('命中当前模型标签: ' + ', '.join(map(str, label_hits[:8])))
+    else:
+        evidence.append('未直接命中当前模型标签，需要人工或外部数据源复核')
+    try:
+        from db.init_db import list_inference_history
+        recent = list_inference_history(limit=10)
+    except Exception:
+        recent = []
+    if recent:
+        evidence.append(f'参考最近 {len(recent)} 条识别历史记录')
+    contradiction_terms = ['一定', '100%', '绝对', '全部', '从不', '永远']
+    has_overclaim = any(term in claim for term in contradiction_terms)
+    if has_overclaim:
+        evidence.append('检测到绝对化表述，降低可信度')
+    confidence = 0.72 if label_hits else 0.42
+    if has_overclaim:
+        confidence = min(confidence, 0.48)
+    verdict = 'consistent' if confidence >= 0.65 else 'needs_review'
+    try:
+        from db.init_db import log_fact_check
+        log_fact_check(claim, verdict, confidence, evidence, source_mode)
+    except Exception:
+        pass
+    return jsonify({'claim': claim, 'verdict': verdict, 'confidence': confidence, 'evidence': evidence, 'source_mode': source_mode})
+
+
+@app.route('/api/fact-checks', methods=['GET'])
+def api_fact_checks():
+    limit = min(int(request.args.get('limit', 50)), 200)
+    try:
+        from db.init_db import list_fact_checks
+        items = list_fact_checks(limit=limit)
+    except Exception:
+        items = []
+    return jsonify({'items': items, 'count': len(items)})
 '''

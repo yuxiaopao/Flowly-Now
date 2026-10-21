@@ -6,6 +6,14 @@ export const useAgentStore = defineStore('agent', () => {
   // State
   const agents = ref([])
   const currentAgent = ref(null)
+  const listPagination = ref({
+    count: 0,
+    totalPages: 1,
+    currentPage: 1,
+    pageSize: 20,
+    next: null,
+    previous: null
+  })
   const isLoading = ref(false)
   const isSaving = ref(false)
   const error = ref(null)
@@ -46,6 +54,14 @@ export const useAgentStore = defineStore('agent', () => {
     try {
       const response = await agentApi.getList(params)
       agents.value = response.results || response
+      listPagination.value = {
+        count: response.count ?? agents.value.length,
+        totalPages: response.totalPages ?? response.total_pages ?? Math.max(1, Math.ceil((response.count ?? agents.value.length) / (params.page_size || params.pageSize || 20))),
+        currentPage: response.currentPage ?? response.current_page ?? params.page ?? 1,
+        pageSize: response.pageSize ?? response.page_size ?? params.page_size ?? params.pageSize ?? agents.value.length,
+        next: response.next ?? null,
+        previous: response.previous ?? null
+      }
       return response
     } catch (err) {
       error.value = err.message
@@ -359,6 +375,7 @@ export const useAgentStore = defineStore('agent', () => {
     // State
     agents,
     currentAgent,
+    listPagination,
     isLoading,
     isSaving,
     error,

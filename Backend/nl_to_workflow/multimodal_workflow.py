@@ -4,6 +4,8 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, List
 
+from django.conf import settings
+
 
 MULTIMODAL_KEYWORDS = (
     '多模态', '文生图', '文生视频', '图生视频', '再生视频', '图像生成', '视频生成', '语音合成',
@@ -51,6 +53,10 @@ def wire_multimodal_workflow(workflow: Dict[str, Any]) -> Dict[str, Any]:
     Ensure input → image → video nodes share the same runtime variable chain.
     Fixes LLM-generated workflows that hard-code sample prompts or mismatched input_name.
     """
+    from nl_to_workflow.variable_wiring import wire_workflow_variable_refs
+
+    # Always apply edge-based empty-field wiring first (all node types).
+    workflow = wire_workflow_variable_refs(workflow)
     nodes = workflow.get('nodes') or []
     if not any(n.get('type') in (
         'image_generation', 'video_generation', 'audio_generation', 'video_translation',
@@ -67,13 +73,17 @@ def wire_multimodal_workflow(workflow: Dict[str, Any]) -> Dict[str, Any]:
             ntype = node.get('type')
             cfg = node.setdefault('config', {})
             if ntype == 'subtitle_generation':
-                cfg.setdefault('provider', 'dashscope')
+                # Only fill missing defaults — never overwrite LLM/user provider choice.
+                cfg.setdefault(
+                    'provider',
+                    getattr(settings, 'VIDEO_TRANSLATION_ASR_PROVIDER', 'local_whisper'),
+                )
                 cfg.setdefault('inputType', 'video')
                 raw = str(cfg.get('inputPath') or cfg.get('input') or '').strip()
                 if not raw or not _VAR_REF_RE.search(raw):
                     cfg['inputPath'] = '{video_url}'
             elif ntype == 'lip_sync':
-                cfg.setdefault('lip_sync', True)
+                cfg.setdefault('lip_sync', False)
                 if not str(cfg.get('video_input') or '').strip():
                     cfg['video_input'] = '{source_video_url}'
                 if not str(cfg.get('audio_input') or '').strip():
@@ -81,6 +91,11 @@ def wire_multimodal_workflow(workflow: Dict[str, Any]) -> Dict[str, Any]:
             elif ntype == 'subtitle_burn':
                 if not str(cfg.get('video_input') or '').strip():
                     cfg['video_input'] = '{video_url}'
+            elif ntype == 'segment_dubbing':
+                cfg.setdefault(
+                    'provider',
+                    getattr(settings, 'VIDEO_TRANSLATION_TTS_PROVIDER', 'pyttsx3'),
+                )
         if workflow.get('name') in (None, '', '多模态 AI 工作流', 'Generated Workflow'):
             workflow['name'] = '视频多语言翻译工作流（分节点）'
         workflow['nodes'] = nodes
@@ -91,7 +106,7 @@ def wire_multimodal_workflow(workflow: Dict[str, Any]) -> Dict[str, Any]:
         var_name = 'video_url'
         for node in input_nodes:
             cfg = node.setdefault('config', {})
-            cfg['input_name'] = var_name
+            cfg.setdefault('input_name', var_name)
             cfg.setdefault('input_type', 'text')
             cfg.setdefault('placeholder', '粘贴公网视频 URL，或在视频翻译节点中本地上传')
         video_ref = '{video_url}'
@@ -99,12 +114,15 @@ def wire_multimodal_workflow(workflow: Dict[str, Any]) -> Dict[str, Any]:
             ntype = node.get('type')
             cfg = node.setdefault('config', {})
             if ntype == 'video_translation':
-                cfg.setdefault('provider', 'dashscope')
+                # setdefault only — preserve AI-chosen providers/models
+                cfg.setdefault(
+                    'provider',
+                    getattr(settings, 'VIDEO_TRANSLATION_ASR_PROVIDER', 'local_whisper'),
+                )
                 cfg.setdefault('source_language', 'zh')
                 cfg.setdefault('target_languages', ['en'])
-                cfg.setdefault('voice', 'longanyang')
                 cfg.setdefault('subtitle_format', 'srt')
-                cfg.setdefault('lip_sync', True)
+                cfg.setdefault('lip_sync', False)
                 cfg.setdefault('burn_subtitles', True)
                 raw_video = str(cfg.get('video_input') or cfg.get('videoInput') or '').strip()
                 if not raw_video or not _VAR_REF_RE.search(raw_video):

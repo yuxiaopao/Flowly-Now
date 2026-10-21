@@ -215,8 +215,8 @@
 
       <template #node-start="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="StartNode"
           :id="id"
+          :node-component="StartNode"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"
@@ -225,8 +225,8 @@
 
       <template #node-end="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="EndNode"
           :id="id"
+          :node-component="EndNode"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"
@@ -235,8 +235,8 @@
 
       <template #node-llm="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="LLMNode"
           :id="id"
+          :node-component="LLMNode"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"
@@ -245,8 +245,8 @@
 
       <template #node-prompt="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="PromptNode"
           :id="id"
+          :node-component="PromptNode"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"
@@ -255,8 +255,8 @@
 
       <template #node-condition="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="ConditionNode"
           :id="id"
+          :node-component="ConditionNode"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"
@@ -265,8 +265,8 @@
 
       <template #node-tool="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="ToolNode"
           :id="id"
+          :node-component="ToolNode"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"
@@ -275,8 +275,8 @@
 
       <template #node-input="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="InputNode"
           :id="id"
+          :node-component="InputNode"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"
@@ -285,8 +285,8 @@
 
       <template #node-output="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="OutputNode"
           :id="id"
+          :node-component="OutputNode"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"
@@ -295,8 +295,8 @@
 
       <template #node-http="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="HttpNode"
           :id="id"
+          :node-component="HttpNode"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"
@@ -305,8 +305,8 @@
 
       <template #node-code="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="CodeNode"
           :id="id"
+          :node-component="CodeNode"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"
@@ -315,8 +315,8 @@
 
       <template #node-loop="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="LoopNode"
           :id="id"
+          :node-component="LoopNode"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"
@@ -325,8 +325,8 @@
 
       <template #node-variable="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="VariableNode"
           :id="id"
+          :node-component="VariableNode"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"
@@ -335,8 +335,8 @@
 
       <template #node-switch="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="SwitchNode"
           :id="id"
+          :node-component="SwitchNode"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"
@@ -345,8 +345,8 @@
 
       <template #node-delay="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="DelayNode"
           :id="id"
+          :node-component="DelayNode"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"
@@ -355,8 +355,8 @@
 
       <template #node-transform="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="TransformNode"
           :id="id"
+          :node-component="TransformNode"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"
@@ -365,8 +365,8 @@
 
       <template #node-image_generation="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="ImageGenerationNode"
           :id="id"
+          :node-component="ImageGenerationNode"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"
@@ -375,8 +375,8 @@
 
       <template #node-video_generation="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="VideoGenerationNode"
           :id="id"
+          :node-component="VideoGenerationNode"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"
@@ -385,8 +385,8 @@
 
       <template #node-audio_generation="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="AudioGenerationNode"
           :id="id"
+          :node-component="AudioGenerationNode"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"
@@ -395,8 +395,8 @@
 
       <template #node-subtitle_generation="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="SubtitleGenerationNode"
           :id="id"
+          :node-component="SubtitleGenerationNode"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"
@@ -405,8 +405,8 @@
 
       <template #node-video_translation="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="VideoTranslationNode"
           :id="id"
+          :node-component="VideoTranslationNode"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"
@@ -415,8 +415,8 @@
 
       <template #node-video_upload="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="VideoUploadNode"
           :id="id"
+          :node-component="VideoUploadNode"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"
@@ -425,8 +425,8 @@
 
       <template #node-subtitle_translate="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="SubtitleTranslateNode"
           :id="id"
+          :node-component="SubtitleTranslateNode"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"
@@ -435,8 +435,8 @@
 
       <template #node-segment_dubbing="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="SegmentDubbingNode"
           :id="id"
+          :node-component="SegmentDubbingNode"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"
@@ -445,8 +445,8 @@
 
       <template #node-lip_sync="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="LipSyncNode"
           :id="id"
+          :node-component="LipSyncNode"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"
@@ -455,8 +455,8 @@
 
       <template #node-subtitle_burn="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="SubtitleBurnNode"
           :id="id"
+          :node-component="SubtitleBurnNode"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"
@@ -465,8 +465,8 @@
 
       <template #node-image_editing="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="ImageEditingNode"
           :id="id"
+          :node-component="ImageEditingNode"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"
@@ -475,8 +475,8 @@
 
       <template #node-dataset_upload="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="DatasetUploadNode"
           :id="id"
+          :node-component="DatasetUploadNode"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"
@@ -485,8 +485,8 @@
 
       <template #node-data_annotation="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="DataAnnotationNode"
           :id="id"
+          :node-component="DataAnnotationNode"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"
@@ -495,8 +495,8 @@
 
       <template #node-data_augmentation="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="DataAugmentationNode"
           :id="id"
+          :node-component="DataAugmentationNode"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"
@@ -505,8 +505,8 @@
 
       <template #node-model_training="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="ModelTrainingNode"
           :id="id"
+          :node-component="ModelTrainingNode"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"
@@ -515,8 +515,8 @@
 
       <template #node-yolo_training="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="YoloTrainingNode"
           :id="id"
+          :node-component="YoloTrainingNode"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"
@@ -525,8 +525,8 @@
 
       <template #node-clip_classification="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="ClipClassificationNode"
           :id="id"
+          :node-component="ClipClassificationNode"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"
@@ -535,8 +535,8 @@
 
       <template #node-clip_retrieval="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="ClipRetrievalNode"
           :id="id"
+          :node-component="ClipRetrievalNode"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"
@@ -545,8 +545,8 @@
 
       <template #node-project_profiler="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="ProjectProfilerNode"
           :id="id"
+          :node-component="ProjectProfilerNode"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"
@@ -555,8 +555,8 @@
 
       <template #node-model_evaluation="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="ModelEvaluationNode"
           :id="id"
+          :node-component="ModelEvaluationNode"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"
@@ -565,8 +565,8 @@
 
       <template #node-model_deployment="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="ModelDeploymentNode"
           :id="id"
+          :node-component="ModelDeploymentNode"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"
@@ -575,8 +575,8 @@
 
       <template #node-website_generator="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="WebsiteGeneratorNode"
           :id="id"
+          :node-component="WebsiteGeneratorNode"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"
@@ -585,8 +585,8 @@
 
       <template #node-environment_provision="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="EnvironmentProvisionNode"
           :id="id"
+          :node-component="EnvironmentProvisionNode"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"
@@ -595,8 +595,8 @@
 
       <template #node-site_qa="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="SiteQaNode"
           :id="id"
+          :node-component="SiteQaNode"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"
@@ -605,8 +605,8 @@
 
       <template #node-site_preview="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="SitePreviewNode"
           :id="id"
+          :node-component="SitePreviewNode"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"
@@ -615,8 +615,8 @@
 
       <template #node-project_agent="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="ProjectAgentNode"
           :id="id"
+          :node-component="ProjectAgentNode"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"
@@ -625,8 +625,8 @@
 
       <template #node-backend_setup="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="BackendSetupNode"
           :id="id"
+          :node-component="BackendSetupNode"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"
@@ -635,8 +635,8 @@
 
       <template #node-frontend_setup="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="FrontendSetupNode"
           :id="id"
+          :node-component="FrontendSetupNode"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"
@@ -645,8 +645,8 @@
 
       <template #node-ui_beautify="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="UiBeautifyNode"
           :id="id"
+          :node-component="UiBeautifyNode"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"
@@ -655,8 +655,8 @@
 
       <template #node-site_code_review="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="SiteCodeReviewNode"
           :id="id"
+          :node-component="SiteCodeReviewNode"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"
@@ -665,8 +665,8 @@
 
       <template #node-document_loader="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="DocumentLoaderNode"
           :id="id"
+          :node-component="DocumentLoaderNode"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"
@@ -675,8 +675,8 @@
 
       <template #node-embedding="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="EmbeddingNode"
           :id="id"
+          :node-component="EmbeddingNode"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"
@@ -685,8 +685,8 @@
 
       <template #node-vector_store="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="VectorStoreNode"
           :id="id"
+          :node-component="VectorStoreNode"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"
@@ -695,8 +695,8 @@
 
       <template #node-retriever="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="RetrieverNode"
           :id="id"
+          :node-component="RetrieverNode"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"
@@ -705,8 +705,8 @@
 
       <template #node-reranker="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="RerankerNode"
           :id="id"
+          :node-component="RerankerNode"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"
@@ -715,8 +715,8 @@
 
       <template #node-agent="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="AgentNodeComponent"
           :id="id"
+          :node-component="AgentNodeComponent"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"
@@ -725,8 +725,8 @@
 
       <template #node-planner="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="PlannerNode"
           :id="id"
+          :node-component="PlannerNode"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"
@@ -735,8 +735,8 @@
 
       <template #node-executor="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="ExecutorNode"
           :id="id"
+          :node-component="ExecutorNode"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"
@@ -745,8 +745,8 @@
 
       <template #node-memory="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="MemoryNode"
           :id="id"
+          :node-component="MemoryNode"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"
@@ -755,8 +755,8 @@
 
       <template #node-file_reader="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="FileReaderNode"
           :id="id"
+          :node-component="FileReaderNode"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"
@@ -765,8 +765,8 @@
 
       <template #node-file_writer="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="FileWriterNode"
           :id="id"
+          :node-component="FileWriterNode"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"
@@ -775,8 +775,8 @@
 
       <template #node-web_scraper="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="WebScraperNode"
           :id="id"
+          :node-component="WebScraperNode"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"
@@ -785,8 +785,8 @@
 
       <template #node-csv_transform="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="CsvTransformNode"
           :id="id"
+          :node-component="CsvTransformNode"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"
@@ -795,8 +795,8 @@
 
       <template #node-json_transform="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="JsonTransformNode"
           :id="id"
+          :node-component="JsonTransformNode"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"
@@ -805,8 +805,8 @@
 
       <template #node-email="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="EmailNode"
           :id="id"
+          :node-component="EmailNode"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"
@@ -815,8 +815,8 @@
 
       <template #node-subworkflow="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="SubworkflowNode"
           :id="id"
+          :node-component="SubworkflowNode"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"
@@ -825,8 +825,8 @@
 
       <template #node-manual="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="ManualTriggerNode"
           :id="id"
+          :node-component="ManualTriggerNode"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"
@@ -835,8 +835,8 @@
 
       <template #node-schedule="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="ScheduleTriggerNode"
           :id="id"
+          :node-component="ScheduleTriggerNode"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"
@@ -845,8 +845,8 @@
 
       <template #node-form="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="FormTriggerNode"
           :id="id"
+          :node-component="FormTriggerNode"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"
@@ -855,8 +855,8 @@
 
       <template #node-webhook="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="WebhookTriggerNode"
           :id="id"
+          :node-component="WebhookTriggerNode"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"
@@ -865,8 +865,8 @@
 
       <template #node-split="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="SplitBatchesNode"
           :id="id"
+          :node-component="SplitBatchesNode"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"
@@ -875,8 +875,8 @@
 
       <template #node-merge="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="MergeNode"
           :id="id"
+          :node-component="MergeNode"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"
@@ -885,8 +885,8 @@
 
       <template #node-filter="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="FilterNode"
           :id="id"
+          :node-component="FilterNode"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"
@@ -895,8 +895,8 @@
 
       <template #node-datetime="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="DateTimeNode"
           :id="id"
+          :node-component="DateTimeNode"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"
@@ -905,8 +905,8 @@
 
       <template #node-set="{ data, id, selected }">
         <WorkflowNodeHost
-          :node-component="SetNode"
           :id="id"
+          :node-component="SetNode"
           :data="data"
           :selected="selected"
           @select="handleCustomNodeSelect"

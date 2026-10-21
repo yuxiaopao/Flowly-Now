@@ -21,7 +21,7 @@ export interface VectorStore {
   updated_at: string
 }
 
-export type VectorStoreType = 'chroma' | 'pinecone' | 'milvus' | 'qdrant' | 'weaviate' | 'pgvector'
+export type VectorStoreType = 'memory' | 'chroma' | 'pinecone' | 'milvus' | 'qdrant' | 'weaviate' | 'ollama'
 export type DistanceMetric = 'cosine' | 'euclidean' | 'dotproduct'
 
 /** Data for creating a vector store */
@@ -56,6 +56,8 @@ export interface DocumentCollection {
   embedding_model: string
   chunk_size: number
   chunk_overlap: number
+  retrieval_mode: 'keyword' | 'semantic' | 'hybrid'
+  chunk_strategy: 'recursive' | 'fixed'
   document_count: number
   chunk_count: number
   created_at: string
@@ -66,10 +68,12 @@ export interface DocumentCollection {
 export interface CreateCollectionData {
   name: string
   description?: string
-  vector_store: string
+  vector_store?: string | null
   embedding_model?: string
   chunk_size?: number
   chunk_overlap?: number
+  retrieval_mode?: 'keyword' | 'semantic' | 'hybrid'
+  chunk_strategy?: 'recursive' | 'fixed'
 }
 
 /** Document in a collection */
@@ -145,32 +149,31 @@ export interface RAGQueryRequest {
   query: string
   filters?: Record<string, unknown>
   top_k?: number
-  include_sources?: boolean
+  min_similarity?: number
 }
 
 /** RAG query response */
 export interface RAGQueryResponse {
-  answer: string
+  response: string
+  grounded: boolean
+  answer_status: 'answered' | 'no_evidence'
+  query: string
+  retrieved_count: number
   sources?: DocumentSource[]
-  usage?: {
-    prompt_tokens: number
-    completion_tokens: number
-    total_tokens: number
-  }
 }
 
 /** Document source from RAG retrieval */
 export interface DocumentSource {
-  document_id: string
-  title: string
+  id: string
+  citation: number
   content: string
   score: number
-  metadata?: Record<string, unknown>
+  metadata: Record<string, unknown> & { doc_id: string; title: string; chunk_index: number; source_url: string }
 }
 
 /** Collection search result */
 export interface CollectionSearchResult {
-  documents: DocumentSource[]
-  query: string
-  total: number
+  results: DocumentSource[]
+  count: number
+  retrieval_mode?: 'keyword' | 'semantic' | 'hybrid'
 }

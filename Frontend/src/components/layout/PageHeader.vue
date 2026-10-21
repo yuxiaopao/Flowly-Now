@@ -91,7 +91,7 @@ defineProps({
   }
 
   &--compact {
-    margin-bottom: $spacing-6;
+    margin-bottom: var(--page-header-gap);
 
     .page-header__title {
       font-size: $font-size-xl;
@@ -100,7 +100,8 @@ defineProps({
 
   &__main {
     min-width: 0;
-    flex: 1;
+    flex: 1 1 16rem;
+    overflow-wrap: anywhere;
   }
 
   &__eyebrow {
@@ -113,20 +114,20 @@ defineProps({
   }
 
   &__title {
-    margin: 0 0 $spacing-2;
-    font-size: $font-size-2xl;
-    font-weight: $font-weight-bold;
-    line-height: $line-height-tight;
+    margin: 0;
+    font-size: var(--page-title-size);
+    font-weight: $font-weight-semibold;
+    line-height: var(--page-title-line-height);
     color: var(--text-primary);
-    letter-spacing: -0.03em;
+    letter-spacing: -0.015em;
   }
 
   &__subtitle {
-    margin: 0;
+    margin: var(--page-description-gap) 0 0;
     font-size: $font-size-sm;
     line-height: $line-height-relaxed;
     color: var(--text-secondary);
-    max-width: 52ch;
+    max-width: 68ch;
   }
 
   &__meta {
@@ -140,7 +141,11 @@ defineProps({
     align-items: center;
     flex-wrap: wrap;
     gap: $spacing-3;
-    flex-shrink: 0;
+    min-width: 0;
+    max-width: 100%;
+    margin-left: auto;
+
+    :deep(.el-button + .el-button) { margin-left: 0; }
   }
 }
 
@@ -149,7 +154,10 @@ defineProps({
     flex-direction: column;
     align-items: stretch;
 
+    &__main { flex-basis: auto; }
+
     &__actions {
+      margin-left: 0;
       width: 100%;
     }
   }

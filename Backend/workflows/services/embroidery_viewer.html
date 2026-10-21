@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>蝶羽共生纹 · 三维模型</title>
+<style>
+:root{--paper:oklch(95% .012 82);--ink:oklch(26% .025 247);--accent:oklch(43% .06 247);--line:oklch(82% .018 82)}
+*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.5 system-ui,"Microsoft YaHei",sans-serif}header{padding:20px 24px;display:flex;gap:18px;align-items:center;flex-wrap:wrap;border-bottom:1px solid var(--line)}h1{font-size:20px;margin:0;margin-right:auto}button,a{font:inherit;color:inherit;background:transparent;border:1px solid var(--line);padding:8px 14px;border-radius:5px;cursor:pointer;text-decoration:none}button[aria-pressed=true]{background:var(--accent);color:var(--paper)}button:focus-visible,a:focus-visible{outline:3px solid var(--accent);outline-offset:3px}button:hover,a:hover{border-color:var(--accent)}button:disabled{opacity:.5;cursor:wait}#view{height:calc(100dvh - 165px);min-height:320px;touch-action:none}canvas{display:block;width:100%;height:100%}footer{padding:12px 24px;border-top:1px solid var(--line);display:flex;gap:16px;flex-wrap:wrap}#status{margin-right:auto}small{display:block;opacity:.75}@media(max-width:650px){header{padding:14px;gap:8px}h1{width:100%;font-size:18px}button,a{padding:7px 10px}footer{padding:10px 14px;font-size:13px}#view{height:calc(100dvh - 205px)}}
+</style>
+<header><h1>蝶羽共生纹 · 三维模型</h1><button data-model="pattern" aria-pressed="true">融合纹样</button><button data-model="garment" aria-pressed="false">服装应用</button><button id="reset">复位视角</button><a id="download" href="pattern.glb" download>下载模型</a></header>
+<main id="view" aria-label="三维模型，拖动旋转、滚轮缩放"></main>
+<footer><span id="status" role="status" aria-live="polite">正在加载三维模型…</span><span>拖动旋转 · 滚轮缩放<small>三维数字概念演示 · 非实物成品</small></span></footer>
+<script type="importmap">{"imports":{"three":"./vendor/three.module.js"}}</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from './vendor/controls/OrbitControls.js';
+import { GLTFLoader } from './vendor/loaders/GLTFLoader.js';
+const view=document.querySelector('#view'),status=document.querySelector('#status');
+const buttons=[...document.querySelectorAll('[data-model]')];
+const scene=new THREE.Scene();scene.background=new THREE.Color('#eeeae1');
+const camera=new THREE.PerspectiveCamera(42,1,.01,200);
+let renderer,controls,model,active='pattern',request=0,meshes=0;
+try{renderer=new THREE.WebGLRenderer({antialias:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.toneMapping=THREE.ACESFilmicToneMapping;view.append(renderer.domElement);controls=new OrbitControls(camera,renderer.domElement);controls.enableDamping=true;controls.minDistance=.2;controls.maxDistance=20;
+scene.add(new THREE.HemisphereLight(0xf4f1e6,0x666d76,2));for(const [x,y,z,power]of[[3,5,4,3],[-3,2,0,1]]){const light=new THREE.DirectionalLight(0xf8f2e8,power);light.position.set(x,y,z);scene.add(light)}
+const resize=()=>{renderer.setSize(view.clientWidth,view.clientHeight);camera.aspect=view.clientWidth/view.clientHeight;camera.updateProjectionMatrix()};new ResizeObserver(resize).observe(view);resize();
+renderer.setAnimationLoop(()=>{controls.update();renderer.render(scene,camera)});
+window.embroideryViewer={snapshot:()=>({active,meshes,triangles:renderer.info.render.triangles,camera:camera.position.toArray(),error:null})};
+async function load(name){const ticket=++request;status.textContent='正在加载三维模型…';buttons.forEach(b=>b.disabled=true);try{const gltf=await new GLTFLoader().loadAsync(name+'.glb');if(ticket!==request)return;if(model){scene.remove(model);model.traverse(o=>{o.geometry?.dispose();if(o.material){for(const mat of(Array.isArray(o.material)?o.material:[o.material]))mat.dispose()}})}model=gltf.scene;scene.add(model);const box=new THREE.Box3().setFromObject(model);model.position.sub(box.getCenter(new THREE.Vector3()));active=name;meshes=0;model.traverse(o=>{if(o.isMesh)meshes++});reset();buttons.forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.model===name)));document.querySelector('#download').href=name+'.glb';status.textContent=`已加载 ${meshes} 个三维网格`;}catch(error){status.textContent='模型加载失败。请检查本地服务后点击模型按钮重试。';window.embroideryViewer={snapshot:()=>({error:String(error)})};}finally{buttons.forEach(b=>b.disabled=false)}}
+function reset(){if(!model)return;const size=new THREE.Box3().setFromObject(model).getSize(new THREE.Vector3());const distance=Math.max(size.x,size.y,size.z)*1.8;controls.target.set(0,0,0);camera.position.set(active==='pattern'?.1*distance:.35*distance,active==='pattern'?.8*distance:.18*distance,distance);controls.update();}
+buttons.forEach(button=>button.addEventListener('click',()=>load(button.dataset.model)));document.querySelector('#reset').addEventListener('click',reset);load('pattern');
+}catch(error){status.textContent='当前浏览器无法启动三维预览。可下载 GLB 模型在三维软件中查看。';window.embroideryViewer={snapshot:()=>({error:String(error)})};}
+</script></html>

@@ -1,5 +1,8 @@
 <template>
-  <div class="collection-detail">
+  <PageShell
+    width="wide"
+    class="collection-detail"
+  >
     <div class="page-header">
       <div class="header-left">
         <el-button
@@ -17,6 +20,12 @@
         </div>
       </div>
       <div class="header-actions">
+        <el-button
+          :loading="importingGuides"
+          @click="importGuides"
+        >
+          导入 Flowly 使用指南
+        </el-button>
         <el-button @click="showEditDialog = true">
           <Edit class="btn-icon" />
           编辑
@@ -83,6 +92,13 @@
       </el-card>
     </div>
 
+    <el-alert
+      :title="RAG_TEXT.modeHint"
+      type="info"
+      :closable="false"
+      show-icon
+    />
+
     <!-- Tabs -->
     <el-tabs
       v-model="activeTab"
@@ -113,7 +129,11 @@
             />
             <el-option
               label="已处理"
-              value="processed"
+              value="completed"
+            />
+            <el-option
+              label="待处理"
+              value="pending"
             />
             <el-option
               label="处理中"
@@ -160,6 +180,14 @@
               >
                 {{ getStatusLabel(row.status) }}
               </el-tag>
+              <el-tooltip
+                v-if="row.error_message"
+                :content="row.error_message"
+              >
+                <el-text type="danger">
+                  查看原因
+                </el-text>
+              </el-tooltip>
             </template>
           </el-table-column>
           <el-table-column
@@ -301,8 +329,8 @@
             </template>
           </el-table-column>
           <el-table-column
-            prop="token_count"
-            label="Token 数"
+            prop="char_count"
+            label="字符数"
             width="100"
             align="center"
           />
@@ -328,6 +356,16 @@
         </div>
       </el-tab-pane>
 
+      <el-tab-pane
+        :label="RAG_TEXT.askTab"
+        name="ask"
+      >
+        <RAGQuestionPanel
+          :collection-id="String(route.params.id)"
+          @open-document="viewDocumentById"
+        />
+      </el-tab-pane>
+
       <!-- Search Tab -->
       <el-tab-pane
         label="搜索测试"
@@ -336,7 +374,7 @@
         <div class="search-test-container">
           <el-card shadow="hover">
             <template #header>
-              <span>语义搜索测试</span>
+              <span>{{ RAG_TEXT.searchTitle }}</span>
             </template>
             <div class="search-form">
               <el-input
@@ -347,7 +385,7 @@
                 @keydown.enter.ctrl="performSearch"
               />
               <div class="search-options">
-                <el-form label-width="80px">
+                <el-form label-width="100px">
                   <el-form-item label="返回数量">
                     <el-input-number
                       v-model="searchTopK"
@@ -355,7 +393,7 @@
                       :max="50"
                     />
                   </el-form-item>
-                  <el-form-item label="最小相似度">
+                  <el-form-item label="最低相关度">
                     <el-slider
                       v-model="searchMinSimilarity"
                       :min="0"
@@ -387,10 +425,15 @@
               >
                 <div class="result-header">
                   <span class="result-score">
-                    相似度: {{ (result.score * 100).toFixed(1) }}%
+                    相关度: {{ (result.score * 100).toFixed(1) }}%
                   </span>
                   <el-tag size="small">
-                    {{ result.document_title }}
+                    <el-button
+                      link
+                      @click="viewDocumentById(result.document_id)"
+                    >
+                      {{ result.document_title }}
+                    </el-button>
                   </el-tag>
                 </div>
                 <div class="result-content">
@@ -423,19 +466,32 @@
             :model="settingsForm"
             label-width="150px"
           >
-            <el-form-item label="Embedding 模型">
-              <el-select v-model="settingsForm.embedding_model">
+            <el-form-item label="检索方式">
+              <el-select v-model="settingsForm.retrieval_mode">
                 <el-option
-                  label="text-embedding-ada-002"
-                  value="text-embedding-ada-002"
+                  v-for="mode in RETRIEVAL_MODES"
+                  :key="mode.value"
+                  :value="mode.value"
+                  :label="mode.label"
                 />
+              </el-select>
+            </el-form-item>
+            <el-form-item
+              v-if="settingsForm.retrieval_mode !== 'keyword'"
+              label="Embedding 模型"
+            >
+              <el-input
+                v-model="settingsForm.embedding_model"
+                placeholder="例如 ollama:nomic-embed-text"
+              />
+            </el-form-item>
+            <el-form-item label="分块策略">
+              <el-select v-model="settingsForm.chunk_strategy">
                 <el-option
-                  label="text-embedding-3-small"
-                  value="text-embedding-3-small"
-                />
-                <el-option
-                  label="text-embedding-3-large"
-                  value="text-embedding-3-large"
+                  v-for="strategy in CHUNK_STRATEGIES"
+                  :key="strategy.value"
+                  :value="strategy.value"
+                  :label="strategy.label"
                 />
               </el-select>
             </el-form-item>
@@ -455,41 +511,13 @@
                 :step="50"
               />
             </el-form-item>
-            <el-form-item label="向量维度">
-              <el-input-number
-                v-model="settingsForm.dimension"
-                :min="128"
-                :max="4096"
-                :step="128"
-              />
-            </el-form-item>
             <el-form-item label="向量存储">
-              <el-select v-model="settingsForm.vector_store">
-                <el-option
-                  label="Qdrant"
-                  value="qdrant"
-                />
-                <el-option
-                  label="Milvus"
-                  value="milvus"
-                />
-                <el-option
-                  label="Chroma"
-                  value="chroma"
-                />
-                <el-option
-                  label="Pinecone"
-                  value="pinecone"
-                />
-                <el-option
-                  label="Weaviate"
-                  value="weaviate"
-                />
-              </el-select>
+              <el-text>{{ collection.vector_store_name }}</el-text>
             </el-form-item>
             <el-form-item>
               <el-button
                 type="primary"
+                :loading="savingSettings"
                 @click="saveSettings"
               >
                 保存设置
@@ -513,6 +541,7 @@
               </div>
               <el-button
                 type="warning"
+                :loading="reindexing"
                 @click="reprocessAll"
               >
                 重新处理
@@ -551,7 +580,7 @@
     <el-dialog
       v-model="showUploadDialog"
       title="上传文档"
-      width="600px"
+      width="min(600px, calc(100vw - 32px))"
     >
       <el-tabs v-model="uploadTab">
         <el-tab-pane
@@ -561,12 +590,12 @@
           <el-upload
             ref="uploadRef"
             :auto-upload="false"
-            :limit="10"
+            :accept="fileAccept"
+            :limit="RAG_CONFIG.maxUploadFiles"
             :file-list="fileList"
             :on-change="handleFileChange"
             :on-remove="handleFileRemove"
             drag
-            accept=".pdf,.doc,.docx,.txt,.md,.csv,.json"
           >
             <el-icon class="el-icon--upload">
               <upload-filled />
@@ -576,7 +605,7 @@
             </div>
             <template #tip>
               <div class="el-upload__tip">
-                支持 PDF, DOC, DOCX, TXT, MD, CSV, JSON 格式，单个文件不超过 50MB
+                支持 {{ fileAccept }}，单个文件不超过 {{ formatSize(maxFileBytes) }}
               </div>
             </template>
           </el-upload>
@@ -640,17 +669,33 @@
     <el-dialog
       v-model="showDocumentDialog"
       :title="selectedDocument?.title"
-      width="800px"
+      width="min(800px, calc(100vw - 32px))"
     >
       <div
         v-if="selectedDocument"
         class="document-detail"
       >
         <div class="detail-meta">
-          <el-tag>{{ selectedDocument.status }}</el-tag>
+          <el-tag :type="getStatusType(selectedDocument.status)">
+            {{ getStatusLabel(selectedDocument.status) }}
+          </el-tag>
           <span>{{ selectedDocument.chunk_count }} 分块</span>
           <span>{{ formatDateTime(selectedDocument.created_at) }}</span>
         </div>
+        <el-alert
+          v-if="selectedDocument.error_message"
+          :title="selectedDocument.error_message"
+          type="error"
+          :closable="false"
+        />
+        <el-link
+          v-if="selectedDocument.source_url"
+          :href="selectedDocument.source_url"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          {{ selectedDocument.source_url }}
+        </el-link>
         <el-divider />
         <div class="detail-content">
           <h4>原始内容</h4>
@@ -661,24 +706,18 @@
         <div class="detail-chunks">
           <h4>分块预览</h4>
           <div
-            v-for="(chunk, index) in selectedDocument.chunks?.slice(0, 5)"
+            v-for="(chunk, index) in selectedDocument.chunks"
             :key="index"
             class="chunk-preview"
           >
             <div class="chunk-header">
               <span>分块 {{ index + 1 }}</span>
-              <span class="chunk-tokens">{{ chunk.token_count }} tokens</span>
+              <span class="chunk-tokens">{{ chunk.content.length }} 字符</span>
             </div>
             <div class="chunk-text">
               {{ chunk.content }}
             </div>
           </div>
-          <el-link
-            v-if="selectedDocument.chunks?.length > 5"
-            type="primary"
-          >
-            查看全部 {{ selectedDocument.chunks.length }} 个分块
-          </el-link>
         </div>
       </div>
     </el-dialog>
@@ -687,7 +726,7 @@
     <el-dialog
       v-model="showEditDialog"
       title="编辑集合"
-      width="500px"
+      width="min(500px, calc(100vw - 32px))"
     >
       <el-form
         :model="editForm"
@@ -721,7 +760,7 @@
     <el-dialog
       v-model="showChunkStatsDialog"
       title="分块统计"
-      width="600px"
+      width="min(600px, calc(100vw - 32px))"
     >
       <div class="stats-content">
         <el-row :gutter="20">
@@ -765,11 +804,12 @@
         </div>
       </div>
     </el-dialog>
-  </div>
+  </PageShell>
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import PageShell from '@/components/layout/PageShell.vue'
+import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
 import { useAppStore } from '@/stores/app'
@@ -780,6 +820,10 @@ import {
 import { formatDate, formatDateTime } from '@/utils/formatters'
 import { ragApi } from '@/api/rag'
 import { APP_CONFIG } from '@/config'
+import { FileText, Layers, Database } from 'lucide-vue-next'
+import RAGQuestionPanel from '@/components/common/RAGQuestionPanel.vue'
+import { RAG_CONFIG, RAG_TEXT, DOCUMENT_STATUSES, RETRIEVAL_MODES, CHUNK_STRATEGIES } from '@/config/rag'
+import { loadRagPages, chunkDistribution as computeChunkDistribution, validateRagFile } from '@/utils/rag'
 
 const DEFAULT_EMBEDDING_MODEL = APP_CONFIG.embedding.defaultModel
 
@@ -794,6 +838,12 @@ const loadingChunks = ref(false)
 const searching = ref(false)
 const uploading = ref(false)
 const hasSearched = ref(false)
+const savingSettings = ref(false)
+const importingGuides = ref(false)
+const reindexing = ref(false)
+const fileAccept = ref(RAG_CONFIG.fileAccept)
+const maxFileBytes = ref(RAG_CONFIG.maxFileBytes)
+let pollingTimer
 const showUploadDialog = ref(false)
 const showDocumentDialog = ref(false)
 const showEditDialog = ref(false)
@@ -809,8 +859,8 @@ const collection = ref({
   name: '',
   description: '',
   embedding_model: '',
-  chunk_size: 1000,
-  chunk_overlap: 200,
+  chunk_size: RAG_CONFIG.chunkSize,
+  chunk_overlap: RAG_CONFIG.chunkOverlap,
   created_at: null,
   updated_at: null
 })
@@ -830,10 +880,10 @@ const documentFilterQuery = ref('')
 const semanticSearchQuery = ref('')
 const chunkSearchQuery = ref('')
 const chunkPage = ref(1)
-const chunkPageSize = ref(20)
+const chunkPageSize = ref(RAG_CONFIG.chunkPageSize)
 const statusFilter = ref('')
-const searchTopK = ref(5)
-const searchMinSimilarity = ref(0.7)
+const searchTopK = ref(RAG_CONFIG.topK)
+const searchMinSimilarity = ref(RAG_CONFIG.minSimilarity)
 const searchResults = ref([])
 
 const textForm = reactive({ title: '', content: '' })
@@ -841,10 +891,10 @@ const urlForm = reactive({ url: '', title: '' })
 
 const settingsForm = reactive({
   embedding_model: DEFAULT_EMBEDDING_MODEL,
-  chunk_size: 1000,
-  chunk_overlap: 200,
-  dimension: 1536,
-  vector_store: 'qdrant'
+  chunk_size: RAG_CONFIG.chunkSize,
+  chunk_overlap: RAG_CONFIG.chunkOverlap,
+  retrieval_mode: 'keyword',
+  chunk_strategy: 'recursive'
 })
 
 const editForm = reactive({
@@ -852,13 +902,7 @@ const editForm = reactive({
   description: ''
 })
 
-const chunkDistribution = ref({
-  '0-100': 45,
-  '100-500': 234,
-  '500-1000': 567,
-  '1000-2000': 345,
-  '2000+': 43
-})
+const chunkDistribution = computed(() => computeChunkDistribution(chunks.value))
 
 // Computed
 const filteredDocuments = computed(() => {
@@ -904,7 +948,9 @@ async function fetchCollection() {
     Object.assign(settingsForm, {
       embedding_model: response.embeddingModel || response.embedding_model || settingsForm.embedding_model,
       chunk_size: response.chunkSize || response.chunk_size || settingsForm.chunk_size,
-      chunk_overlap: response.chunkOverlap || response.chunk_overlap || settingsForm.chunk_overlap,
+      chunk_overlap: response.chunk_overlap ?? settingsForm.chunk_overlap,
+      retrieval_mode: response.retrieval_mode,
+      chunk_strategy: response.chunk_strategy,
     })
     Object.assign(editForm, {
       name: response.name || collection.value.name,
@@ -920,6 +966,9 @@ async function fetchStats() {
     const data = await ragApi.getCollectionStats(route.params.id)
     stats.value.documents = data.documentCount ?? data.document_count ?? 0
     stats.value.chunks = data.chunkCount ?? data.chunk_count ?? 0
+    stats.value.storage = data.storage_bytes ?? 0
+    stats.value.totalTokens = data.token_count ?? 0
+    stats.value.avgTokens = stats.value.chunks ? Math.round(stats.value.totalTokens / stats.value.chunks) : 0
   } catch {
     // Error shown via API interceptor
   }
@@ -928,8 +977,7 @@ async function fetchStats() {
 async function fetchDocuments() {
   loadingDocuments.value = true
   try {
-    const response = await ragApi.getDocuments({ collection: route.params.id })
-    documents.value = response.results || response || []
+    documents.value = await loadRagPages(ragApi.getDocuments, { collection: route.params.id })
   } catch {
     // Error shown via API interceptor
   } finally {
@@ -940,27 +988,8 @@ async function fetchDocuments() {
 async function fetchChunks() {
   loadingChunks.value = true
   try {
-    const docs = documents.value.length
-      ? documents.value
-      : ((await ragApi.getDocuments({ collection: route.params.id })).results || [])
-    const allChunks = []
-    for (const doc of docs) {
-      const chunksRes = await ragApi.getDocumentChunks(doc.id)
-      const list = chunksRes.results || chunksRes || []
-      for (const chunk of list) {
-        allChunks.push({
-          ...chunk,
-          document_id: doc.id,
-          document_title: doc.title,
-        })
-      }
-    }
-    chunks.value = allChunks
-    const tokenCounts = allChunks.map(c => c.tokenCount ?? c.token_count ?? 0).filter(Boolean)
-    if (tokenCounts.length) {
-      stats.value.avgTokens = Math.round(tokenCounts.reduce((a, b) => a + b, 0) / tokenCounts.length)
-      stats.value.totalTokens = tokenCounts.reduce((a, b) => a + b, 0)
-    }
+    chunks.value = (await loadRagPages(ragApi.getChunks, { collection: route.params.id }))
+      .map(chunk => ({ ...chunk, char_count: chunk.content.length }))
   } catch {
     // Error shown via API interceptor
   } finally {
@@ -976,7 +1005,17 @@ async function refreshCollectionData() {
 // Initial data fetch
 onMounted(async () => {
   await refreshCollectionData()
+  try {
+    const capabilities = await ragApi.getCapabilities()
+    fileAccept.value = capabilities.file_extensions.join(',')
+    maxFileBytes.value = capabilities.max_file_bytes
+  } catch { /* API interceptor displays the error. */ }
+  pollingTimer = setInterval(() => {
+    if (!loadingDocuments.value && documents.value.some(doc => doc.status === 'processing')) refreshCollectionData()
+  }, RAG_CONFIG.pollInterval)
 })
+onUnmounted(() => clearInterval(pollingTimer))
+watch(() => route.params.id, () => { selectedDocuments.value = []; searchResults.value = []; refreshCollectionData() })
 
 const formatSize = (bytes) => {
   if (bytes < 1024) return bytes + ' B'
@@ -984,15 +1023,8 @@ const formatSize = (bytes) => {
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
 }
 
-const getStatusType = (status) => {
-  const types = { processed: 'success', processing: 'warning', failed: 'danger' }
-  return types[status] || ''
-}
-
-const getStatusLabel = (status) => {
-  const labels = { processed: '已处理', processing: '处理中', failed: '失败' }
-  return labels[status] || status
-}
+const getStatusType = status => DOCUMENT_STATUSES[status]?.type || 'info'
+const getStatusLabel = status => DOCUMENT_STATUSES[status]?.label || status
 
 const handleFileChange = (file, files) => {
   fileList.value = files
@@ -1007,6 +1039,7 @@ const handleSelectionChange = (selection) => {
 }
 
 const handleUpload = async () => {
+  if (uploading.value) return
   uploading.value = true
   const collectionId = route.params.id
   try {
@@ -1021,9 +1054,12 @@ const handleUpload = async () => {
           appStore.error('无法读取文件内容，请重新选择')
           return
         }
+        const error = validateRagFile(rawFile, maxFileBytes.value, fileAccept.value)
+        if (error) { appStore.error(error); return }
         const formData = new FormData()
         formData.append('file', rawFile)
         await ragApi.uploadFile(collectionId, formData)
+        fileList.value = fileList.value.filter(item => item !== file)
       }
     } else if (uploadTab.value === 'text') {
       if (!textForm.title.trim() || !textForm.content.trim()) {
@@ -1050,6 +1086,8 @@ const handleUpload = async () => {
     Object.assign(textForm, { title: '', content: '' })
     Object.assign(urlForm, { url: '', title: '' })
     await refreshCollectionData()
+  } catch {
+    await refreshCollectionData()
   } finally {
     uploading.value = false
   }
@@ -1069,16 +1107,13 @@ const viewDocument = async (doc) => {
   }
 }
 
-const viewDocumentById = (id) => {
-  const doc = documents.value.find(d => d.id === id)
-  if (doc) viewDocument(doc)
-}
+const viewDocumentById = id => viewDocument({ id })
 
 const reprocessDocument = async (doc) => {
   try {
     await ElMessageBox.confirm(`重新处理文档「${doc.title}」？`, '确认', { type: 'info' })
     await ragApi.reprocessDocument(doc.id)
-    appStore.success('文档重新处理已启动')
+    appStore.success('文档重新处理完成')
     await refreshCollectionData()
   } catch (_e) { /* noop */ }
 }
@@ -1095,8 +1130,10 @@ const deleteDocument = async (doc) => {
 const reprocessDocuments = async () => {
   try {
     await ElMessageBox.confirm(`重新处理选中的 ${selectedDocuments.value.length} 个文档？`, '确认', { type: 'info' })
-    await Promise.all(selectedDocuments.value.map(doc => ragApi.reprocessDocument(doc.id)))
-    appStore.success('批量重新处理已启动')
+    const results = await Promise.allSettled(selectedDocuments.value.map(doc => ragApi.reprocessDocument(doc.id)))
+    const failed = results.filter(result => result.status === 'rejected').length
+    if (failed) appStore.error(`${failed} 个文档处理失败，请查看文档状态`)
+    else appStore.success('批量重新处理完成')
     await refreshCollectionData()
   } catch (_e) { /* noop */ }
 }
@@ -1104,8 +1141,10 @@ const reprocessDocuments = async () => {
 const deleteDocuments = async () => {
   try {
     await ElMessageBox.confirm(`删除选中的 ${selectedDocuments.value.length} 个文档？`, '确认', { type: 'warning' })
-    await Promise.all(selectedDocuments.value.map(doc => ragApi.deleteDocument(doc.id)))
-    appStore.success('批量删除成功')
+    const results = await Promise.allSettled(selectedDocuments.value.map(doc => ragApi.deleteDocument(doc.id)))
+    const failed = results.filter(result => result.status === 'rejected').length
+    if (failed) appStore.error(`${failed} 个文档删除失败，请重试`)
+    else appStore.success('批量删除成功')
     selectedDocuments.value = []
     await refreshCollectionData()
   } catch (_e) { /* noop */ }
@@ -1115,10 +1154,12 @@ const performSearch = async () => {
   if (!semanticSearchQuery.value.trim()) return
   searching.value = true
   hasSearched.value = true
+  searchResults.value = []
   try {
     const response = await ragApi.searchCollection(route.params.id, {
       query: semanticSearchQuery.value.trim(),
       top_k: searchTopK.value,
+      min_similarity: searchMinSimilarity.value,
     })
     const results = response.results || []
     searchResults.value = results
@@ -1127,31 +1168,52 @@ const performSearch = async () => {
         score: r.score ?? 0,
         content: r.content || '',
         document_title: r.metadata?.title || r.documentTitle || '未知文档',
+        document_id: r.metadata?.doc_id,
       }))
-  } finally {
+  } catch { /* API interceptor displays the error. */ } finally {
     searching.value = false
   }
 }
 
-const saveSettings = async () => {
+const importGuides = async () => {
+  if (importingGuides.value) return
+  importingGuides.value = true
   try {
+    const result = await ragApi.importGuides(route.params.id)
+    if (result.failed) appStore.error(`${result.completed} 份成功，${result.failed} 份失败：${result.results.filter(item => !item.success).map(item => item.error).join('；')}`)
+    else appStore.success('Flowly 使用指南已导入，可在知识问答中提问')
+  } catch { /* API interceptor displays the error. */ }
+  finally { importingGuides.value = false; await refreshCollectionData() }
+}
+
+const saveSettings = async () => {
+  if (savingSettings.value) return
+  if (settingsForm.chunk_overlap >= settingsForm.chunk_size) { appStore.error('分块重叠必须小于分块大小'); return }
+  savingSettings.value = true
+  try {
+    if (documents.value.length) await ElMessageBox.confirm('修改索引配置后，旧索引将暂停检索，需要重新处理全部文档。继续保存？', '修改索引配置', { type: 'warning' })
     await ragApi.updateCollection(route.params.id, {
       embedding_model: settingsForm.embedding_model,
       chunk_size: settingsForm.chunk_size,
       chunk_overlap: settingsForm.chunk_overlap,
+      retrieval_mode: settingsForm.retrieval_mode,
+      chunk_strategy: settingsForm.chunk_strategy,
     })
-    appStore.success('设置保存成功')
-    await fetchCollection()
-  } catch (_e) { /* noop */ }
+    appStore.success('设置已保存；索引参数变化后请重新处理全部文档')
+    await refreshCollectionData()
+  } catch { /* Cancellation or API error. */ } finally { savingSettings.value = false }
 }
 
 const reprocessAll = async () => {
+  if (reindexing.value) return
   try {
     await ElMessageBox.confirm('重新处理集合中的所有文档？这可能需要较长时间。', '确认', { type: 'warning' })
-    await Promise.all(documents.value.map(doc => ragApi.reprocessDocument(doc.id)))
-    appStore.success('重新处理任务已启动')
+    reindexing.value = true
+    const result = await ragApi.reindexCollection(route.params.id)
+    if (result.failed) appStore.error(`${result.completed} 个完成，${result.failed} 个失败，请查看文档错误原因`)
+    else appStore.success(`${result.completed} 个文档重新处理完成`)
     await refreshCollectionData()
-  } catch (_e) { /* noop */ }
+  } catch { /* Cancellation or API error. */ } finally { reindexing.value = false }
 }
 
 const clearCollectionAction = async () => {
@@ -1187,11 +1249,6 @@ const saveEdit = async () => {
 </script>
 
 <style scoped>
-.collection-detail {
-  padding: 24px;
-  max-width: 1400px;
-  margin: 0 auto;
-}
 
 .page-header {
   display: flex;
@@ -1224,6 +1281,7 @@ const saveEdit = async () => {
 
 .header-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 12px;
 }
 
@@ -1337,6 +1395,8 @@ const saveEdit = async () => {
 
 .result-header {
   display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-3, 12px);
   justify-content: space-between;
   align-items: center;
   margin-bottom: 8px;
@@ -1509,5 +1569,21 @@ const saveEdit = async () => {
   text-align: right;
   font-size: 13px;
   font-weight: 500;
+}
+.collection-detail :deep(.el-alert--info) {
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  margin-bottom: var(--spacing-3, 12px);
+}
+
+@media (max-width: 768px) {
+  .page-header { flex-wrap: wrap; gap: var(--spacing-4, 16px); }
+  .stats-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .stat-content { gap: var(--spacing-2, 8px); }
+  .stat-icon { width: 24px; height: 24px; }
+  .stat-value { font-size: 16px; overflow-wrap: anywhere; }
+  .tab-toolbar, .danger-item, .bulk-actions { flex-wrap: wrap; }
+  .tab-toolbar > * { max-width: 100%; }
+  .search-options { padding: var(--spacing-2, 8px); }
 }
 </style>

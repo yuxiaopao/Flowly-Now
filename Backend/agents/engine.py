@@ -545,9 +545,10 @@ class KnowledgeBaseTool(BaseTool):
         "required": ["query"]
     }
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None, collection_ids: Optional[List[str]] = None):
+    def __init__(self, config: Optional[Dict[str, Any]] = None, collection_ids: Optional[List[str]] = None, user_id=None):
         super().__init__(config)
         self.collection_ids = collection_ids or []
+        self.user_id = user_id
 
     def run(self, query: str, top_k: int = DEFAULT_NUM_RESULTS) -> Dict[str, Any]:
         if not self.collection_ids:
@@ -558,20 +559,27 @@ class KnowledgeBaseTool(BaseTool):
 
         try:
             from rag.models import DocumentCollection
+            from rag.access import accessible_collections
+            from django.contrib.auth import get_user_model
             from rag.services import RAGService
         except Exception as e:
             logger.error(f"KnowledgeBaseTool: rag module unavailable: {e}")
             return {"success": False, "error": f"知识库模块不可用: {e}"}
 
+        user = get_user_model().objects.filter(id=self.user_id).first() if self.user_id else None
+        available = accessible_collections(user)
         all_results = []
+        errors = []
         for collection_id in self.collection_ids:
             try:
-                collection = DocumentCollection.objects.get(id=collection_id)
+                collection = available.get(id=collection_id)
             except DocumentCollection.DoesNotExist:
                 logger.warning(f"KnowledgeBaseTool: collection {collection_id} not found")
+                errors.append('知识库不存在或当前用户无权访问。')
                 continue
             except Exception as e:
                 logger.warning(f"KnowledgeBaseTool: failed to load collection {collection_id}: {e}")
+                errors.append('知识库配置无效。')
                 continue
 
             try:
@@ -582,19 +590,22 @@ class KnowledgeBaseTool(BaseTool):
                         "collection": collection.name,
                         "content": r.get("payload", {}).get("content", ""),
                         "score": r.get("score", 0),
+                        "metadata": r.get("payload", {}),
                     })
             except Exception as e:
                 logger.warning(f"KnowledgeBaseTool: retrieval failed for collection {collection_id}: {e}")
+                errors.append('知识库检索失败，请检查索引和服务配置。')
                 continue
 
         all_results.sort(key=lambda x: x.get("score", 0), reverse=True)
         top_results = all_results[:top_k]
 
         return {
-            "success": True,
+            "success": not errors or bool(top_results),
             "query": query,
             "results": top_results,
             "count": len(top_results),
+            "errors": errors,
         }
 
 
@@ -624,7 +635,8 @@ class AgentEngine:
         tools: Optional[List[str]] = None,
         memory_enabled: bool = True,
         context_window: int = DEFAULT_CONTEXT_WINDOW,
-        knowledge_collection_ids: Optional[List[str]] = None
+        knowledge_collection_ids: Optional[List[str]] = None,
+        user_id=None,
     ):
         """Initialize the Agent Engine.
 
@@ -645,6 +657,7 @@ class AgentEngine:
         self.memory_enabled = memory_enabled
         self.context_window = context_window
         self.knowledge_collection_ids = knowledge_collection_ids or []
+        self.user_id = user_id
 
         self._llm = None
         self._tool_instances = {}
@@ -737,7 +750,7 @@ class AgentEngine:
         if tool_name not in self._tool_instances:
             if tool_name == "knowledge_base":
                 self._tool_instances[tool_name] = KnowledgeBaseTool(
-                    collection_ids=self.knowledge_collection_ids
+                    collection_ids=self.knowledge_collection_ids, user_id=self.user_id
                 )
             else:
                 tool_class = self.TOOLS_REGISTRY.get(tool_name)
@@ -975,7 +988,7 @@ class AgentEngine:
 
 
 # Factory function to create agent engine from database model
-def create_agent_engine(agent_model, conversation=None) -> AgentEngine:
+def create_agent_engine(agent_model, conversation=None, user=None) -> AgentEngine:
     """Create AgentEngine from Agent model instance.
 
     Args:
@@ -1013,7 +1026,8 @@ def create_agent_engine(agent_model, conversation=None) -> AgentEngine:
         tools=agent_model.tools or [],
         memory_enabled=agent_model.memory_enabled,
         context_window=agent_model.context_window,
-        knowledge_collection_ids=getattr(agent_model, 'knowledge_collections', None) or []
+        knowledge_collection_ids=getattr(agent_model, 'knowledge_collections', None) or [],
+        user_id=user.id if user else agent_model.owner_id,
     )
 
     if conversation and agent_model.memory_enabled:

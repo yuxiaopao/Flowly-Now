@@ -1,7 +1,9 @@
 <template>
-  <div class="training-redirect">
+  <PageShell
+    width="wide"
+    class="training-redirect"
+  >
     <PageHeader
-      compact
       title="训练已迁移至工作流"
       subtitle="选择 YOLO / CLIP / Transformer 策略，一键创建完整 MLOps 项目工作流"
     />
@@ -16,13 +18,24 @@
     <el-card class="redirect-card">
       <p>快速模板：</p>
       <div class="actions">
-        <el-button type="primary" @click="createYoloWorkflow">
+        <el-button
+          type="primary"
+          @click="createYoloWorkflow"
+        >
           YOLO 识别项目
         </el-button>
-        <el-button type="primary" plain @click="createClipRetrievalWorkflow">
+        <el-button
+          type="primary"
+          plain
+          @click="createClipRetrievalWorkflow"
+        >
           CLIP 检索项目
         </el-button>
-        <el-button type="primary" plain @click="createTransformerWorkflow">
+        <el-button
+          type="primary"
+          plain
+          @click="createTransformerWorkflow"
+        >
           Transformer 微调项目
         </el-button>
         <el-button @click="router.push('/workflows')">
@@ -33,10 +46,11 @@
         </el-button>
       </div>
     </el-card>
-  </div>
+  </PageShell>
 </template>
 
 <script setup>
+import PageShell from '@/components/layout/PageShell.vue'
 import { useRouter } from 'vue-router'
 import PageHeader from '@/components/layout/PageHeader.vue'
 import TrainingStrategyWizard from '@/components/workflow/configs/TrainingStrategyWizard.vue'
@@ -154,11 +168,6 @@ async function createTransformerWorkflow() {
 </script>
 
 <style lang="scss" scoped>
-.training-redirect {
-  max-width: 720px;
-  margin: 0 auto;
-  padding: 24px;
-}
 
 .wizard-card {
   margin-top: 16px;

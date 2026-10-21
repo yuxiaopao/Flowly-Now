@@ -28,10 +28,10 @@
             v-model="localData.scheduleType"
             @change="handleChange"
           >
-            <el-radio label="cron">
+            <el-radio value="cron">
               Cron 表达式
             </el-radio>
-            <el-radio label="interval">
+            <el-radio value="interval">
               间隔触发
             </el-radio>
           </el-radio-group>

@@ -56,6 +56,37 @@
 
       <div class="form-section">
         <h4 class="section-title">
+          复用已有权重
+        </h4>
+        <el-form-item label="复用训练任务（跳过重复训练）">
+          <el-select
+            v-model="localData.reuseTrainingJobId"
+            clearable
+            filterable
+            placeholder="选择已完成的 YOLO 权重"
+            style="width: 100%"
+            @change="handleReuseChange"
+          >
+            <el-option
+              v-for="run in completedWeights"
+              :key="run.id"
+              :label="reuseLabel(run)"
+              :value="run.id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item v-if="localData.reuseTrainingJobId">
+          <el-checkbox
+            v-model="localData.skipTrainingIfReused"
+            @change="handleChange"
+          >
+            检测到可复用权重时跳过训练步骤
+          </el-checkbox>
+        </el-form-item>
+      </div>
+
+      <div class="form-section">
+        <h4 class="section-title">
           模型配置
         </h4>
         <el-form-item label="YOLO 版本">
@@ -294,9 +325,54 @@ const localData = ref({
   datasetPath: '',
   classNames: [],
   outputDir: './yolo_outputs',
+  reuseTrainingJobId: '',
+  skipTrainingIfReused: true,
 })
 
 const yoloBaseWeights = ref([])
+const completedWeights = ref([])
+
+async function loadCompletedWeights() {
+  try {
+    const res = await trainingApi.listYoloRuns({ status: 'completed' })
+    const items = Array.isArray(res) ? res : (res?.results || [])
+    completedWeights.value = items.filter((r) => r.bestWeightPath || r.best_weight_path)
+  } catch {
+    completedWeights.value = []
+  }
+}
+
+function reuseLabel(run) {
+  const classes = (run.classNames || run.class_names || []).join(', ')
+  const m = run.metricsSummary || run.metrics_summary || run.metrics || {}
+  const map50 = m.mAP50 ?? m.map50
+  const mapText = map50 != null ? ` mAP50=${Number(map50).toFixed(3)}` : ''
+  return `${run.name} (${classes || '无类别'})${mapText}`
+}
+
+function handleReuseChange(value) {
+  if (!value) {
+    localData.value.skipTrainingIfReused = false
+    handleChange()
+    return
+  }
+  const picked = completedWeights.value.find((r) => r.id === value)
+  if (picked) {
+    localData.value.skipTrainingIfReused = true
+    localData.value.baseWeightUri = picked.bestWeightPath || picked.best_weight_path || localData.value.baseWeightUri
+    if (picked.yoloVersion || picked.yolo_version) {
+      localData.value.yoloVersion = picked.yoloVersion || picked.yolo_version
+    }
+    if (picked.modelVariant || picked.model_variant) {
+      localData.value.modelVariant = picked.modelVariant || picked.model_variant
+    }
+    if (picked.classNames?.length || picked.class_names?.length) {
+      localData.value.classNames = picked.classNames || picked.class_names
+      classNamesInput.value = localData.value.classNames.join(', ')
+    }
+  }
+  handleChange()
+}
 
 async function loadYoloWeights() {
   try {
@@ -314,7 +390,10 @@ async function loadYoloWeights() {
   }
 }
 
-onMounted(loadYoloWeights)
+onMounted(() => {
+  loadYoloWeights()
+  loadCompletedWeights()
+})
 
 const classNamesInput = ref('')
 const annotationProjects = ref([])
@@ -342,6 +421,8 @@ watch(
         datasetPath: cfg.datasetPath || '',
         classNames: cfg.classNames || [],
         outputDir: cfg.outputDir || './yolo_outputs',
+        reuseTrainingJobId: cfg.reuseTrainingJobId || '',
+        skipTrainingIfReused: cfg.skipTrainingIfReused ?? Boolean(cfg.reuseTrainingJobId),
       }
       classNamesInput.value = (cfg.classNames || []).join(', ')
     }
@@ -354,6 +435,7 @@ function handleChange() {
     label: localData.value.label,
     description: localData.value.description,
     config: {
+      ...props.nodeData.config,
       trainingMode: localData.value.trainingMode,
       yoloVersion: localData.value.yoloVersion,
       modelVariant: localData.value.modelVariant,
@@ -369,6 +451,8 @@ function handleChange() {
       datasetPath: localData.value.datasetPath,
       classNames: localData.value.classNames,
       outputDir: localData.value.outputDir,
+      reuseTrainingJobId: localData.value.reuseTrainingJobId || undefined,
+      skipTrainingIfReused: localData.value.skipTrainingIfReused,
     },
   })
 }

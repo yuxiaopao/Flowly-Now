@@ -1,0 +1,35 @@
+{
+  "skill_name": "comp-code",
+  "category": "08_competition_modeling",
+  "tier": "tier2_important",
+  "encrypted": true,
+  "scan": {
+    "name": "comp-code",
+    "path": "resources/app/skills/comp-code",
+    "has_skill_md_enc": true,
+    "has_skill_md_plain": false,
+    "encrypted": true,
+    "files": {
+      "enc": 9,
+      "plain": 0,
+      "total": 9
+    },
+    "subdirs": [
+      "references"
+    ],
+    "extensions": {
+      ".enc": 9
+    },
+    "readable_assets": []
+  },
+  "artifacts": [
+    "code/"
+  ],
+  "runtime_prompts": [],
+  "used_in_templates": [
+    "comp_cumcm",
+    "comp_mcm"
+  ],
+  "flowly_status": "pending",
+  "replication_strategy": "decrypt_and_port"
+}

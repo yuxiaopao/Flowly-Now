@@ -531,6 +531,100 @@ def resolve_rag_status(site, user) -> str:
     return 'ready'
 
 
+def sync_project_agent_to_system(
+    site,
+    user,
+    user_message: str,
+    assistant_reply: str,
+    *,
+    rag_collection_id=None,
+) -> Dict[str, Any]:
+    """
+    Bridge Project Agent turns into system Agent + AgentConversation.
+    Creates/updates a per-site coding agent owned by the same user.
+    """
+    out: Dict[str, Any] = {'synced': False, 'agent_id': None, 'conversation_id': None}
+    if not user:
+        out['error'] = 'no_user'
+        return out
+    try:
+        from agents.models import Agent, AgentConversation
+    except Exception as exc:
+        out['error'] = f'agents_unavailable:{exc}'
+        return out
+
+    agent_name = f"Site Agent · {(site.name or 'unnamed')[:80]}"
+    settings_blob = {
+        'source': 'project_agent',
+        'generated_site_id': str(site.id),
+        'output_dir': site.output_dir or '',
+    }
+    agent = None
+    try:
+        for cand in Agent.objects.filter(owner=user, agent_type='coding').order_by('-updated_at')[:40]:
+            cfg = cand.settings if isinstance(cand.settings, dict) else {}
+            if str(cfg.get('generated_site_id') or '') == str(site.id):
+                agent = cand
+                break
+    except Exception:
+        agent = None
+
+    if agent is None:
+        agent = Agent.objects.create(
+            name=agent_name,
+            description=f'由 Site Factory Project Agent 自动同步（站点 {site.id}）',
+            owner=user,
+            agent_type='coding',
+            system_prompt=(
+                '你是该生成站点的项目 Agent。你熟悉 Flask+Vue+MySQL 检测站结构，'
+                '可协助解释 QA、修改前端样式与排查推理接口问题。'
+            ),
+            tools=['knowledge_base'] if rag_collection_id else [],
+            knowledge_collections=[str(rag_collection_id)] if rag_collection_id else [],
+            memory_enabled=True,
+            settings=settings_blob,
+            is_active=True,
+        )
+    else:
+        agent.name = agent_name
+        agent.settings = {**(agent.settings if isinstance(agent.settings, dict) else {}), **settings_blob}
+        if rag_collection_id:
+            cols = list(agent.knowledge_collections or [])
+            rid = str(rag_collection_id)
+            if rid not in cols:
+                cols.append(rid)
+            agent.knowledge_collections = cols
+            tools = list(agent.tools or [])
+            if 'knowledge_base' not in tools:
+                tools.append('knowledge_base')
+            agent.tools = tools
+        agent.save(update_fields=['name', 'settings', 'knowledge_collections', 'tools', 'updated_at'])
+
+    conversation, _ = AgentConversation.objects.get_or_create(
+        agent=agent,
+        user=user,
+        defaults={'messages': [], 'message_count': 0},
+    )
+    messages = list(conversation.messages or [])
+    now_iso = datetime.now(timezone.utc).isoformat()
+    messages.append({'role': 'user', 'content': user_message, 'ts': now_iso})
+    messages.append({'role': 'assistant', 'content': assistant_reply, 'ts': now_iso})
+    if len(messages) > 200:
+        messages = messages[-200:]
+    conversation.messages = messages
+    conversation.message_count = len(messages)
+    conversation.summary = f'最近回复: {(assistant_reply or "")[:120]}'
+    conversation.save(update_fields=['messages', 'message_count', 'summary', 'updated_at'])
+
+    out.update({
+        'synced': True,
+        'agent_id': str(agent.id),
+        'conversation_id': str(conversation.id),
+        'message_count': conversation.message_count,
+    })
+    return out
+
+
 def run_agent_for_site(
     site,
     message: str,
@@ -540,6 +634,7 @@ def run_agent_for_site(
     confirm_core_edit: bool = False,
     user=None,
     agent_mode: str = 'auto',
+    sync_system_agent: bool = True,
 ) -> Dict[str, Any]:
     """Shared entry for API and workflow node."""
     site.mark_iterating()
@@ -605,4 +700,19 @@ def run_agent_for_site(
     if rag_status == 'ready' and collection:
         rag_status = 'synced' if rag_synced else 'ready'
     result['rag_status'] = rag_status
+
+    if sync_system_agent:
+        try:
+            result['system_agent_sync'] = sync_project_agent_to_system(
+                site,
+                user,
+                message,
+                result.get('reply', ''),
+                rag_collection_id=site.rag_collection_id,
+            )
+        except Exception as exc:
+            result['system_agent_sync'] = {'synced': False, 'error': str(exc)}
+    else:
+        result['system_agent_sync'] = {'synced': False, 'skipped': True}
+
     return result

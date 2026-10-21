@@ -1,318 +1,320 @@
 <template>
-  <div class="agent-create">
-    <div class="create-container">
-      <div class="page-header">
-        <div class="header-left">
-          <el-button
-            :icon="ArrowLeft"
-            @click="handleBack"
+  <PageShell
+    width="wide"
+    class="agent-create"
+  >
+    <div class="page-header">
+      <div class="header-left">
+        <el-button
+          :icon="ArrowLeft"
+          @click="handleBack"
+        >
+          返回
+        </el-button>
+        <h1 class="page-title">
+          {{ isEdit ? '编辑 Agent' : '创建 Agent' }}
+        </h1>
+      </div>
+      <div class="header-actions">
+        <el-button @click="handleBack">
+          取消
+        </el-button>
+        <AppButton
+          variant="primary"
+          :loading="isSaving"
+          @click="handleSubmit"
+        >
+          {{ isEdit ? '保存更改' : '创建' }}
+        </AppButton>
+      </div>
+    </div>
+
+    <el-form
+      ref="formRef"
+      :model="form"
+      :rules="rules"
+      label-position="top"
+      class="agent-form"
+    >
+      <div class="form-grid">
+        <!-- 左侧：基本信息 -->
+        <div class="form-section">
+          <h3 class="section-title">
+            基本信息
+          </h3>
+
+          <el-form-item
+            label="名称"
+            prop="name"
           >
-            返回
-          </el-button>
-          <h1 class="page-title">
-            {{ isEdit ? '编辑 Agent' : '创建 Agent' }}
-          </h1>
+            <el-input
+              v-model="form.name"
+              placeholder="输入 Agent 名称"
+            />
+          </el-form-item>
+
+          <el-form-item
+            label="描述"
+            prop="description"
+          >
+            <el-input
+              v-model="form.description"
+              type="textarea"
+              :rows="3"
+              placeholder="描述 Agent 的功能和用途"
+            />
+          </el-form-item>
+
+          <el-form-item
+            label="类型"
+            prop="agent_type"
+          >
+            <el-select
+              v-model="form.agent_type"
+              placeholder="选择 Agent 类型"
+            >
+              <el-option
+                label="对话型"
+                value="conversational"
+              >
+                <div class="type-option">
+                  <MessageCircle class="type-icon" />
+                  <span>对话型 - 适用于聊天交互</span>
+                </div>
+              </el-option>
+              <el-option
+                label="任务型"
+                value="task"
+              >
+                <div class="type-option">
+                  <CheckSquare class="type-icon" />
+                  <span>任务型 - 适用于完成特定任务</span>
+                </div>
+              </el-option>
+              <el-option
+                label="研究型"
+                value="research"
+              >
+                <div class="type-option">
+                  <Search class="type-icon" />
+                  <span>研究型 - 适用于信息搜索和分析</span>
+                </div>
+              </el-option>
+              <el-option
+                label="编程型"
+                value="coding"
+              >
+                <div class="type-option">
+                  <Code class="type-icon" />
+                  <span>编程型 - 适用于代码生成和调试</span>
+                </div>
+              </el-option>
+            </el-select>
+          </el-form-item>
+
+          <el-form-item label="状态">
+            <el-switch
+              v-model="form.is_active"
+              active-text="启用"
+              inactive-text="禁用"
+            />
+          </el-form-item>
+
+          <el-form-item label="所属团队">
+            <el-select
+              v-model="form.tenant"
+              placeholder="仅个人可见（不选择团队）"
+              style="width: 100%"
+              clearable
+            >
+              <el-option
+                v-for="t in tenantStore.tenants"
+                :key="t.id"
+                :label="t.name"
+                :value="t.id"
+              />
+            </el-select>
+            <span class="input-hint">选择团队后，该团队所有成员均可查看和使用此 Agent</span>
+          </el-form-item>
         </div>
-        <div class="header-actions">
-          <el-button @click="handleBack">
-            取消
-          </el-button>
-          <AppButton
-            variant="primary"
-            :loading="isSaving"
-            @click="handleSubmit"
+
+        <!-- 右侧：AI 配置 -->
+        <div class="form-section">
+          <h3 class="section-title">
+            AI 配置
+          </h3>
+
+          <el-form-item
+            label="模型"
+            prop="model"
           >
-            {{ isEdit ? '保存更改' : '创建' }}
-          </AppButton>
+            <el-select
+              v-model="form.model"
+              placeholder="选择 AI 模型"
+              filterable
+            >
+              <el-option-group
+                v-for="(models, provider) in agentModelOptions"
+                :key="provider"
+                :label="provider"
+              >
+                <el-option
+                  v-for="opt in models"
+                  :key="opt.value"
+                  :label="opt.label"
+                  :value="opt.value"
+                />
+              </el-option-group>
+            </el-select>
+          </el-form-item>
+
+          <el-form-item label="温度参数">
+            <div class="slider-container">
+              <el-slider
+                v-model="form.temperature"
+                :min="0"
+                :max="2"
+                :step="0.1"
+                :marks="temperatureMarks"
+              />
+              <span class="slider-value">{{ form.temperature }}</span>
+            </div>
+            <div class="slider-hints">
+              <span>精确</span>
+              <span>创意</span>
+            </div>
+          </el-form-item>
+
+          <el-form-item label="最大 Token 数">
+            <el-input-number
+              v-model="form.max_tokens"
+              :min="100"
+              :max="32000"
+              :step="100"
+            />
+          </el-form-item>
+
+          <el-form-item label="上下文窗口">
+            <el-input-number
+              v-model="form.context_window"
+              :min="1"
+              :max="50"
+              :step="1"
+            />
+            <span class="input-hint">保留最近的对话轮数</span>
+          </el-form-item>
         </div>
       </div>
 
-      <el-form
-        ref="formRef"
-        :model="form"
-        :rules="rules"
-        label-position="top"
-        class="agent-form"
+      <!-- 系统提示词 -->
+      <div class="form-section full-width">
+        <h3 class="section-title">
+          系统提示词
+        </h3>
+        <el-form-item prop="system_prompt">
+          <el-input
+            v-model="form.system_prompt"
+            type="textarea"
+            :rows="6"
+            placeholder="定义 Agent 的角色和行为。例如：你是一个专业的客服助手，可以帮助用户解决产品相关的问题..."
+          />
+        </el-form-item>
+        <div class="prompt-tips">
+          <el-alert
+            title="提示"
+            type="info"
+            :closable="false"
+            show-icon
+          >
+            <template #default>
+              <p>系统提示词定义了 Agent 的角色定位和回复风格。建议包含：</p>
+              <ul>
+                <li>Agent 的身份和职责</li>
+                <li>Agent 的能力和限制</li>
+                <li>回复的风格和格式</li>
+              </ul>
+            </template>
+          </el-alert>
+        </div>
+      </div>
+
+      <!-- 工具配置 -->
+      <div class="form-section full-width">
+        <h3 class="section-title">
+          工具配置
+        </h3>
+
+        <div class="tools-grid">
+          <div
+            v-for="tool in availableTools"
+            :key="tool.id"
+            :class="['tool-card', { selected: isToolSelected(tool.id) }]"
+            @click="toggleTool(tool.id)"
+          >
+            <div class="tool-header">
+              <component
+                :is="getToolIcon(tool.id)"
+                class="tool-icon"
+              />
+              <el-checkbox
+                :model-value="isToolSelected(tool.id)"
+                @click.stop
+                @change="toggleTool(tool.id)"
+              />
+            </div>
+            <h4 class="tool-name">
+              {{ tool.name }}
+            </h4>
+            <p class="tool-desc">
+              {{ tool.description }}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- 知识库关联 -->
+      <div
+        v-if="isToolSelected('knowledge_base')"
+        class="form-section full-width"
       >
-        <div class="form-grid">
-          <!-- 左侧：基本信息 -->
-          <div class="form-section">
-            <h3 class="section-title">
-              基本信息
-            </h3>
-
-            <el-form-item
-              label="名称"
-              prop="name"
-            >
-              <el-input
-                v-model="form.name"
-                placeholder="输入 Agent 名称"
-              />
-            </el-form-item>
-
-            <el-form-item
-              label="描述"
-              prop="description"
-            >
-              <el-input
-                v-model="form.description"
-                type="textarea"
-                :rows="3"
-                placeholder="描述 Agent 的功能和用途"
-              />
-            </el-form-item>
-
-            <el-form-item
-              label="类型"
-              prop="agent_type"
-            >
-              <el-select
-                v-model="form.agent_type"
-                placeholder="选择 Agent 类型"
-              >
-                <el-option
-                  label="对话型"
-                  value="conversational"
-                >
-                  <div class="type-option">
-                    <MessageCircle class="type-icon" />
-                    <span>对话型 - 适用于聊天交互</span>
-                  </div>
-                </el-option>
-                <el-option
-                  label="任务型"
-                  value="task"
-                >
-                  <div class="type-option">
-                    <CheckSquare class="type-icon" />
-                    <span>任务型 - 适用于完成特定任务</span>
-                  </div>
-                </el-option>
-                <el-option
-                  label="研究型"
-                  value="research"
-                >
-                  <div class="type-option">
-                    <Search class="type-icon" />
-                    <span>研究型 - 适用于信息搜索和分析</span>
-                  </div>
-                </el-option>
-                <el-option
-                  label="编程型"
-                  value="coding"
-                >
-                  <div class="type-option">
-                    <Code class="type-icon" />
-                    <span>编程型 - 适用于代码生成和调试</span>
-                  </div>
-                </el-option>
-              </el-select>
-            </el-form-item>
-
-            <el-form-item label="状态">
-              <el-switch
-                v-model="form.is_active"
-                active-text="启用"
-                inactive-text="禁用"
-              />
-            </el-form-item>
-
-            <el-form-item label="所属团队">
-              <el-select
-                v-model="form.tenant"
-                placeholder="仅个人可见（不选择团队）"
-                style="width: 100%"
-                clearable
-              >
-                <el-option
-                  v-for="t in tenantStore.tenants"
-                  :key="t.id"
-                  :label="t.name"
-                  :value="t.id"
-                />
-              </el-select>
-              <span class="input-hint">选择团队后，该团队所有成员均可查看和使用此 Agent</span>
-            </el-form-item>
-          </div>
-
-          <!-- 右侧：AI 配置 -->
-          <div class="form-section">
-            <h3 class="section-title">
-              AI 配置
-            </h3>
-
-            <el-form-item
-              label="模型"
-              prop="model"
-            >
-              <el-select
-                v-model="form.model"
-                placeholder="选择 AI 模型"
-                filterable
-              >
-                <el-option-group
-                  v-for="(models, provider) in agentModelOptions"
-                  :key="provider"
-                  :label="provider"
-                >
-                  <el-option
-                    v-for="opt in models"
-                    :key="opt.value"
-                    :label="opt.label"
-                    :value="opt.value"
-                  />
-                </el-option-group>
-              </el-select>
-            </el-form-item>
-
-            <el-form-item label="温度参数">
-              <div class="slider-container">
-                <el-slider
-                  v-model="form.temperature"
-                  :min="0"
-                  :max="2"
-                  :step="0.1"
-                  :marks="temperatureMarks"
-                />
-                <span class="slider-value">{{ form.temperature }}</span>
-              </div>
-              <div class="slider-hints">
-                <span>精确</span>
-                <span>创意</span>
-              </div>
-            </el-form-item>
-
-            <el-form-item label="最大 Token 数">
-              <el-input-number
-                v-model="form.max_tokens"
-                :min="100"
-                :max="32000"
-                :step="100"
-              />
-            </el-form-item>
-
-            <el-form-item label="上下文窗口">
-              <el-input-number
-                v-model="form.context_window"
-                :min="1"
-                :max="50"
-                :step="1"
-              />
-              <span class="input-hint">保留最近的对话轮数</span>
-            </el-form-item>
-          </div>
-        </div>
-
-        <!-- 系统提示词 -->
-        <div class="form-section full-width">
-          <h3 class="section-title">
-            系统提示词
-          </h3>
-          <el-form-item prop="system_prompt">
-            <el-input
-              v-model="form.system_prompt"
-              type="textarea"
-              :rows="6"
-              placeholder="定义 Agent 的角色和行为。例如：你是一个专业的客服助手，可以帮助用户解决产品相关的问题..."
+        <h3 class="section-title">
+          关联知识库
+        </h3>
+        <el-form-item>
+          <el-select
+            v-model="form.knowledge_collections"
+            multiple
+            filterable
+            placeholder="选择该 Agent 可检索的知识库集合"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="c in availableCollections"
+              :key="c.id"
+              :label="c.tenant_name ? `${c.name}（团队: ${c.tenant_name}）` : `${c.name}（个人）`"
+              :value="c.id"
             />
-          </el-form-item>
-          <div class="prompt-tips">
-            <el-alert
-              title="提示"
-              type="info"
-              :closable="false"
-              show-icon
-            >
-              <template #default>
-                <p>系统提示词定义了 Agent 的角色定位和回复风格。建议包含：</p>
-                <ul>
-                  <li>Agent 的身份和职责</li>
-                  <li>Agent 的能力和限制</li>
-                  <li>回复的风格和格式</li>
-                </ul>
-              </template>
-            </el-alert>
+          </el-select>
+          <div
+            v-if="!availableCollections.length"
+            class="input-hint"
+          >
+            暂无可用知识库，请先前往「知识库」页面创建文档集合
           </div>
-        </div>
-
-        <!-- 工具配置 -->
-        <div class="form-section full-width">
-          <h3 class="section-title">
-            工具配置
-          </h3>
-
-          <div class="tools-grid">
-            <div
-              v-for="tool in availableTools"
-              :key="tool.id"
-              :class="['tool-card', { selected: isToolSelected(tool.id) }]"
-              @click="toggleTool(tool.id)"
-            >
-              <div class="tool-header">
-                <component
-                  :is="getToolIcon(tool.id)"
-                  class="tool-icon"
-                />
-                <el-checkbox
-                  :model-value="isToolSelected(tool.id)"
-                  @click.stop
-                  @change="toggleTool(tool.id)"
-                />
-              </div>
-              <h4 class="tool-name">
-                {{ tool.name }}
-              </h4>
-              <p class="tool-desc">
-                {{ tool.description }}
-              </p>
-            </div>
+          <div
+            v-else
+            class="input-hint"
+          >
+            已启用「知识库检索」工具，Agent 会在回答时自动检索所选集合中的相关内容
           </div>
-        </div>
-
-        <!-- 知识库关联 -->
-        <div
-          v-if="isToolSelected('knowledge_base')"
-          class="form-section full-width"
-        >
-          <h3 class="section-title">
-            关联知识库
-          </h3>
-          <el-form-item>
-            <el-select
-              v-model="form.knowledge_collections"
-              multiple
-              filterable
-              placeholder="选择该 Agent 可检索的知识库集合"
-              style="width: 100%"
-            >
-              <el-option
-                v-for="c in availableCollections"
-                :key="c.id"
-                :label="c.tenant_name ? `${c.name}（团队: ${c.tenant_name}）` : `${c.name}（个人）`"
-                :value="c.id"
-              />
-            </el-select>
-            <div
-              v-if="!availableCollections.length"
-              class="input-hint"
-            >
-              暂无可用知识库，请先前往「知识库」页面创建文档集合
-            </div>
-            <div
-              v-else
-              class="input-hint"
-            >
-              已启用「知识库检索」工具，Agent 会在回答时自动检索所选集合中的相关内容
-            </div>
-          </el-form-item>
-        </div>
-      </el-form>
-    </div>
-  </div>
+        </el-form-item>
+      </div>
+    </el-form>
+  </PageShell>
 </template>
 
 <script setup>
+import PageShell from '@/components/layout/PageShell.vue'
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAgentStore } from '@/stores/agent'
@@ -504,12 +506,6 @@ async function handleSubmit() {
   min-height: calc(100vh - #{$header-height} - #{$spacing-12});
 }
 
-.create-container {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: $spacing-6;
-}
-
 .page-header {
   display: flex;
   justify-content: space-between;
@@ -679,6 +675,4 @@ async function handleSubmit() {
   }
 }
 </style>
-
-
 

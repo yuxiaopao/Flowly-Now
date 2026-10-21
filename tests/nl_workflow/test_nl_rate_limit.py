@@ -10,6 +10,12 @@ Tests rate limiting on:
 import pytest
 from unittest.mock import patch, MagicMock
 from rest_framework import status
+from django.core.cache import cache
+
+
+@pytest.fixture(autouse=True)
+def isolate_rate_limit_cache():
+    cache.clear()
 
 
 @pytest.mark.django_db
@@ -41,7 +47,11 @@ class TestNLRateLimiting:
                     'description': f'Test request {i}'
                 })
                 # Should not be rate limited
-                assert response.status_code != 429, f"Request {i+1} should not be rate limited"
+                assert response.status_code == 200, f"Request {i+1} failed: {response.status_code}"
+
+            response = authenticated_client.post('/api/v1/nl-workflow/stream/', {'description': '第六次请求'})
+            assert response.status_code == 429
+            assert response.data['message']
 
     def test_preview_endpoint_rate_limit_hit(self, authenticated_client):
         """Making 11 preview requests in 1 minute should fail on 11th."""
@@ -63,7 +73,11 @@ class TestNLRateLimiting:
                     'description': f'Test preview {i}'
                 })
                 # Should not be rate limited
-                assert response.status_code != 429, f"Request {i+1} should not be rate limited"
+                assert response.status_code == 200, f"Request {i+1} failed: {response.status_code}"
+
+            response = authenticated_client.post('/api/v1/nl-workflow/preview/', {'description': '第十一次请求'})
+            assert response.status_code == 429
+            assert response.data['message']
 
     def test_rate_limit_response_format(self, authenticated_client):
         """Rate limited response should return proper error format."""
@@ -89,7 +103,8 @@ class TestNLRateLimiting:
                 })
                 if response.status_code == 429:
                     # Rate limited - check error format
-                    assert 'error' in response.data or 'detail' in response.data
+                    assert response.data['code'] == 429
+                    assert response.data['message']
                     break
 
     def test_rate_limit_per_user(self, user, admin_user):
@@ -156,7 +171,7 @@ class TestNLRateLimiting:
             
             # Note: Django-ratelimit may or may not add headers depending on configuration
             # This is a soft check - just ensure the request went through
-            assert response.status_code in [status.HTTP_200_OK, 429]
+            assert response.status_code == status.HTTP_200_OK
 
 
 @pytest.mark.django_db

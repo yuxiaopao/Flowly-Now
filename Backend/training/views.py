@@ -350,6 +350,13 @@ class TrainingJobViewSet(viewsets.ModelViewSet):
             'total_epochs': job.total_epochs,
         })
 
+    @action(detail=True, methods=['get'], url_path='artifact-manifest')
+    def artifact_manifest(self, request, pk=None):
+        """Return the stable model artifact manifest for generated-site nodes."""
+        from .artifacts import build_model_artifact_manifest
+
+        return Response(build_model_artifact_manifest(self.get_object()))
+
     @action(detail=False, methods=['get'])
     def stats(self, request):
         """Get aggregate statistics for training jobs."""
@@ -533,6 +540,13 @@ class YoloTrainingRunViewSet(viewsets.ModelViewSet):
             },
             'metrics_history': job.metrics_history or [],
         })
+
+    @action(detail=True, methods=['get'], url_path='artifact-manifest')
+    def artifact_manifest(self, request, pk=None):
+        """Return the stable model artifact manifest for generated-site nodes."""
+        from .artifacts import build_model_artifact_manifest
+
+        return Response(build_model_artifact_manifest(self.get_object()))
 
     @action(detail=True, methods=['get'])
     def plots(self, request, pk=None):

@@ -1,6 +1,7 @@
 <template>
   <div
-    :style="{ '--node-accent': nodeColor }" class="domain-node"
+    :style="{ '--node-accent': nodeColor }"
+    class="domain-node"
     :class="{ selected, expanded: isExpanded }"
     @click.stop="handleSelect"
   >
@@ -25,8 +26,8 @@
     <div class="node-name-section">
       <input
         :id="id ? `node-label-${id}` : undefined"
-        name="node-label"
         v-model="localName"
+        name="node-label"
         class="node-name-input"
         placeholder="节点名称..."
         @blur="handleChange"
@@ -37,17 +38,17 @@
 
     <div class="compact-view">
       <div
-        v-if="localConfig.fileType || localConfig.format"
+        v-if="displayFormat"
         class="info-row"
       >
         <span class="info-label">格式</span>
-        <span class="info-value">{{ localConfig.fileType || localConfig.format || '-' }}</span>
+        <span class="info-value">{{ displayFormat }}</span>
       </div>
       <div
-        v-if="localConfig.filePath || localConfig.description"
+        v-if="displayPath"
         class="preview-row"
       >
-        <span class="preview-text">{{ truncate(localConfig.filePath || localConfig.description, 35) }}</span>
+        <span class="preview-text">{{ truncate(displayPath, 35) }}</span>
       </div>
     </div>
 
@@ -60,7 +61,7 @@
         <div class="config-section">
           <label class="config-label">文件路径</label>
           <el-input
-            v-model="localConfig.filePath"
+            v-model="localConfig.path"
             size="small"
             placeholder="/path/to/output.txt"
             @change="handleChange"
@@ -70,13 +71,29 @@
         <div class="config-section">
           <label class="config-label">文件格式</label>
           <el-select
-            v-model="localConfig.fileType"
+            v-model="localConfig.format"
             size="small"
             @change="handleChange"
           >
             <el-option
+              value="text"
+              label="纯文本 (TEXT)"
+            />
+            <el-option
               value="txt"
               label="文本 (TXT)"
+            />
+            <el-option
+              value="docx"
+              label="Word (DOCX)"
+            />
+            <el-option
+              value="md"
+              label="Markdown (MD)"
+            />
+            <el-option
+              value="markdown"
+              label="Markdown"
             />
             <el-option
               value="json"
@@ -93,10 +110,6 @@
             <el-option
               value="yaml"
               label="YAML"
-            />
-            <el-option
-              value="md"
-              label="Markdown"
             />
             <el-option
               value="html"
@@ -187,12 +200,42 @@
 </template>
 
 <script setup>
-import { ref, watch } from 'vue'
+import { ref, watch, computed } from 'vue'
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
-import { FileOutput, ChevronDown } from 'lucide-vue-next'
+import { ChevronDown } from 'lucide-vue-next'
 import NodeTypeBadge from '@/components/workflow/nodes/NodeTypeBadge.vue'
 import { useNodePresentation } from '@/composables/useNodePresentation'
 
+const FORMAT_LABELS = {
+  text: '纯文本',
+  txt: 'TXT',
+  docx: 'Word (DOCX)',
+  md: 'Markdown',
+  markdown: 'Markdown',
+  json: 'JSON',
+  csv: 'CSV',
+  xml: 'XML',
+  yaml: 'YAML',
+  html: 'HTML',
+  parquet: 'Parquet',
+  excel: 'Excel',
+}
+
+function normalizeFileWriterConfig(config = {}) {
+  const format = config.format || config.fileType || 'text'
+  const path = config.path || config.filePath || ''
+  return {
+    path,
+    format,
+    filePath: path,
+    fileType: format,
+    content: config.content || '',
+    encoding: config.encoding || 'utf-8',
+    writeMode: config.writeMode || 'overwrite',
+    overwrite: config.overwrite ?? (config.writeMode !== 'append'),
+    description: config.description || '',
+  }
+}
 
 const props = defineProps({
   id: { type: String, default: '' },
@@ -201,7 +244,7 @@ const props = defineProps({
 })
 
 const NODE_TYPE = 'file_writer'
-const { nodeIcon, nodeColor, nodeLabel } = useNodePresentation(NODE_TYPE)
+const { nodeColor } = useNodePresentation(NODE_TYPE)
 
 const emit = defineEmits(['select'])
 const { updateNodeData } = useVueFlow()
@@ -209,13 +252,15 @@ const { updateNodeData } = useVueFlow()
 const isExpanded = ref(false)
 
 const localName = ref(props.data.label || '文件写入')
-const localConfig = ref({
-  filePath: props.data.config?.filePath || '',
-  fileType: props.data.config?.fileType || 'txt',
-  content: props.data.config?.content || '',
-  encoding: props.data.config?.encoding || 'utf-8',
-  writeMode: props.data.config?.writeMode || 'overwrite',
-  description: props.data.config?.description || ''
+const localConfig = ref(normalizeFileWriterConfig(props.data.config))
+
+const displayFormat = computed(() => {
+  const raw = localConfig.value.format || localConfig.value.fileType
+  return raw ? (FORMAT_LABELS[raw] || raw) : ''
+})
+
+const displayPath = computed(() => {
+  return localConfig.value.path || localConfig.value.filePath || localConfig.value.description || ''
 })
 
 function truncate(str, len) {
@@ -226,26 +271,21 @@ function truncate(str, len) {
 watch(() => props.data, (d) => {
   if (d) {
     localName.value = d.label || '文件写入'
-    localConfig.value = {
-      filePath: d.config?.filePath || '',
-      fileType: d.config?.fileType || 'txt',
-      content: d.config?.content || '',
-      encoding: d.config?.encoding || 'utf-8',
-      writeMode: d.config?.writeMode || 'overwrite',
-      description: d.config?.description || '',
-      ...d.config
-    }
+    localConfig.value = normalizeFileWriterConfig(d.config)
   }
 }, { deep: true })
 
 function toggleExpand() {
-  handleSelect()
-  isExpanded.value = !isExpanded.value
+  const expanded = !isExpanded.value
+  emit('select')
+  isExpanded.value = expanded
 }
 
 function handleChange() {
   if (props.id) {
-    updateNodeData(props.id, { label: localName.value, config: { ...localConfig.value } })
+    const normalized = normalizeFileWriterConfig(localConfig.value)
+    localConfig.value = normalized
+    updateNodeData(props.id, { label: localName.value, config: normalized })
   }
 }
 

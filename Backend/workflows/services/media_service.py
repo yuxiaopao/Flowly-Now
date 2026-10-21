@@ -56,6 +56,19 @@ def local_path_from_public_url(url: str) -> Optional[Path]:
     return None
 
 
+def _strip_media_url_prefix(value: str) -> str:
+    """Turn '/media/foo.mp4' or 'media/foo.mp4' into 'foo.mp4' relative to MEDIA_ROOT."""
+    raw = str(value or '').strip().replace('\\', '/')
+    media_url = getattr(settings, 'MEDIA_URL', '/media/') or '/media/'
+    prefix = media_url if media_url.startswith('/') else f'/{media_url}'
+    prefix = prefix.rstrip('/') + '/'
+    if raw.startswith(prefix):
+        return raw[len(prefix):].lstrip('/')
+    if raw.startswith('media/'):
+        return raw[len('media/'):].lstrip('/')
+    return raw.lstrip('/')
+
+
 def ensure_public_url(path_or_url: str, *, download_dir: Optional[Path] = None) -> str:
     """
     Return a public HTTP(S) URL.
@@ -70,19 +83,25 @@ def ensure_public_url(path_or_url: str, *, download_dir: Optional[Path] = None) 
         return value
 
     media_root = Path(settings.MEDIA_ROOT)
+    # Prefer MEDIA_URL-prefixed paths: /media/workflow_concat/x.mp4
+    rel_guess = _strip_media_url_prefix(value)
+    candidates = []
+    if rel_guess and rel_guess != value.lstrip('/'):
+        candidates.append(media_root / rel_guess)
     candidate = Path(value)
-    if not candidate.is_absolute():
-        candidate = media_root / value.lstrip('/')
+    if candidate.is_absolute():
+        candidates.append(candidate)
+    else:
+        candidates.append(media_root / value.lstrip('/'))
+        candidates.append(media_root / rel_guess)
 
-    if candidate.exists():
+    for cand in candidates:
         try:
-            rel = candidate.resolve().relative_to(media_root.resolve())
-            return build_public_media_url(str(rel).replace('\\', '/'))
-        except ValueError:
-            pass
-
-    if candidate.exists():
-        return build_public_media_url(str(candidate.name))
+            if cand.exists():
+                rel = cand.resolve().relative_to(media_root.resolve())
+                return build_public_media_url(str(rel).replace('\\', '/'))
+        except Exception:
+            continue
 
     raise MediaServiceError(f'无法解析为公网 URL 的本地路径: {value}')
 
@@ -100,11 +119,16 @@ def resolve_local_media_path(path_or_url: str, *, subdir: str = 'video_translati
         return download_url_to_media(value, subdir=subdir)
 
     media_root = Path(settings.MEDIA_ROOT)
-    candidate = Path(value)
-    if not candidate.is_absolute():
-        candidate = media_root / value.lstrip('/')
-    if candidate.exists():
-        return candidate.resolve()
+    rel_guess = _strip_media_url_prefix(value)
+    for cand in (
+        media_root / rel_guess,
+        Path(value) if Path(value).is_absolute() else None,
+        media_root / value.lstrip('/'),
+    ):
+        if cand is None:
+            continue
+        if cand.exists():
+            return cand.resolve()
 
     public = ensure_public_url(value)
     return download_url_to_media(public, subdir=subdir)
@@ -117,10 +141,17 @@ def download_url_to_media(url: str, *, subdir: str = 'video_translation/work') -
     dest_dir = Path(settings.MEDIA_ROOT) / subdir
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest = dest_dir / f"{uuid.uuid4().hex}{ext}"
-    with httpx.Client(timeout=120, follow_redirects=True) as client:
-        resp = client.get(url)
-        resp.raise_for_status()
-        dest.write_bytes(resp.content)
+    # Agnes CDN / some hosts trip default SSL verification; retry without verify.
+    try:
+        with httpx.Client(timeout=120, follow_redirects=True, trust_env=False) as client:
+            resp = client.get(url)
+            resp.raise_for_status()
+            dest.write_bytes(resp.content)
+    except Exception:
+        with httpx.Client(timeout=120, follow_redirects=True, trust_env=False, verify=False) as client:
+            resp = client.get(url)
+            resp.raise_for_status()
+            dest.write_bytes(resp.content)
     logger.info('Downloaded media %s -> %s', url, dest)
     return dest
 

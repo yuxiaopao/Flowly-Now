@@ -1,6 +1,6 @@
 # Flowly - AI Agent 工作流编排平台
 
-> 企业级 AI Agent 工作流编排平台，支持自然语言生成工作流、可视化编辑器、多模态模型集成、桌面端 GPU 训练与平台级管理后台。
+> 企业级 AI Agent 工作流编排平台，支持语创（对话生成工作流）、可视化编辑器、多模态模型集成、桌面端 GPU 训练与平台级管理后台。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.12+](https://img.shields.io/badge/Python-3.12+-green.svg)](https://www.python.org/)
@@ -16,7 +16,7 @@
 - [系统架构](#系统架构)
 - [技术栈](#技术栈)
 - [管理后台](#管理后台)
-- [NL to Workflow 工作原理](#nl-to-workflow-工作原理)
+- [语创（对话生成工作流）原理](#语创对话生成工作流原理)
 - [多 Agent 协作系统](#多-agent-协作系统)
 - [项目结构](#项目结构)
 - [快速开始](#快速开始)
@@ -37,13 +37,13 @@
 
 **Flowly** 是一个企业级 AI Agent 工作流编排平台，旨在降低 AI 工作流的创建门槛，让用户通过自然语言即可快速构建复杂的 AI 工作流。
 
-平台核心围绕两大能力构建：**自然语言生成工作流**（NL to Workflow）和**可视化工作流编辑**，结合多模型网关、多租户协作、RAG 知识库、模型训练、网站生成器以及**三层管理后台**等企业级功能，适用于问答机器人、数据处理流水线、内容生成系统、智能客服、ML 站点工厂等多种业务场景。
+平台核心围绕两大能力构建：**语创**（对话生成工作流，原 NL to Workflow）和**可视化工作流编辑**，结合多模型网关、多租户协作、RAG 知识库、模型训练、网站生成器以及**三层管理后台**等企业级功能，适用于问答机器人、数据处理流水线、内容生成系统、智能客服、ML 站点工厂等多种业务场景。
 
 ---
 
 ## 核心特性
 
-### 自然语言生成工作流
+### 语创（对话生成工作流）
 
 通过自然语言描述，自动解析用户意图并生成完整的工作流定义（DAG 结构）。系统支持多轮对话修改、流式响应、DAG 验证，覆盖问答机器人、数据处理、翻译、内容生成等 7 种工作流类型。
 
@@ -316,9 +316,9 @@ daphne -b 127.0.0.1 -p 8000 config.asgi:application
 
 ---
 
-## NL to Workflow 工作原理
+## 语创（对话生成工作流）原理
 
-NL to Workflow 是 e-Flowly 的核心能力，将自然语言描述转换为可执行的工作流定义。流程分为以下阶段：
+语创是 e-Flowly 的核心能力，将自然语言描述转换为可执行的工作流定义。流程分为以下阶段：
 
 ### 第一阶段：意图识别与分类
 
@@ -427,7 +427,7 @@ Flowly-now/
 │   │
 │   ├── users/                            # 用户认证（注册/登录/Token）
 │   ├── workflows/                        # 工作流引擎与节点执行
-│   ├── nl_to_workflow/                   # 自然语言生成工作流
+│   ├── nl_to_workflow/                   # 语创（对话生成工作流）
 │   ├── agents/                           # Agent 管理与多 Agent 协作
 │   ├── gateway/                          # AI 模型网关
 │   ├── rag/                              # RAG 知识库
@@ -649,7 +649,7 @@ response = registry.get("openai").generate(
 |------|------|------|
 | 认证 | `/api/v1/auth/` | 登录、注册、Token 刷新、密码重置 |
 | 工作流 | `/api/v1/workflows/` | CRUD、执行、版本控制 |
-| NL 生成 | `/api/v1/nl-workflow/` | 自然语言生成工作流 |
+| 语创 | `/api/v1/nl-workflow/` | 对话生成工作流 |
 | Agent | `/api/v1/agents/` | Agent 创建、调试、执行 |
 | RAG | `/api/v1/rag/` | 知识库集合管理 |
 | 数据集 | `/api/v1/datasets/` | 数据集上传与管理 |
@@ -677,7 +677,7 @@ response = registry.get("openai").generate(
 | POST | `/api/v1/auth/password-reset/` | 请求密码重置 |
 | POST | `/api/v1/auth/password-reset/confirm/` | 确认密码重置 |
 
-### NL to Workflow 核心接口
+### 语创核心接口
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
@@ -714,7 +714,7 @@ response = registry.get("openai").generate(
 | `/workflows/:id` | WorkflowDetail | 工作流详情 |
 | `/workflows/:id/execute` | WorkflowExecute | 执行工作流 |
 | `/workflows/diff` | WorkflowDiff | 工作流对比 |
-| `/nl-create` | NLCreator | 自然语言创建工作流 |
+| `/nl-create`（别名 `/compose`） | FlowSpeak | 语创 · 对话生成工作流 |
 
 ### Agent 与知识库
 

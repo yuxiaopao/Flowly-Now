@@ -54,6 +54,26 @@
             @change="handleChange"
           >
             <el-option
+              label="纯文本 (TEXT)"
+              value="text"
+            />
+            <el-option
+              label="文本 (TXT)"
+              value="txt"
+            />
+            <el-option
+              label="Word (DOCX)"
+              value="docx"
+            />
+            <el-option
+              label="Markdown (MD)"
+              value="md"
+            />
+            <el-option
+              label="Markdown"
+              value="markdown"
+            />
+            <el-option
               label="JSON"
               value="json"
             />
@@ -68,10 +88,6 @@
             <el-option
               label="Excel"
               value="excel"
-            />
-            <el-option
-              label="纯文本 (TXT)"
-              value="txt"
             />
           </el-select>
         </el-form-item>
@@ -97,7 +113,7 @@
           </div>
           <div class="preview-row">
             <span class="preview-label">格式:</span>
-            <span class="preview-value">{{ localData.format || 'json' }}</span>
+            <span class="preview-value">{{ FORMAT_LABELS[localData.format] || localData.format || 'json' }}</span>
           </div>
           <div class="preview-row">
             <span class="preview-label">覆盖:</span>
@@ -125,6 +141,18 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['update:modelValue', 'change'])
+
+const FORMAT_LABELS = {
+  text: '纯文本 (TEXT)',
+  txt: '文本 (TXT)',
+  docx: 'Word (DOCX)',
+  md: 'Markdown (MD)',
+  markdown: 'Markdown',
+  json: 'JSON',
+  csv: 'CSV',
+  parquet: 'Parquet',
+  excel: 'Excel',
+}
 
 const localData = reactive({
   label: '',

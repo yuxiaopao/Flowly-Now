@@ -56,6 +56,7 @@ def build_chat_llm(
     max_tokens: int = DEFAULT_MAX_TOKENS,
     api_key: Optional[str] = None,
     base_url: Optional[str] = None,
+    timeout: Optional[float] = None,
 ):
     """Create a LangChain chat model using the same rules as AgentEngine."""
     from langchain_openai import AzureChatOpenAI, ChatOpenAI
@@ -65,6 +66,8 @@ def build_chat_llm(
     resolved_api_key = api_key if api_key is not None else getattr(settings, 'OPENAI_API_KEY', None)
     resolved_base_url = base_url if base_url is not None else getattr(settings, 'OPENAI_BASE_URL', None)
     provider = _resolve_provider(resolved_model, resolved_api_key, resolved_base_url)
+    if base_url and not _is_ollama_endpoint(base_url):
+        provider = 'azure' if 'azure' in base_url.lower() else 'openai'
 
     if provider == 'ollama':
         ollama_url = (
@@ -74,10 +77,10 @@ def build_chat_llm(
         return ChatOllama(
             model=resolved_model,
             temperature=temperature,
-            timeout=OLLAMA_CHAT_TIMEOUT,
+            timeout=timeout or OLLAMA_CHAT_TIMEOUT,
             base_url=ollama_url.rstrip('/'),
             num_ctx=getattr(settings, 'OLLAMA_NUM_CTX', OLLAMA_NUM_CTX),
-            client_kwargs={'trust_env': False},
+            client_kwargs={'trust_env': False, 'timeout': timeout or OLLAMA_CHAT_TIMEOUT},
         )
 
     if provider == 'azure':
@@ -88,14 +91,14 @@ def build_chat_llm(
             api_key=resolved_api_key,
             azure_endpoint=resolved_base_url,
             api_version='2024-02-01',
-            timeout=OLLAMA_CHAT_TIMEOUT,
+            timeout=timeout or OLLAMA_CHAT_TIMEOUT,
         )
 
     model_kwargs: Dict[str, Any] = {
         'model': resolved_model,
         'temperature': temperature,
         'max_tokens': max_tokens,
-        'timeout': OLLAMA_CHAT_TIMEOUT,
+        'timeout': timeout or OLLAMA_CHAT_TIMEOUT,
     }
     if resolved_api_key:
         model_kwargs['api_key'] = resolved_api_key
@@ -110,6 +113,9 @@ def invoke_chat_messages(
     model: Optional[str] = None,
     temperature: float = DEFAULT_TEMPERATURE,
     max_tokens: int = DEFAULT_MAX_TOKENS,
+    api_key: Optional[str] = None,
+    base_url: Optional[str] = None,
+    timeout: Optional[float] = None,
 ) -> str:
     """Invoke an LLM with role/content dict messages and return text content."""
     from langchain_core.messages import HumanMessage, SystemMessage
@@ -118,6 +124,9 @@ def invoke_chat_messages(
         model=model,
         temperature=temperature,
         max_tokens=max_tokens,
+        api_key=api_key,
+        base_url=base_url,
+        timeout=timeout,
     )
     langchain_messages = []
     for msg in messages:

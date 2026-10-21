@@ -552,9 +552,6 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.credentials-page {
-  padding: 24px;
-}
 
 .loading-container {
   background: var(--bg-secondary);

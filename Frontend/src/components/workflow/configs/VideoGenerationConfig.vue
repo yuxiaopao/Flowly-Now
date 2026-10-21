@@ -145,7 +145,52 @@
           </el-select>
         </el-form-item>
 
-        <el-form-item label="输入图像 (图生视频)">
+        <el-form-item
+          v-if="localData.provider === 'agnes'"
+          label="生成模式"
+        >
+          <el-select
+            v-model="localData.mode"
+            @change="handleGenerationModeChange"
+          >
+            <el-option
+              label="自动 / 首帧控制"
+              value=""
+            />
+            <el-option
+              label="文字直接生成"
+              value="text"
+            />
+            <el-option
+              label="参考图片生成"
+              value="reference"
+            />
+            <el-option
+              label="首尾帧控制"
+              value="keyframe"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item
+          v-if="localData.mode === 'reference'"
+          label="参考图片（每行一个URL）"
+        >
+          <el-input
+            v-model="referenceImagesText"
+            type="textarea"
+            :rows="3"
+            aria-label="视频参考图片"
+            placeholder="可填写上游图片变量或公开图片URL"
+            @change="handleChange"
+          />
+          <div class="field-hint">
+            Flash 最多 5 张；参考模式将图像用于内容与风格控制。
+          </div>
+        </el-form-item>
+        <el-form-item
+          v-if="localData.mode !== 'reference'"
+          label="输入图像 (图生视频)"
+        >
           <el-input
             v-model="localData.inputImage"
             placeholder="{images.0.url} 或粘贴图片 URL"
@@ -154,6 +199,16 @@
           <div class="field-hint">
             连接文生图节点后使用 <code>{images.0.url}</code> 自动引用上游生成图；留空时后端也会自动取上游 images
           </div>
+        </el-form-item>
+        <el-form-item
+          v-if="localData.mode === 'keyframe'"
+          label="尾帧图像（可选）"
+        >
+          <el-input
+            v-model="localData.lastFrame"
+            placeholder="尾帧图片URL或上游变量"
+            @change="handleChange"
+          />
         </el-form-item>
       </div>
 
@@ -186,7 +241,7 @@
 </template>
 
 <script setup>
-import { reactive, watch } from 'vue'
+import { computed, reactive, watch } from 'vue'
 
 const props = defineProps({
   modelValue: {
@@ -206,12 +261,16 @@ const localData = reactive({
   duration: 4,
   fps: 24,
   resolution: '720p',
-  inputImage: '{images.0.url}'
+  inputImage: '{images.0.url}',
+  mode: '',
+  referenceImages: []
 })
 
 watch(() => props.modelValue, (newVal) => {
   if (newVal) {
+    for (const key of Object.keys(localData)) delete localData[key]
     Object.assign(localData, {
+      ...newVal,
       label: newVal.label || '',
       description: newVal.description || '',
       provider: newVal.provider || 'replicate',
@@ -220,10 +279,18 @@ watch(() => props.modelValue, (newVal) => {
       duration: newVal.duration ?? 4,
       fps: newVal.fps ?? 24,
       resolution: newVal.resolution || '720p',
-      inputImage: newVal.inputImage || '{images.0.url}'
+      inputImage: newVal.inputImage ?? '{images.0.url}',
+      mode: newVal.mode || '',
+      referenceImages: newVal.referenceImages || newVal.reference_images || [],
+      lastFrame: newVal.lastFrame || newVal.last_frame || ''
     })
   }
 }, { immediate: true, deep: true })
+
+const referenceImagesText = computed({
+  get: () => Array.isArray(localData.referenceImages) ? localData.referenceImages.join('\n') : String(localData.referenceImages || ''),
+  set: (value) => { localData.referenceImages = value.split('\n').map(url => url.trim()).filter(Boolean) }
+})
 
 const defaultModels = {
   dashscope: 'wanx2.1-t2v-turbo',
@@ -237,9 +304,15 @@ const handleProviderChange = () => {
   handleChange()
 }
 
+const handleGenerationModeChange = () => {
+  if (localData.mode !== 'reference') localData.referenceImages = []
+  handleChange()
+}
+
 const handleChange = () => {
-  emit('update:modelValue', { ...localData })
-  emit('change', { ...localData })
+  const config = { ...props.modelValue, ...localData }
+  emit('update:modelValue', config)
+  emit('change', config)
 }
 </script>
 

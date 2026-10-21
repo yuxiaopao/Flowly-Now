@@ -2,7 +2,6 @@
   <div
     class="node-type-badge"
     :class="{ compact }"
-    :style="badgeStyle"
   >
     <component
       :is="nodeIcon"
@@ -10,7 +9,7 @@
       class="badge-icon"
       :style="{ color: nodeColor }"
     />
-    <span :style="{ color: nodeColor }">{{ displayLabel }}</span>
+    <span>{{ displayLabel }}</span>
   </div>
 </template>
 
@@ -38,10 +37,6 @@ const { nodeIcon, nodeColor, nodeLabel } = useNodePresentation(toRef(props, 'nod
 
 const displayLabel = computed(() => props.label || nodeLabel.value)
 
-const badgeStyle = computed(() => ({
-  backgroundColor: `${nodeColor.value}22`,
-  borderColor: nodeColor.value,
-}))
 </script>
 
 <style scoped lang="scss">
@@ -50,7 +45,9 @@ const badgeStyle = computed(() => ({
   align-items: center;
   gap: 6px;
   padding: 3px 10px;
-  border: 1px solid;
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-secondary);
   border-radius: 20px;
   font-size: 10px;
   font-weight: 700;

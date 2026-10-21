@@ -1,34 +1,43 @@
 FROM python:3.12-slim
 
-# Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV DEBIAN_FRONTEND=noninteractive
+# Ultralytics offline config (Arial.ttf baked in at build time — avoids network fetch in Docker)
+ENV YOLO_CONFIG_DIR=/opt/ultralytics
 
-# Set work directory
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
+# System deps: MySQL client, OpenCV (ultralytics), fonts (YOLO plots offline)
+RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     default-libmysqlclient-dev \
     pkg-config \
     curl \
-    && rm -rf /var/lib/apt/lists/*
+    libxcb1 \
+    libgl1 \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender1 \
+    fonts-dejavu-core \
+    && rm -rf /var/lib/apt/lists/* \
+    && mkdir -p /opt/ultralytics /app/outputs /app/logs /app/media /app/staticfiles \
+    && cp /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf /opt/ultralytics/Arial.ttf
 
-# Install Python dependencies
+# PyTorch CPU wheels (pinned pair verified for ultralytics 8.4 + Site Factory E2E)
+ARG TORCH_VERSION=2.8.0+cpu
+ARG TORCHVISION_VERSION=0.23.0+cpu
+RUN pip install --no-cache-dir \
+    "torch==${TORCH_VERSION}" "torchvision==${TORCHVISION_VERSION}" \
+    --index-url https://download.pytorch.org/whl/cpu
+
 COPY Backend/requirements.txt /app/
 RUN pip install --no-cache-dir -r requirements.txt \
     && python -m pip install --no-cache-dir daphne
 
-# Copy backend code
 COPY Backend/ /app/
 
-# Create necessary directories
-RUN mkdir -p /app/logs /app/media /app/staticfiles
-
-# Expose port
 EXPOSE 8000
 
-# Default command
 CMD ["daphne", "-b", "0.0.0.0", "-p", "8000", "config.asgi:application"]

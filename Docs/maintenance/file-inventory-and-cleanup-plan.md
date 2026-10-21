@@ -1,265 +1,283 @@
-﻿# Flowly-now 椤圭洰鏂囦欢娓呭崟涓庢暣鐞嗗缓璁?
-鐢熸垚鏃ユ湡锛?026-06-12
+# Flowly-now 项目文件清单与整理建议
+
+生成日期：2026-06-12
 
 ---
 
-## 涓€銆佹枃浠跺垎绫绘€昏
+## 一、文件分类总览
 
-### 1. 鍚庣鏍稿績浠ｇ爜锛圖jango Backend锛?
-> 璺緞锛歚Backend/` 鈥?Django 椤圭洰涓讳綋锛屽叡 28 涓簲鐢ㄦā鍧?
-| 妯″潡 | 璺緞 | 璇存槑 |
+### 1. 后端核心代码（Django Backend）
+
+> 路径：`Backend/` - Django 项目主体，共 28 个应用模块
+
+| 模块 | 路径 | 说明 |
 |------|------|------|
-| `admin` | `Backend/admin/` | 绠＄悊鍚庡彴鍏ュ彛 |
-| `agents` | `Backend/agents/` | AI Agent 绠＄悊锛堝惈 Desktop銆丮ulti-Agent锛?|
-| `annotations` | `Backend/annotations/` | 鏁版嵁鏍囨敞妯″潡 |
-| `augmentation` | `Backend/augmentation/` | 鏁版嵁澧炲己 |
-| `billing` | `Backend/billing/` | 璁¤垂妯″潡 |
-| `branding` | `Backend/branding/` | 鍝佺墝瀹氬埗 |
-| `codegraph` | `Backend/codegraph/` | 浠ｇ爜鍥捐氨锛圵ebSocket锛?|
-| `config` | `Backend/config/` | Django 閰嶇疆锛坰ettings銆乧elery銆乤sgi锛?|
-| `core` | `Backend/core/` | 鏍稿績宸ュ叿绫?|
-| `dataset_recommend` | `Backend/dataset_recommend/` | 鏁版嵁闆嗘帹鑽?|
-| `datasets` | `Backend/datasets/` | 鏁版嵁闆嗙鐞?|
-| `evaluation` | `Backend/evaluation/` | 妯″瀷璇勪及 |
-| `features` | `Backend/features/` | 鐗规€у紑鍏?|
-| `gateway` | `Backend/gateway/` | LLM 缃戝叧鏈嶅姟 |
-| `integrations` | `Backend/integrations/` | 涓夋柟闆嗘垚 |
-| `marketplace` | `Backend/marketplace/` | 妯℃澘甯傚満 |
-| `monitoring` | `Backend/monitoring/` | 鐩戞帶妯″潡 |
-| `nl_to_workflow` | `Backend/nl_to_workflow/` | 鑷劧璇█杞伐浣滄祦锛堟牳蹇冿級 |
-| `prompts` | `Backend/prompts/` | 鎻愮ず璇嶇鐞?|
-| `rag` | `Backend/rag/` | RAG 妫€绱㈠寮?|
-| `templates` | `Backend/templates/` | 妯℃澘绠＄悊 |
-| `tenants` | `Backend/tenants/` | 澶氱鎴?|
-| `training` | `Backend/training/` | 妯″瀷璁粌锛圵ebSocket锛?|
-| `users` | `Backend/users/` | 鐢ㄦ埛璁よ瘉 |
-| `utils` | `Backend/utils/` | 宸ュ叿鍑芥暟锛堢紦瀛樸€佷腑闂翠欢銆侀獙璇佸櫒锛?|
-| `website_generator` | `Backend/website_generator/` | 缃戠珯鐢熸垚鍣?|
-| `workflows` | `Backend/workflows/` | 宸ヤ綔娴佸紩鎿庯紙鏍稿績锛?|
-| `scripts` | `Backend/scripts/` | 杩愮淮/妫€鏌ヨ剼鏈?|
-| `reports` | `Backend/reports/` | API 妫€鏌ユ姤鍛婏紙涓存椂锛?|
+| `admin` | `Backend/admin/` | 管理后台入口 |
+| `agents` | `Backend/agents/` | AI Agent 管理（含 Desktop、Multi-Agent） |
+| `annotations` | `Backend/annotations/` | 数据标注模块 |
+| `augmentation` | `Backend/augmentation/` | 数据增强 |
+| `billing` | `Backend/billing/` | 计费模块 |
+| `branding` | `Backend/branding/` | 品牌定制 |
+| `codegraph` | `Backend/codegraph/` | 代码图谱（WebSocket） |
+| `config` | `Backend/config/` | Django 配置（settings、celery、asgi） |
+| `core` | `Backend/core/` | 核心工具类 |
+| `dataset_recommend` | `Backend/dataset_recommend/` | 数据集推荐 |
+| `datasets` | `Backend/datasets/` | 数据集管理 |
+| `evaluation` | `Backend/evaluation/` | 模型评估 |
+| `features` | `Backend/features/` | 特性开关 |
+| `gateway` | `Backend/gateway/` | LLM 网关服务 |
+| `integrations` | `Backend/integrations/` | 三方集成 |
+| `marketplace` | `Backend/marketplace/` | 模板市场 |
+| `monitoring` | `Backend/monitoring/` | 监控模块 |
+| `nl_to_workflow` | `Backend/nl_to_workflow/` | 自然语言转工作流（核心） |
+| `prompts` | `Backend/prompts/` | 提示词管理 |
+| `rag` | `Backend/rag/` | RAG 检索增强 |
+| `templates` | `Backend/templates/` | 模板管理 |
+| `tenants` | `Backend/tenants/` | 多租户 |
+| `training` | `Backend/training/` | 模型训练（WebSocket） |
+| `users` | `Backend/users/` | 用户认证 |
+| `utils` | `Backend/utils/` | 工具函数（缓存、中间件、验证器） |
+| `website_generator` | `Backend/website_generator/` | 网站生成器 |
+| `workflows` | `Backend/workflows/` | 工作流引擎（核心） |
+| `scripts` | `Backend/scripts/` | 运维/检查脚本 |
+| `reports` | `Backend/reports/` | API 检查报告（临时） |
 
-**鏍稿績鍏ュ彛鏂囦欢**锛歚Backend/manage.py`銆乣Backend/conftest.py`銆乣Backend/requirements.txt`銆乣Backend/.env.example`
+**核心入口文件**：`Backend/manage.py`、`Backend/conftest.py`、`Backend/requirements.txt`、`Backend/.env.example`
 
 ---
 
-### 2. 鍓嶇鏍稿績浠ｇ爜锛圴ue.js Frontend锛?
-> 璺緞锛歚Frontend/` 鈥?Vue 3 + Vite + TypeScript
+### 2. 前端核心代码（Vue.js Frontend）
 
-| 绫诲埆 | 璺緞 | 璇存槑 |
+> 路径：`Frontend/` - Vue 3 + Vite + TypeScript
+
+| 类别 | 路径 | 说明 |
 |------|------|------|
-| 璺敱鍏ュ彛 | `Frontend/src/main.js`銆乣Frontend/src/App.vue` | 搴旂敤鍏ュ彛 |
-| 浠〃鐩?| `Frontend/src/views/dashboard/Home.vue` | 棣栭〉 |
-| 璁よ瘉 | `Frontend/src/views/auth/` | 鐧诲綍/娉ㄥ唽/鎵惧洖瀵嗙爜锛? 鏂囦欢锛?|
-| 宸ヤ綔娴?| `Frontend/src/views/workflow/` | 宸ヤ綔娴佺紪杈戝櫒/鍒楄〃/鎵ц/鐗堟湰瀵规瘮锛? 鏂囦欢锛?|
-| NL 宸ヤ綔娴?| `Frontend/src/views/nl-workflow/Creator.vue` | NL 杞伐浣滄祦鍒涘缓鍣?|
-| 浠ｇ爜鍥捐氨 | `Frontend/src/views/codegraph/` | 浠ｇ爜鍥捐氨鍙鍖栵紙7 鏂囦欢锛?|
-| 璁粌 | `Frontend/src/views/training/` | YOLO 璁粌杩涘害闈㈡澘锛? 鏂囦欢锛?|
-| 璁剧疆 | `Frontend/src/views/settings/` | 璁剧疆/璁¤垂/鍝佺墝/闆嗘垚/妗岄潰Agent锛? 鏂囦欢锛?|
-| 鏁版嵁闆?| `Frontend/src/views/datasets/` + `dataset/` | 鏁版嵁闆嗘祻瑙?鏍囨敞/鎺ㄨ崘锛? 鏂囦欢锛?|
-| 鐭ヨ瘑搴?| `Frontend/src/views/knowledge/` | RAG 鐭ヨ瘑搴擄紙2 鏂囦欢锛?|
-| 鍚戦噺瀛樺偍 | `Frontend/src/views/vector-store/` | 鍚戦噺瀛樺偍绠＄悊锛? 鏂囦欢锛?|
-| 鎻愮ず璇?| `Frontend/src/views/prompt/List.vue` | 鎻愮ず璇嶅垪琛?|
-| 妯″瀷 | `Frontend/src/views/model/Index.vue` | 妯″瀷绠＄悊 |
-| 妯℃澘甯傚満 | `Frontend/src/views/marketplace/` | 妯℃澘甯傚満/璇︽儏/鎴戠殑妯℃澘锛? 鏂囦欢锛?|
-| 鍥㈤槦 | `Frontend/src/views/team/Index.vue` | 鍥㈤槦绠＄悊 |
-| 鐩戞帶 | `Frontend/src/views/monitoring/Index.vue` | 鐩戞帶闈㈡澘 |
-| 鎵ц鍘嗗彶 | `Frontend/src/views/execution/History.vue` | 鎵ц鍘嗗彶 |
-| 钀藉湴椤?| `Frontend/src/views/Landing.vue` | 棣栭〉钀藉湴椤?|
-| 404 | `Frontend/src/views/NotFound.vue` | 404 椤甸潰 |
+| 路由入口 | `Frontend/src/main.js`、`Frontend/src/App.vue` | 应用入口 |
+| 仪表盘 | `Frontend/src/views/dashboard/Home.vue` | 首页 |
+| 认证 | `Frontend/src/views/auth/` | 登录/注册/找回密码（3 文件） |
+| 工作流 | `Frontend/src/views/workflow/` | 工作流编辑器/列表/执行/版本对比（4 文件） |
+| NL 工作流 | `Frontend/src/views/nl-workflow/Creator.vue` | NL 转工作流创建器 |
+| 代码图谱 | `Frontend/src/views/codegraph/` | 代码图谱可视化（7 文件） |
+| 训练 | `Frontend/src/views/training/` | YOLO 训练进度面板（1 文件） |
+| 设置 | `Frontend/src/views/settings/` | 设置/计费/品牌/集成/桌面 Agent（5 文件） |
+| 数据集 | `Frontend/src/views/datasets/` + `dataset/` | 数据集浏览/标注/推荐（5 文件） |
+| 知识库 | `Frontend/src/views/knowledge/` | RAG 知识库（2 文件） |
+| 向量存储 | `Frontend/src/views/vector-store/` | 向量存储管理（1 文件） |
+| 提示词 | `Frontend/src/views/prompt/List.vue` | 提示词列表 |
+| 模型 | `Frontend/src/views/model/Index.vue` | 模型管理 |
+| 模板市场 | `Frontend/src/views/marketplace/` | 模板市场/详情/我的模板（3 文件） |
+| 团队 | `Frontend/src/views/team/Index.vue` | 团队管理 |
+| 监控 | `Frontend/src/views/monitoring/Index.vue` | 监控面板 |
+| 执行历史 | `Frontend/src/views/execution/History.vue` | 执行历史 |
+| 落地页 | `Frontend/src/views/Landing.vue` | 首页落地页 |
+| 404 | `Frontend/src/views/NotFound.vue` | 404 页面 |
 
-**閰嶇疆鏂囦欢**锛歚package.json`銆乣vite.config.js`銆乣tsconfig.json`銆乣tsconfig.node.json`銆乣vitest.config.ts`銆乣playwright.config.js`銆乣.eslintrc.cjs`銆乣.env.example`銆乣.env.production`
+**配置文件**：`package.json`、`vite.config.js`、`tsconfig.json`、`tsconfig.node.json`、`vitest.config.ts`、`playwright.config.js`、`.eslintrc.cjs`、`.env.example`、`.env.production`
 
-**娴嬭瘯**锛歚Frontend/tests/`锛圗2E + 鍗曞厓娴嬭瘯 + mocks锛?
+**测试**：`Frontend/tests/`（E2E + 单元测试 + mocks）
+
 ---
 
-### 3. 妗岄潰搴旂敤锛圗lectron Desktop锛?
-> 璺緞锛歚Desktop/`
+### 3. 桌面应用（Electron Desktop）
 
-| 鏂囦欢 | 璇存槑 |
+> 路径：`Desktop/`
+
+| 文件 | 说明 |
 |------|------|
-| `main.js` | Electron 涓昏繘绋?|
-| `preload.js` | 棰勫姞杞借剼鏈?|
-| `electron.html` | 绐楀彛椤甸潰 |
-| `package.json` | 渚濊禆閰嶇疆 |
-| `assets/README.md` | 璧勬簮鐩綍璇存槑 |
+| `main.js` | Electron 主进程 |
+| `preload.js` | 预加载脚本 |
+| `electron.html` | 窗口页面 |
+| `package.json` | 依赖配置 |
+| `assets/README.md` | 资源目录说明 |
 
 ---
 
-### 4. 椤圭洰鏂囨。锛圖ocs锛?
-> 璺緞锛歚Docs/` 鈥?鍏?50+ 浠芥枃妗?
-| 瀛愮洰褰?| 璇存槑 | 鏂囦欢鏁?|
+### 4. 项目文档（Docs）
+
+> 路径：`Docs/` - 共 50+ 份文档
+
+| 子目录 | 说明 | 文件数 |
 |--------|------|--------|
-| `Docs/project-audits/` | 椤圭洰瀹¤锛氭灦鏋勫璁°€佽縼绉昏褰曘€侀鍩熻璁°€佽鍔ㄨ鍒掋€佽缁冨伐浣滄祦钃濆浘 | ~20 |
-| `Docs/phases/` | 鍒嗛樁娈典紭鍖栬鍒掞紙Phase 0-5锛?| 6 |
-| `Docs/tasks/` | 鍥㈤槦浠诲姟鍒嗛厤锛圱ASK-001 鑷?006锛?| 7 |
-| `Docs/api/` | API 瑙勮寖鏂囨。銆佷竴鑷存€ф寚鍗椼€佸揩閫熷弬鑰?| 4 |
-| `Docs/guides/` | 閮ㄧ讲/鏈湴寮€鍙戞寚鍗?| 2 |
-| `Docs/superpowers/` | 寮€鍙戣鍒掍笌楠岃瘉 | 2 |
-| `Docs/archive/student-assignments/` | 瀛︾敓浣滀笟褰掓。 | 6 |
-| `Docs/杞欢钁椾綔鏉?` | 杞憲鐢宠鏉愭枡 | 3 |
-| `Docs/` 鏍圭洰褰?| 椤圭洰鎵ц绱㈠紩銆佹敼杩涜鍒掋€佺粨鏋勬枃妗ｃ€佺瓟杈╅棶棰樺簱 | 5 |
+| `Docs/project-audits/` | 项目审计：架构审计、迁移记录、领域设计、行动计划、训练工作流蓝图 | ~20 |
+| `Docs/phases/` | 分阶段优化计划（Phase 0-5） | 6 |
+| `Docs/tasks/` | 团队任务分配（TASK-001 至 006） | 7 |
+| `Docs/api/` | API 规范文档、一致性指南、快速参考 | 4 |
+| `Docs/guides/` | 部署/本地开发指南 | 2 |
+| `Docs/superpowers/` | 开发计划与验证 | 2 |
+| `Docs/archive/student-assignments/` | 学生作业归档 | 6 |
+| `Docs/软件著作权/` | 软著申请材料 | 3 |
+| `Docs/` 根目录 | 项目执行索引、改进计划、结构文档、答辩问题库 | 5 |
 
 ---
 
-### 5. 姣曚笟璁烘枃锛圱hesis锛?
-> 璺緞锛歚Thesis/` 鈥?姣曚笟璁烘枃鍏ㄥ鏉愭枡
+### 5. 毕业论文（Thesis）
 
-| 瀛愮洰褰?| 璇存槑 | 鏂囦欢鏁?|
+> 路径：`Thesis/` - 毕业论文全套材料
+
+| 子目录 | 说明 | 文件数 |
 |--------|------|--------|
-| `Thesis/chapter/` | 璁烘枃绔犺妭 00-09锛堟憳瑕佲啋鎬荤粨灞曟湜锛?| 10 |
-| `Thesis/figures/` | 鍥捐〃璇存槑鏂囨。 | 5 |
-| `Thesis/experiments/` | 瀹為獙鑴氭湰涓庤瘎浼版暟鎹?| 5 |
-| `Thesis/references/` | 鍙傝€冩枃鐚瑪璁?| 1 |
-| 鏍圭洰褰?| 璁烘枃鑽夌 v1銆丷EADME | 2 |
+| `Thesis/chapter/` | 论文章节 00-09（摘要到总结展望） | 10 |
+| `Thesis/figures/` | 图表说明文档 | 5 |
+| `Thesis/experiments/` | 实验脚本与评估数据 | 5 |
+| `Thesis/references/` | 参考文献笔记 | 1 |
+| 根目录 | 论文草稿 v1、README | 2 |
 
 ---
 
-### 6. PPT 婕旂ず
+### 6. PPT 演示
 
-> 璺緞锛歚PPT/`
+> 路径：`PPT/`
 
-| 鏂囦欢 | 璇存槑 |
+| 文件 | 说明 |
 |------|------|
-| `Flowly_NL2WF_鍙傝禌浣滃搧.pptx` | 鍙傝禌婕旂ず鏂囩 |
-| `check_table.py` | PPT 鏁版嵁妫€鏌ヨ剼鏈?|
-| `qa_check.py` | QA 妫€鏌ヨ剼鏈?|
-| `generate.js` | PPT 鐢熸垚杈呭姪鑴氭湰 |
-| `package.json` + `package-lock.json` | Node 渚濊禆 |
+| `Flowly_NL2WF_参赛作品.pptx` | 参赛演示文稿 |
+| `check_table.py` | PPT 数据检查脚本 |
+| `qa_check.py` | QA 检查脚本 |
+| `generate.js` | PPT 生成辅助脚本 |
+| `package.json` + `package-lock.json` | Node 依赖 |
 
 ---
 
-### 7. 娴嬭瘯浠ｇ爜
+### 7. 测试代码
 
-> 璺緞锛歚tests/`
+> 路径：`tests/`
 
-| 瀛愮洰褰?| 璇存槑 |
+| 子目录 | 说明 |
 |--------|------|
-| `tests/frontend/unit/` | 鍓嶇 API 鍗曞厓娴嬭瘯锛?5 涓?spec锛?|
-| `tests/frontend/` 鏍?| Jest 閰嶇疆 |
-| `tests/nl_workflow/` | NL 宸ヤ綔娴佹祴璇曪紙鍚?conftest锛? 涓祴璇曪級 |
-| `tests/` 鏍圭洰褰?| `debug_auth.py`銆乣debug_conv.py`銆乣debug_conv2.py`銆乣test_agent_comprehensive.py` 鈥?**涓存椂璋冭瘯鏂囦欢** |
+| `tests/frontend/unit/` | 前端 API 单元测试（25 个 spec） |
+| `tests/frontend/` 根目录 | Jest 配置 |
+| `tests/nl_workflow/` | NL 工作流测试（含 conftest，6 个测试） |
+| `tests/` 根目录 | `debug_auth.py`、`debug_conv.py`、`debug_conv2.py`、`test_agent_comprehensive.py` 等临时调试文件 |
 
 ---
 
-### 8. 娴嬭瘯鎶ュ憡涓庢埅鍥?
-> 璺緞锛歚tests/artifacts/acceptance/`銆乣tests/artifacts/manual-screenshots/`銆乣Backend/reports/`銆乣Frontend/tests/artifacts/manual-screenshots/`
+### 8. 测试报告与截图
 
-| 璺緞 | 鍐呭 | 寤鸿 |
+> 路径：`tests/artifacts/acceptance/`、`tests/artifacts/manual-screenshots/`、`Backend/reports/`、`Frontend/tests/artifacts/manual-screenshots/`
+
+| 路径 | 内容 | 建议 |
 |------|------|------|
-| `tests/artifacts/acceptance/` | NL 妯″潡 E2E 娴嬭瘯鎶ュ憡 + 12 寮犳埅鍥?| 褰掓。鍚庡彲娓呯悊 |
-| `tests/artifacts/manual-screenshots/` | 涓昏鍥炬祴璇曟埅鍥撅紙5 寮狅級 | 褰掓。鍚庡彲娓呯悊 |
-| `Backend/reports/` | 5 涓?API 妫€鏌?JSON 鎶ュ憡锛?026-05-10锛?| 涓存椂鏂囦欢锛屽彲鍒犻櫎 |
-| `Frontend/tests/artifacts/manual-screenshots/` | 澶辫触娴嬭瘯鐨勬埅鍥俱€佽棰戙€侀敊璇棩蹇?| 淇鍚庡彲娓呯悊 |
+| `tests/artifacts/acceptance/` | NL 模块 E2E 测试报告 + 12 张截图 | 归档后可清理 |
+| `tests/artifacts/manual-screenshots/` | 主视图测试截图（5 张） | 归档后可清理 |
+| `Backend/reports/` | 5 个 API 检查 JSON 报告（2026-05-10） | 临时文件，可删除 |
+| `Frontend/tests/artifacts/manual-screenshots/` | 失败测试的截图、视频、错误日志 | 修复后可清理 |
 
 ---
 
-### 9. CI/CD 涓?Docker
+### 9. CI/CD 与 Docker
 
-> 璺緞锛歚docker/`銆乣.github/`
+> 路径：`docker/`、`.github/`
 
-| 璺緞 | 璇存槑 |
+| 路径 | 说明 |
 |------|------|
-| `.github/workflows/ci.yml` | GitHub Actions CI 閰嶇疆 |
-| `docker/Dockerfile.backend` | 鍚庣 Dockerfile |
-| `docker/Dockerfile.frontend` | 鍓嶇 Dockerfile |
+| `.github/workflows/ci.yml` | GitHub Actions CI 配置 |
+| `docker/Dockerfile.backend` | 后端 Dockerfile |
+| `docker/Dockerfile.frontend` | 前端 Dockerfile |
 | `docker/Dockerfile.nginx` | Nginx Dockerfile |
-| `docker/.env.example` | Docker 鐜鍙橀噺绀轰緥 |
+| `docker/.env.example` | Docker 环境变量示例 |
 
 ---
 
-### 10. 鑴氭湰涓庡伐鍏?
-> 璺緞锛歚Scripts/`
+### 10. 脚本与工具
 
-| 鏂囦欢 | 璇存槑 |
+> 路径：`Scripts/`
+
+| 文件 | 说明 |
 |------|------|
-| `setup.bat` | 鐜鍒濆鍖栬剼鏈?|
-| `train_model.py` | 鐙珛璁粌鑴氭湰锛堜笌 Backend/scripts/train_model.py 鍐呭涓嶅悓锛?|
+| `setup.bat` | 环境初始化脚本 |
+| `train_model.py` | 独立训练脚本（与 Backend/scripts/train_model.py 内容不同） |
 
 ---
 
-### 11. IDE/缂栬緫鍣ㄩ厤缃?
-| 璺緞 | 璇存槑 |
+### 11. IDE/编辑器配置
+
+| 路径 | 说明 |
 |------|------|
-| `.vscode/settings.json` | VS Code 宸ヤ綔鍖鸿缃?|
-| `.idea/` | JetBrains IDE 閰嶇疆锛? 涓枃浠讹級 |
-| `.cursor/rules/global-rules.md` | Cursor AI 瑙勫垯 |
-| `.claude/settings.local.json` | Claude 鏈湴璁剧疆 |
-| `.cursorrules` | Cursor 瑙勫垯锛堟牴鐩綍锛?|
+| `.vscode/settings.json` | VS Code 工作区设置 |
+| `.idea/` | JetBrains IDE 配置（若干文件） |
+| `.cursor/rules/global-rules.md` | Cursor AI 规则 |
+| `.claude/settings.local.json` | Claude 本地设置 |
+| `.cursorrules` | Cursor 规则（根目录） |
 
 ---
 
-### 12. 鏍圭洰褰曢厤缃枃浠?
-| 鏂囦欢 | 璇存槑 |
+### 12. 根目录配置文件
+
+| 文件 | 说明 |
 |------|------|
-| `README.md` | 椤圭洰璇存槑 |
-| `AGENTS.md` | AI Agent 绾﹀畾 |
-| `.gitignore` | Git 蹇界暐瑙勫垯 |
-| `.env.example` | 鐜鍙橀噺绀轰緥 |
-| `.env` | **瀹為檯鐜鍙橀噺锛堝惈瀵嗛挜锛?* |
-| `.mcp.json` | MCP 閰嶇疆 |
-| `pyrightconfig.json` | Python 绫诲瀷妫€鏌ラ厤缃?|
-| `pytest.ini` | pytest 閰嶇疆 |
-| `requirements.txt` | Python 渚濊禆锛堟牴鐩綍锛?|
-| `requirements.in` | Python 渚濊禆澹版槑锛堟牴鐩綍锛屼笌 requirements.txt 鍔熻兘閲嶅锛?|
-| `skills-lock.json` | 鎶€鑳介攣瀹氭枃浠讹紙鏍圭洰褰曪級 |
+| `README.md` | 项目说明 |
+| `AGENTS.md` | AI Agent 约定 |
+| `.gitignore` | Git 忽略规则 |
+| `.env.example` | 环境变量示例 |
+| `.env` | **实际环境变量（含密钥）** |
+| `.mcp.json` | MCP 配置 |
+| `pyrightconfig.json` | Python 类型检查配置 |
+| `pytest.ini` | pytest 配置 |
+| `requirements.txt` | Python 依赖（根目录） |
+| `requirements.in` | Python 依赖声明（根目录，与 requirements.txt 功能重复） |
+| `skills-lock.json` | 技能锁定文件（根目录） |
 
 ---
 
-### 13. 铏氭嫙鐜涓庝緷璧栫紦瀛?
-| 璺緞 | 璇存槑 |
+### 13. 虚拟环境与依赖缓存
+
+| 路径 | 说明 |
 |------|------|
-| `.venv/` | Python 铏氭嫙鐜锛?00+ 鏂囦欢锛?|
-| `Frontend/node_modules/` | 鍓嶇 Node 渚濊禆 |
-| `Desktop/node_modules/` | Electron 渚濊禆 |
-| `tests/frontend/node_modules/` | 娴嬭瘯 Node 渚濊禆 |
+| `.venv/` | Python 虚拟环境（200+ 文件） |
+| `Frontend/node_modules/` | 前端 Node 依赖 |
+| `Desktop/node_modules/` | Electron 依赖 |
+| `tests/frontend/node_modules/` | 测试 Node 依赖 |
 
-> 杩欎簺鐩綍搴旈€氳繃 `.gitignore` 绠＄悊锛屼笉搴旀彁浜ゅ埌鐗堟湰鎺у埗銆?
----
-
-### 14. Playwright 娴忚鍣ㄥ綍鍒讹紙鍙竻鐞嗭級
-
-> 璺緞锛歚.playwright-mcp/` 鈥?64 涓?YAML 鏂囦欢  
-> 鏃堕棿鑼冨洿锛?026-05-10 07:36 ~ 09:56  
-> 璇存槑锛氭祻瑙堝櫒鑷姩鍖栧綍鍒跺揩鐓э紝涓存椂璋冭瘯浜х墿
+> 这些目录应通过 `.gitignore` 管理，不应提交到版本控制。
 
 ---
 
-### 15. pytest 缂撳瓨
+### 14. Playwright 浏览器录制（可清理）
 
-| 璺緞 |
+> 路径：`.playwright-mcp/` - 64 个 YAML 文件
+> 时间范围：2026-05-10 07:36 ~ 09:56
+> 说明：浏览器自动化录制快照，临时调试产物
+
+---
+
+### 15. pytest 缓存
+
+| 路径 |
 |------|
 | `.pytest_cache/` |
 | `Backend/.pytest_cache/` |
 
-> 鍙€氳繃 `.gitignore` 蹇界暐鎴栫洿鎺ュ垹闄ゃ€?
+> 可通过 `.gitignore` 忽略或直接删除。
+
 ---
 
-## 浜屻€侀噸澶嶆枃浠惰瘑鍒?
-| 搴忓彿 | 鏂囦欢缁?| 绫诲瀷 | 璇存槑 |
+## 二、重复文件识别
+
+| 序号 | 文件组 | 类型 | 说明 |
 |------|--------|------|------|
-| 1 | `Backend/check_user.py` / `check_user2.py` / `check_user3.py` / `check_user4.py` | 涓存椂璋冭瘯 | 4 涓枃浠跺潎璋冭瘯鍚屼竴鐢ㄦ埛 `sucker`锛屽姛鑳介珮搴﹂噸鍙?|
-| 2 | `Backend/test_login.py` / `test_login2.py` / `test_login3.py` / `test_login4.py` | 涓存椂璋冭瘯 | 4 涓枃浠舵祴璇曞悓涓€鐧诲綍娴佺▼锛岄€愭杩唬鐗堟湰 |
-| 3 | `Backend/test_api_login.py` / `test_api_login2.py` / `test_api_login3.py` | 涓存椂璋冭瘯 | 3 涓枃浠舵祴璇?API 鐧诲綍 |
-| 4 | `Backend/test_http_login.py` / `test_http_login2.py` | 涓存椂璋冭瘯 | 2 涓枃浠舵祴璇?HTTP 鐧诲綍 |
-| 5 | `Backend/scan_passwords.py` / `scan_passwords2.py` | 涓存椂璋冭瘯 | 2 涓枃浠舵壂鎻忓瘑鐮佸搱甯岋紝`scan_passwords2.py` 涓虹簿绠€鐗?|
-| 6 | `Scripts/train_model.py` vs `Backend/scripts/train_model.py` | 鍔熻兘閲嶅 | 鍚屼负璁粌鑴氭湰浣嗗唴瀹瑰樊寮傚ぇ锛涘缓璁繚鐣?Backend 鐗堟湰锛堝姛鑳芥洿鍏級锛孲cripts 鐩綍鏀逛负寮曠敤 |
-| 7 | 鏍圭洰褰?`requirements.txt` vs `requirements.in` | 閰嶇疆鍐椾綑 | `requirements.in` 涓烘簮澹版槑锛宍requirements.txt` 涓洪攣瀹氱増鏈紱淇濈暀 `requirements.in`锛宍requirements.txt` 鐢?`pip-compile` 鐢熸垚 |
-| 8 | 鏍圭洰褰?`skills-lock.json` vs `Frontend/skills-lock.json` | 閰嶇疆閲嶅 | 寤鸿浠呬繚鐣欎竴浠?|
+| 1 | `Backend/check_user.py` / `check_user2.py` / `check_user3.py` / `check_user4.py` | 临时调试 | 4 个文件均调试同一用户 `sucker`，功能高度重复 |
+| 2 | `Backend/test_login.py` / `test_login2.py` / `test_login3.py` / `test_login4.py` | 临时调试 | 4 个文件测试同一登录流程，逐步迭代版本 |
+| 3 | `Backend/test_api_login.py` / `test_api_login2.py` / `test_api_login3.py` | 临时调试 | 3 个文件测试 API 登录 |
+| 4 | `Backend/test_http_login.py` / `test_http_login2.py` | 临时调试 | 2 个文件测试 HTTP 登录 |
+| 5 | `Backend/scan_passwords.py` / `scan_passwords2.py` | 临时调试 | 2 个文件扫描密码哈希，`scan_passwords2.py` 为精简版 |
+| 6 | `Scripts/train_model.py` vs `Backend/scripts/train_model.py` | 功能重复 | 同为训练脚本但内容差异大；建议保留 Backend 版本（功能更全），Scripts 目录改为引用 |
+| 7 | 根目录 `requirements.txt` vs `requirements.in` | 配置冗余 | `requirements.in` 为源声明，`requirements.txt` 为锁定版本；保留 `requirements.in`，`requirements.txt` 由 `pip-compile` 生成 |
+| 8 | 根目录 `skills-lock.json` vs `Frontend/skills-lock.json` | 配置重复 | 建议仅保留一份 |
 
 ---
 
-## 涓夈€佸缓璁垹闄ょ殑鏂囦欢
+## 三、建议删除的文件
 
-### 楂樹紭鍏堢骇锛堝畨鍏?鏁忔劅淇℃伅锛?
-| 鏂囦欢 | 鍘熷洜 |
+### 高优先级（安全/敏感信息）
+
+| 文件 | 原因 |
 |------|------|
-| `Backend/password_hash.txt` | 鍖呭惈瀵嗙爜鍝堝笇鐗囨 `pbkdf2_sha256\`锛屽瓨鍦ㄥ畨鍏ㄩ殣鎮?|
-| `.env` | 鍖呭惈瀹為檯瀵嗛挜閰嶇疆锛岀‘璁ゅ凡灏嗗繀闇€鍙橀噺杩佺Щ鍒?`.env.example` 鍚庡彲鍒犻櫎 |
+| `Backend/password_hash.txt` | 包含密码哈希片段 `pbkdf2_sha256\`，存在安全隐患 |
+| `.env` | 包含实际密钥配置，确认已将必需变量迁移到 `.env.example` 后可删除 |
 
-### 涓紭鍏堢骇锛堜复鏃惰皟璇曡剼鏈?鈥?20 涓枃浠讹級
+### 中优先级（临时调试脚本，约 20 个文件）
 
-| 鏂囦欢鍒楄〃 |
+| 文件列表 |
 |----------|
 | `Backend/check_user.py` |
 | `Backend/check_user2.py` |
@@ -283,33 +301,43 @@
 | `tests/debug_conv.py` |
 | `tests/debug_conv2.py` |
 
-> 璇存槑锛氬潎涓轰竴娆℃€ц皟璇曡剼鏈紝鍔熻兘宸茬敱姝ｅ紡娴嬭瘯瑕嗙洊銆傚闇€淇濈暀璁板綍锛屽缓璁Щ鍔ㄥ埌 `Docs/archive/debug-scripts/` 褰掓。鑰岄潪鐩存帴鍒犻櫎銆?
-### 浣庝紭鍏堢骇锛堜复鏃朵骇鐗╀笌缂撳瓨锛?
-| 璺緞 | 鏂囦欢鏁?| 璇存槑 |
+> 说明：均为一次性调试脚本，功能已由正式测试覆盖。如需保留记录，建议移动到 `Docs/archive/debug-scripts/` 归档而非直接删除。
+
+### 低优先级（临时产物与缓存）
+
+| 路径 | 文件数 | 说明 |
 |------|--------|------|
-| `.playwright-mcp/` | 64 | 娴忚鍣ㄥ綍鍒跺揩鐓э紝璋冭瘯娈嬬暀 |
-| `Backend/reports/api_check_*.json` | 5 | 涓存椂 API 妫€鏌ユ姤鍛?|
-| `tests/artifacts/acceptance/*.png` | 12 | E2E 娴嬭瘯鎴浘锛堝彲褰掓。锛?|
-| `tests/artifacts/manual-screenshots/*.png` | 5 | 娴嬭瘯鎴浘锛堝彲褰掓。锛?|
-| `Frontend/tests/artifacts/manual-screenshots/` | 3 | 澶辫触娴嬭瘯瑙嗛/鎴浘/鏃ュ織 |
-| `Frontend/vite-out.log` | 1 | Vite 鏋勫缓杈撳嚭鏃ュ織 |
-| `Frontend/vite-err.log` | 1 | Vite 閿欒鏃ュ織 |
-| `.pytest_cache/` (2 澶? | 鈥?| pytest 缂撳瓨鐩綍 |
-| `tests/frontend/junit.xml` | 1 | 娴嬭瘯缁撴灉 XML |
+| `.playwright-mcp/` | 64 | 浏览器录制快照，调试残留 |
+| `Backend/reports/api_check_*.json` | 5 | 临时 API 检查报告 |
+| `tests/artifacts/acceptance/*.png` | 12 | E2E 测试截图（可归档） |
+| `tests/artifacts/manual-screenshots/*.png` | 5 | 测试截图（可归档） |
+| `Frontend/tests/artifacts/manual-screenshots/` | 3 | 失败测试视频/截图/日志 |
+| `Frontend/vite-out.log` | 1 | Vite 构建输出日志 |
+| `Frontend/vite-err.log` | 1 | Vite 错误日志 |
+| `.pytest_cache/`（2 处） | - | pytest 缓存目录 |
+| `tests/frontend/junit.xml` | 1 | 测试结果 XML |
 
 ---
 
-## 鍥涖€佹暣鐞嗗缓璁紭鍏堢骇
+## 四、整理建议优先级
 
-### 绔嬪嵆澶勭悊
-1. 鍒犻櫎 `Backend/password_hash.txt`
-2. 灏?`.env` 浠庣増鏈帶鍒朵腑绉婚櫎锛堢‘璁?.gitignore 宸插寘鍚級
-3. 娓呯悊 20 涓?Backend 鏍圭洰褰曚复鏃惰皟璇曡剼鏈?
-### 鏈澶勭悊
-4. 娓呯悊 `.playwright-mcp/` 鐩綍锛?4 涓?YAML锛?5. 娓呯悊 `Backend/reports/` 涓?5 涓复鏃?JSON
-6. 鍒犻櫎 `Frontend/vite-out.log` 鍜?`Frontend/vite-err.log`
-7. 娓呯悊 `.pytest_cache/` 鐩綍
+### 立即处理
 
-### 鍙€変紭鍖?8. 鍚堝苟 `tests/artifacts/acceptance/` 鍜?`tests/artifacts/manual-screenshots/` 鐩綍
-9. 缁熶竴 `requirements` 绠＄悊锛堜繚鐣?`.in`锛屽垹闄?`.txt` 鐢辩紪璇戠敓鎴愶級
-10. 鍐冲畾 `skills-lock.json` 淇濈暀涓€浠?11. 鍚堝苟 `Scripts/train_model.py` 鍒?Backend 鐗堟湰鎴栨槑纭尯鍒嗙敤閫?12. 鏁寸悊 `Docs/archive/` 涓殑瀛︾敓浣滀笟褰掓。
+1. 删除 `Backend/password_hash.txt`
+2. 将 `.env` 从版本控制中移除（确认 `.gitignore` 已包含）
+3. 清理 20 个 Backend 根目录临时调试脚本
+
+### 本次处理
+
+4. 清理 `.playwright-mcp/` 目录（64 个 YAML）
+5. 清理 `Backend/reports/` 中 5 个临时 JSON
+6. 删除 `Frontend/vite-out.log` 和 `Frontend/vite-err.log`
+7. 清理 `.pytest_cache/` 目录
+
+### 可选优化
+
+8. 合并 `tests/artifacts/acceptance/` 和 `tests/artifacts/manual-screenshots/` 目录
+9. 统一 `requirements` 管理（保留 `.in`，删除由编译生成的 `.txt`）
+10. 决定 `skills-lock.json` 保留一份
+11. 合并 `Scripts/train_model.py` 到 Backend 版本，或明确区分用途
+12. 整理 `Docs/archive/` 中的学生作业归档

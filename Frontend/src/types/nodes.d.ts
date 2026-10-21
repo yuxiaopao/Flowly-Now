@@ -584,7 +584,7 @@ export interface FileReaderConfig extends BaseNodeConfig {
 
 export interface FileWriterConfig extends BaseNodeConfig {
   path: string
-  format: 'csv' | 'json' | 'txt' | 'parquet' | 'excel'
+  format: 'csv' | 'json' | 'txt' | 'text' | 'docx' | 'md' | 'markdown' | 'parquet' | 'excel'
   overwrite: boolean
 }
 

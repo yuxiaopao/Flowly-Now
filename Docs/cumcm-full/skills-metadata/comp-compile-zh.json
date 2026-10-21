@@ -1,0 +1,30 @@
+{
+  "skill_name": "comp-compile-zh",
+  "category": "08_competition_modeling",
+  "tier": null,
+  "encrypted": true,
+  "scan": {
+    "name": "comp-compile-zh",
+    "path": "resources/app/skills/comp-compile-zh",
+    "has_skill_md_enc": true,
+    "has_skill_md_plain": false,
+    "encrypted": true,
+    "files": {
+      "enc": 1,
+      "plain": 0,
+      "total": 1
+    },
+    "subdirs": [],
+    "extensions": {
+      ".enc": 1
+    },
+    "readable_assets": []
+  },
+  "artifacts": [],
+  "runtime_prompts": [],
+  "used_in_templates": [
+    "comp_cumcm"
+  ],
+  "flowly_status": "pending",
+  "replication_strategy": "decrypt_and_port"
+}

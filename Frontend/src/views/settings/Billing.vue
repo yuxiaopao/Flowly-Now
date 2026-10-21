@@ -472,11 +472,6 @@ onMounted(async () => {
 </script>
 
 <style lang="scss" scoped>
-.billing-page {
-  padding: 24px;
-  max-width: 1200px;
-  margin: 0 auto;
-}
 
 .current-plan-section {
   margin-bottom: 32px;

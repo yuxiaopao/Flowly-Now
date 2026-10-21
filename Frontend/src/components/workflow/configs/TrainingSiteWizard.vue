@@ -1,6 +1,11 @@
 <template>
   <div class="training-site-wizard">
-    <el-steps :active="step" finish-status="success" align-center class="wizard-steps">
+    <el-steps
+      :active="step"
+      finish-status="success"
+      align-center
+      class="wizard-steps"
+    >
       <el-step title="场景" />
       <el-step title="品牌" />
       <el-step title="合规" />
@@ -9,7 +14,10 @@
 
     <div class="wizard-body">
       <!-- Step 1 -->
-      <div v-show="step === 0" class="step-panel">
+      <div
+        v-show="step === 0"
+        class="step-panel"
+      >
         <el-alert
           v-if="!hasProfile"
           type="info"
@@ -18,132 +26,314 @@
           title="未检测到上游 Profiler，可手动填写场景信息"
           class="mb-3"
         />
-        <el-form label-position="top" size="small">
+        <el-form
+          label-position="top"
+          size="small"
+        >
           <el-form-item label="领域">
-            <el-input v-model="local.domain" @change="emitWizard" />
+            <el-input
+              v-model="local.domain"
+              @change="emitWizard"
+            />
           </el-form-item>
-          <el-form-item label="应用场景" required>
-            <el-input v-model="local.scenario" type="textarea" :rows="2" @change="emitWizard" />
+          <el-form-item
+            label="应用场景"
+            required
+          >
+            <el-input
+              v-model="local.scenario"
+              type="textarea"
+              :rows="2"
+              @change="emitWizard"
+            />
           </el-form-item>
           <el-form-item label="UI 风格">
-            <el-select v-model="local.uiTone" @change="emitWizard">
-              <el-option label="工业警示" value="industrial_warning" />
-              <el-option label="告警红" value="alert_red" />
-              <el-option label="质检蓝" value="quality_inspect" />
-              <el-option label="友好" value="friendly" />
-              <el-option label="检索图库" value="search_gallery" />
-              <el-option label="中性" value="neutral" />
+            <el-select
+              v-model="local.uiTone"
+              @change="emitWizard"
+            >
+              <el-option
+                label="工业警示"
+                value="industrial_warning"
+              />
+              <el-option
+                label="告警红"
+                value="alert_red"
+              />
+              <el-option
+                label="质检蓝"
+                value="quality_inspect"
+              />
+              <el-option
+                label="友好"
+                value="friendly"
+              />
+              <el-option
+                label="检索图库"
+                value="search_gallery"
+              />
+              <el-option
+                label="中性"
+                value="neutral"
+              />
             </el-select>
           </el-form-item>
-          <div v-if="copyHints.length" class="hint-list">
-            <p class="hint-title">文案建议</p>
+          <div
+            v-if="copyHints.length"
+            class="hint-list"
+          >
+            <p class="hint-title">
+              文案建议
+            </p>
             <ul>
-              <li v-for="(h, i) in copyHints" :key="i">{{ h }}</li>
+              <li
+                v-for="(h, i) in copyHints"
+                :key="i"
+              >
+                {{ h }}
+              </li>
             </ul>
           </div>
-          <div v-if="riskNotes.length" class="risk-list">
-            <p class="hint-title">风险提示</p>
+          <div
+            v-if="riskNotes.length"
+            class="risk-list"
+          >
+            <p class="hint-title">
+              风险提示
+            </p>
             <ul>
-              <li v-for="(r, i) in riskNotes" :key="i">{{ r }}</li>
+              <li
+                v-for="(r, i) in riskNotes"
+                :key="i"
+              >
+                {{ r }}
+              </li>
             </ul>
           </div>
         </el-form>
       </div>
 
       <!-- Step 2 -->
-      <div v-show="step === 1" class="step-panel">
-        <el-form label-position="top" size="small">
-          <el-form-item label="站点名称" required>
-            <el-input v-model="local.siteName" placeholder="如：安全帽识别系统" @change="emitWizard" />
+      <div
+        v-show="step === 1"
+        class="step-panel"
+      >
+        <el-form
+          label-position="top"
+          size="small"
+        >
+          <el-form-item
+            label="站点名称"
+            required
+          >
+            <el-input
+              v-model="local.siteName"
+              placeholder="如：安全帽识别系统"
+              @change="emitWizard"
+            />
           </el-form-item>
           <el-form-item label="Logo URL">
-            <el-input v-model="local.logoUrl" placeholder="https://..." @change="emitWizard" />
+            <el-input
+              v-model="local.logoUrl"
+              placeholder="https://..."
+              @change="emitWizard"
+            />
           </el-form-item>
           <el-form-item label="主色">
-            <el-color-picker v-model="local.primaryColor" @change="emitWizard" />
+            <el-color-picker
+              v-model="local.primaryColor"
+              @change="emitWizard"
+            />
           </el-form-item>
           <el-form-item label="联系邮箱">
-            <el-input v-model="local.contactEmail" placeholder="support@example.com" @change="emitWizard" />
+            <el-input
+              v-model="local.contactEmail"
+              placeholder="support@example.com"
+              @change="emitWizard"
+            />
           </el-form-item>
         </el-form>
       </div>
 
       <!-- Step 3 -->
-      <div v-show="step === 2" class="step-panel">
-        <el-form label-position="top" size="small">
-          <el-form-item label="使用场景描述" required>
-            <el-input v-model="local.usageDescription" type="textarea" :rows="3" @change="emitWizard" />
+      <div
+        v-show="step === 2"
+        class="step-panel"
+      >
+        <el-form
+          label-position="top"
+          size="small"
+        >
+          <el-form-item
+            label="使用场景描述"
+            required
+          >
+            <el-input
+              v-model="local.usageDescription"
+              type="textarea"
+              :rows="3"
+              @change="emitWizard"
+            />
           </el-form-item>
           <el-form-item label="免责声明">
-            <el-input v-model="local.disclaimer" type="textarea" :rows="2" placeholder="本系统仅供参考，不构成安全合规承诺…" @change="emitWizard" />
+            <el-input
+              v-model="local.disclaimer"
+              type="textarea"
+              :rows="2"
+              placeholder="本系统仅供参考，不构成安全合规承诺…"
+              @change="emitWizard"
+            />
           </el-form-item>
           <el-form-item label="隐私说明">
-            <el-input v-model="local.privacy" type="textarea" :rows="2" @change="emitWizard" />
+            <el-input
+              v-model="local.privacy"
+              type="textarea"
+              :rows="2"
+              @change="emitWizard"
+            />
           </el-form-item>
         </el-form>
       </div>
 
       <!-- Step 4 -->
-      <div v-show="step === 3" class="step-panel">
-        <el-form label-position="top" size="small">
+      <div
+        v-show="step === 3"
+        class="step-panel"
+      >
+        <el-form
+          label-position="top"
+          size="small"
+        >
           <el-form-item label="数据库引擎">
-            <el-select v-model="local.dbEngine" @change="emitWizard">
-              <el-option label="SQLite（默认）" value="sqlite" />
-              <el-option label="MySQL（高级）" value="mysql" />
+            <el-select
+              v-model="local.dbEngine"
+              @change="emitWizard"
+            >
+              <el-option
+                label="SQLite（默认）"
+                value="sqlite"
+              />
+              <el-option
+                label="MySQL（高级）"
+                value="mysql"
+              />
             </el-select>
           </el-form-item>
           <template v-if="local.dbEngine === 'mysql'">
             <el-form-item label="MySQL Host">
-              <el-input v-model="local.mysqlHost" placeholder="127.0.0.1" @change="emitWizard" />
+              <el-input
+                v-model="local.mysqlHost"
+                placeholder="127.0.0.1"
+                @change="emitWizard"
+              />
             </el-form-item>
             <el-form-item label="MySQL Port">
-              <el-input-number v-model="local.mysqlPort" :min="1" :max="65535" @change="emitWizard" />
+              <el-input-number
+                v-model="local.mysqlPort"
+                :min="1"
+                :max="65535"
+                @change="emitWizard"
+              />
             </el-form-item>
             <el-form-item label="MySQL User">
-              <el-input v-model="local.mysqlUser" @change="emitWizard" />
+              <el-input
+                v-model="local.mysqlUser"
+                @change="emitWizard"
+              />
             </el-form-item>
             <el-form-item label="MySQL Database">
-              <el-input v-model="local.mysqlDatabase" @change="emitWizard" />
+              <el-input
+                v-model="local.mysqlDatabase"
+                @change="emitWizard"
+              />
             </el-form-item>
-            <p class="field-hint">MySQL 密码通过 Desktop 运行时环境变量 MYSQL_PASSWORD 注入，不会写入工作流配置。</p>
+            <p class="field-hint">
+              MySQL 密码通过 Desktop 运行时环境变量 MYSQL_PASSWORD 注入，不会写入工作流配置。
+            </p>
           </template>
           <el-form-item label="输出目录">
-            <el-input v-model="local.outputDir" placeholder="留空则使用 {训练目录}/generated_site" @change="emitWizard">
-              <template v-if="isDesktop" #append>
+            <el-input
+              v-model="local.outputDir"
+              placeholder="留空则使用 {训练目录}/generated_site"
+              @change="emitWizard"
+            >
+              <template
+                v-if="isDesktop"
+                #append
+              >
                 <el-button @click="pickOutputDir">
                   <FolderOpen class="btn-icon-inline" />
                   选择本地文件夹
                 </el-button>
               </template>
             </el-input>
-            <p v-if="isDesktop" class="field-hint">
+            <p
+              v-if="isDesktop"
+              class="field-hint"
+            >
               网站代码将直接生成到你选择的本地文件夹，不会写入应用安装目录
             </p>
-            <p v-else class="field-hint hint-warning">
+            <p
+              v-else
+              class="field-hint hint-warning"
+            >
               浏览器模式无法调用系统文件夹选择器，请在 Flowly Desktop 中运行以生成到本地目录
             </p>
           </el-form-item>
           <el-form-item label="后端端口">
-            <el-input-number v-model="local.port" :min="1024" :max="65535" @change="emitWizard" />
+            <el-input-number
+              v-model="local.port"
+              :min="1024"
+              :max="65535"
+              @change="emitWizard"
+            />
           </el-form-item>
           <el-form-item label="QA Profile">
-            <el-select v-model="local.qaProfile" @change="emitWizard">
-              <el-option label="默认（严格）" value="default" />
-              <el-option label="研究" value="research" />
+            <el-select
+              v-model="local.qaProfile"
+              @change="emitWizard"
+            >
+              <el-option
+                label="默认（严格）"
+                value="default"
+              />
+              <el-option
+                label="研究"
+                value="research"
+              />
             </el-select>
           </el-form-item>
           <el-form-item label="模型路径">
-            <el-input v-model="local.modelPath" @change="emitWizard">
+            <el-input
+              v-model="local.modelPath"
+              @change="emitWizard"
+            >
               <template #append>
-                <el-button @click="$emit('pick-training')">从训练节点</el-button>
+                <el-button @click="$emit('pick-training')">
+                  从训练节点
+                </el-button>
               </template>
             </el-input>
           </el-form-item>
           <el-form-item label="类别标签">
-            <el-input v-model="local.labels" type="textarea" :rows="2" @change="emitWizard" />
+            <el-input
+              v-model="local.labels"
+              type="textarea"
+              :rows="2"
+              @change="emitWizard"
+            />
           </el-form-item>
-          <div v-if="isClipRetrieval" class="clip-wizard-block">
-            <el-alert type="info" :closable="false" show-icon title="CLIP 检索站专用配置" class="mb-3" />
+          <div
+            v-if="isClipRetrieval"
+            class="clip-wizard-block"
+          >
+            <el-alert
+              type="info"
+              :closable="false"
+              show-icon
+              title="CLIP 检索站专用配置"
+              class="mb-3"
+            />
             <el-form-item label="检索索引目录">
               <el-input
                 v-model="local.indexDir"
@@ -159,17 +349,36 @@
                 placeholder="一只橘猫, 工业现场, 商品展示"
                 @change="onClipQueriesChange"
               />
-              <p class="field-hint">将显示在检索站 Tab1 空态与占位符中</p>
+              <p class="field-hint">
+                将显示在检索站 Tab1 空态与占位符中
+              </p>
             </el-form-item>
             <el-form-item label="默认 Top-K">
-              <el-input-number v-model="local.topK" :min="1" :max="48" @change="emitWizard" />
+              <el-input-number
+                v-model="local.topK"
+                :min="1"
+                :max="48"
+                @change="emitWizard"
+              />
             </el-form-item>
           </div>
           <el-form-item label="网站类型">
-            <el-select v-model="local.websiteType" @change="emitWizard">
-              <el-option label="目标检测" value="detection" />
-              <el-option label="图像分类" value="classification" />
-              <el-option label="CLIP 图文检索" value="clip_retrieval" />
+            <el-select
+              v-model="local.websiteType"
+              @change="emitWizard"
+            >
+              <el-option
+                label="目标检测"
+                value="detection"
+              />
+              <el-option
+                label="图像分类"
+                value="classification"
+              />
+              <el-option
+                label="CLIP 图文检索"
+                value="clip_retrieval"
+              />
             </el-select>
           </el-form-item>
         </el-form>
@@ -177,11 +386,35 @@
     </div>
 
     <div class="wizard-footer">
-      <el-button :disabled="step === 0" @click="prev">上一步</el-button>
-      <el-button v-if="step < 3" type="primary" :disabled="!canNext" @click="next">下一步</el-button>
-      <el-button v-else type="primary" :disabled="!canFinish" @click="finish">完成向导</el-button>
+      <el-button
+        :disabled="step === 0"
+        @click="prev"
+      >
+        上一步
+      </el-button>
+      <el-button
+        v-if="step < 3"
+        type="primary"
+        :disabled="!canNext"
+        @click="next"
+      >
+        下一步
+      </el-button>
+      <el-button
+        v-else
+        type="primary"
+        :disabled="!canFinish"
+        @click="finish"
+      >
+        完成向导
+      </el-button>
     </div>
-    <p v-if="validationError" class="validation-error">{{ validationError }}</p>
+    <p
+      v-if="validationError"
+      class="validation-error"
+    >
+      {{ validationError }}
+    </p>
   </div>
 </template>
 
@@ -237,7 +470,9 @@ const local = reactive({
   indexDir: '',
   exampleQueries: '',
   topK: 12,
-  dbEngine: 'sqlite',
+  dbEngine: 'mysql',
+  requiredFeatures: ['imageRecognition', 'videoRecognition', 'factRecognition', 'historyRecords'],
+  agentMemoryEnabled: true,
   mysqlHost: '127.0.0.1',
   mysqlPort: 3306,
   mysqlUser: 'root',
@@ -272,7 +507,9 @@ function syncFromProps() {
   local.indexDir = w.indexDir ?? w.index_dir ?? local.indexDir
   local.exampleQueries = w.exampleQueries ?? w.example_queries ?? local.exampleQueries
   local.topK = w.topK ?? w.top_k ?? local.topK
-  local.dbEngine = w.dbEngine ?? w.db_engine ?? local.dbEngine
+  local.dbEngine = 'mysql'
+  local.requiredFeatures = w.requiredFeatures ?? w.required_features ?? local.requiredFeatures
+  local.agentMemoryEnabled = w.agentMemoryEnabled ?? w.agent_memory_enabled ?? local.agentMemoryEnabled
   local.mysqlHost = w.mysqlHost ?? w.mysql_host ?? local.mysqlHost
   local.mysqlPort = w.mysqlPort ?? w.mysql_port ?? local.mysqlPort
   local.mysqlUser = w.mysqlUser ?? w.mysql_user ?? local.mysqlUser
@@ -309,7 +546,9 @@ function buildWizard(extra = {}) {
     indexDir: local.indexDir,
     exampleQueries: local.exampleQueries,
     topK: local.topK,
-    dbEngine: local.dbEngine,
+    dbEngine: 'mysql',
+    requiredFeatures: local.requiredFeatures,
+    agentMemoryEnabled: local.agentMemoryEnabled,
     mysqlHost: local.mysqlHost,
     mysqlPort: local.mysqlPort,
     mysqlUser: local.mysqlUser,

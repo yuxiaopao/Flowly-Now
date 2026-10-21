@@ -17,12 +17,24 @@
             value=""
           />
           <el-option
+            label="排队中"
+            value="queued"
+          />
+          <el-option
             label="等待中"
             value="pending"
           />
           <el-option
             label="运行中"
             value="running"
+          />
+          <el-option
+            label="已暂停"
+            value="paused"
+          />
+          <el-option
+            label="已中断"
+            value="interrupted"
           />
           <el-option
             label="已完成"
@@ -131,6 +143,18 @@
             <template #dropdown>
               <el-dropdown-menu>
                 <el-dropdown-item
+                  command="resume"
+                  :disabled="!['paused', 'interrupted'].includes(execution.status)"
+                >
+                  从断点继续
+                </el-dropdown-item>
+                <el-dropdown-item
+                  command="pause"
+                  :disabled="execution.status !== 'running'"
+                >
+                  暂停
+                </el-dropdown-item>
+                <el-dropdown-item
                   command="retry"
                   :disabled="execution.status === 'running'"
                 >
@@ -138,7 +162,7 @@
                 </el-dropdown-item>
                 <el-dropdown-item
                   command="cancel"
-                  :disabled="!['pending', 'running'].includes(execution.status)"
+                  :disabled="!['pending', 'queued', 'running', 'paused', 'interrupted'].includes(execution.status)"
                 >
                   取消
                 </el-dropdown-item>
@@ -254,6 +278,12 @@ async function handleCommand(command, execution) {
     case 'cancel':
       await handleCancel(execution)
       break
+    case 'pause':
+      await handlePause(execution)
+      break
+    case 'resume':
+      await handleResume(execution)
+      break
     case 'delete':
       await handleDelete(execution)
       break
@@ -262,11 +292,36 @@ async function handleCommand(command, execution) {
 
 async function handleRetry(execution) {
   try {
-    await workflowStore.execute(execution.workflow_id, { retry_from: execution.id })
-    appStore.success('重试已启动')
+    if (execution.status === 'interrupted') {
+      await workflowStore.resumeExecution(execution.id)
+      appStore.success('已从断点恢复')
+    } else {
+      await workflowStore.execute(execution.workflow_id, { retry_from: execution.id })
+      appStore.success('重试已启动')
+    }
     handleRefresh()
   } catch (err) {
     appStore.error('重试失败: ' + (err.message || '未知错误'))
+  }
+}
+
+async function handlePause(execution) {
+  try {
+    await workflowStore.pauseExecution(execution.id)
+    appStore.success('已请求暂停')
+    handleRefresh()
+  } catch (err) {
+    appStore.error('暂停失败: ' + (err.message || '未知错误'))
+  }
+}
+
+async function handleResume(execution) {
+  try {
+    await workflowStore.resumeExecution(execution.id)
+    appStore.success('已从断点恢复')
+    handleRefresh()
+  } catch (err) {
+    appStore.error('恢复失败: ' + (err.message || '未知错误'))
   }
 }
 
@@ -293,10 +348,14 @@ async function handleDelete(execution) {
 function getStatusType(status) {
   const typeMap = {
     pending: 'info',
+    queued: 'info',
     running: 'warning',
     completed: 'success',
     failed: 'danger',
-    cancelled: 'info'
+    cancelled: 'info',
+    paused: 'warning',
+    interrupted: 'warning',
+    timeout: 'danger'
   }
   return typeMap[status] || 'info'
 }
@@ -304,10 +363,14 @@ function getStatusType(status) {
 function getStatusLabel(status) {
   const labelMap = {
     pending: '等待中',
+    queued: '排队中',
     running: '运行中',
     completed: '已完成',
     failed: '失败',
-    cancelled: '已取消'
+    cancelled: '已取消',
+    paused: '已暂停',
+    interrupted: '已中断',
+    timeout: '超时'
   }
   return labelMap[status] || status
 }

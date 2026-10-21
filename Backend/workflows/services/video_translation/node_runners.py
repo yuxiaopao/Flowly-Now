@@ -63,6 +63,37 @@ def _ctx(context: Dict[str, Any], *keys: str, default: Any = None) -> Any:
     return default
 
 
+def _segments_for_language(context: Dict[str, Any], target_lang: str) -> Any:
+    """Prefer segments from the upstream translate node matching target_language."""
+    lang = str(target_lang or '').strip().lower()
+    node_outputs = context.get('node_outputs') or (context.get('_execution') or {}).get('node_outputs') or {}
+    if isinstance(node_outputs, dict) and lang:
+        for output in reversed(list(node_outputs.values())):
+            if not isinstance(output, dict):
+                continue
+            out_lang = str(output.get('target_language') or '').strip().lower()
+            if out_lang == lang and output.get('segments'):
+                return output.get('segments')
+    return _ctx(context, 'segments')
+
+
+def _ctx_for_language(context: Dict[str, Any], target_lang: str, *keys: str, default: Any = None) -> Any:
+    """Read a key from the node_output that matches target_language, then fall back to _ctx."""
+    lang = str(target_lang or '').strip().lower()
+    node_outputs = context.get('node_outputs') or (context.get('_execution') or {}).get('node_outputs') or {}
+    if isinstance(node_outputs, dict) and lang:
+        for output in reversed(list(node_outputs.values())):
+            if not isinstance(output, dict):
+                continue
+            out_lang = str(output.get('target_language') or '').strip().lower()
+            if out_lang != lang:
+                continue
+            for key in keys:
+                if key in output and output[key] not in (None, ''):
+                    return output[key]
+    return _ctx(context, *keys, default=default)
+
+
 def _render(value: Any, render_template: Optional[Callable[[str, Dict[str, Any]], str]], context: Dict[str, Any]) -> str:
     text = str(value or '').strip()
     if not text:
@@ -169,7 +200,9 @@ def run_segment_dubbing(
     if not is_ffmpeg_available():
         raise VideoPostprocessError('服务器未安装 FFmpeg')
 
-    segments = _cfg(node_config, 'segments') or _ctx(context, 'segments')
+    segments = _cfg(node_config, 'segments') or _segments_for_language(context, str(
+        _cfg(node_config, 'target_language', 'targetLanguage') or _ctx(context, 'target_language') or 'en'
+    ))
     if not segments:
         raise MediaServiceError('缺少上游 segments，请先连接字幕翻译或 ASR 节点')
 
@@ -183,6 +216,7 @@ def run_segment_dubbing(
             voice = OPENAI_TTS_VOICES.get(str(target_lang), 'alloy')
         elif provider == 'dashscope':
             voice = DASHSCOPE_TTS_VOICES.get(str(target_lang), 'longanyang')
+        # pyttsx3 / gtts: leave empty — system default / lang code handled in TTS call
     total_duration = float(
         _cfg(node_config, 'duration', 'total_duration')
         or _ctx(context, 'duration', 'total_duration')
@@ -236,15 +270,23 @@ def run_lip_sync(
     if not is_ffmpeg_available():
         raise VideoPostprocessError('服务器未安装 FFmpeg')
 
+    target_lang = str(
+        _cfg(node_config, 'target_language', 'targetLanguage') or ''
+    ).strip().lower()
+
     video_ref = _cfg(
         node_config, 'video_input', 'videoInput', 'video_url', 'source_video_url',
     ) or _ctx(context, 'source_video_url', 'video_url')
     video_ref = _render(video_ref, render_template, context) or _ctx(context, 'source_video_url', 'video_url')
 
-    audio_ref = _cfg(
-        node_config, 'audio_input', 'audioInput', 'dubbed_audio_url', 'audio_url',
-    ) or _ctx(context, 'dubbed_audio_url', 'audio_url')
-    audio_ref = _render(audio_ref, render_template, context) or _ctx(context, 'dubbed_audio_url')
+    audio_cfg = _cfg(node_config, 'audio_input', 'audioInput', 'dubbed_audio_url', 'audio_url') or ''
+    # Template placeholders must resolve from the matching language branch, not flat context
+    if (not audio_cfg) or ('{' in str(audio_cfg) and '}' in str(audio_cfg)):
+        audio_ref = _ctx_for_language(context, target_lang, 'dubbed_audio_url', 'audio_url')
+    else:
+        audio_ref = _render(audio_cfg, render_template, context) or _ctx_for_language(
+            context, target_lang, 'dubbed_audio_url', 'audio_url'
+        )
 
     if not video_ref:
         raise MediaServiceError('缺少源视频 URL')
@@ -265,7 +307,6 @@ def run_lip_sync(
     use_videoretalk = lip_sync_enabled and lip_provider == 'dashscope'
     ref_face = _cfg(node_config, 'face_ref_image_url', 'faceRefImageUrl') or ''
     video_extension = bool(_cfg(node_config, 'video_extension', 'videoExtension', default=False))
-    target_lang = _cfg(node_config, 'target_language', 'targetLanguage') or _ctx(context, 'target_language') or ''
 
     lip_sync_applied = False
     working_video = local_video
@@ -324,15 +365,29 @@ def run_subtitle_burn(
     if not is_ffmpeg_available():
         raise VideoPostprocessError('服务器未安装 FFmpeg')
 
-    video_ref = _cfg(node_config, 'video_input', 'videoInput', 'video_url') or _ctx(context, 'video_url')
-    video_ref = _render(video_ref, render_template, context) or _ctx(context, 'video_url')
+    target_lang = str(
+        _cfg(node_config, 'target_language', 'targetLanguage') or ''
+    ).strip().lower()
+    lang_key = f'video_url_{target_lang}' if target_lang else 'video_url'
+
+    video_cfg = _cfg(node_config, 'video_input', 'videoInput', 'video_url') or ''
+    if (not video_cfg) or ('{' in str(video_cfg) and '}' in str(video_cfg)):
+        video_ref = _ctx_for_language(context, target_lang, lang_key, 'video_url') or _ctx(
+            context, lang_key, 'video_url'
+        )
+    else:
+        video_ref = _render(video_cfg, render_template, context) or _ctx_for_language(
+            context, target_lang, lang_key, 'video_url'
+        )
     if not video_ref:
         raise MediaServiceError('缺少待烧录视频 URL')
 
-    segments = _cfg(node_config, 'segments') or _ctx(context, 'segments')
-    subtitles = _cfg(node_config, 'subtitles') or _ctx(context, 'subtitles', 'subtitles_srt')
+    segments = _cfg(node_config, 'segments') or _segments_for_language(context, target_lang or 'en')
+    subtitles = (
+        _cfg(node_config, 'subtitles')
+        or _ctx_for_language(context, target_lang, 'subtitles', 'subtitles_srt')
+    )
     subtitle_format = (_cfg(node_config, 'subtitle_format', 'subtitleFormat') or 'srt').lower()
-    target_lang = _cfg(node_config, 'target_language', 'targetLanguage') or _ctx(context, 'target_language') or ''
 
     if not subtitles and segments:
         subtitles = build_subtitle_file(segments, 'vtt' if subtitle_format == 'vtt' else 'srt')

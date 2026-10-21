@@ -1,0 +1,201 @@
+{
+  "name": "蝶羽共生纹｜60秒三维数字刺绣·丝线生成·服装映射",
+  "preset": "butterfly_symbiosis_60",
+  "duration": 60,
+  "fps": 24,
+  "width": 1280,
+  "height": 720,
+  "preview_width": 1920,
+  "preview_height": 1080,
+  "engine": "BLENDER_EEVEE_NEXT",
+  "samples": 24,
+  "preview_samples": 64,
+  "crf": 18,
+  "process_timeout": 21600,
+  "poll_seconds": 2,
+  "crops": {
+    "motif": [
+      1450,
+      399,
+      1672,
+      587
+    ],
+    "bone": [
+      62,
+      389,
+      337,
+      638
+    ],
+    "feather": [
+      62,
+      719,
+      329,
+      940
+    ],
+    "garment": [
+      1722,
+      400,
+      1868,
+      589
+    ]
+  },
+  "trace": {
+    "threshold": 165,
+    "minimum_path_pixels": 2.2,
+    "smooth_tolerance": 0.35,
+    "world_width": 2.9,
+    "fill_spacing_pixels": 2.4,
+    "border_radius": 0.006,
+    "fill_radius": 0.0038,
+    "thread_height": 0.009,
+    "stitch_lift": 0.006
+  },
+  "diamonds": [
+    [
+      -0.37,
+      0.36
+    ],
+    [
+      0.37,
+      0.36
+    ],
+    [
+      -0.34,
+      -0.35
+    ],
+    [
+      0.34,
+      -0.35
+    ]
+  ],
+  "colors": {
+    "indigo": [
+      0.008,
+      0.018,
+      0.038,
+      1
+    ],
+    "slate": [
+      0.025,
+      0.06,
+      0.095,
+      1
+    ],
+    "pearl": [
+      0.36,
+      0.4,
+      0.39,
+      1
+    ],
+    "linen": [
+      0.67,
+      0.59,
+      0.44,
+      1
+    ],
+    "garment": [
+      0.85,
+      0.83,
+      0.76,
+      1
+    ]
+  },
+  "board": {
+    "z": 1.55,
+    "width": 3.6,
+    "height": 3.3
+  },
+  "cloth": {
+    "weave_scale": 190,
+    "bump_strength": 0.12,
+    "bump_distance": 0.0015
+  },
+  "garment": {
+    "front_depth": -0.27,
+    "base_width": 0.7,
+    "bottom": 0.48,
+    "top": 2.42,
+    "grid_columns": 40,
+    "grid_rows": 56,
+    "embroidery_scale": 0.23,
+    "embroidery_x": 0.13,
+    "embroidery_z": 1.85,
+    "sleeve_radius": 0.22,
+    "sleeve_length": 1.02,
+    "embroidery_rotation": -35
+  },
+  "animation": {
+    "flat_end": 6,
+    "bone_start": 3,
+    "bone_end": 16,
+    "outline_delete_start": 13,
+    "outline_delete_end": 18,
+    "feather_start": 16,
+    "feather_end": 33,
+    "fusion_end": 36,
+    "orbit_end": 42,
+    "mapping_start": 42,
+    "mapping_end": 49,
+    "cuff_start": 49,
+    "cuff_end": 55
+  },
+  "preview_times": [
+    5,
+    21,
+    35,
+    56
+  ],
+  "disclosure": "三维数字概念演示 · 非实物成品 · 非已实现工艺验证",
+  "captions": [
+    {
+      "start": 0,
+      "end": 6,
+      "text": "从原平面图开始：锁定蝴蝶中轴与四翼菱格"
+    },
+    {
+      "start": 6,
+      "end": 13,
+      "text": "线条离开平面，沿针脚路径生成三维骨架"
+    },
+    {
+      "start": 13,
+      "end": 18,
+      "text": "保留内部菱格，释放封闭翅形"
+    },
+    {
+      "start": 18,
+      "end": 25,
+      "text": "凤凰取形：S形羽线由中轴向外生长"
+    },
+    {
+      "start": 25,
+      "end": 33,
+      "text": "锯齿转为羽尖，丝线逐针填充层叠羽片"
+    },
+    {
+      "start": 33,
+      "end": 36,
+      "text": "蝴蝶为骨，凤凰为形，共用一套轮廓"
+    },
+    {
+      "start": 36,
+      "end": 42,
+      "text": "三维环绕：观察丝线厚度、针脚走向与层叠"
+    },
+    {
+      "start": 42,
+      "end": 49,
+      "text": "同一三维纹样逐步贴合服装曲面与斜襟"
+    },
+    {
+      "start": 49,
+      "end": 55,
+      "text": "沿袖口生成呼应针脚，完成服饰映射"
+    },
+    {
+      "start": 55,
+      "end": 60,
+      "text": "呈现完整三维服饰：一眼为蝶，一线见羽"
+    }
+  ]
+}

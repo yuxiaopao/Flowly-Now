@@ -7,8 +7,7 @@ import json
 import os
 import threading
 import time
-from dataclasses import asdict, dataclass
-from datetime import datetime
+from dataclasses import dataclass
 from typing import Dict, List, Optional, Any
 from functools import wraps
 import hashlib
@@ -40,6 +39,7 @@ class CacheEntry:
     def to_dict(self) -> dict:
         return {
             'key': self.key,
+            'value': self.value,
             'created_at': self.created_at,
             'updated_at': self.updated_at,
             'version': self.version,
@@ -294,7 +294,10 @@ class ProjectCache:
     def get_structure(self, project_id: int, project_path: str) -> Optional[CodeStructure]:
         """获取项目结构缓存"""
         key = f"structure:{project_id}"
-        return self._cache.get(key)
+        data = self._cache.get(key)
+        if not data or os.path.realpath(data['root_path']) != os.path.realpath(project_path):
+            return None
+        return CodeStructure.from_dict(data)
 
     def set_structure(self, project_id: int, structure: CodeStructure):
         """设置项目结构缓存"""

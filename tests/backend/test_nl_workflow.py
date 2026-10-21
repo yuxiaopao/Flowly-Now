@@ -5,8 +5,10 @@ Covers models, views, services, and constants.
 """
 
 import pytest
+from pathlib import Path
 from rest_framework import status
 from unittest.mock import patch, MagicMock
+from django.test import override_settings
 
 
 @pytest.mark.django_db
@@ -186,7 +188,7 @@ class TestNLWorkflowAPI:
         assert response.data['session_id'] is not None
 
         session = NLSession.objects.get(id=response.data['session_id'])
-        assert session.status == 'active'
+        assert session.status == 'completed'
         assert session.workflow_json == mock_workflow
 
     def test_create_session_llm_error(self, authenticated_client):
@@ -315,6 +317,179 @@ class TestNLWorkflowAPI:
         nl_session.refresh_from_db()
         assert nl_session.status == 'completed'
         assert nl_session.workflow is not None
+        saved_nodes = {node.name: node for node in nl_session.workflow.nodes.all()}
+        assert saved_nodes['Start'].position_x == 100
+        assert saved_nodes['Start'].position_y == 100
+        assert saved_nodes['End'].position_x == 300
+        assert saved_nodes['End'].position_y == 100
+
+    def test_confirm_workflow_repairs_missing_or_overlapping_positions(self, authenticated_client, nl_session):
+        """Confirming NL output should persist a readable non-overlapping layout."""
+        nl_session.workflow_json = {
+            'name': 'Layout Repair Workflow',
+            'description': 'Test layout repair',
+            'nodes': [
+                {'id': 'node_1', 'type': 'start', 'name': 'Start', 'position': {'x': 10, 'y': 10}, 'config': {}},
+                {'id': 'node_2', 'type': 'llm', 'name': 'Analyze', 'position': {'x': 10, 'y': 10}, 'config': {}},
+                {'id': 'node_3', 'type': 'end', 'name': 'End', 'config': {}},
+            ],
+            'edges': [
+                {'id': 'edge_1', 'source': 'node_1', 'target': 'node_2', 'label': ''},
+                {'id': 'edge_2', 'source': 'node_2', 'target': 'node_3', 'label': ''},
+            ]
+        }
+        nl_session.save()
+
+        response = authenticated_client.post(
+            f'/api/v1/nl-workflow/sessions/{nl_session.id}/confirm/'
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        nl_session.refresh_from_db()
+        positions = [
+            (node.position_x, node.position_y)
+            for node in nl_session.workflow.nodes.order_by('id')
+        ]
+        assert len(set(positions)) == 3
+        assert positions != [(0, 0), (0, 0), (0, 0)]
+
+    def test_confirm_workflow_adds_missing_start_and_end_boundaries(self, authenticated_client, nl_session):
+        """LLM-generated business-node chains must be saved as executable workflows."""
+        nl_session.workflow_json = {
+            'name': 'Model Training Site Workflow',
+            'description': 'Generated without explicit start/end nodes',
+            'nodes': [
+                {'id': 'dataset_1', 'type': 'dataset_upload', 'name': '上传数据集', 'config': {}},
+                {'id': 'training_1', 'type': 'yolo_training', 'name': '训练 YOLO', 'config': {}},
+                {'id': 'site_1', 'type': 'website_generator', 'name': '生成识别网站', 'config': {}},
+            ],
+            'edges': [
+                {'id': 'edge_1', 'source': 'dataset_1', 'target': 'training_1', 'label': ''},
+                {'id': 'edge_2', 'source': 'training_1', 'target': 'site_1', 'label': ''},
+            ],
+        }
+        nl_session.save()
+
+        response = authenticated_client.post(
+            f'/api/v1/nl-workflow/sessions/{nl_session.id}/confirm/'
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        nl_session.refresh_from_db()
+        workflow = nl_session.workflow
+        node_types = set(workflow.nodes.values_list('node_type', flat=True))
+        assert 'start' in node_types
+        assert 'end' in node_types
+
+        start_node = workflow.nodes.get(node_type='start')
+        end_node = workflow.nodes.get(node_type='end')
+        dataset_node = workflow.nodes.get(node_type='dataset_upload')
+        site_node = workflow.nodes.get(node_type='website_generator')
+        assert workflow.edges.filter(source_node=start_node, target_node=dataset_node).exists()
+        assert workflow.edges.filter(source_node=site_node, target_node=end_node).exists()
+
+        validation = authenticated_client.post(f'/api/v1/workflows/{workflow.id}/validate/')
+        assert validation.status_code == status.HTTP_200_OK
+        assert '缺少开始节点' not in validation.data['errors']
+        assert '缺少结束节点' not in validation.data['warnings']
+
+    def test_confirm_workflow_enriches_model_training_site_configs(self, authenticated_client, nl_session):
+        """Model-training site workflows saved from NL should be executable without manual node surgery."""
+        nl_session.workflow_json = {
+            'name': 'NL Model Training Site Workflow',
+            'description': 'Train a YOLO model and generate a Flask Vue Mysql detection site.',
+            'nodes': [
+                {'id': 'dataset_1', 'type': 'dataset_upload', 'name': 'Upload dataset', 'config': {}},
+                {'id': 'training_1', 'type': 'yolo_training', 'name': 'Train YOLO', 'config': {}},
+                {'id': 'site_1', 'type': 'website_generator', 'name': 'Generate site', 'config': {}},
+            ],
+            'edges': [
+                {'id': 'edge_1', 'source': 'dataset_1', 'target': 'training_1', 'label': ''},
+                {'id': 'edge_2', 'source': 'training_1', 'target': 'site_1', 'label': ''},
+            ],
+        }
+        nl_session.save()
+
+        response = authenticated_client.post(
+            f'/api/v1/nl-workflow/sessions/{nl_session.id}/confirm/'
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        nl_session.refresh_from_db()
+        workflow = nl_session.workflow
+        dataset_config = workflow.nodes.get(node_type='dataset_upload').config
+        training_config = workflow.nodes.get(node_type='yolo_training').config
+        site_config = workflow.nodes.get(node_type='website_generator').config
+
+        assert dataset_config['format'] == 'yolo'
+        assert dataset_config['source'] == 'upload'
+        assert dataset_config['sourceType'] == 'upload'
+        assert dataset_config['customPathEnabled'] is True
+        assert Path(dataset_config['path']).name == 't2_mini_yolo'
+
+        assert training_config['trainingMode'] == 'local'
+        assert training_config['dataSourceType'] == 'upstream'
+        assert training_config['device'] == 'cpu'
+        assert training_config['epochs'] == 1
+        assert training_config['base_weight_uri'] == 'yolov8n.pt'
+
+        assert site_config['frontendFramework'] == 'vue'
+        assert site_config['backendFramework'] == 'flask'
+        assert site_config['dbEngine'] == 'mysql'
+        assert site_config['waitForCompletion'] is True
+        assert {'imageRecognition', 'videoRecognition', 'factRecognition', 'historyRecords'}.issubset(
+            set(site_config['requiredFeatures'])
+        )
+
+    def test_dataset_upload_accepts_runtime_dataset_path_input(self):
+        """Runtime input_data.dataset_path should satisfy NL dataset_upload nodes."""
+        from workflows.services.langchain_service import LangChainService
+
+        dataset_root = Path(__file__).resolve().parents[2] / 'Backend' / 'scripts' / 'fixtures' / 't2_mini_yolo'
+        service = LangChainService()
+
+        result = service.run_dataset_upload_node(
+            {'format': 'yolo', 'sourceType': 'upload'},
+            {'input_data': {'dataset_path': str(dataset_root)}},
+        )
+
+        assert result['success'] is True
+        assert result['output']['dataset_yaml_path'].endswith('dataset.yaml')
+        assert result['output']['class_names'] == ['helmet', 'vest']
+
+    def test_yolo_training_stores_dataset_source_mode_string(self, user, tmp_path):
+        """datasetSource config objects must not be written into the CharField as dict text."""
+        from workflows.services.langchain_service import LangChainService
+        from training.models import TrainingJob
+
+        service = LangChainService(user_id=user.id)
+
+        def complete_training(*args, **kwargs):
+            TrainingJob.objects.filter(created_by=user).update(status='completed')
+            return {
+                'success': True,
+                'best_weight_path': 'E:/tmp/best.pt',
+                'last_weight_path': 'E:/tmp/last.pt',
+                'final_metrics': {},
+            }
+
+        with override_settings(BASE_DIR=tmp_path):
+            with patch.object(service, '_run_local_yolo_training', side_effect=complete_training):
+                result = service.run_yolo_training_node(
+                    {
+                        'trainingMode': 'local',
+                        'datasetSource': {'mode': 'upstream', 'fromNodeType': 'dataset_upload'},
+                        'datasetYamlPath': 'E:/datasets/demo/dataset.yaml',
+                        'classNames': ['helmet', 'vest'],
+                        'epochs': 1,
+                        'device': 'cpu',
+                    },
+                    {},
+                )
+
+        assert result['success'] is True
+        job = TrainingJob.objects.latest('created_at')
+        assert job.dataset_source_mode == 'upstream'
 
     def test_preview_empty_description(self, authenticated_client):
         """Test preview with empty description returns error."""
@@ -429,41 +604,115 @@ class TestNLServiceConstants:
 class TestNLService:
     """Test NLToWorkflowService methods."""
 
+    @override_settings(
+        NL_WORKFLOW_USE_TEMPLATES=False,
+        NL_WORKFLOW_TEMPLATE_FALLBACK=True,
+        NL_WORKFLOW_USE_MOCK=False,
+    )
+    def test_generate_workflow_prefers_llm_for_template_intent(self):
+        """Template-matching requests should still use the LLM when a provider exists."""
+        import json
+        from types import SimpleNamespace
+        from nl_to_workflow.services import NLToWorkflowService
+
+        class FakeProvider:
+            name = 'fake'
+            provider_name = 'fake'
+
+            def chat(self, **kwargs):
+                return SimpleNamespace(
+                    error=None,
+                    content=json.dumps({
+                        'name': 'LLM Designed Email Workflow',
+                        'description': 'Designed by the configured model.',
+                        'nodes': [
+                            {'id': 'node_1', 'type': 'start', 'name': 'Start', 'position': {'x': 0, 'y': 0}, 'config': {}},
+                            {'id': 'node_2', 'type': 'llm', 'name': 'Summarize', 'position': {'x': 200, 'y': 0}, 'config': {'model': 'fake-model'}},
+                            {'id': 'node_3', 'type': 'end', 'name': 'End', 'position': {'x': 400, 'y': 0}, 'config': {}},
+                        ],
+                        'edges': [
+                            {'id': 'edge_1', 'source': 'node_1', 'target': 'node_2', 'label': ''},
+                            {'id': 'edge_2', 'source': 'node_2', 'target': 'node_3', 'label': ''},
+                        ],
+                    }),
+                )
+
+        service = NLToWorkflowService(model='fake-model')
+        service._llm = FakeProvider()
+        service._registry = MagicMock()
+        service._registry.get_all.return_value = []
+
+        workflow = service.generate_workflow(
+            'Scrape https://example.com, summarize the content, and email it to ops@example.com',
+            include_validation=False,
+        )
+
+        assert workflow['_generation_mode'] == 'llm'
+        assert workflow['_llm_model'] == 'fake-model'
+        assert workflow['name'] == 'LLM Designed Email Workflow'
+
+    @override_settings(DEBUG=True, NL_WORKFLOW_USE_MOCK=False)
+    def test_call_llm_does_not_use_mock_just_because_debug_is_enabled(self):
+        """DEBUG mode must not hide a missing provider behind mock generation."""
+        from nl_to_workflow.constants import ERROR_MESSAGES
+        from nl_to_workflow.services import NLToWorkflowService
+
+        service = NLToWorkflowService(model='missing-model')
+        service._registry = MagicMock()
+        service._registry.get_all.return_value = []
+        service._registry.list_models.return_value = []
+
+        with patch.object(service, '_iter_llm_provider_models', return_value=[]):
+            result = service._call_llm(
+                [{'role': 'user', 'content': 'Create a workflow'}],
+                mock_description='Create a workflow',
+            )
+
+        assert result == {'error': ERROR_MESSAGES['no_provider']}
+
+    def test_iter_llm_provider_models_filters_non_chat_generation_models(self):
+        """Image/video/audio models must not be tried as workflow chat generators."""
+        from types import SimpleNamespace
+        from nl_to_workflow.services import NLToWorkflowService
+
+        chat_provider = MagicMock()
+        chat_provider.name = 'agnes'
+        chat_provider.list_models.return_value = [
+            SimpleNamespace(model_id='agnes-2.0-flash', model_type='chat'),
+            SimpleNamespace(model_id='x/z-image-turbo:latest', model_type='chat'),
+            SimpleNamespace(model_id='agnes-video-v2.0', model_type='video'),
+            SimpleNamespace(model_id='tts-1', model_type='audio'),
+        ]
+
+        registry = MagicMock()
+        registry.get_all.return_value = ['agnes']
+        registry.get.side_effect = lambda name: chat_provider if name == 'agnes' else None
+
+        service = NLToWorkflowService(model='agnes-2.0-flash')
+        service._llm = chat_provider
+        service._registry = registry
+
+        candidates = service._iter_llm_provider_models()
+        model_ids = [model_id for _, model_id in candidates]
+
+        assert model_ids == ['agnes-2.0-flash']
+
     def test_analyze_intent_modification(self):
-        """Test intent analysis returns a dict with intent field."""
+        """私有分类器返回修改意图字符串。"""
         from nl_to_workflow.services import NLToWorkflowService
 
         service = NLToWorkflowService()
-        # Backend returns dict with 'intent' key
-        result = service._analyze_intent('添加一个新节点')
-        assert isinstance(result, dict)
-        assert 'intent' in result
-
-        result = service._analyze_intent('删除这个步骤')
-        assert isinstance(result, dict)
-        assert 'intent' in result
-
-        result = service._analyze_intent('修改配置')
-        assert isinstance(result, dict)
-        assert 'intent' in result
-
-        result = service._analyze_intent('添加邮件发送')
-        assert isinstance(result, dict)
-        assert 'intent' in result
+        for message in ('添加一个新节点', '修改配置', '添加邮件发送'):
+            assert service._analyze_intent(message) == 'modify'
+        assert service._analyze_intent('删除这个步骤') == 'delete'
 
     def test_analyze_intent_chat(self):
-        """Test intent analysis returns a dict for non-modification."""
+        """创建工作流和一般问答使用各自意图。"""
         from nl_to_workflow.services import NLToWorkflowService
 
         service = NLToWorkflowService()
-        # Backend returns dict with 'intent' key
-        result = service._analyze_intent('你好，我想创建一个工作流')
-        assert isinstance(result, dict)
-        assert 'intent' in result
-
-        result = service._analyze_intent('这是什么')
-        assert isinstance(result, dict)
-        assert 'intent' in result
+        assert service._analyze_intent('你好，我想创建一个工作流') == 'create'
+        assert service._analyze_intent('这是什么') == 'chat'
 
     def test_normalize_workflow(self):
         """Test workflow normalization."""

@@ -12,6 +12,12 @@ from typing import Dict, List, Any, Tuple, Optional
 from config.constants import DEFAULT_MAX_TOKENS, DEFAULT_TEMPERATURE
 from .node_catalog import SUPPORTED_NODE_TYPES, NL_PRIMARY_NODE_TYPES
 
+FALLBACK_GRID_START_X = 100
+FALLBACK_GRID_START_Y = 150
+FALLBACK_GRID_SPACING_X = 180
+FALLBACK_GRID_SPACING_Y = 120
+FALLBACK_GRID_COLUMNS = 4
+
 # Fallback model when none is configured (prefer Agnes when API key present)
 FALLBACK_MODEL: str = 'agnes-2.0-flash'
 
@@ -279,6 +285,12 @@ SUGGESTION_TEMPLATES: Dict[str, List[str]] = {
         '开始生成',
         '我还需要补充一些细节',
     ],
+    'chat_cumcm': [
+        '帮我搭建 CUMCM 数学建模完整工作流',
+        '赛题有 3 个子问题，需要建模求解和论文输出',
+        '增加灵敏度分析和模型检验节点',
+        '现在就生成工作流',
+    ],
     'modify': [
         '把 LLM 节点改成使用 gpt-4',
         '添加一个条件分支',
@@ -337,6 +349,8 @@ def get_initial_suggestions(description: str = '') -> List[str]:
         suggestions.insert(2, '设置多个收件人')
     if any(k in desc_lower for k in ['数据', 'csv', 'excel', '文件']):
         suggestions.insert(0, '添加数据处理节点')
+    if any(k in desc_lower for k in ['cumcm', '数学建模', '建模竞赛', '国赛', '建模论文']):
+        suggestions = list(SUGGESTION_TEMPLATES['chat_cumcm']) + suggestions
 
     return suggestions[:MAX_SUGGESTIONS]
 

@@ -12,6 +12,13 @@ RUN npm ci
 # Copy source code
 COPY . ./
 
+# Same-origin API: nginx proxies /api/ → backend (see nginx/frontend.conf).
+# Do not bake dev .env.local (5210 Vite proxy) into production assets.
+ARG VITE_API_URL=
+ARG VITE_WS_URL=
+ENV VITE_API_URL=${VITE_API_URL}
+ENV VITE_WS_URL=${VITE_WS_URL}
+
 # Build application
 RUN npm run build
 

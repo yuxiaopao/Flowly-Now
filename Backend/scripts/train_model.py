@@ -14,12 +14,16 @@ from pathlib import Path
 from datetime import datetime
 
 # 添加项目根目录到 Python 路径
+backend_root = Path(__file__).parent.parent
 project_root = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(backend_root))
 sys.path.insert(0, str(project_root))
 
 import torch
 from torch.utils.data import DataLoader, TensorDataset
 import numpy as np
+
+from training.yolo_weights import resolve_yolo_model_source, yolo_model_label
 
 
 # Global flag for graceful termination
@@ -673,18 +677,11 @@ def train_with_yolo(config: dict, job_id: str = None, streaming: bool = True):
             _stream_print({'type': 'error', 'message': error_msg})
         return {'success': False, 'error': error_msg}
 
-    yolo_version = config.get('yolo_version', 'v8')
-    model_variant = config.get('model_variant', 'n')
-    version_token = str(yolo_version).strip()
-    if version_token.startswith('yolo'):
-        model_name = f'{version_token}{model_variant}'
-    elif version_token.startswith('v'):
-        model_name = f'yolo{version_token}{model_variant}'
-    else:
-        model_name = f'yolo{version_token}{model_variant}'
+    model_source = resolve_yolo_model_source(config)
+    model_name = yolo_model_label(model_source)
 
     try:
-        model = YOLO(f'{model_name}.pt')
+        model = YOLO(model_source)
     except Exception as e:
         error_msg = f'Failed to load YOLO model {model_name}: {str(e)}'
         if streaming:
@@ -717,6 +714,8 @@ def train_with_yolo(config: dict, job_id: str = None, streaming: bool = True):
         if streaming:
             _stream_print({'type': 'error', 'message': error_msg})
         return {'success': False, 'error': error_msg}
+
+    dataset_yaml_path = _normalize_yolo_dataset_yaml(dataset_yaml_path, dataset_path)
 
     # Broadcast data ready
     if streaming:
@@ -893,7 +892,7 @@ def train_with_yolo(config: dict, job_id: str = None, streaming: bool = True):
                     torch.cuda.empty_cache()
             except Exception:
                 pass
-            model = YOLO(f'{model_name}.pt')
+            model = YOLO(model_source)
             trainer = StreamingTrainer(
                 model=model,
                 data_yaml=dataset_yaml_path,
@@ -991,6 +990,42 @@ def train_with_yolo(config: dict, job_id: str = None, streaming: bool = True):
         'best_epoch': trainer.best_epoch,
         'best_fitness': trainer.best_fitness,
     }
+
+
+def _normalize_yolo_dataset_yaml(dataset_yaml_path: str, dataset_path: str = '') -> str:
+    """Rewrite dataset.yaml when root path is stale (e.g. Windows host path in Docker)."""
+    yaml_file = Path(dataset_yaml_path)
+    if not yaml_file.is_file():
+        return dataset_yaml_path
+
+    try:
+        import yaml
+    except ImportError:
+        return dataset_yaml_path
+
+    with open(yaml_file, 'r', encoding='utf-8') as handle:
+        data = yaml.safe_load(handle) or {}
+
+    root = Path(dataset_path).resolve() if dataset_path else yaml_file.parent.resolve()
+    path_value = str(data.get('path', '.')).strip()
+    path_obj = Path(path_value)
+    if not path_obj.is_absolute():
+        path_obj = (yaml_file.parent / path_obj).resolve()
+
+    needs_rewrite = (
+        ':' in path_value
+        or path_value in ('.', './')
+        or not path_obj.exists()
+        or path_obj.resolve() != root
+    )
+    if not needs_rewrite:
+        return str(yaml_file)
+
+    data['path'] = str(root)
+    normalized = yaml_file.parent / '.dataset.normalized.yaml'
+    with open(normalized, 'w', encoding='utf-8') as handle:
+        yaml.dump(data, handle, allow_unicode=True, sort_keys=False)
+    return str(normalized)
 
 
 def _write_training_result(output_path: Path, result: dict) -> None:

@@ -5,7 +5,7 @@ Billing API serializers.
 from rest_framework import serializers
 from .models import (
     PriceTier, Subscription, UsageRecord, Invoice,
-    Payment, Coupon, CouponUsage
+    Payment, Coupon, CouponUsage, PlanType, BillingCycle
 )
 
 
@@ -65,13 +65,8 @@ class SubscriptionSerializer(serializers.ModelSerializer):
 class SubscriptionCreateSerializer(serializers.Serializer):
     """Serializer for creating subscriptions."""
 
-    plan_type = serializers.ChoiceField(choices=[
-        ('free', 'Free'), ('starter', 'Starter'),
-        ('professional', 'Professional'), ('enterprise', 'Enterprise')
-    ])
-    billing_cycle = serializers.ChoiceField(choices=[
-        ('monthly', 'Monthly'), ('yearly', 'Yearly')
-    ])
+    plan_type = serializers.ChoiceField(choices=PlanType.choices, default=PlanType.FREE)
+    billing_cycle = serializers.ChoiceField(choices=BillingCycle.choices, default=BillingCycle.MONTHLY)
 
 
 class UsageRecordSerializer(serializers.ModelSerializer):

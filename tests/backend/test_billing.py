@@ -32,16 +32,38 @@ class TestSubscriptionSerializer:
         assert response.status_code == 400
 
     def test_subscribe_creates_or_returns(self, authenticated_client):
-        # Skip - backend bug: signal handler references non-existent 'plan' field
-        pass
+        from billing.models import Subscription
+        response = authenticated_client.post('/api/v1/billing/subscriptions/subscribe/',
+                                             {'plan_type': 'professional', 'billing_cycle': 'monthly'}, format='json')
+        assert response.status_code == 201
+        first_id = response.data['id']
+        response = authenticated_client.post('/api/v1/billing/subscriptions/subscribe/',
+                                             {'plan_type': 'professional', 'billing_cycle': 'yearly'}, format='json')
+        assert response.status_code == 200
+        assert response.data['id'] == first_id
+        assert Subscription.objects.count() == 1
+        assert Subscription.objects.get().billing_cycle == 'yearly'
 
     def test_cancel_sets_cancel_at_period_end(self, authenticated_client, user):
-        # Skip - backend bug: signal handler references non-existent 'plan' field
-        pass
+        from billing.models import Subscription
+        authenticated_client.post('/api/v1/billing/subscriptions/subscribe/', {'plan_type': 'free'})
+        response = authenticated_client.post('/api/v1/billing/subscriptions/cancel/')
+        assert response.status_code == 200
+        subscription = Subscription.objects.get(user=user)
+        assert subscription.cancel_at_period_end is True
+        assert subscription.status == 'canceled'
+        assert subscription.canceled_at is not None
 
     def test_reactivate_clears_cancel_flag(self, authenticated_client, user):
-        # Skip - backend bug: signal handler references non-existent 'plan' field
-        pass
+        from billing.models import Subscription
+        authenticated_client.post('/api/v1/billing/subscriptions/subscribe/', {'plan_type': 'free'})
+        authenticated_client.post('/api/v1/billing/subscriptions/cancel/')
+        response = authenticated_client.post('/api/v1/billing/subscriptions/reactivate/')
+        assert response.status_code == 200
+        subscription = Subscription.objects.get(user=user)
+        assert subscription.cancel_at_period_end is False
+        assert subscription.status == 'active'
+        assert subscription.canceled_at is None
 
 
 class TestCouponSerializer:

@@ -9,6 +9,7 @@ import router from './router'
 // 导入全局样式
 import './assets/styles/variables.scss'
 import './assets/styles/themes.scss'
+import './assets/styles/tech-theme.scss'
 import './assets/styles/page-layout.scss'
 import './assets/styles/motion.scss'
 import './assets/styles/surface-system.scss'

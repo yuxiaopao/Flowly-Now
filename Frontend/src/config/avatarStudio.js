@@ -1,0 +1,28 @@
+import protocol from '../../avatar-studio/protocol.json'
+
+export const AVATAR_STUDIO = Object.freeze({
+  ...protocol,
+  route: '/settings/avatar',
+  entry: 'avatar-studio/index.html',
+  source: 'https://github.com/jeremy-prt/bloub',
+  title: 'AI 头像',
+  subtitle: '定制造型与表情，编排动画，导出你的专属机器人头像。',
+  open: '设计 AI 头像',
+  apply: '设为我的头像',
+  applied: '动态 AI 头像已保存到账号',
+  appliedLocal: '动态头像已在当前浏览器生效；后端更新后重新应用可同步账号。',
+  appliedSession: '动态头像已生效，但浏览器无法保存设置，请检查存储权限。',
+  applying: '正在保存头像…',
+  loading: '正在加载头像工作台…',
+  unavailable: '头像工作台未能加载，请重新加载。',
+  captureError: '无法生成头像，请稍后重试。',
+  saveError: '头像保存失败，设计仍保留，请重试。',
+  retry: '重新加载工作台',
+  fullscreen: '全屏编辑',
+  exitFullscreen: '退出全屏',
+  fullscreenError: '浏览器暂时无法进入全屏，可以继续在当前页面编辑。',
+  hint: '黑白头像随主题自动反色；彩色身体保留原色，统一使用白色眼睛。可在个人资料中选择上传图片。',
+  frameTitle: 'Bloub 完整头像工作台：定制、动画、导出与设置',
+  attribution: '基于 Bloub · MIT 开源协议',
+  capabilities: '8 种造型 · 12 种配色 · 16 种表情 · 14 种动画状态',
+})

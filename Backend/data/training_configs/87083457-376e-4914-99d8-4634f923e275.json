@@ -1,1 +1,0 @@
-{"job_id": "87083457-376e-4914-99d8-4634f923e275", "framework": "transformers", "model_type": "classification", "training_kind": "transformer", "config": {"base_weight_uri": "bert-base-uncased"}, "dataset_id": "", "dataset_path": "", "hyperparameters": {}}

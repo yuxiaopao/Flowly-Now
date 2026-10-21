@@ -1,16 +1,14 @@
 <template>
-  <div class="dataset-list-page">
+  <PageShell
+    width="wide"
+    class="dataset-list-page"
+  >
     <!-- Header -->
-    <div class="page-header">
-      <div class="header-left">
-        <h1 class="page-title">
-          数据集管理
-        </h1>
-        <p class="page-description">
-          管理和查看您上传的训练数据集
-        </p>
-      </div>
-      <div class="header-right">
+    <PageHeader
+      title="数据集管理"
+      subtitle="管理和查看您上传的训练数据集"
+    >
+      <template #actions>
         <el-button
           type="primary"
           @click="showUploadDialog = true"
@@ -18,11 +16,11 @@
           <Upload class="btn-icon" />
           上传数据集
         </el-button>
-      </div>
-    </div>
+      </template>
+    </PageHeader>
 
     <!-- Search and Filter -->
-    <div class="filter-bar">
+    <PageToolbar>
       <el-input
         v-model="searchQuery"
         placeholder="搜索数据集名称..."
@@ -64,7 +62,7 @@
         <RefreshCw class="btn-icon" />
         刷新
       </el-button>
-    </div>
+    </PageToolbar>
 
     <!-- Dataset Table -->
     <div class="dataset-table-container">
@@ -170,6 +168,7 @@
                 type="primary"
                 link
                 size="small"
+                :disabled="!supportsDatasetPreview(row)"
                 @click="previewDataset(row)"
               >
                 预览
@@ -305,12 +304,12 @@
         class="preview-content"
       >
         <el-table
-          :data="previewData.rows || []"
+          :data="previewData.rows"
           max-height="400"
           stripe
         >
           <el-table-column
-            v-for="col in previewData.columns || []"
+            v-for="col in previewData.columns"
             :key="col"
             :prop="col"
             :label="col"
@@ -322,7 +321,7 @@
           <el-pagination
             v-model:current-page="previewPage"
             :page-size="100"
-            :total="previewData.total || 0"
+            :total="previewData.total"
             layout="prev, pager, next"
             small
             @current-change="loadPreview"
@@ -377,7 +376,7 @@
         </div>
 
         <div
-          v-if="statsData.columnStats"
+          v-if="statsData.columnStats.length"
           class="column-stats"
         >
           <h4>列统计</h4>
@@ -405,10 +404,13 @@
         </div>
       </div>
     </el-dialog>
-  </div>
+  </PageShell>
 </template>
 
 <script setup>
+import PageToolbar from '@/components/layout/PageToolbar.vue'
+import PageHeader from '@/components/layout/PageHeader.vue'
+import PageShell from '@/components/layout/PageShell.vue'
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -490,6 +492,80 @@ const detectedFormat = computed(() => {
   return formatMap[ext] || ext?.toUpperCase() || 'Unknown'
 })
 
+const PREVIEWABLE_DATASET_FORMATS = new Set(['csv', 'json', 'jsonl', 'txt', 'text', 'tsv'])
+
+function getDatasetFormat(row = {}) {
+  return String(row.format || row.fileType || '').toLowerCase()
+}
+
+function supportsDatasetPreview(row = {}) {
+  return PREVIEWABLE_DATASET_FORMATS.has(getDatasetFormat(row))
+}
+
+function normalizeDatasetListResponse(response) {
+  const results = Array.isArray(response?.results)
+    ? response.results
+    : Array.isArray(response)
+      ? response
+      : []
+  return {
+    results,
+    total: Number(response?.count ?? response?.total ?? results.length),
+  }
+}
+
+function normalizePreviewResponse(response = {}) {
+  const rows = Array.isArray(response.rows)
+    ? response.rows
+    : Array.isArray(response.preview)
+      ? response.preview
+      : []
+  const columns = Array.isArray(response.columns)
+    ? response.columns
+    : rows.length && typeof rows[0] === 'object'
+      ? Object.keys(rows[0])
+      : []
+  return {
+    rows,
+    columns,
+    total: Number(response.total ?? response.totalRows ?? response.total_rows ?? rows.length),
+  }
+}
+
+function normalizeColumnStats(columnStats) {
+  if (Array.isArray(columnStats)) {
+    return columnStats.map((item) => ({
+      name: item.name,
+      type: item.type || item.dtype || 'string',
+      nullCount: item.nullCount ?? item.null_count ?? 0,
+      unique: item.unique ?? item.uniqueCount ?? item.unique_count ?? 0,
+    }))
+  }
+
+  if (!columnStats || typeof columnStats !== 'object') {
+    return []
+  }
+
+  return Object.entries(columnStats).map(([name, item]) => ({
+    name,
+    type: item?.type || item?.dtype || 'string',
+    nullCount: item?.nullCount ?? item?.null_count ?? 0,
+    unique: item?.unique ?? item?.uniqueCount ?? item?.unique_count ?? 0,
+  }))
+}
+
+function normalizeStatsResponse(response = {}, row = {}) {
+  const columnStats = normalizeColumnStats(response.columnStats || response.column_stats)
+  const nullCount = columnStats.reduce((sum, item) => sum + Number(item.nullCount || 0), 0)
+  return {
+    totalRows: response.totalRows ?? response.total_rows ?? response.rowCount ?? response.row_count ?? row.rowCount ?? 0,
+    columns: response.columnCount ?? response.column_count ?? (Array.isArray(response.columns) ? response.columns.length : response.columns) ?? row.columns?.length ?? 0,
+    memory: response.memory ?? response.size ?? row.size ?? 0,
+    nullCount: response.nullCount ?? response.null_count ?? nullCount,
+    columnStats,
+  }
+}
+
 // Methods
 async function loadDatasets() {
   loading.value = true
@@ -498,8 +574,9 @@ async function loadDatasets() {
       page: currentPage.value,
       page_size: pageSize.value
     })
+    const normalized = normalizeDatasetListResponse(response)
 
-    datasets.value = (response.results || response).map(d => ({
+    datasets.value = normalized.results.map(d => ({
       id: d.id,
       name: d.name || d.fileName || `Dataset ${d.id}`,
       description: d.description || '',
@@ -510,9 +587,8 @@ async function loadDatasets() {
       createdAt: d.createdAt || d.created_at || new Date().toISOString()
     }))
 
-    totalDatasets.value = response.count || response.total || datasets.value.length
-  } catch (error) {
-    console.error('Failed to load datasets:', error)
+    totalDatasets.value = normalized.total
+  } catch {
     ElMessage.error('加载数据集失败')
   } finally {
     loading.value = false
@@ -567,6 +643,10 @@ async function submitUpload() {
 }
 
 async function previewDataset(row) {
+  if (!supportsDatasetPreview(row)) {
+    appStore.warning('该数据集格式暂不支持预览')
+    return
+  }
   previewDatasetId.value = row.id
   previewPage.value = 1
   const loaded = await loadPreview()
@@ -579,10 +659,9 @@ async function loadPreview() {
   if (!previewDatasetId.value) return false
   try {
     const response = await datasetApi.preview(previewDatasetId.value, previewPage.value)
-    previewData.value = response
+    previewData.value = normalizePreviewResponse(response)
     return true
   } catch (error) {
-    console.error('Preview failed:', error)
     previewData.value = null
     const message = error?.response?.data?.message || error?.message || '预览失败'
     appStore.error(message)
@@ -594,20 +673,11 @@ async function showStats(row) {
   statsDatasetId.value = row.id
   try {
     const response = await datasetApi.stats(row.id)
-    statsData.value = response
+    statsData.value = normalizeStatsResponse(response, row)
   } catch (error) {
-    console.error('Stats failed:', error)
-    statsData.value = {
-      totalRows: row.rowCount || 1000,
-      columns: 5,
-      memory: row.size || 1024000,
-      nullCount: 0,
-      columnStats: [
-        { name: 'id', type: 'int64', nullCount: 0, unique: 1000 },
-        { name: 'text', type: 'string', nullCount: 5, unique: 980 },
-        { name: 'label', type: 'string', nullCount: 0, unique: 10 }
-      ]
-    }
+    statsData.value = normalizeStatsResponse({}, row)
+    const message = error?.response?.data?.message || error?.message || '统计信息加载失败'
+    appStore.error(message)
   }
   showStatsDialog.value = true
 }
@@ -672,52 +742,15 @@ onMounted(() => {
 <style lang="scss" scoped>
 @use '@/assets/styles/variables.scss' as *;
 
-.dataset-list-page {
-  padding: $spacing-6;
-  max-width: 1400px;
-  margin: 0 auto;
-}
-
-.page-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  margin-bottom: $spacing-6;
-}
-
-.page-title {
-  font-size: $font-size-2xl;
-  font-weight: $font-weight-bold;
-  color: var(--text-primary);
-  margin: 0 0 $spacing-1;
-}
-
-.page-description {
-  font-size: $font-size-sm;
-  color: var(--text-tertiary);
-  margin: 0;
-}
-
 .btn-icon {
   width: 16px;
   height: 16px;
   margin-right: $spacing-1;
 }
 
-.filter-bar {
-  display: flex;
-  align-items: center;
-  gap: $spacing-3;
-  margin-bottom: $spacing-4;
-}
 
-.search-input {
-  width: 300px;
-}
 
-.format-filter {
-  width: 150px;
-}
+
 
 .dataset-table-container {
   background: var(--bg-secondary);

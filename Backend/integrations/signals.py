@@ -1,128 +1,87 @@
-"""
-Django signals for integrations app.
-Handles webhook delivery tracking and integration status updates.
-"""
-
+"""Status broadcasts and delivery outbox for subscribed execution transitions."""
 import logging
+from functools import partial
+
+from django.db import transaction
+from django.db.models.signals import pre_save, post_save
 from django.dispatch import receiver, Signal
-from django.db.models.signals import post_save, post_delete
-from django.utils import timezone
+
+from monitoring.broadcasts import broadcast_to_monitoring
+from .catalog import CONNECTORS, EXECUTION_EVENTS
+from .models import Integration, IntegrationDelivery
 
 logger = logging.getLogger(__name__)
-
-# Custom signals
 webhook_delivery_succeeded = Signal()
 webhook_delivery_failed = Signal()
 integration_connected = Signal()
 integration_disconnected = Signal()
 
 
-def get_channel_layer_safe():
-    """Safely get channel layer."""
-    try:
-        from channels.layers import get_channel_layer
-        return get_channel_layer()
-    except Exception:
-        return None
-
-
 @receiver(post_save, sender='integrations.Webhook')
 def on_webhook_created(sender, instance, created, **kwargs):
-    """Handle webhook creation."""
     if created:
-        logger.info(f"Webhook created: {instance.id} - {instance.name}")
+        broadcast_to_monitoring({'event': 'webhook_created', 'webhook_id': instance.id, 'user_id': instance.user_id})
 
-        broadcast_to_monitoring({
-            'event': 'webhook_created',
-            'webhook_id': instance.id,
-            'tenant_id': instance.tenant_id
-        })
+
+@receiver(pre_save, sender='integrations.WebhookDelivery')
+@receiver(pre_save, sender='integrations.Integration')
+@receiver(pre_save, sender='workflows.WorkflowExecution')
+def remember_status(sender, instance, raw=False, **kwargs):
+    if raw:
+        return
+    field = 'is_connected' if sender is Integration else 'status'
+    instance._integration_previous_status = sender.objects.filter(pk=instance.pk).values_list(field, flat=True).first() if instance.pk else None
 
 
 @receiver(post_save, sender='integrations.WebhookDelivery')
-def on_webhook_delivery_completed(sender, instance, **kwargs):
-    """Handle webhook delivery completion."""
-    if instance.status in ('success', 'failed', 'retrying'):
-        logger.info(f"Webhook delivery completed: {instance.id} - status={instance.status}")
-
-        # Update webhook stats
-        from .models import Webhook
-        webhook = instance.webhook
-
-        if instance.status == 'success':
-            Webhook.objects.filter(id=webhook.id).update(
-                successful_deliveries=webhook.successful_deliveries + 1,
-                last_called_at=timezone.now(),
-                updated_at=timezone.now()
-            )
-
-            webhook_delivery_succeeded.send(
-                sender=sender,
-                delivery_id=instance.id,
-                webhook_id=webhook.id
-            )
-        else:
-            Webhook.objects.filter(id=webhook.id).update(
-                failed_deliveries=webhook.failed_deliveries + 1,
-                last_called_at=timezone.now(),
-                updated_at=timezone.now()
-            )
-
-            webhook_delivery_failed.send(
-                sender=sender,
-                delivery_id=instance.id,
-                webhook_id=webhook.id,
-                error=instance.error_message
-            )
-
-        broadcast_to_monitoring({
-            'event': 'webhook_delivery',
-            'delivery_id': instance.id,
-            'webhook_id': webhook.id,
-            'status': instance.status
-        })
+def on_webhook_delivery_completed(sender, instance, raw=False, **kwargs):
+    if raw or instance.status == getattr(instance, '_integration_previous_status', None):
+        return
+    if instance.status not in ('success', 'failed'):
+        return
+    # The sender owns counters, avoiding double increments on log updates.
+    signal = webhook_delivery_succeeded if instance.status == 'success' else webhook_delivery_failed
+    signal.send(sender=sender, delivery_id=instance.id, webhook_id=instance.webhook_id)
+    broadcast_to_monitoring({'event': 'webhook_delivery', 'delivery_id': instance.id,
+                             'webhook_id': instance.webhook_id, 'status': instance.status})
 
 
-@receiver(post_save, sender='integrations.Integration')
-def on_integration_status_changed(sender, instance, **kwargs):
-    """Handle integration status changes."""
-    if instance.tracker.has_changed('is_connected'):
-        if instance.is_connected:
-            logger.info(f"Integration connected: {instance.id} - {instance.name}")
-
-            integration_connected.send(
-                sender=sender,
-                integration_id=instance.id,
-                tenant_id=instance.tenant_id
-            )
-        else:
-            logger.info(f"Integration disconnected: {instance.id} - {instance.name}")
-
-            integration_disconnected.send(
-                sender=sender,
-                integration_id=instance.id,
-                tenant_id=instance.tenant_id
-            )
+@receiver(post_save, sender=Integration)
+def on_integration_status_changed(sender, instance, raw=False, **kwargs):
+    if raw or instance.is_connected == getattr(instance, '_integration_previous_status', None):
+        return
+    signal = integration_connected if instance.is_connected else integration_disconnected
+    signal.send(sender=sender, integration_id=instance.id, user_id=instance.user_id)
 
 
-@receiver(post_save, sender='integrations.Integration')
-def on_integration_updated(sender, instance, **kwargs):
-    """Handle integration updates."""
-    logger.debug(f"Integration updated: {instance.id}")
+def enqueue_delivery(delivery_id):
+    from .tasks import deliver_integration_event
+    try:
+        deliver_integration_event.delay(delivery_id)
+    except Exception:
+        logger.exception('Could not queue integration delivery %s', delivery_id)
+        IntegrationDelivery.objects.filter(pk=delivery_id, status='pending').update(
+            status='failed', message='投递任务未入队，请检查任务队列后重新测试连接。')
 
 
-def broadcast_to_monitoring(data):
-    """Broadcast event to monitoring channel."""
-    channel_layer = get_channel_layer_safe()
-    if channel_layer:
-        try:
-            from asgiref.sync import async_to_sync
-            async_to_sync(channel_layer.group_send)(
-                'monitoring',
-                {
-                    'type': 'metric_update',
-                    'data': data
-                }
-            )
-        except Exception as e:
-            logger.error(f"Failed to broadcast to monitoring: {e}")
+@receiver(post_save, sender='workflows.WorkflowExecution')
+def on_execution_transition(sender, instance, raw=False, **kwargs):
+    if raw or instance.status == getattr(instance, '_integration_previous_status', None):
+        return
+    event = EXECUTION_EVENTS.get(instance.status)
+    if not event:
+        return
+    # Only the workflow owner can subscribe to its execution metadata.
+    owner_id = instance.workflow.owner_id
+    candidates = Integration.objects.filter(user_id=owner_id, is_active=True, is_connected=True)
+    payload = {'event': event, 'execution_id': str(instance.pk), 'workflow_id': str(instance.workflow_id),
+               'workflow_name': instance.workflow.name, 'status': instance.status}
+    for integration in candidates:
+        connector = CONNECTORS.get(integration.integration_type)
+        if not connector or connector['mode'] == 'api' or event not in integration.config.get('events', []):
+            continue
+        delivery, created = IntegrationDelivery.objects.get_or_create(
+            integration=integration, event_key=f'{instance.pk}:{event}',
+            defaults={'event': event, 'payload': payload})
+        if created:
+            transaction.on_commit(partial(enqueue_delivery, delivery.pk))

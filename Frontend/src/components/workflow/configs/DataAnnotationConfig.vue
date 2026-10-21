@@ -408,7 +408,7 @@
 import { ref, reactive, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { FolderOpen, X, Search, Loader, Check, Tag, ExternalLink } from 'lucide-vue-next'
+import { FolderOpen, X, Search, Loader, Check, Tag, ExternalLink, RefreshCw as Refresh } from 'lucide-vue-next'
 import { datasetApi, formatFileSize } from '@/api/dataset'
 import { annotationApi } from '@/api/annotation'
 

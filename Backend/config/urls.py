@@ -88,6 +88,7 @@ urlpatterns = [
 # Serve media + static in development (finders include admin_static/)
 if settings.DEBUG:
     from django.contrib.staticfiles.urls import staticfiles_urlpatterns
+    from core.views.media_views import serve_media
 
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+    urlpatterns += static(settings.MEDIA_URL, view=serve_media, document_root=settings.MEDIA_ROOT)
     urlpatterns += staticfiles_urlpatterns()

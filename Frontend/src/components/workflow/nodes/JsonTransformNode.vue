@@ -1,6 +1,7 @@
 <template>
   <div
-    :style="{ '--node-accent': nodeColor }" class="domain-node"
+    :style="{ '--node-accent': nodeColor }"
+    class="domain-node"
     :class="{ selected, expanded: isExpanded, 'is-running': isRunning, 'is-completed': isCompleted, 'is-failed': isFailed }"
     @click.stop="handleSelect"
   >
@@ -25,8 +26,8 @@
     <div class="node-name-section">
       <input
         :id="id ? `node-label-${id}` : undefined"
-        name="node-label"
         v-model="localName"
+        name="node-label"
         class="node-name-input"
         placeholder="节点名称..."
         @blur="handleChange"
@@ -41,13 +42,13 @@
         class="info-row"
       >
         <span class="info-label">操作</span>
-        <span class="info-value">{{ localConfig.transformType || localConfig.operation || '-' }}</span>
+        <span class="info-value">{{ getDataTransformOperationLabel(localConfig.operation) }}</span>
       </div>
       <div
         v-if="localConfig.description || localConfig.operation"
         class="preview-row"
       >
-        <span class="preview-text">{{ truncate(localConfig.description || localConfig.operation, 35) }}</span>
+        <span class="preview-text">{{ truncate(localConfig.description || getDataTransformOperationLabel(localConfig.operation), 35) }}</span>
       </div>
     </div>
 
@@ -60,41 +61,15 @@
         <div class="config-section">
           <label class="config-label">转换操作</label>
           <el-select
-            v-model="localConfig.transformType"
+            v-model="localConfig.operation"
             size="small"
             @change="handleChange"
           >
             <el-option
-              value="json_to_object"
-              label="JSON → 对象"
-            />
-            <el-option
-              value="object_to_json"
-              label="对象 → JSON"
-            />
-            <el-option
-              value="json_to_xml"
-              label="JSON → XML"
-            />
-            <el-option
-              value="xml_to_json"
-              label="XML → JSON"
-            />
-            <el-option
-              value="json_schema"
-              label="JSON Schema 验证"
-            />
-            <el-option
-              value="json_path"
-              label="JSON Path 查询"
-            />
-            <el-option
-              value="json_merge"
-              label="JSON 合并"
-            />
-            <el-option
-              value="json_query"
-              label="JSON 查询"
+              v-for="operation in JSON_OPERATIONS"
+              :key="operation.value"
+              :value="operation.value"
+              :label="operation.label"
             />
           </el-select>
         </div>
@@ -195,10 +170,11 @@
 <script setup>
 import { ref, watch, computed } from 'vue'
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
-import { Braces, ChevronDown, Loader, Check, X } from 'lucide-vue-next'
+import { ChevronDown, Loader, Check, X } from 'lucide-vue-next'
 import { useExecutionStore } from '@/stores/execution'
 import NodeTypeBadge from '@/components/workflow/nodes/NodeTypeBadge.vue'
 import { useNodePresentation } from '@/composables/useNodePresentation'
+import { JSON_OPERATIONS, createDataTransformConfig, getDataTransformOperationLabel } from '@/config/dataTransformOperations'
 
 
 const props = defineProps({
@@ -208,7 +184,7 @@ const props = defineProps({
 })
 
 const NODE_TYPE = 'json_transform'
-const { nodeIcon, nodeColor, nodeLabel } = useNodePresentation(NODE_TYPE)
+const { nodeColor } = useNodePresentation(NODE_TYPE)
 
 const emit = defineEmits(['select'])
 const { updateNodeData } = useVueFlow()
@@ -222,15 +198,15 @@ const isFailed = computed(() => nodeStatus.value === 'failed')
 
 const resultSummary = computed(() => {
   if (!nodeOutput.value) return '完成'
-  const count = nodeOutput.value.count || nodeOutput.value.result_count || 0
-  return `${count} 条已转换`
+  const count = nodeOutput.value.count ?? nodeOutput.value.result_count ?? (Array.isArray(nodeOutput.value.data) ? nodeOutput.value.data.length : null)
+  return count == null ? '转换完成' : `${count} 条已转换`
 })
 
 const isExpanded = ref(false)
 
 const localName = ref(props.data.label || 'JSON转换')
 const localConfig = ref({
-  transformType: props.data.config?.transformType || 'json_to_object',
+  ...createDataTransformConfig(props.data.config),
   source: props.data.config?.source || '',
   query: props.data.config?.query || '',
   formatting: props.data.config?.formatting || 'pretty',
@@ -246,24 +222,24 @@ watch(() => props.data, (d) => {
   if (d) {
     localName.value = d.label || 'JSON转换'
     localConfig.value = {
-      transformType: d.config?.transformType || 'json_to_object',
       source: d.config?.source || '',
       query: d.config?.query || '',
       formatting: d.config?.formatting || 'pretty',
       description: d.config?.description || '',
-      ...d.config
+      ...createDataTransformConfig(d.config)
     }
   }
 }, { deep: true })
 
 function toggleExpand() {
-  handleSelect()
-  isExpanded.value = !isExpanded.value
+  const expanded = !isExpanded.value
+  emit('select')
+  isExpanded.value = expanded
 }
 
 function handleChange() {
   if (props.id) {
-    updateNodeData(props.id, { label: localName.value, config: { ...localConfig.value } })
+    updateNodeData(props.id, { label: localName.value, config: { ...localConfig.value, transformType: localConfig.value.operation } })
   }
 }
 

@@ -1,19 +1,19 @@
 <template>
-  <div class="model-list">
-    <div class="page-header">
-      <div class="header-left">
-        <h1>模型管理</h1>
-        <p class="subtitle">
-          管理 AI 模型配置和 API 密钥
-        </p>
-      </div>
-      <div class="header-actions">
+  <PageShell
+    width="wide"
+    class="model-list"
+  >
+    <PageHeader
+      title="模型管理"
+      subtitle="管理 AI 模型配置和 API 密钥"
+    >
+      <template #actions>
         <el-button @click="showAPIKeyDialog = true">
           <Key class="btn-icon" />
           添加 API Key
         </el-button>
-      </div>
-    </div>
+      </template>
+    </PageHeader>
 
     <!-- Tabs -->
     <el-tabs
@@ -25,20 +25,21 @@
         label="API 密钥"
         name="api-keys"
       >
-        <div
+        <PageEmptyState
           v-if="apiKeys.length === 0 && !apiKeysLoading"
-          class="empty-state"
+          :icon="Key"
+          title="暂无 API 密钥"
+          description="添加您的 API 密钥以使用 AI 模型"
         >
-          <Key class="empty-icon" />
-          <h3>暂无 API 密钥</h3>
-          <p>添加您的 API 密钥以使用 AI 模型</p>
-          <el-button
-            type="primary"
-            @click="showAPIKeyDialog = true"
-          >
-            添加密钥
-          </el-button>
-        </div>
+          <template #actions>
+            <el-button
+              type="primary"
+              @click="showAPIKeyDialog = true"
+            >
+              添加密钥
+            </el-button>
+          </template>
+        </PageEmptyState>
 
         <div
           v-else
@@ -179,14 +180,12 @@
           </div>
         </div>
 
-        <div
+        <PageEmptyState
           v-if="filteredModels.length === 0 && !modelsLoading"
-          class="empty-state"
-        >
-          <Bot class="empty-icon" />
-          <h3>暂无模型配置</h3>
-          <p>系统中还没有配置 AI 模型</p>
-        </div>
+          :icon="Bot"
+          title="暂无模型配置"
+          description="系统中还没有配置 AI 模型"
+        />
 
         <div
           v-else
@@ -682,10 +681,14 @@
         </el-button>
       </template>
     </el-dialog>
-  </div>
+  </PageShell>
 </template>
 
 <script setup>
+import PageEmptyState from '@/components/layout/PageEmptyState.vue'
+import PageHeader from '@/components/layout/PageHeader.vue'
+import PageShell from '@/components/layout/PageShell.vue'
+import { ElMessageBox } from 'element-plus'
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useGatewayStore } from '@/stores/gateway'
 import { useAppStore } from '@/stores/app'
@@ -929,29 +932,6 @@ onMounted(async () => {
 <style lang="scss" scoped>
 @use '@/assets/styles/variables.scss' as *;
 
-.model-list {
-  padding: $spacing-6;
-}
-
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: $spacing-6;
-
-  h1 {
-    font-size: $font-size-2xl;
-    font-weight: $font-weight-bold;
-    margin: 0;
-  }
-
-  .subtitle {
-    font-size: $font-size-sm;
-    color: var(--text-secondary);
-    margin: $spacing-1 0 0;
-  }
-}
-
 .btn-icon {
   width: 16px;
   height: 16px;
@@ -963,27 +943,7 @@ onMounted(async () => {
   }
 }
 
-.empty-state {
-  text-align: center;
-  padding: $spacing-12;
 
-  .empty-icon {
-    width: 64px;
-    height: 64px;
-    color: var(--text-tertiary);
-    margin-bottom: $spacing-4;
-  }
-
-  h3 {
-    font-size: $font-size-lg;
-    margin: 0 0 $spacing-2;
-  }
-
-  p {
-    color: var(--text-secondary);
-    margin: 0 0 $spacing-4;
-  }
-}
 
 .api-keys-list {
   display: flex;
@@ -994,8 +954,8 @@ onMounted(async () => {
 .api-key-card {
   background: var(--bg-secondary);
   border: 1px solid var(--border-primary);
-  border-radius: $radius-xl;
-  padding: $spacing-4;
+  border-radius: var(--content-card-radius);
+  padding: var(--content-card-padding);
 }
 
 .key-header {
@@ -1069,15 +1029,15 @@ onMounted(async () => {
 
 .models-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--content-card-min-width)), 1fr));
   gap: $spacing-4;
 }
 
 .model-card {
   background: var(--bg-secondary);
   border: 1px solid var(--border-primary);
-  border-radius: $radius-xl;
-  padding: $spacing-4;
+  border-radius: var(--content-card-radius);
+  padding: var(--content-card-padding);
   transition: all $transition-fast;
 
   &:hover {
@@ -1287,6 +1247,4 @@ onMounted(async () => {
   }
 }
 </style>
-
-
 

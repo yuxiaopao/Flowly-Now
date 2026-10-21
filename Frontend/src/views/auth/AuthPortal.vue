@@ -53,24 +53,34 @@
         <div
           class="auth-tabs"
           role="tablist"
+          aria-label="登录或注册"
+          @keydown="handleTabKey"
         >
           <button
+            id="auth-login-tab"
             type="button"
             role="tab"
+            aria-controls="auth-login-panel"
+            :tabindex="activeTab === 'login' ? 0 : -1"
             class="auth-tab"
             :class="{ 'auth-tab--active': activeTab === 'login' }"
             :aria-selected="activeTab === 'login'"
+            :disabled="submitting"
             @click="switchTab('login')"
           >
             登录
           </button>
           <button
             v-if="allowRegistration"
+            id="auth-register-tab"
             type="button"
             role="tab"
+            aria-controls="auth-register-panel"
+            :tabindex="activeTab === 'register' ? 0 : -1"
             class="auth-tab"
             :class="{ 'auth-tab--active': activeTab === 'register' }"
             :aria-selected="activeTab === 'register'"
+            :disabled="submitting"
             @click="switchTab('register')"
           >
             注册
@@ -80,6 +90,9 @@
         <!-- 登录 -->
         <div
           v-show="activeTab === 'login'"
+          id="auth-login-panel"
+          role="tabpanel"
+          aria-labelledby="auth-login-tab"
           class="auth-form-block"
         >
           <div class="auth-form-header">
@@ -92,12 +105,27 @@
             :model="loginForm"
             :rules="loginRules"
             class="auth-form"
+            novalidate
             @submit.prevent="handleLogin"
           >
-            <el-form-item prop="username">
+            <el-alert
+              v-if="formError && activeTab === 'login'"
+              :title="formError"
+              type="error"
+              :closable="false"
+              show-icon
+              role="alert"
+            />
+            <el-form-item
+              prop="username"
+              label="用户名或邮箱"
+              label-position="top"
+            >
               <el-input
-                v-model="loginForm.username"
+                v-model.trim="loginForm.username"
                 placeholder="用户名或邮箱"
+                aria-label="用户名或邮箱"
+                autocomplete="username"
                 size="large"
               >
                 <template #prefix>
@@ -106,11 +134,17 @@
               </el-input>
             </el-form-item>
 
-            <el-form-item prop="password">
+            <el-form-item
+              prop="password"
+              label="密码"
+              label-position="top"
+            >
               <el-input
                 v-model="loginForm.password"
                 type="password"
                 placeholder="密码"
+                aria-label="登录密码"
+                autocomplete="current-password"
                 size="large"
                 show-password
               >
@@ -136,14 +170,15 @@
               <button
                 type="submit"
                 class="submit-button"
-                :class="{ loading: authStore.isLoading }"
-                :disabled="authStore.isLoading"
+                :class="{ loading: submitting }"
+                :disabled="submitting"
+                :aria-busy="submitting"
               >
-                <span v-if="!authStore.isLoading">登录</span>
+                <span v-if="!submitting">登录</span>
                 <span
                   v-else
                   class="loading-dots"
-                ><span /><span /><span /></span>
+                >正在登录…</span>
               </button>
             </el-form-item>
           </el-form>
@@ -152,6 +187,9 @@
         <!-- 注册 -->
         <div
           v-show="activeTab === 'register' && allowRegistration"
+          id="auth-register-panel"
+          role="tabpanel"
+          aria-labelledby="auth-register-tab"
           class="auth-form-block"
         >
           <div class="auth-form-header">
@@ -164,11 +202,27 @@
             :model="registerForm"
             :rules="registerRules"
             class="auth-form"
+            novalidate
             @submit.prevent="handleRegister"
           >
-            <el-form-item prop="username">
+            <el-alert
+              v-if="formError && activeTab === 'register'"
+              :title="formError"
+              type="error"
+              :closable="false"
+              show-icon
+              role="alert"
+            />
+            <el-form-item
+              prop="username"
+              label="用户名"
+              label-position="top"
+              :error="fieldErrors.username"
+            >
               <el-input
-                v-model="registerForm.username"
+                v-model.trim="registerForm.username"
+                aria-label="注册用户名"
+                autocomplete="username"
                 placeholder="用户名"
                 size="large"
               >
@@ -178,9 +232,16 @@
               </el-input>
             </el-form-item>
 
-            <el-form-item prop="email">
+            <el-form-item
+              prop="email"
+              label="邮箱"
+              label-position="top"
+              :error="fieldErrors.email"
+            >
               <el-input
-                v-model="registerForm.email"
+                v-model.trim="registerForm.email"
+                aria-label="注册邮箱"
+                autocomplete="email"
                 type="email"
                 placeholder="邮箱地址"
                 size="large"
@@ -191,9 +252,16 @@
               </el-input>
             </el-form-item>
 
-            <el-form-item prop="password">
+            <el-form-item
+              prop="password"
+              label="密码"
+              label-position="top"
+              :error="fieldErrors.password"
+            >
               <el-input
                 v-model="registerForm.password"
+                aria-label="注册密码"
+                autocomplete="new-password"
                 type="password"
                 :placeholder="`密码 (至少 ${minPasswordLength} 位)`"
                 size="large"
@@ -205,9 +273,16 @@
               </el-input>
             </el-form-item>
 
-            <el-form-item prop="password_confirm">
+            <el-form-item
+              prop="password_confirm"
+              label="确认密码"
+              label-position="top"
+              :error="fieldErrors.passwordConfirm"
+            >
               <el-input
                 v-model="registerForm.password_confirm"
+                aria-label="确认注册密码"
+                autocomplete="new-password"
                 type="password"
                 placeholder="确认密码"
                 size="large"
@@ -219,21 +294,24 @@
               </el-input>
             </el-form-item>
 
-            <div class="form-terms">
+            <div
+              v-if="requireTerms"
+              class="form-terms"
+            >
               <el-checkbox v-model="registerForm.agreeTerms">
                 <span class="terms-text">
                   我已阅读并同意
-                  <a
-                    href="#"
+                  <button
+                    type="button"
                     class="terms-link"
-                    @click.prevent
-                  >服务条款</a>
+                    @click.stop.prevent="openLegal('terms')"
+                  >服务条款</button>
                   和
-                  <a
-                    href="#"
+                  <button
+                    type="button"
                     class="terms-link"
-                    @click.prevent
-                  >隐私政策</a>
+                    @click.stop.prevent="openLegal('privacy')"
+                  >隐私政策</button>
                 </span>
               </el-checkbox>
             </div>
@@ -242,14 +320,15 @@
               <button
                 type="submit"
                 class="submit-button"
-                :class="{ loading: authStore.isLoading }"
-                :disabled="authStore.isLoading || !registerForm.agreeTerms"
+                :class="{ loading: submitting }"
+                :disabled="submitting || !siteConfigStore.loaded"
+                :aria-busy="submitting"
               >
-                <span v-if="!authStore.isLoading">创建账号</span>
+                <span v-if="!submitting">创建账号</span>
                 <span
                   v-else
                   class="loading-dots"
-                ><span /><span /><span /></span>
+                >正在创建账号…</span>
               </button>
             </el-form-item>
           </el-form>
@@ -268,11 +347,40 @@
         />
       </div>
     </section>
+    <AuthLegalDialog
+      v-model="legalVisible"
+      :document="legalDocument"
+      :title="legalTitle"
+    />
+    <el-dialog
+      v-model="configErrorVisible"
+      :title="AUTH.configNotice.title"
+      :width="AUTH.configNotice.width"
+      align-center
+      append-to-body
+      destroy-on-close
+    >
+      <p class="config-notice-message">
+        {{ configError }}
+      </p>
+      <template #footer>
+        <el-button @click="configErrorVisible = false">
+          {{ AUTH.configNotice.dismiss }}
+        </el-button>
+        <el-button
+          type="primary"
+          :loading="configLoading"
+          @click="loadConfig"
+        >
+          {{ AUTH.configNotice.retry }}
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, watch } from 'vue'
+import { ref, reactive, computed, onMounted, watch, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useAppStore } from '@/stores/app'
@@ -282,6 +390,10 @@ import ThemeSwitcher from '@/components/common/ThemeSwitcher.vue'
 import AuthSplineRobot from '@/components/auth/AuthSplineRobot.vue'
 import AuthRobotSpeechBubble from '@/components/auth/AuthRobotSpeechBubble.vue'
 import AuthRobotChatBox from '@/components/auth/AuthRobotChatBox.vue'
+import AuthLegalDialog from '@/components/auth/AuthLegalDialog.vue'
+import { AUTH } from '@/config/auth'
+import { rememberSession, safeAuthRedirect } from '@/utils/authSession'
+import { getSettingsError, getSettingsFieldErrors } from '@/utils/personalCenter'
 import { sendAuthAssistantMessage } from '@/api/public'
 import { APP_CONFIG } from '@/config'
 import {
@@ -297,6 +409,17 @@ const siteConfigStore = useSiteConfigStore()
 const activeTab = ref('login')
 const loginFormRef = ref(null)
 const registerFormRef = ref(null)
+const submitting = ref(false)
+const formError = ref('')
+const fieldErrors = ref({})
+const configError = ref('')
+const configErrorVisible = ref(false)
+const configLoading = ref(false)
+const legalVisible = ref(false)
+const legalType = ref('terms')
+const legalDocument = computed(() => siteConfigStore.terms[legalType.value])
+const legalTitle = computed(() => legalType.value === 'terms' ? '服务条款' : '隐私政策')
+function openLegal(type) { legalType.value = type; legalVisible.value = true }
 
 const robotReply = ref(APP_CONFIG.auth.assistantWelcome)
 const chatLoading = ref(false)
@@ -307,7 +430,7 @@ const MAX_CHAT_HISTORY = 10
 const loginForm = reactive({
   username: '',
   password: '',
-  remember: false,
+  remember: rememberSession(),
 })
 
 const registerForm = reactive({
@@ -320,8 +443,9 @@ const registerForm = reactive({
 
 const termsDoc = computed(() => siteConfigStore.terms.terms)
 const privacyDoc = computed(() => siteConfigStore.terms.privacy)
-const minPasswordLength = computed(() => siteConfigStore.auth.passwordMinLength || 8)
+const minPasswordLength = computed(() => siteConfigStore.auth.passwordMinLength || AUTH.passwordMinLength)
 const allowRegistration = computed(() => siteConfigStore.auth.allowRegistration !== false)
+const requireTerms = computed(() => siteConfigStore.auth.requireTermsOnRegister !== false)
 
 const loginRules = {
   username: [
@@ -329,7 +453,6 @@ const loginRules = {
   ],
   password: [
     { required: true, message: '请输入密码', trigger: 'blur' },
-    { min: 6, message: '密码至少 6 个字符', trigger: 'blur' },
   ],
 }
 
@@ -344,7 +467,8 @@ const validatePasswordConfirm = (_rule, value, callback) => {
 const registerRules = computed(() => ({
   username: [
     { required: true, message: '请输入用户名', trigger: 'blur' },
-    { min: 3, max: 20, message: '用户名 3-20 个字符', trigger: 'blur' },
+    { max: AUTH.usernameMaxLength, message: `用户名最多 ${AUTH.usernameMaxLength} 个字符`, trigger: 'blur' },
+    { pattern: /^[\p{L}\p{N}_@.+-]+$/u, message: '用户名仅支持文字、数字及 @ . + - _', trigger: 'blur' },
   ],
   email: [
     { required: true, message: '请输入邮箱', trigger: 'blur' },
@@ -371,7 +495,10 @@ function syncTabFromRoute() {
 
 function switchTab(tab) {
   if (tab === 'register' && !allowRegistration.value) return
+  if (tab === 'register' && configError.value && !siteConfigStore.loaded) configErrorVisible.value = true
   activeTab.value = tab
+  formError.value = ''
+  fieldErrors.value = {}
   const query = { ...route.query }
   if (tab === 'register') {
     query.tab = 'register'
@@ -382,28 +509,49 @@ function switchTab(tab) {
   router.replace({ path: '/login', query })
 }
 
-async function handleLogin() {
-  const valid = await loginFormRef.value?.validate().catch(() => false)
-  if (!valid) return
+async function handleTabKey(event) {
+  if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key) || submitting.value) return
+  event.preventDefault()
+  if (!allowRegistration.value) return
+  const tab = event.key === 'Home' ? 'login' : event.key === 'End' ? 'register' : activeTab.value === 'login' ? 'register' : 'login'
+  switchTab(tab)
+  await nextTick()
+  document.getElementById(`auth-${tab}-tab`)?.focus()
+}
 
+async function handleLogin() {
+  if (submitting.value) return
+  submitting.value = true
+  formError.value = ''
   try {
+    const valid = await loginFormRef.value?.validate().catch(() => false)
+    if (!valid) return
     await authStore.login({
       username: loginForm.username,
       password: loginForm.password,
+      remember: loginForm.remember,
     })
     appStore.success('登录成功')
-    const redirect = route.query.redirect || '/'
-    router.push(typeof redirect === 'string' ? redirect : '/')
-  } catch {
-    // 错误已由请求拦截器展示
+    await router.replace(safeAuthRedirect(route.query.redirect))
+  } catch (error) {
+    formError.value = getSettingsError(error, '登录失败，请检查网络后重试')
+  } finally {
+    submitting.value = false
   }
 }
 
 async function handleRegister() {
-  const valid = await registerFormRef.value?.validate().catch(() => false)
-  if (!valid) return
-
+  if (submitting.value || !siteConfigStore.loaded || !allowRegistration.value) return
+  submitting.value = true
+  formError.value = ''
+  fieldErrors.value = {}
   try {
+    const valid = await registerFormRef.value?.validate().catch(() => false)
+    if (!valid) return
+    if (requireTerms.value && !registerForm.agreeTerms) {
+      formError.value = '请先阅读并同意服务条款与隐私政策'
+      return
+    }
     await authStore.register({
       username: registerForm.username,
       email: registerForm.email,
@@ -414,9 +562,21 @@ async function handleRegister() {
       privacy_version: privacyDoc.value?.version || '',
     })
     appStore.success('注册成功，请登录')
+    loginForm.username = registerForm.username
+    loginForm.password = ''
+    registerForm.password = ''
+    registerForm.password_confirm = ''
+    registerForm.agreeTerms = false
     switchTab('login')
-  } catch {
-    // 错误已由请求拦截器展示
+  } catch (error) {
+    fieldErrors.value = getSettingsFieldErrors(error)
+    formError.value = getSettingsError(error, '注册失败，请检查网络后重试')
+    if (formError.value.includes('版本已更新')) {
+      registerForm.agreeTerms = false
+      await loadConfig()
+    }
+  } finally {
+    submitting.value = false
   }
 }
 
@@ -449,9 +609,21 @@ async function handleRobotChat(message) {
   }
 }
 
+async function loadConfig() {
+  if (configLoading.value) return
+  configLoading.value = true
+  try {
+    await siteConfigStore.fetchPublicConfig({ reportError: false })
+    configError.value = siteConfigStore.loaded ? '' : AUTH.configNotice.message
+    configErrorVisible.value = Boolean(configError.value)
+  } finally {
+    configLoading.value = false
+  }
+}
+
 onMounted(async () => {
   if (!siteConfigStore.loaded) {
-    await siteConfigStore.fetchPublicConfig()
+    await loadConfig()
   }
   syncTabFromRoute()
   if (route.query.registered === '1') {
@@ -466,6 +638,12 @@ watch(
   () => [route.query.tab, allowRegistration.value],
   () => syncTabFromRoute(),
 )
+
+watch(activeTab, async () => {
+  await nextTick()
+  loginFormRef.value?.clearValidate()
+  registerFormRef.value?.clearValidate()
+})
 </script>
 
 <style lang="scss" scoped>
@@ -493,7 +671,7 @@ watch(
   text-decoration: none;
   font-size: $font-size-sm;
   border-radius: $radius-lg;
-  transition: all $transition-fast;
+  transition: background-color $transition-fast, color $transition-fast, border-color $transition-fast;
   background: color-mix(in srgb, var(--bg-primary) 55%, transparent);
   backdrop-filter: blur(8px);
 
@@ -510,8 +688,8 @@ watch(
 
 .auth-portal__hero {
   position: relative;
-  flex: 0 0 70%;
-  width: 70%;
+  flex: 1;
+  min-width: 0;
   min-height: 100vh;
   overflow: hidden;
 }
@@ -604,8 +782,9 @@ watch(
 }
 
 .auth-portal__panel {
-  flex: 0 0 30%;
-  width: 30%;
+  flex: 0 0 420px;
+  width: 420px;
+  max-width: 100%;
   min-height: 100vh;
   display: flex;
   align-items: center;
@@ -624,19 +803,9 @@ watch(
   flex-direction: column;
   min-height: calc(100vh - #{$spacing-8 * 2});
   max-height: calc(100vh - #{$spacing-8 * 2});
-  animation: slideUp 0.45s ease;
+
 }
 
-@keyframes slideUp {
-  from {
-    opacity: 0;
-    transform: translateY(16px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
 
 .auth-form-block {
   flex: 1;
@@ -672,7 +841,7 @@ watch(
   font-size: $font-size-sm;
   font-weight: $font-weight-medium;
   cursor: pointer;
-  transition: all $transition-fast;
+  transition: background-color $transition-fast, color $transition-fast, border-color $transition-fast;
 
   &:hover {
     color: var(--text-primary);
@@ -703,6 +872,7 @@ watch(
 }
 
 .auth-form {
+  :deep(.el-alert) { margin-bottom: $spacing-4; }
   :deep(.el-form-item) {
     margin-bottom: $spacing-4;
   }
@@ -715,7 +885,7 @@ watch(
       background-color: var(--bg-tertiary);
       border: 1px solid var(--border-primary);
       border-radius: $radius-lg;
-      transition: all $transition-fast;
+      transition: background-color $transition-fast, color $transition-fast, border-color $transition-fast;
 
       &:hover {
         border-color: var(--text-secondary);
@@ -780,6 +950,11 @@ watch(
   }
 
   .terms-link {
+    border: 0;
+    padding: 0;
+    background: none;
+    font: inherit;
+    cursor: pointer;
     color: var(--accent-primary);
     text-decoration: none;
 
@@ -804,7 +979,7 @@ watch(
   font-size: $font-size-base;
   font-weight: $font-weight-semibold;
   cursor: pointer;
-  transition: all $transition-fast;
+  transition: background-color $transition-fast, color $transition-fast, border-color $transition-fast;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -822,27 +997,6 @@ watch(
   &.loading {
     pointer-events: none;
   }
-}
-
-.loading-dots {
-  display: flex;
-  gap: 4px;
-
-  span {
-    width: 8px;
-    height: 8px;
-    background: var(--text-inverse);
-    border-radius: 50%;
-    animation: bounce 1.4s ease-in-out infinite both;
-
-    &:nth-child(1) { animation-delay: -0.32s; }
-    &:nth-child(2) { animation-delay: -0.16s; }
-  }
-}
-
-@keyframes bounce {
-  0%, 80%, 100% { transform: scale(0); }
-  40% { transform: scale(1); }
 }
 
 .auth-portal__theme {

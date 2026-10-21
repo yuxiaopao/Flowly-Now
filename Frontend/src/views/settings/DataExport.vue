@@ -243,13 +243,13 @@
 
           <el-form-item label="格式">
             <el-radio-group v-model="exportFormat">
-              <el-radio label="json">
+              <el-radio value="json">
                 JSON
               </el-radio>
-              <el-radio label="csv">
+              <el-radio value="csv">
                 CSV
               </el-radio>
-              <el-radio label="xlsx">
+              <el-radio value="xlsx">
                 Excel
               </el-radio>
             </el-radio-group>
@@ -543,11 +543,6 @@ const deleteAllData = async () => {
 </script>
 
 <style lang="scss" scoped>
-.data-export-page {
-  padding: 24px;
-  max-width: 1000px;
-  margin: 0 auto;
-}
 
 .section {
   margin-bottom: 32px;
@@ -561,11 +556,13 @@ const deleteAllData = async () => {
 
 .export-options {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--content-card-min-width)), 1fr));
+  gap: var(--content-gap);
 }
 
 .export-card {
+  min-width: 0;
+  overflow-wrap: anywhere;
   display: flex;
   align-items: center;
   gap: 16px;

@@ -51,6 +51,9 @@ def is_web_scrape_email_intent(description: str) -> bool:
     )
     has_format = any(kw.lower() in text for kw in FORMAT_KEYWORDS)
     has_email = any(kw.lower() in text for kw in EMAIL_KEYWORDS) or bool(EMAIL_RE.search(text))
+    has_web_context = bool(re.search(r'web|website|page|url|https?://', text, re.I))
+    if has_collect and has_email and has_web_context:
+        return True
     # Primary user theme: collect from web + format + email
     if has_collect and has_format and has_email:
         return True

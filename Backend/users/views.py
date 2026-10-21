@@ -2,27 +2,31 @@
 User authentication views.
 """
 
-from rest_framework import status, generics
+from rest_framework import status, generics, serializers
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.authtoken.models import Token
-from django.contrib.auth import update_session_auth_hash
+from django.contrib.auth import update_session_auth_hash, logout
+from django.core.exceptions import ValidationError
+from django.core.mail import send_mail
 from django.contrib.auth.tokens import default_token_generator
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from django.utils import timezone
 from django.utils.encoding import force_bytes, force_str
-from django.template.loader import render_to_string
-from core.email_delivery import send_email_with_fallback
 from django.conf import settings
+from django.db import transaction
+import logging
 from .serializers import (
     UserSerializer, UserCreateSerializer, LoginSerializer,
-    ChangePasswordSerializer, TokenSerializer,
-    PasswordResetRequestSerializer, PasswordResetConfirmSerializer
+    ChangePasswordSerializer,
+    PasswordResetRequestSerializer, PasswordResetConfirmSerializer, validate_account_password
 )
-from .authentication import generate_tokens, verify_refresh_token
+from .authentication import generate_tokens, verify_refresh_token, revoke_session
 from .models import User
+
+logger = logging.getLogger(__name__)
 
 
 # =============================================================================
@@ -32,18 +36,19 @@ def _log_audit(user, action, resource_type, resource_id, request, status_val='su
     """Log an audit event. Import here to avoid circular imports."""
     try:
         from workflows.models import AuditLog
-        AuditLog.objects.create(
-            user=user,
-            action=action,
-            resource_type=resource_type,
-            resource_id=resource_id or '',
-            status=status_val,
-            error_message=error_message,
-            ip_address=_get_client_ip(request),
-            user_agent=request.META.get('HTTP_USER_AGENT', '')[:500] if request else '',
-        )
+        with transaction.atomic():
+            AuditLog.objects.create(
+                user=user,
+                action=action,
+                resource_type=resource_type,
+                resource_id=resource_id or '',
+                status=status_val,
+                error_message=error_message or '',
+                ip_address=_get_client_ip(request),
+                user_agent=request.META.get('HTTP_USER_AGENT', '')[:500] if request else '',
+            )
     except Exception:
-        pass
+        logger.exception('审计日志写入失败：%s %s', action, resource_type)
 
 def _get_client_ip(request):
     """Extract client IP from request, handling proxies."""
@@ -61,9 +66,11 @@ class RegisterView(generics.CreateAPIView):
     queryset = User.objects.all()
     serializer_class = UserCreateSerializer
     permission_classes = [AllowAny]
+    authentication_classes = []
 
+    @transaction.atomic
     def create(self, request, *args, **kwargs):
-        from admin.models import LegalDocument, UserTermsAcceptance
+        from admin.models import UserTermsAcceptance
         from admin.services.config_service import get_active_legal_document
         from admin.models import SystemSetting
 
@@ -73,9 +80,11 @@ class RegisterView(generics.CreateAPIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
         terms_version = request.data.get('terms_version')
         privacy_version = request.data.get('privacy_version')
-        agree_terms = request.data.get('agree_terms', False)
+        agree_terms = serializer.validated_data['agree_terms']
 
         if SystemSetting.get('require_terms_on_register', True):
             if not agree_terms:
@@ -96,8 +105,6 @@ class RegisterView(generics.CreateAPIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
         user = serializer.save()
 
         default_role = SystemSetting.get('default_role', 'user')
@@ -108,7 +115,7 @@ class RegisterView(generics.CreateAPIView):
 
         client_ip = _get_client_ip(request)
         user_agent = request.META.get('HTTP_USER_AGENT', '')[:500]
-        for doc in [get_active_legal_document('terms'), get_active_legal_document('privacy')]:
+        for doc in ([get_active_legal_document('terms'), get_active_legal_document('privacy')] if agree_terms else []):
             if doc:
                 UserTermsAcceptance.objects.create(
                     user=user,
@@ -132,6 +139,7 @@ class LoginView(APIView):
     """User login endpoint."""
 
     permission_classes = [AllowAny]
+    authentication_classes = []
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = 'login'
 
@@ -148,7 +156,7 @@ class LoginView(APIView):
                 status_val='failure',
                 error_message=str(serializer.errors)
             )
-            return Response(serializer.errors, status=status.HTTP_401_UNAUTHORIZED)
+            return Response({'errors': serializer.errors}, status=status.HTTP_401_UNAUTHORIZED)
 
         user = serializer.validated_data['user']
         tokens = generate_tokens(user)
@@ -177,6 +185,7 @@ class TokenRefreshView(APIView):
     """Refresh access token using refresh token."""
 
     permission_classes = [AllowAny]
+    authentication_classes = []
 
     def post(self, request):
         refresh_token = request.data.get('refresh')
@@ -203,7 +212,7 @@ class TokenRefreshView(APIView):
                 status=status.HTTP_401_UNAUTHORIZED
             )
 
-        tokens = generate_tokens(user)
+        tokens = generate_tokens(user, session_id=payload['sid'])
         user_serializer = UserSerializer(user)
 
         return Response({
@@ -219,11 +228,11 @@ class LogoutView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        # Delete the token
-        try:
-            request.user.auth_token.delete()
-        except Exception:
-            pass
+        if isinstance(request.auth, str):
+            revoke_session(request.auth)
+        elif isinstance(request.auth, Token):
+            request.auth.delete()
+        logout(request)
 
         return Response({'message': '登出成功'})
 
@@ -269,13 +278,17 @@ class ChangePasswordView(APIView):
         # Update session to prevent logout
         update_session_auth_hash(request, request.user)
 
-        return Response({'message': '密码修改成功'})
+        Token.objects.filter(user=request.user).delete()
+        return Response({'message': '密码修改成功', **generate_tokens(request.user)})
 
 
 class PasswordResetRequestView(APIView):
     """Request password reset email."""
 
     permission_classes = [AllowAny]
+    authentication_classes = []
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'password_reset'
 
     def post(self, request):
         serializer = PasswordResetRequestSerializer(data=request.data)
@@ -284,7 +297,9 @@ class PasswordResetRequestView(APIView):
         email = serializer.validated_data['email']
 
         try:
-            user = User.objects.get(email=email)
+            user = User.objects.get(email__iexact=email, is_active=True)
+            if not user.has_usable_password():
+                return Response({'message': '如果邮箱存在，您将收到重置链接，请同时检查垃圾邮件。'})
 
             # Generate password reset token
             uidb64 = urlsafe_base64_encode(force_bytes(user.pk))
@@ -303,7 +318,7 @@ class PasswordResetRequestView(APIView):
 请点击以下链接重置您的密码：
 {reset_url}
 
-此链接将在 24 小时后过期。
+此链接将在 {settings.PASSWORD_RESET_TIMEOUT // 60} 分钟后过期，使用后立即失效。
 
 如果您没有请求重置密码，请忽略此邮件。
 
@@ -311,20 +326,26 @@ class PasswordResetRequestView(APIView):
 Flowly 团队
             """
 
-            send_email_with_fallback(
+            send_mail(
                 subject=subject,
                 message=message,
                 from_email=settings.DEFAULT_FROM_EMAIL,
-                recipient_list=[email],
+                recipient_list=[user.email],
+                fail_silently=False,
             )
 
-        except User.DoesNotExist:
+        except (User.DoesNotExist, User.MultipleObjectsReturned):
             # Don't reveal that the email doesn't exist
             pass
+        except Exception:
+            logger.exception('密码重置邮件发送失败')
+            return Response({'error': '邮件服务暂时不可用，请稍后重试或联系管理员'}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
         # Always return success to prevent email enumeration
         return Response({
-            'message': '如果邮箱存在，重置链接已发送'
+            'message': ('当前为本地测试环境，重置邮件仅记录在服务端日志，未发送到邮箱。'
+                        if settings.EMAIL_BACKEND == 'django.core.mail.backends.console.EmailBackend'
+                        else '如果邮箱存在，您将收到重置链接，请同时检查垃圾邮件。')
         })
 
 
@@ -332,7 +353,11 @@ class PasswordResetConfirmView(APIView):
     """Confirm password reset with token."""
 
     permission_classes = [AllowAny]
+    authentication_classes = []
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'password_reset'
 
+    @transaction.atomic
     def post(self, request):
         serializer = PasswordResetConfirmSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -343,7 +368,7 @@ class PasswordResetConfirmView(APIView):
 
         try:
             uid = force_str(urlsafe_base64_decode(uidb64))
-            user = User.objects.get(pk=uid)
+            user = User.objects.select_for_update().get(pk=uid, is_active=True)
         except (TypeError, ValueError, OverflowError, User.DoesNotExist):
             return Response(
                 {'error': '无效的重置链接'},
@@ -357,9 +382,15 @@ class PasswordResetConfirmView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Set new password
+        try:
+            validate_account_password(new_password, user)
+        except ValidationError as exc:
+            raise serializers.ValidationError({'new_password': exc.messages}) from exc
+
+        # Set new password; password-bound JWTs and existing sessions expire.
         user.set_password(new_password)
         user.save()
+        Token.objects.filter(user=user).delete()
 
         return Response({
             'message': '密码重置成功'

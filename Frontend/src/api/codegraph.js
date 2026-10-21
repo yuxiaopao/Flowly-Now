@@ -33,8 +33,9 @@ export function getProjectStructure(projectId) {
  * @param {number} projectId
  * @param {boolean} forceRefresh
  */
-export function getGraphData(projectId, forceRefresh = false) {
+export function getGraphData(projectId, forceRefresh = false, config = {}) {
   return api.get(`/codegraph/projects/${projectId}/graph/`, {
+    ...config,
     params: { force_refresh: forceRefresh }
   })
 }
@@ -77,10 +78,29 @@ export function getModuleDependencies(projectId) {
  * @param {number} projectId
  * @param {string} filePath
  */
-export function getFileContent(projectId, filePath) {
+export function getFileContent(projectId, filePath, config = {}) {
   return api.get(`/codegraph/projects/${projectId}/file/`, {
+    ...config,
     params: { path: filePath }
   })
+}
+
+/**
+ * AI 解读文件用途
+ * @param {number} projectId
+ * @param {object} payload - { path, module, type, indegree, outdegree, centrality }
+ */
+export function explainFile(projectId, payload, config = {}) {
+  return api.post(`/codegraph/projects/${projectId}/file/explain/`, payload, config)
+}
+
+/**
+ * CodeGraph 分析助手问答
+ * @param {number} projectId
+ * @param {object} payload - { message, history?, selected_path?, selected_node_id? }
+ */
+export function askAssistant(projectId, payload, config = {}) {
+  return api.post(`/codegraph/projects/${projectId}/assistant/ask/`, payload, config)
 }
 
 /**
@@ -89,8 +109,9 @@ export function getFileContent(projectId, filePath) {
  * @param {string} query
  * @param {object} options
  */
-export function searchFiles(projectId, query, options = {}) {
+export function searchFiles(projectId, query, options = {}, config = {}) {
   return api.get(`/codegraph/projects/${projectId}/search/`, {
+    ...config,
     params: {
       q: query,
       ...options
@@ -132,6 +153,8 @@ export default {
   getModules,
   getModuleDependencies,
   getFileContent,
+  explainFile,
+  askAssistant,
   searchFiles,
   invalidateCache,
   getWebSocketUrl,

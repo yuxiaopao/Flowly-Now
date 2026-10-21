@@ -1,0 +1,104 @@
+{
+  "feishu": {
+    "file": "feishu.png",
+    "source": "https://p16-hera-overseas.larksuitecdn.com/tos-mya-i-lojyj5t9n9/c801a0760aef41dc9835bb36a61400eb.png~tplv-lojyj5t9n9-origin.image",
+    "site": "https://www.feishu.cn",
+    "sha256": "f58d925630a7f1f99fd9bcb45d695d4446e6639fe774eabd69c6c2ebcfacdfb1"
+  },
+  "dingtalk": {
+    "file": "dingtalk.png",
+    "source": "https://gw.alicdn.com/imgextra/i3/O1CN014ZbI6ZTEhdC0ttN2_!!6000000003783-2-tps-444-444.png",
+    "site": "https://www.dingtalk.com",
+    "sha256": "b3fb0715857df5d23213b5265166fabcb7f7b4b290890d7b5682a027cf39c85d"
+  },
+  "wechat_work": {
+    "file": "wechat_work.png",
+    "source": "https://wwcdn.weixin.qq.com/node/wwnl/wwnl/style/images/independent/favicon/favicon_48h$c976bd14.png",
+    "site": "https://work.weixin.qq.com",
+    "sha256": "5b95029b419b45aef63f876b9bb8d86705fbff36da4c51dfdd9f2d63a1de7f2a"
+  },
+  "slack": {
+    "file": "slack.png",
+    "source": "https://a.slack-edge.com/9cc0056/img/icons/favicon-32.png",
+    "site": "https://slack.com",
+    "sha256": "ca3872d0fb85ff9858bcbdc529d6e1db32c029c681c6e723e4f2ecb1c7defea6"
+  },
+  "discord": {
+    "file": "discord.png",
+    "source": "https://cdn.prod.website-files.com/6257adef93867e50d84d30e2/62fddf0fde45a8baedcc7ee5_847541504914fd33810e70a0ea73177e%20(2)-1.png",
+    "site": "https://discord.com",
+    "sha256": "11848b5f1c8a7f294c6211c2f0d0dc83a8a28bfe1ef0829a8dacfdf475c5e5a2"
+  },
+  "microsoft_teams": {
+    "file": "microsoft_teams.svg",
+    "source": "https://cdn-dynmedia-1.microsoft.com/is/content/microsoftcorp/Teams-Icon-FY26",
+    "site": "https://www.microsoft.com/en-us/microsoft-teams/group-chat-software",
+    "sha256": "6a33d49f19d1be2bcdf86921935a2171e5c18c3b11abe297ca03d5f4f302ba3a"
+  },
+  "telegram": {
+    "file": "telegram.svg",
+    "source": "https://telegram.org/img/website_icon.svg?4",
+    "site": "https://telegram.org",
+    "sha256": "0019255c610cb0843c524d7995905fa5201651fcc393846bee8414f0610097f5"
+  },
+  "zapier": {
+    "file": "zapier.ico",
+    "source": "https://zapier.com/favicon.ico",
+    "site": "https://zapier.com",
+    "sha256": "733fdd5c9e5b3020cbae07b0f9f6b0e21653b4975b400f8fe230c2a4e10f931a"
+  },
+  "make": {
+    "file": "make.png",
+    "source": "https://cdn.prod.website-files.com/6a294495bc84130c6dd0c4fd/6a7b944121e8a94aaf6ca04f_favicon-32x32.png",
+    "site": "https://www.make.com",
+    "sha256": "7e7bbbdfc59aad6a88f7630332c79941f23b55c5152a1bf86e0f3179675aaf6d"
+  },
+  "powerautomate": {
+    "file": "powerautomate.png",
+    "source": "https://cdn-dynmedia-1.microsoft.com/is/image/microsoftcorp/Hero_PAU_icon?wid=96&hei=96&fmt=png-alpha",
+    "site": "https://www.microsoft.com/en-us/power-platform/products/power-automate",
+    "sha256": "35800854ad6a0729db90453b65f0e531614b3bb12a6d4dee405895084c54afe9"
+  },
+  "github": {
+    "file": "github.svg",
+    "source": "https://github.githubassets.com/favicons/favicon.svg",
+    "site": "https://github.com",
+    "sha256": "6a9577cd4f7fa6b75bde1025af85b944e9dd1388373b55ccba6e9f80ac2eae60"
+  },
+  "gitlab": {
+    "file": "gitlab.png",
+    "source": "https://about.gitlab.com/images/ico/favicon-192x192.png",
+    "site": "https://about.gitlab.com",
+    "sha256": "8274a7c15c1c7c5a07fdb684f8a7e5b417fe74ea2321fdd1c830fc9b18b50cb0"
+  },
+  "notion": {
+    "file": "notion.png",
+    "source": "https://www.notion.com/front-static/logo-ios.png",
+    "site": "https://www.notion.com",
+    "sha256": "483846a85e43e22879445047b83b22033e70fcc25ab34809ebadb7f856507ee0"
+  },
+  "airtable": {
+    "file": "airtable.png",
+    "source": "https://www.airtable.com/favicon.ico",
+    "site": "https://www.airtable.com",
+    "sha256": "8020f46841434ab3782fa38d6b8d6c47b3ea69fc025ba8f8d3608e87c36c9aa3"
+  },
+  "google_sheets": {
+    "file": "google_sheets.png",
+    "source": "https://www.gstatic.com/images/branding/product/2x/sheets_2020q4_48dp.png",
+    "site": "https://www.google.com/sheets/about/",
+    "sha256": "7bef05dde4e1e8e9c5e7374cab674241f4d77b8574b19e829f2f414fe94191a6"
+  },
+  "google_drive": {
+    "file": "google_drive.png",
+    "source": "https://www.gstatic.com/images/branding/product/2x/drive_2020q4_48dp.png",
+    "site": "https://www.google.com/drive/",
+    "sha256": "72ea8d2de5e0568158cf48029cb9121564ab20c275465a65453776baf1160ebd"
+  },
+  "n8n": {
+    "file": "n8n.ico",
+    "source": "https://raw.githubusercontent.com/n8n-io/n8n/master/packages/frontend/editor-ui/public/favicon.ico",
+    "site": "https://n8n.io",
+    "sha256": "7c238ace483e3ea03da5ee3ed30b03f108319ed4942b01c1f74164168be794aa"
+  }
+}

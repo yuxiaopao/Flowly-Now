@@ -28,6 +28,143 @@ logger = logging.getLogger(__name__)
 
 IS_WINDOWS = platform.system() == 'Windows'
 
+# Scientific modules allowed in code-node sandbox (CUMCM / data analysis)
+SANDBOX_SCIENTIFIC_MODULES = ('numpy', 'scipy', 'pandas', 'matplotlib')
+
+# Slim Docker images without pre-installed scientific stack
+SLIM_DOCKER_IMAGE_MARKERS = (
+    'python:3.12-slim',
+    'python:3.11-slim',
+    'python:3-slim',
+    ':slim',
+)
+
+
+def code_uses_scientific_stack(code: str) -> bool:
+    """Heuristic: CUMCM / numeric code nodes that need numpy/scipy/matplotlib."""
+    if not code:
+        return False
+    lowered = code.lower()
+    markers = (
+        'numpy', 'np.', 'scipy', 'pandas', 'pd.', 'matplotlib', 'plt.',
+        'linprog', 'minimize', 'curve_fit', 'monte_carlo',
+    )
+    return any(m in lowered for m in markers)
+
+
+def docker_image_lacks_scientific_stack(image: str) -> bool:
+    """True when Docker image is unlikely to include numpy/scipy (e.g. python:slim)."""
+    img = (image or '').lower()
+    if 'code-sandbox' in img or 'flowly-code-sandbox' in img:
+        return False
+    return any(m in img for m in SLIM_DOCKER_IMAGE_MARKERS)
+
+
+def _is_scientific_import_error(error: Optional[str]) -> bool:
+    if not error:
+        return False
+    lowered = error.lower()
+    if 'importerror' in lowered or 'no module named' in lowered:
+        for mod in SANDBOX_SCIENTIFIC_MODULES:
+            if mod in lowered:
+                return True
+    return False
+
+# Env keys preserved on Windows so subprocess can resolve user site-packages
+_SUBPROCESS_ENV_KEYS = (
+    'PATH', 'SYSTEMROOT', 'TEMP', 'TMP', 'HOME', 'LANG', 'LC_ALL',
+    'PYTHONIOENCODING', 'PYTHONUTF8',
+    'PYTHONPATH', 'PYTHONHOME', 'PYTHONUSERBASE',
+    'APPDATA', 'LOCALAPPDATA', 'USERPROFILE',
+    'PROGRAMFILES', 'PROGRAMFILES(X86)',
+    'LD_LIBRARY_PATH', 'VIRTUAL_ENV',
+)
+
+# Keep BLAS/OpenMP single-threaded in sandbox to avoid Docker OOM / OpenBLAS alloc failures.
+_BLAS_THREAD_ENV = {
+    'OPENBLAS_NUM_THREADS': '1',
+    'OMP_NUM_THREADS': '1',
+    'MKL_NUM_THREADS': '1',
+    'NUMEXPR_NUM_THREADS': '1',
+    'VECLIB_MAXIMUM_THREADS': '1',
+}
+
+
+def _build_subprocess_env() -> Dict[str, str]:
+    """Build a minimal subprocess env that still finds installed Python packages."""
+    env: Dict[str, str] = {}
+    for key in _SUBPROCESS_ENV_KEYS:
+        val = os.environ.get(key)
+        if val:
+            env[key] = val
+    env.update(_BLAS_THREAD_ENV)
+    env.setdefault('PYTHONIOENCODING', 'utf-8')
+    env.setdefault('PYTHONUTF8', '1')
+    return env
+
+
+def _scientific_preamble_lines() -> List[str]:
+    """Python lines pre-importing scientific stack into sandbox namespace."""
+    return [
+        'import os as _os_env',
+        "_os_env.environ.setdefault('OPENBLAS_NUM_THREADS', '1')",
+        "_os_env.environ.setdefault('OMP_NUM_THREADS', '1')",
+        "_os_env.environ.setdefault('MKL_NUM_THREADS', '1')",
+        "_os_env.environ.setdefault('NUMEXPR_NUM_THREADS', '1')",
+        '_np = _sp = _pd = None',
+        '_sp_optimize = _sp_stats = None',
+        'try:',
+        '    import numpy as _np',
+        'except Exception:',
+        '    _np = None',
+        'try:',
+        '    import scipy as _sp',
+        '    from scipy import optimize as _sp_optimize',
+        '    from scipy import stats as _sp_stats',
+        'except Exception:',
+        '    _sp = None',
+        '    _sp_optimize = None',
+        '    _sp_stats = None',
+        'try:',
+        '    import pandas as _pd',
+        'except Exception:',
+        '    _pd = None',
+        '_mpl = None',
+        '_plt = None',
+        'try:',
+        '    import matplotlib as _mpl',
+        '    _mpl.use("Agg")',
+        '    import matplotlib.backends.backend_agg  # noqa: F401 — init Agg before import lockdown',
+        '    import matplotlib.pyplot as _plt',
+        'except Exception:',
+        '    _mpl = None',
+        '    _plt = None',
+    ]
+
+
+def _scientific_preamble_stub_lines() -> List[str]:
+    """No-op placeholders when user code does not need the scientific stack."""
+    return [
+        '_np = _sp = _pd = None',
+        '_sp_optimize = _sp_stats = None',
+        '_mpl = None',
+        '_plt = None',
+    ]
+
+
+def _scientific_namespace_entries() -> List[str]:
+    """Key/value pairs injected into sandbox namespace dict."""
+    return [
+        "'np': _np",
+        "'numpy': _np",
+        "'scipy': _sp",
+        "'pandas': _pd",
+        "'sp_optimize': _sp_optimize",
+        "'sp_stats': _sp_stats",
+        "'plt': _plt",
+        "'matplotlib': _mpl",
+    ]
+
 # Check if resource module is available (not available on Windows)
 try:
     import resource
@@ -320,6 +457,7 @@ class SubprocessSandbox:
         '__import__', 'eval', 'exec', 'compile', 'open', 'file',
         'input', 'print', 'breakpoint', 'exit', 'quit',
     }
+    # numpy / scipy / pandas are intentionally NOT blocked — see SANDBOX_SCIENTIFIC_MODULES
     
     def __init__(self, timeout: int = 30, max_memory_mb: int = 128):
         self.timeout = timeout
@@ -348,28 +486,25 @@ class SubprocessSandbox:
             
             def set_limits():
                 if RESOURCE_AVAILABLE and not IS_WINDOWS:
-                    resource.setrlimit(resource.RLIMIT_AS, (self.max_memory_mb * 1024 * 1024, resource.RLIM_INFINITY))
+                    # Scientific stack (numpy/OpenBLAS) needs headroom under Docker.
+                    mem_bytes = max(int(self.max_memory_mb), 768) * 1024 * 1024
+                    resource.setrlimit(resource.RLIMIT_AS, (mem_bytes, resource.RLIM_INFINITY))
                     resource.setrlimit(resource.RLIMIT_CPU, (self.timeout, resource.RLIM_INFINITY))
                     resource.setrlimit(resource.RLIMIT_FSIZE, (self.max_file_size, self.max_file_size))
                     resource.setrlimit(resource.RLIMIT_NPROC, (self.max_processes, self.max_processes))
             
             input_json = json.dumps(input_data, ensure_ascii=False)
             python_exe = sys.executable
+            child_env = _build_subprocess_env()
             
             try:
                 if IS_WINDOWS:
-                    minimal_env = {
-                        'PATH': os.environ.get('PATH', ''),
-                        'SYSTEMROOT': os.environ.get('SYSTEMROOT', ''),
-                        'TEMP': os.environ.get('TEMP', ''),
-                        'TMP': os.environ.get('TMP', ''),
-                    }
                     proc = subprocess.Popen(
                         [python_exe, temp_path],
                         stdin=subprocess.PIPE,
                         stdout=subprocess.PIPE,
                         stderr=subprocess.PIPE,
-                        env=minimal_env
+                        env=child_env,
                     )
                 else:
                     proc = subprocess.Popen(
@@ -378,7 +513,7 @@ class SubprocessSandbox:
                         stdout=subprocess.PIPE,
                         stderr=subprocess.PIPE,
                         preexec_fn=set_limits,
-                        env={}
+                        env=child_env,
                     )
                 
                 stdout, stderr = proc.communicate(
@@ -401,7 +536,7 @@ class SubprocessSandbox:
             
             if exit_code == 0 and stdout:
                 try:
-                    result = json.loads(stdout.decode('utf-8'))
+                    result = json.loads(stdout.decode('utf-8', errors='replace'))
                     return ExecutionResult(
                         success=True,
                         output=result.get('output', {}),
@@ -410,14 +545,14 @@ class SubprocessSandbox:
                 except json.JSONDecodeError:
                     return ExecutionResult(
                         success=False,
-                        error=f'Invalid output format: {stdout.decode("utf-8")[:200]}',
+                        error=f'Invalid output format: {stdout.decode("utf-8", errors="replace")[:200]}',
                         error_type='output_format',
                         duration_ms=duration_ms
                     )
             else:
                 error_msg = stderr.decode('utf-8', errors='replace') if stderr else 'Unknown error'
-                if len(error_msg) > 500:
-                    error_msg = error_msg[:500] + '...'
+                if len(error_msg) > 4000:
+                    error_msg = error_msg[:4000] + '...'
                 return ExecutionResult(
                     success=False,
                     error=error_msg,
@@ -434,6 +569,16 @@ class SubprocessSandbox:
     def _build_wrapper(self, code: str) -> str:
         """Build wrapper script with restricted builtins."""
         blocked = repr(self.BLOCKED_NAMES)
+        need_sci = code_uses_scientific_stack(code)
+        sci_lines = '\n'.join(
+            _scientific_preamble_lines() if need_sci else _scientific_preamble_stub_lines()
+        )
+        sci_entries = ', '.join(_scientific_namespace_entries())
+        sci_skip = list({'input', 'output', 'json', 'math', 're', 'datetime', 'collections',
+                         'itertools', 'functools', 'decimal', 'fractions',
+                         'np', 'numpy', 'scipy', 'pandas', 'sp_optimize', 'sp_stats',
+                         'plt', 'matplotlib'})
+        sci_skip_repr = repr(sci_skip)
         
         return f'''
 import sys
@@ -450,12 +595,19 @@ import functools
 import decimal
 import fractions
 
+{sci_lines}
+
 import builtins as _b
 _orig_import = _b.__import__
 _blocked = {blocked}
+_mpl_loaded = _mpl is not None
 
 def _safe_import(name, *args, **kwargs):
-    if name.split('.')[0] in _blocked:
+    root = name.split('.')[0]
+    if root in _blocked:
+        # matplotlib Agg backend chain may lazy-import os/sys via PIL after init
+        if _mpl_loaded and root in ('os', 'sys'):
+            return _orig_import(name, *args, **kwargs)
         raise ImportError(f"Module '{{name}}' is not allowed")
     return _orig_import(name, *args, **kwargs)
 
@@ -470,6 +622,8 @@ for _name in dir(_b):
             _safe_builtins[_name] = getattr(_b, _name)
         except (AttributeError, TypeError):
             pass
+# import 语句依赖 __import__；暴露受控导入
+_safe_builtins['__import__'] = _safe_import
 
 input_json = sys.stdin.read()
 input_data = json.loads(input_json) if input_json.strip() else {{}}
@@ -478,6 +632,7 @@ _safe_ns = {{
     '__builtins__': _safe_builtins,
     'input': input_data,
     'output': {{}},
+    'json': json,
     'math': math,
     're': re,
     'datetime': datetime,
@@ -486,24 +641,31 @@ _safe_ns = {{
     'functools': functools,
     'decimal': decimal,
     'fractions': fractions,
+    {sci_entries},
 }}
 
 try:
-    exec({code!r}, _safe_ns, _safe_ns)
+    _user_code = {code!r}
+    _code_obj = compile(_user_code, '<cumcm_user_code>', 'exec')
+    exec(_code_obj, _safe_ns, _safe_ns)
     output = _safe_ns.get('output', {{}})
     if not output:
         intermediate = {{k: v for k, v in _safe_ns.items() 
                   if not k.startswith('_') 
-                  and k not in ['input', 'output', 'math', 're', 'datetime', 'collections', 
-                               'itertools', 'functools', 'decimal', 'fractions']
+                  and k not in {sci_skip_repr}
                   and not callable(v)
                   and not isinstance(v, types.ModuleType)}}
         if intermediate:
             output = intermediate
 except SystemExit:
     output = {{"__info__": "SystemExit called"}}
-except Exception:
+except Exception as _exc:
+    # Put exception type/message first — full exec() tracebacks embed the entire
+    # source string and get truncated before the real error is visible.
+    sys.stderr.write(type(_exc).__name__ + ': ' + str(_exc) + '\\n')
     tb = traceback.format_exc()
+    if len(tb) > 1800:
+        tb = tb[:400] + '\\n...\\n' + tb[-1400:]
     sys.stderr.write(tb)
     sys.exit(1)
 
@@ -582,8 +744,26 @@ class DockerSandbox:
             )
         
         if self._docker_available:
+            if (
+                code_uses_scientific_stack(code)
+                and docker_image_lacks_scientific_stack(self.config.image)
+            ):
+                logger.info(
+                    'Scientific code on slim Docker image — using host subprocess sandbox'
+                )
+                return self._execute_in_subprocess(code, input_data, start_time)
             try:
-                return self._execute_in_container(code, input_data, start_time)
+                result = self._execute_in_container(code, input_data, start_time)
+                if (
+                    not result.success
+                    and _is_scientific_import_error(result.error)
+                ):
+                    logger.info(
+                        'Docker missing scientific deps (%s), falling back to subprocess',
+                        (result.error or '')[:120],
+                    )
+                    return self._execute_in_subprocess(code, input_data, start_time)
+                return result
             except DockerNotAvailable:
                 logger.info("Falling back to subprocess sandbox")
                 self._docker_available = False
@@ -695,17 +875,26 @@ class DockerSandbox:
     def _build_container_script(self, code: str, input_data: Dict[str, Any]) -> str:
         """Build execution script for container."""
         escaped_code = code.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n')
-        # Embed JSON as a string literal — raw json.dumps() uses null/true/false which are invalid Python.
         input_json_literal = json.dumps(json.dumps(input_data, ensure_ascii=False))
+        need_sci = code_uses_scientific_stack(code)
+        sci_lines = '\n'.join(
+            _scientific_preamble_lines() if need_sci else _scientific_preamble_stub_lines()
+        )
+        sci_entries = ', '.join(_scientific_namespace_entries())
+        sci_skip = list({'input', 'output', 'math', 're', 'datetime', 'collections',
+                         'itertools', 'functools', 'decimal', 'fractions',
+                         'np', 'numpy', 'scipy', 'pandas', 'sp_optimize', 'sp_stats',
+                         'plt', 'matplotlib'})
+        sci_skip_repr = repr(sci_skip)
         
         return f'''
 import json
 import sys
+import types
 
 input_data = json.loads({input_json_literal})
 code = "{escaped_code}"
 
-# Safe modules for container execution
 import math
 import re
 import datetime
@@ -715,8 +904,17 @@ import functools
 import decimal
 import fractions
 
+{sci_lines}
+
 _namespace = {{
-    '__builtins__': {{}},
+    '__builtins__': {{
+        'True': True, 'False': False, 'None': None,
+        'abs': abs, 'all': all, 'any': any, 'bool': bool, 'dict': dict,
+        'enumerate': enumerate, 'float': float, 'int': int, 'len': len,
+        'list': list, 'max': max, 'min': min, 'range': range, 'round': round,
+        'set': set, 'sorted': sorted, 'str': str, 'sum': sum, 'tuple': tuple,
+        'zip': zip, 'isinstance': isinstance,
+    }},
     'input': input_data,
     'output': {{}},
     'math': math,
@@ -727,17 +925,16 @@ _namespace = {{
     'functools': functools,
     'decimal': decimal,
     'fractions': fractions,
+    {sci_entries},
 }}
 
 try:
     exec(code, _namespace, _namespace)
     output = _namespace.get('output', {{}})
     if not output:
-        import types
         output = {{k: v for k, v in _namespace.items() 
                   if not k.startswith('_') 
-                  and k not in ['input', 'output', 'math', 're', 'datetime', 'collections', 
-                               'itertools', 'functools', 'decimal', 'fractions']
+                  and k not in {sci_skip_repr}
                   and not callable(v)
                   and not isinstance(v, types.ModuleType)}}
 except Exception as e:
@@ -946,15 +1143,63 @@ _sandbox_service: Optional[SandboxService] = None
 _sandbox_lock = threading.Lock()
 
 
-def get_sandbox_service() -> SandboxService:
+def _load_sandbox_config() -> Dict[str, Any]:
+    """Read sandbox limits from Django settings when available."""
+    defaults = {
+        'timeout': 60,
+        'max_memory_mb': 256,
+        'cpu_limit': 0.5,
+        'docker_image': 'python:3.12-slim',
+    }
+    try:
+        from django.conf import settings
+
+        return {
+            'timeout': int(getattr(settings, 'DOCKER_TIMEOUT', defaults['timeout'])),
+            'max_memory_mb': int(
+                getattr(settings, 'DOCKER_MEMORY_LIMIT', defaults['max_memory_mb'])
+            ),
+            'cpu_limit': float(
+                getattr(settings, 'DOCKER_CPU_LIMIT', defaults['cpu_limit'])
+            ),
+            'docker_image': getattr(
+                settings, 'DOCKER_CODE_IMAGE', defaults['docker_image']
+            ),
+        }
+    except Exception:
+        return defaults
+
+
+def get_sandbox_service(
+    *,
+    timeout: Optional[int] = None,
+    max_memory_mb: Optional[int] = None,
+) -> SandboxService:
     """Get or create singleton sandbox service instance."""
     global _sandbox_service
-    
+
+    cfg = _load_sandbox_config()
+    eff_timeout = timeout if timeout is not None else cfg['timeout']
+    eff_memory = max_memory_mb if max_memory_mb is not None else cfg['max_memory_mb']
+
     if _sandbox_service is None:
         with _sandbox_lock:
             if _sandbox_service is None:
-                _sandbox_service = SandboxService()
-    
+                _sandbox_service = SandboxService(
+                    timeout=eff_timeout,
+                    max_memory_mb=eff_memory,
+                    cpu_limit=cfg['cpu_limit'],
+                    docker_image=cfg['docker_image'],
+                )
+    elif timeout is not None or max_memory_mb is not None:
+        # Per-node overrides: fresh instance (code nodes may need higher memory)
+        return SandboxService(
+            timeout=eff_timeout,
+            max_memory_mb=eff_memory,
+            cpu_limit=cfg['cpu_limit'],
+            docker_image=cfg['docker_image'],
+        )
+
     return _sandbox_service
 
 

@@ -1,368 +1,89 @@
 <template>
-
   <div
-
+    :aria-busy="loading"
     class="stat-card"
-
-    :class="[`stat-card--${tone}`]"
-
+    :class="`stat-card--${tone}`"
   >
-
     <div
-
+      v-if="icon"
       class="stat-card__icon"
-
-      :class="`stat-card__icon--${tone}`"
-
+      aria-hidden="true"
     >
-
-      <component
-
-        :is="icon"
-
-        v-if="icon"
-
-      />
-
+      <component :is="icon" />
     </div>
-
     <div class="stat-card__body">
-
-      <span class="stat-card__value">{{ value }}</span>
-
       <span class="stat-card__label">{{ label }}</span>
-
-      <div
-
-        v-if="$slots.extra"
-
-        class="stat-card__extra"
-
+      <el-skeleton
+        v-if="loading"
+        animated
+        class="stat-card__loading"
       >
-
+        <template #template>
+          <el-skeleton-item variant="text" />
+        </template>
+      </el-skeleton>
+      <span
+        v-else
+        class="stat-card__value"
+      >{{ value }}</span>
+      <div
+        v-if="$slots.extra"
+        class="stat-card__extra"
+      >
         <slot name="extra" />
-
       </div>
-
     </div>
-
   </div>
-
 </template>
 
-
-
 <script setup>
-
 defineProps({
-
-  label: {
-
-    type: String,
-
-    required: true,
-
-  },
-
-  value: {
-
-    type: [String, Number],
-
-    required: true,
-
-  },
-
-  icon: {
-
-    type: [Object, Function],
-
-    default: null,
-
-  },
-
+  label: { type: String, required: true },
+  value: { type: [String, Number], required: true },
+  loading: Boolean,
+  icon: { type: [Object, Function], default: null },
   tone: {
-
     type: String,
-
     default: 'primary',
-
-    validator: (v) => ['primary', 'success', 'warning', 'info', 'neutral'].includes(v),
-
+    validator: value => ['primary', 'success', 'warning', 'danger', 'info', 'violet', 'neutral'].includes(value),
   },
-
 })
-
 </script>
 
-
-
 <style lang="scss" scoped>
-
 @use '@/assets/styles/variables.scss' as *;
-
-
-
 .stat-card {
-
-  position: relative;
-
+  --stat-accent: var(--tech-blue);
+  --stat-soft: var(--tech-blue-soft);
+  position: relative; overflow: hidden;
   display: flex;
-
   align-items: flex-start;
-
-  gap: $spacing-4;
-
-  padding: $spacing-5;
-
-  background: var(--card-bg);
-
+  gap: $spacing-3;
+  padding: var(--content-card-padding);
+  background: var(--card-bg); background-image: var(--tech-card-highlight);
   border: 1px solid var(--card-border);
-
-  border-radius: var(--radius-card, $radius-xl);
-
-  box-shadow: var(--shadow-sm);
-
-  overflow: hidden;
-
-  transition: border-color 0.25s cubic-bezier(0.22, 1, 0.36, 1),
-
-              box-shadow 0.25s cubic-bezier(0.22, 1, 0.36, 1),
-
-              transform 0.25s cubic-bezier(0.22, 1, 0.36, 1);
-
-
-
-  &::before {
-
-    content: '';
-
-    position: absolute;
-
-    inset: 0;
-
-    pointer-events: none;
-
-    background: var(--card-inner-highlight);
-
-  }
-
-
-
-  &::after {
-
-    content: '';
-
-    position: absolute;
-
-    top: 0;
-
-    left: 0;
-
-    right: 0;
-
-    height: 2px;
-
-    opacity: 0.85;
-
-    transition: opacity 0.25s ease;
-
-  }
-
-
-
-  &--primary::after { background: linear-gradient(90deg, var(--accent-blue), var(--accent-amber)); }
-
-  &--success::after { background: linear-gradient(90deg, var(--accent-emerald), var(--accent-blue)); }
-
-  &--warning::after { background: linear-gradient(90deg, var(--accent-amber), var(--accent-rose)); }
-
-  &--info::after { background: linear-gradient(90deg, var(--accent-blue), var(--accent-emerald)); }
-
-  &--neutral::after { background: var(--border-primary); opacity: 0.5; }
-
-
-
-  &:hover {
-
-    transform: translateY(-3px);
-
-    box-shadow: var(--shadow-md);
-
-
-
-    &::after {
-
-      opacity: 1;
-
-    }
-
-  }
-
-
-
-  &--primary:hover { border-color: var(--accent-blue-soft); }
-
-  &--success:hover { border-color: var(--accent-emerald-soft); }
-
-  &--warning:hover { border-color: var(--accent-amber-soft); }
-
-  &--info:hover { border-color: var(--accent-blue-soft); }
-
-  &--neutral:hover { border-color: var(--border-hover); }
-
-
-
+  border-radius: var(--radius-card);
+  min-width: 0;
+  &::before { content: ''; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse at 100% 0%, var(--stat-soft), transparent 65%); }
+  &--success { --stat-accent: var(--accent-emerald); --stat-soft: var(--accent-emerald-bg); }
+  &--warning { --stat-accent: var(--warning); --stat-soft: var(--warning-bg); }
+  &--danger { --stat-accent: var(--error); --stat-soft: var(--error-bg); }
+  &--info { --stat-accent: var(--tech-cyan); --stat-soft: var(--tech-cyan-soft); }
+  &--violet { --stat-accent: var(--tech-violet); --stat-soft: var(--tech-violet-soft); }
+  &--neutral { --stat-accent: var(--text-secondary); --stat-soft: var(--surface-muted); }
   &__icon {
-
-    position: relative;
-
-    z-index: 1;
-
-    display: flex;
-
-    align-items: center;
-
-    justify-content: center;
-
-    width: 48px;
-
-    height: 48px;
-
-    border-radius: $radius-lg;
-
-    flex-shrink: 0;
-
-
-
-    svg {
-
-      width: 22px;
-
-      height: 22px;
-
-    }
-
-
-
-    &--primary {
-
-      background: var(--color-primary-10);
-
-      color: var(--color-primary);
-
-      box-shadow: inset 0 0 0 1px var(--color-primary-20);
-
-    }
-
-
-
-    &--success {
-
-      background: var(--accent-emerald-soft);
-
-      color: var(--accent-emerald);
-
-    }
-
-
-
-    &--warning {
-
-      background: var(--accent-amber-soft);
-
-      color: var(--accent-amber);
-
-    }
-
-
-
-    &--info {
-
-      background: var(--accent-blue-soft);
-
-      color: var(--accent-blue);
-
-    }
-
-
-
-    &--neutral {
-
-      background: var(--bg-tertiary);
-
-      color: var(--text-secondary);
-
-    }
-
+    position: relative; display: grid; place-items: center; width: var(--control-height); height: var(--control-height);
+    color: var(--stat-accent); background: var(--stat-soft); border-radius: $radius-lg; flex-shrink: 0;
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--stat-accent) 20%, transparent);
+    svg { width: $spacing-5; height: $spacing-5; }
   }
-
-
-
-  &__body {
-
-    position: relative;
-
-    z-index: 1;
-
-    display: flex;
-
-    flex-direction: column;
-
-    min-width: 0;
-
-  }
-
-
-
+  &__body { position: relative; display: flex; flex-direction: column; min-width: 0; }
+  &__label { color: var(--text-secondary); font-size: $font-size-xs; }
   &__value {
-
-    font-size: $font-size-2xl;
-
-    font-weight: $font-weight-bold;
-
-    line-height: 1.2;
-
-    color: var(--text-primary);
-
-    font-variant-numeric: tabular-nums;
-
-    letter-spacing: -0.02em;
-
+    margin-top: $spacing-1; color: var(--text-primary); font-size: $font-size-2xl; font-weight: $font-weight-semibold;
+    font-variant-numeric: tabular-nums; font-family: var(--font-family-mono); line-height: $line-height-tight; overflow-wrap: anywhere;
   }
-
-
-
-  &__label {
-
-    margin-top: 2px;
-
-    font-size: $font-size-sm;
-
-    color: var(--text-secondary);
-
-  }
-
-
-
-  &__extra {
-
-    margin-top: $spacing-2;
-
-  }
-
+  &__extra { margin-top: $spacing-2; }
+  &__loading { width: $spacing-16; margin-top: $spacing-1; height: $spacing-8; }
 }
-
-
-
-@media (prefers-reduced-motion: reduce) {
-
-  .stat-card:hover {
-
-    transform: none;
-
-  }
-
-}
-
 </style>
-

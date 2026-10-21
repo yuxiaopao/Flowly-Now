@@ -9,7 +9,10 @@
       :position="Position.Left"
     />
     <div class="node-header">
-      <NodeTypeBadge :node-type="NODE_TYPE" compact />
+      <NodeTypeBadge
+        :node-type="NODE_TYPE"
+        compact
+      />
     </div>
     <div class="node-body">
       <div
@@ -47,7 +50,6 @@
 <script setup>
 import { computed } from 'vue'
 import { Handle, Position, useNodeId } from '@vue-flow/core'
-import { FileCode } from 'lucide-vue-next'
 import { useExecutionStore } from '@/stores/execution'
 import { truncateText } from '@/composables/useNodeResultDisplay'
 import NodeTypeBadge from '@/components/workflow/nodes/NodeTypeBadge.vue'

@@ -5,10 +5,19 @@ WebSocket consumers for real-time updates.
 import json
 import asyncio
 import logging
+from django.core.serializers.json import DjangoJSONEncoder
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
+from users.websocket_permissions import (
+    can_subscribe_workflow, can_subscribe_execution,
+    UNAUTHENTICATED_CLOSE_CODE, FORBIDDEN_CLOSE_CODE,
+)
 
 logger = logging.getLogger(__name__)
+
+
+def encode_message(data):
+    return json.dumps(data, cls=DjangoJSONEncoder, ensure_ascii=False)
 
 
 class WorkflowConsumer(AsyncWebsocketConsumer):
@@ -19,6 +28,13 @@ class WorkflowConsumer(AsyncWebsocketConsumer):
         self.room_group_name = f'workflow_{self.workflow_id}'
         self.user = self.scope.get('user')
 
+        if not self.user or not self.user.is_authenticated:
+            await self.close(code=UNAUTHENTICATED_CLOSE_CODE)
+            return
+        if not await can_subscribe_workflow(self.user, self.workflow_id):
+            await self.close(code=FORBIDDEN_CLOSE_CODE)
+            return
+
         # Join room group
         await self.channel_layer.group_add(
             self.room_group_name,
@@ -27,7 +43,7 @@ class WorkflowConsumer(AsyncWebsocketConsumer):
 
         await self.accept()
 
-        await self.send(text_data=json.dumps({
+        await self.send(text_data=encode_message({
             'type': 'connected',
             'workflow_id': self.workflow_id
         }))
@@ -46,7 +62,7 @@ class WorkflowConsumer(AsyncWebsocketConsumer):
             message_type = data.get('type')
 
             if message_type == 'ping':
-                await self.send(text_data=json.dumps({
+                await self.send(text_data=encode_message({
                     'type': 'pong'
                 }))
 
@@ -63,7 +79,7 @@ class WorkflowConsumer(AsyncWebsocketConsumer):
                 await self.handle_save_workflow(data)
 
         except json.JSONDecodeError:
-            await self.send(text_data=json.dumps({
+            await self.send(text_data=encode_message({
                 'type': 'error',
                 'message': 'Invalid JSON'
             }))
@@ -71,7 +87,7 @@ class WorkflowConsumer(AsyncWebsocketConsumer):
     async def handle_get_status(self):
         """Get current workflow status."""
         workflow_data = await self.get_workflow_status()
-        await self.send(text_data=json.dumps({
+        await self.send(text_data=encode_message({
             'type': 'workflow_status',
             'data': workflow_data
         }))
@@ -79,7 +95,7 @@ class WorkflowConsumer(AsyncWebsocketConsumer):
     async def handle_subscribe(self, data):
         """Subscribe to specific events."""
         events = data.get('events', ['all'])
-        await self.send(text_data=json.dumps({
+        await self.send(text_data=encode_message({
             'type': 'subscribed',
             'events': events
         }))
@@ -125,7 +141,7 @@ class WorkflowConsumer(AsyncWebsocketConsumer):
 
         except Exception as e:
             logger.exception(f"WebSocket error in receive: {e}")
-            await self.send(text_data=json.dumps({
+            await self.send(text_data=encode_message({
                 'type': 'error',
                 'message': str(e)
             }))
@@ -169,35 +185,35 @@ class WorkflowConsumer(AsyncWebsocketConsumer):
 
     async def workflow_update(self, event):
         """Handle workflow update events."""
-        await self.send(text_data=json.dumps({
+        await self.send(text_data=encode_message({
             'type': 'workflow_update',
             'data': event['data']
         }))
 
     async def node_update(self, event):
         """Handle node update events."""
-        await self.send(text_data=json.dumps({
+        await self.send(text_data=encode_message({
             'type': 'node_update',
             'data': event['data']
         }))
 
     async def node_position_update(self, event):
         """Handle node position update events (real-time collaboration)."""
-        await self.send(text_data=json.dumps({
+        await self.send(text_data=encode_message({
             'type': 'node_position_update',
             'data': event['data']
         }))
 
     async def workflow_saved(self, event):
         """Handle workflow saved event."""
-        await self.send(text_data=json.dumps({
+        await self.send(text_data=encode_message({
             'type': 'workflow_saved',
             'data': event['data']
         }))
 
     async def user_cursor(self, event):
         """Handle user cursor position updates."""
-        await self.send(text_data=json.dumps({
+        await self.send(text_data=encode_message({
             'type': 'user_cursor',
             'data': event['data']
         }))
@@ -224,6 +240,13 @@ class ExecutionConsumer(AsyncWebsocketConsumer):
         self.room_group_name = f'execution_{self.execution_id}'
         self.user = self.scope.get('user')
 
+        if not self.user or not self.user.is_authenticated:
+            await self.close(code=UNAUTHENTICATED_CLOSE_CODE)
+            return
+        if not await can_subscribe_execution(self.user, self.execution_id):
+            await self.close(code=FORBIDDEN_CLOSE_CODE)
+            return
+
         # Join room group
         await self.channel_layer.group_add(
             self.room_group_name,
@@ -232,7 +255,7 @@ class ExecutionConsumer(AsyncWebsocketConsumer):
 
         await self.accept()
 
-        await self.send(text_data=json.dumps({
+        await self.send(text_data=encode_message({
             'type': 'connected',
             'execution_id': self.execution_id
         }))
@@ -251,7 +274,7 @@ class ExecutionConsumer(AsyncWebsocketConsumer):
             message_type = data.get('type')
 
             if message_type == 'ping':
-                await self.send(text_data=json.dumps({
+                await self.send(text_data=encode_message({
                     'type': 'pong'
                 }))
 
@@ -271,74 +294,56 @@ class ExecutionConsumer(AsyncWebsocketConsumer):
                 await self.handle_resume()
 
         except json.JSONDecodeError:
-            await self.send(text_data=json.dumps({
+            await self.send(text_data=encode_message({
                 'type': 'error',
                 'message': 'Invalid JSON'
             }))
 
     async def handle_cancel(self):
-        """Cancel the execution."""
-        from .tasks import execute_workflow_task
-
-        try:
-            execution = await self.get_execution()
-            if execution and execution.status == 'running':
-                execution.status = 'cancelled'
-                execution.save()
-
-                await self.send(text_data=json.dumps({
-                    'type': 'execution_cancelled',
-                    'data': {'execution_id': self.execution_id}
-                }))
-
-        except Exception as e:
-            await self.send(text_data=json.dumps({
-                'type': 'error',
-                'message': str(e)
-            }))
+        await self.handle_control('cancel', 'execution_cancelled')
 
     async def handle_pause(self):
-        """Pause the execution."""
-        try:
-            execution = await self.get_execution()
-            if execution and execution.status == 'running':
-                execution.status = 'paused'
-                execution.save()
-
-                await self.send(text_data=json.dumps({
-                    'type': 'execution_paused',
-                    'data': {'execution_id': self.execution_id}
-                }))
-
-        except Exception as e:
-            await self.send(text_data=json.dumps({
-                'type': 'error',
-                'message': str(e)
-            }))
+        await self.handle_control('pause', 'execution_paused')
 
     async def handle_resume(self):
-        """Resume a paused execution."""
+        await self.handle_control('resume', 'execution_resumed')
+
+    async def handle_control(self, action, event):
         try:
-            execution = await self.get_execution()
-            if execution and execution.status == 'paused':
-                execution.status = 'running'
-                execution.save()
-
-                await self.send(text_data=json.dumps({
-                    'type': 'execution_resumed',
-                    'data': {'execution_id': self.execution_id}
+            changed = await self.change_execution_status(action)
+            if changed:
+                await self.send(text_data=encode_message({
+                    'type': event, 'data': {'execution_id': self.execution_id},
                 }))
+            else:
+                await self.send(text_data=encode_message({'type': 'error', 'message': '当前执行状态不支持此操作'}))
+        except Exception:
+            logger.exception('实时执行控制失败：%s', action)
+            await self.send(text_data=encode_message({'type': 'error', 'message': '执行控制失败，请稍后重试'}))
 
-        except Exception as e:
-            await self.send(text_data=json.dumps({
-                'type': 'error',
-                'message': str(e)
-            }))
+    @database_sync_to_async
+    def change_execution_status(self, action):
+        from django.db import transaction
+        from .models import WorkflowExecution
+        with transaction.atomic():
+            execution = WorkflowExecution.objects.select_for_update().get(pk=self.execution_id)
+            previous = execution.status
+            if action == 'resume':
+                from .execution_control import has_resumable_snapshot
+                from .tasks import resume_workflow_task
+                if previous not in execution.RESUMABLE_STATUSES or not has_resumable_snapshot(execution):
+                    return False
+                task = resume_workflow_task.delay(str(execution.id))
+                execution.task_id = task.id
+                execution.save(update_fields=['task_id'])
+                return True
+            getattr(execution, action)()
+        return previous != execution.status
 
     async def handle_get_status(self):
         """Get current execution status."""
         execution_data = await self.get_execution_status()
-        await self.send(text_data=json.dumps({
+        await self.send(text_data=encode_message({
             'type': 'execution_status',
             'data': execution_data
         }))
@@ -346,7 +351,7 @@ class ExecutionConsumer(AsyncWebsocketConsumer):
     async def handle_subscribe(self, data):
         """Subscribe to specific event types."""
         events = data.get('events', ['all'])
-        await self.send(text_data=json.dumps({
+        await self.send(text_data=encode_message({
             'type': 'subscribed',
             'execution_id': self.execution_id,
             'events': events
@@ -389,70 +394,70 @@ class ExecutionConsumer(AsyncWebsocketConsumer):
 
     async def execution_start(self, event):
         """Handle execution start event."""
-        await self.send(text_data=json.dumps({
+        await self.send(text_data=encode_message({
             'type': 'execution_start',
             'data': event['data']
         }))
 
     async def execution_node_start(self, event):
         """Handle node execution start event."""
-        await self.send(text_data=json.dumps({
+        await self.send(text_data=encode_message({
             'type': 'node_start',
             'data': event['data']
         }))
 
     async def execution_node_complete(self, event):
         """Handle node execution complete event."""
-        await self.send(text_data=json.dumps({
+        await self.send(text_data=encode_message({
             'type': 'node_complete',
             'data': event['data']
         }))
 
     async def execution_node_error(self, event):
         """Handle node execution error event."""
-        await self.send(text_data=json.dumps({
+        await self.send(text_data=encode_message({
             'type': 'node_error',
             'data': event['data']
         }))
 
     async def execution_output(self, event):
         """Handle execution output event (for streaming)."""
-        await self.send(text_data=json.dumps({
+        await self.send(text_data=encode_message({
             'type': 'stream_output',
             'data': event['data']
         }))
 
     async def execution_complete(self, event):
         """Handle execution complete event."""
-        await self.send(text_data=json.dumps({
+        await self.send(text_data=encode_message({
             'type': 'execution_complete',
             'data': event['data']
         }))
 
     async def execution_error(self, event):
         """Handle execution error event."""
-        await self.send(text_data=json.dumps({
+        await self.send(text_data=encode_message({
             'type': 'execution_error',
             'data': event['data']
         }))
 
     async def execution_progress(self, event):
         """Handle execution progress event."""
-        await self.send(text_data=json.dumps({
+        await self.send(text_data=encode_message({
             'type': 'execution_progress',
             'data': event['data']
         }))
 
     async def execution_cancelled(self, event):
         """Handle execution cancelled event."""
-        await self.send(text_data=json.dumps({
+        await self.send(text_data=encode_message({
             'type': 'execution_cancelled',
             'data': event['data']
         }))
 
     async def execution_paused(self, event):
         """Handle execution paused event."""
-        await self.send(text_data=json.dumps({
+        await self.send(text_data=encode_message({
             'type': 'execution_paused',
             'data': event['data']
         }))
@@ -462,7 +467,7 @@ class ExecutionConsumer(AsyncWebsocketConsumer):
         Handle node status update event.
         Provides comprehensive node execution status including queued, running, completed, failed.
         """
-        await self.send(text_data=json.dumps({
+        await self.send(text_data=encode_message({
             'type': 'node_status',
             'node_id': event.get('node_id'),
             'node_type': event.get('node_type'),
@@ -480,25 +485,27 @@ class MonitoringConsumer(AsyncWebsocketConsumer):
     """WebSocket consumer for monitoring updates."""
 
     async def connect(self):
-        self.room_group_name = 'monitoring'
-
-        await self.channel_layer.group_add(
-            self.room_group_name,
-            self.channel_name
-        )
+        self.user = self.scope.get('user')
+        if not self.user or not self.user.is_authenticated:
+            await self.close(code=UNAUTHENTICATED_CLOSE_CODE)
+            return
+        self.room_groups = [f'monitoring_{self.user.id}', 'monitoring_public']
+        from tenants.access import get_accessible_tenant_ids
+        tenant_ids = await database_sync_to_async(get_accessible_tenant_ids)(self.user)
+        self.room_groups.extend(f'monitoring_tenant_{tenant_id}' for tenant_id in tenant_ids)
+        for group in self.room_groups:
+            await self.channel_layer.group_add(group, self.channel_name)
 
         await self.accept()
 
-        await self.send(text_data=json.dumps({
+        await self.send(text_data=encode_message({
             'type': 'connected',
             'channel': 'monitoring'
         }))
 
     async def disconnect(self, close_code):
-        await self.channel_layer.group_discard(
-            self.room_group_name,
-            self.channel_name
-        )
+        for group in getattr(self, 'room_groups', []):
+            await self.channel_layer.group_discard(group, self.channel_name)
 
     async def receive(self, text_data):
         """Handle incoming messages."""
@@ -507,11 +514,11 @@ class MonitoringConsumer(AsyncWebsocketConsumer):
             message_type = data.get('type')
 
             if message_type == 'ping':
-                await self.send(text_data=json.dumps({
+                await self.send(text_data=encode_message({
                     'type': 'pong'
                 }))
             elif message_type == 'subscribe_metrics':
-                await self.send(text_data=json.dumps({
+                await self.send(text_data=encode_message({
                     'type': 'metrics_subscription_confirmed'
                 }))
 
@@ -520,14 +527,14 @@ class MonitoringConsumer(AsyncWebsocketConsumer):
 
     async def metric_update(self, event):
         """Handle metric update event."""
-        await self.send(text_data=json.dumps({
+        await self.send(text_data=encode_message({
             'type': 'metric_update',
             'data': event['data']
         }))
 
     async def alert_notification(self, event):
         """Handle alert notification event."""
-        await self.send(text_data=json.dumps({
+        await self.send(text_data=encode_message({
             'type': 'alert',
             'data': event['data']
         }))
@@ -551,7 +558,7 @@ class NotificationConsumer(AsyncWebsocketConsumer):
 
         await self.accept()
 
-        await self.send(text_data=json.dumps({
+        await self.send(text_data=encode_message({
             'type': 'connected',
             'channel': 'notifications'
         }))
@@ -570,7 +577,7 @@ class NotificationConsumer(AsyncWebsocketConsumer):
             message_type = data.get('type')
 
             if message_type == 'ping':
-                await self.send(text_data=json.dumps({
+                await self.send(text_data=encode_message({
                     'type': 'pong'
                 }))
             elif message_type == 'mark_read':
@@ -595,7 +602,7 @@ class NotificationConsumer(AsyncWebsocketConsumer):
 
     async def notification(self, event):
         """Handle notification event."""
-        await self.send(text_data=json.dumps({
+        await self.send(text_data=encode_message({
             'type': 'notification',
             'data': event['data']
         }))

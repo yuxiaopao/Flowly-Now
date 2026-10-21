@@ -872,10 +872,6 @@ onMounted(async () => {
 </script>
 
 <style lang="scss" scoped>
-.branding-settings-page {
-  padding: 24px;
-  max-width: 1200px;
-}
 
 .btn-icon {
   width: 16px;

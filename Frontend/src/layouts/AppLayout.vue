@@ -1,8 +1,12 @@
 <template>
   <div
     class="app-layout"
-    :class="{ 'sidebar-collapsed': appStore.sidebarCollapsed, 'mobile-open': mobileMenuOpen }"
+    :class="{ 'sidebar-collapsed': appStore.sidebarCollapsed && !isMobile, 'mobile-open': mobileMenuOpen }"
   >
+    <a
+      class="skip-link"
+      href="#main-content"
+    >跳至页面内容</a>
     <!-- 移动端菜单遮罩 -->
     <div
       v-show="mobileMenuOpen"
@@ -12,6 +16,12 @@
 
     <!-- 侧边栏 -->
     <aside
+      id="app-sidebar"
+      ref="sidebarRef"
+      :inert="(isMobile && !mobileMenuOpen) || undefined"
+      :role="isMobile && mobileMenuOpen ? 'dialog' : undefined"
+      :aria-modal="isMobile && mobileMenuOpen ? true : undefined"
+      aria-label="应用导航"
       class="sidebar"
       :class="{ 'mobile-open': mobileMenuOpen }"
     >
@@ -26,89 +36,112 @@
             alt="Flowly"
           />
           <span class="logo-text">Flowly</span>
+          <span class="logo-badge">AI</span>
         </router-link>
         <button
           class="mobile-close"
+          aria-label="关闭导航"
           @click="mobileMenuOpen = false"
         >
           <X />
         </button>
       </div>
 
-      <!-- 导航菜单 -->
-      <nav class="sidebar-nav">
-        <div class="nav-section">
-          <span class="nav-section-title">主导航</span>
-          <router-link
-            v-for="item in mainNavItems"
-            :key="item.path"
-            :to="item.path"
-            class="nav-item"
-            :class="[`nav-item--${item.accent}`, { active: isActiveRoute(item.path) }]"
-            @click="mobileMenuOpen = false"
-          >
-            <span class="nav-icon-wrap">
-              <component
-                :is="item.icon"
-                class="nav-icon"
-              />
-            </span>
-            <span class="nav-label">{{ item.label }}</span>
-          </router-link>
-        </div>
+      <router-link
+        :to="NAVIGATION_UI.newWorkflow.path"
+        class="sidebar-create"
+        :aria-label="NAVIGATION_UI.newWorkflow.label"
+        :title="NAVIGATION_UI.newWorkflow.label"
+        @click="mobileMenuOpen = false"
+      >
+        <Plus aria-hidden="true" />
+        <span>{{ NAVIGATION_UI.newWorkflow.label }}</span>
+      </router-link>
 
-        <div class="nav-section">
-          <span class="nav-section-title">工具</span>
-          <router-link
-            v-for="item in toolNavItems"
-            :key="item.path"
-            :to="item.path"
-            class="nav-item"
-            :class="[`nav-item--${item.accent}`, { active: isActiveRoute(item.path) }]"
-            @click="mobileMenuOpen = false"
+      <!-- 导航菜单 -->
+      <nav
+        class="sidebar-nav"
+        aria-label="主导航"
+      >
+        <div
+          v-for="section in APP_NAV_SECTIONS"
+          :key="section.id"
+          class="nav-section"
+          :class="`nav-section--${section.accent}`"
+        >
+          <button
+            type="button"
+            class="nav-section-title"
+            :aria-label="NAVIGATION_UI.sectionLabel(section.label)"
+            :aria-expanded="isSectionOpen(section.id)"
+            :aria-controls="NAVIGATION_UI.sectionId(section.id)"
+            @click="toggleSection(section.id)"
           >
-            <span class="nav-icon-wrap">
-              <component
+            <span>{{ section.label }}</span>
+            <span
+              class="nav-section-count"
+              aria-hidden="true"
+            >{{ section.items.length }}</span>
+            <ChevronRight
+              class="nav-section-chevron"
+              :class="{ expanded: isSectionOpen(section.id) }"
+              aria-hidden="true"
+            />
+          </button>
+          <div
+            v-show="isSectionOpen(section.id)"
+            :id="NAVIGATION_UI.sectionId(section.id)"
+            class="nav-section-items"
+          >
+            <router-link
+              v-for="item in section.items"
+              :key="item.path"
+              :to="item.path"
+              class="nav-item"
+              :class="[`nav-item--${item.accent}`, { active: isActiveRoute(item.path) }]"
+              :aria-current="isActiveRoute(item.path) ? 'page' : undefined"
+              :aria-label="item.label"
+              :title="item.label"
+              @click="mobileMenuOpen = false"
+            >
+              <span class="nav-icon-wrap"><component
                 :is="item.icon"
                 class="nav-icon"
+                aria-hidden="true"
+              /></span>
+              <span class="nav-label">{{ item.label }}</span>
+              <ChevronRight
+                v-if="isActiveRoute(item.path)"
+                class="nav-active-arrow"
+                aria-hidden="true"
               />
-            </span>
-            <span class="nav-label">{{ item.label }}</span>
-          </router-link>
+            </router-link>
+          </div>
         </div>
 
         <div
           v-if="generatedSiteNavItems.length"
           class="nav-section"
         >
-          <span class="nav-section-title">识别项目</span>
+          <span class="nav-section-title nav-section-title--static">{{ NAVIGATION_UI.generatedProjects.label }}</span>
           <router-link
             v-for="site in generatedSiteNavItems"
             :key="site.id"
             :to="siteNavPath(site)"
             class="nav-item nav-item--emerald"
             :class="{ active: isActiveRoute(siteNavPath(site)) }"
+            :aria-label="site.name"
+            :title="site.name"
+            :aria-current="isActiveRoute(siteNavPath(site)) ? 'page' : undefined"
             @click="mobileMenuOpen = false"
           >
             <span class="nav-icon-wrap">
-              <Globe class="nav-icon" />
+              <Globe
+                class="nav-icon"
+                aria-hidden="true"
+              />
             </span>
             <span class="nav-label">{{ site.name }}</span>
-          </router-link>
-        </div>
-
-        <div class="nav-section">
-          <span class="nav-section-title">工作流</span>
-          <router-link
-            :to="'/workflows/new'"
-            class="nav-item nav-item--amber"
-            :class="{ active: isActiveRoute('/workflows/new') }"
-            @click="mobileMenuOpen = false"
-          >
-            <span class="nav-icon-wrap">
-              <Plus class="nav-icon" />
-            </span>
-            <span class="nav-label">新建工作流</span>
           </router-link>
         </div>
       </nav>
@@ -116,40 +149,61 @@
       <!-- 侧边栏底部 -->
       <div class="sidebar-footer">
         <router-link
-          to="/settings"
-          class="nav-item nav-item--rose"
-          :class="{ active: isActiveRoute('/settings') }"
+          :to="NAVIGATION_UI.personalCenter.path"
+          class="nav-item"
+          :class="[`nav-item--${NAVIGATION_UI.personalCenter.accent}`, { active: isActiveRoute(NAVIGATION_UI.personalCenter.path) }]"
+          :aria-label="NAVIGATION_UI.personalCenter.label"
+          :title="NAVIGATION_UI.personalCenter.label"
+          :aria-current="isActiveRoute(NAVIGATION_UI.personalCenter.path) ? 'page' : undefined"
           @click="mobileMenuOpen = false"
         >
           <span class="nav-icon-wrap">
-            <Settings class="nav-icon" />
+            <Settings
+              class="nav-icon"
+              aria-hidden="true"
+            />
           </span>
-          <span class="nav-label">个人中心</span>
+          <span class="nav-label">{{ NAVIGATION_UI.personalCenter.label }}</span>
         </router-link>
       </div>
     </aside>
 
     <!-- 主内容区 -->
-    <div class="main-container">
+    <div
+      class="main-container"
+      :inert="(isMobile && mobileMenuOpen) || undefined"
+    >
       <!-- 顶部栏 -->
       <header class="topbar">
         <!-- 移动端菜单按钮 -->
         <button
           class="mobile-menu-btn"
+          aria-label="打开导航"
+          aria-controls="app-sidebar"
+          :aria-expanded="mobileMenuOpen"
           @click="mobileMenuOpen = true"
         >
           <Menu />
         </button>
         <button
           class="sidebar-toggle"
+          :aria-label="appStore.sidebarCollapsed ? '展开导航' : '收起导航'"
+          :aria-expanded="!appStore.sidebarCollapsed"
           @click="appStore.toggleSidebar"
         >
-          <Menu v-if="appStore.sidebarCollapsed" />
-          <X v-else />
+          <PanelLeftOpen v-if="appStore.sidebarCollapsed" />
+          <PanelLeftClose v-else />
         </button>
 
         <!-- 面包屑 -->
-        <div class="breadcrumb">
+        <div
+          class="breadcrumb"
+          aria-label="当前位置"
+        >
+          <span
+            v-if="appStore.breadcrumbs.length === 0"
+            class="breadcrumb-current"
+          >{{ route.meta.title }}</span>
           <span
             v-for="(item, index) in appStore.breadcrumbs"
             :key="index"
@@ -171,28 +225,37 @@
           <!-- 主题切换 -->
           <ThemeSwitcher />
           <!-- 搜索 -->
-          <el-button
-            :icon="Search"
-            circle
-          />
+          <button
+            class="global-search"
+            aria-label="搜索命令与页面"
+            @click="appStore.openCommandPalette?.()"
+          >
+            <Search
+              class="icon"
+              aria-hidden="true"
+            />
+            <span>快速跳转</span>
+            <kbd>Ctrl K</kbd>
+          </button>
           <!-- 通知 -->
           <el-button
             :icon="BellIcon"
+            aria-label="通知与邮件"
+            title="通知与邮件"
             circle
+            @click="router.push('/settings/notifications')"
           />
           <!-- 用户菜单 -->
           <el-dropdown
             trigger="click"
             @command="handleUserCommand"
           >
-            <div class="user-avatar">
-              <el-avatar
-                :size="36"
-                :src="authStore.user?.avatar"
-              >
-                {{ authStore.user?.username?.[0]?.toUpperCase() }}
-              </el-avatar>
-            </div>
+            <button
+              class="user-menu-trigger"
+              aria-label="打开账户菜单"
+            >
+              <AccountAvatar />
+            </button>
             <template #dropdown>
               <el-dropdown-menu>
                 <el-dropdown-item disabled>
@@ -223,7 +286,11 @@
       </header>
 
       <!-- 页面内容 -->
-      <main class="main-content">
+      <main
+        id="main-content"
+        class="main-content"
+        tabindex="-1"
+      >
         <transition
           name="page"
           mode="out-in"
@@ -241,44 +308,29 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, nextTick, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useAppStore } from '@/stores/app'
 import {
-  Home,
-  GitBranch,
-  Bot,
-  MessageSquare,
-  Database,
-  Users,
-  BarChart2,
   Settings,
   Search,
   Bell as BellIcon,
   User,
   LogOut,
   Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
   X,
   ChevronRight,
   Plus,
-  FileText,
-  BookOpen,
-  Network,
-  Cpu,
-  HardDrive,
-  Terminal,
-  Store,
-  History,
-  Compass,
-  Star,
-  GitCompare,
   Globe,
-  Workflow,
 } from 'lucide-vue-next'
 import ThemeSwitcher from '@/components/common/ThemeSwitcher.vue'
+import AccountAvatar from '@/components/common/AccountAvatar.vue'
 import ThemeLogo from '@/components/common/ThemeLogo.vue'
-import { excludePersonalCenterModules } from '@/config/userNavigation'
+import { APP_NAV_SECTIONS, APP_NAV_ITEMS, NAVIGATION_UI } from '@/config/appNavigation'
+import { PRODUCT_UI } from '@/config/productUi'
 import { websiteGeneratorApi } from '@/api/websiteGenerator'
 
 const router = useRouter()
@@ -288,6 +340,38 @@ const appStore = useAppStore()
 const mobileMenuOpen = ref(false)
 const isMobile = ref(false)
 const generatedSiteNavItems = ref([])
+const sidebarRef = ref(null)
+let menuReturnFocus
+
+watch(mobileMenuOpen, async (open) => {
+  if (open) {
+    menuReturnFocus = document.activeElement
+    await nextTick()
+    sidebarRef.value?.querySelector('.mobile-close')?.focus()
+  } else {
+    await nextTick()
+    menuReturnFocus?.focus()
+  }
+})
+
+function handleNavigationKeydown(event) {
+  if (!mobileMenuOpen.value) return
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    mobileMenuOpen.value = false
+  } else if (event.key === 'Tab') {
+    const focusable = [...sidebarRef.value.querySelectorAll('a[href], button')].filter(el => el.getClientRects().length)
+    const first = focusable[0]
+    const last = focusable.at(-1)
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault()
+      last?.focus()
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault()
+      first?.focus()
+    }
+  }
+}
 
 function siteNavPath(site) {
   return `/projects/${site.id}`
@@ -308,7 +392,7 @@ async function loadGeneratedSiteNav() {
 }
 
 const checkMobile = () => {
-  isMobile.value = window.innerWidth < 768
+  isMobile.value = window.innerWidth <= PRODUCT_UI.mobileBreakpoint
   if (!isMobile.value) {
     mobileMenuOpen.value = false
   }
@@ -318,46 +402,41 @@ onMounted(() => {
   checkMobile()
   window.addEventListener('resize', checkMobile)
   loadGeneratedSiteNav()
+  window.addEventListener('flowly:assets-updated', loadGeneratedSiteNav)
+  document.addEventListener('keydown', handleNavigationKeydown)
 })
 
 onUnmounted(() => {
   window.removeEventListener('resize', checkMobile)
+  window.removeEventListener('flowly:assets-updated', loadGeneratedSiteNav)
+  document.removeEventListener('keydown', handleNavigationKeydown)
 })
 
-const mainNavItems = [
-  { path: '/home', label: '仪表盘', icon: Home, accent: 'blue' },
-  { path: '/workflows', label: '工作流', icon: GitBranch, accent: 'emerald' },
-  { path: '/agents', label: 'Agent', icon: Bot, accent: 'amber' },
-  { path: '/knowledge', label: '知识库', icon: Database, accent: 'rose' },
-  { path: '/team', label: '团队', icon: Users, accent: 'blue' },
-]
+const collapsedSections = ref([])
 
-const toolNavItems = excludePersonalCenterModules([
-  { path: '/agents/collaborate', label: '多智能体协作', icon: Workflow, accent: 'rose' },
-  { path: '/agents/marketplace', label: 'Agent 市场', icon: Store, accent: 'amber' },
-  { path: '/nl-create', label: 'NL 创建', icon: MessageSquare, accent: 'blue' },
-  { path: '/executions', label: '执行历史', icon: History, accent: 'emerald' },
-  { path: '/datasets', label: '数据集', icon: BookOpen, accent: 'amber' },
-  { path: '/dataset-recommend', label: '数据集推荐', icon: Compass, accent: 'rose' },
-  { path: '/prompts', label: '模板', icon: FileText, accent: 'blue' },
-  { path: '/marketplace', label: '模板市场', icon: Store, accent: 'emerald' },
-  { path: '/my-templates', label: '我的模板', icon: Star, accent: 'amber' },
-  { path: '/codegraph', label: '代码图谱', icon: Network, accent: 'rose' },
-  { path: '/models', label: '模型管理', icon: Cpu, accent: 'blue' },
-  { path: '/vector-stores', label: '向量存储', icon: HardDrive, accent: 'emerald' },
-  { path: '/analytics', label: '数据分析', icon: BarChart2, accent: 'amber' },
-  { path: '/api-explorer', label: 'API 测试', icon: Terminal, accent: 'rose' },
-  { path: '/workflows/diff', label: '工作流对比', icon: GitCompare, accent: 'blue' },
-])
+watch(() => route.path, () => {
+  const activeSection = APP_NAV_SECTIONS.find(section => section.items.some(item => isActiveRoute(item.path)))
+  if (activeSection) collapsedSections.value = collapsedSections.value.filter(id => id !== activeSection.id)
+})
 
-function isActiveRoute(path) {
-  if (path === '/home') {
-    return route.path === '/home'
-  }
-  return route.path.startsWith(path)
+function isSectionOpen(id) {
+  return (appStore.sidebarCollapsed && !isMobile.value) || !collapsedSections.value.includes(id)
 }
 
-function handleUserCommand(command) {
+function toggleSection(id) {
+  collapsedSections.value = collapsedSections.value.includes(id)
+    ? collapsedSections.value.filter(sectionId => sectionId !== id)
+    : [...collapsedSections.value, id]
+}
+
+function isActiveRoute(path) {
+  if (!(route.path === path || route.path.startsWith(`${path}/`))) return false
+  const paths = APP_NAV_ITEMS.map(item => item.path)
+  return !paths.some(candidate => candidate !== path && candidate.startsWith(`${path}/`) &&
+    (route.path === candidate || route.path.startsWith(`${candidate}/`)))
+}
+
+async function handleUserCommand(command) {
   switch (command) {
     case 'profile':
       router.push('/settings/profile')
@@ -366,8 +445,8 @@ function handleUserCommand(command) {
       router.push('/settings')
       break
     case 'logout':
-      authStore.logout()
-      router.push('/login')
+      await authStore.logout()
+      await router.replace('/login')
       break
   }
 }
@@ -375,429 +454,108 @@ function handleUserCommand(command) {
 
 <style lang="scss" scoped>
 @use '@/assets/styles/variables.scss' as *;
-
-.app-layout {
-  display: flex;
-  min-height: 100vh;
-  background-color: var(--bg-primary);
+.app-layout { display: flex; min-height: 100dvh; background: var(--tech-app-bg); }
+.skip-link {
+  position: fixed; top: $spacing-2; left: $spacing-2; z-index: $z-tooltip;
+  padding: $spacing-3; background: var(--bg-elevated); color: var(--text-primary);
+  border-radius: $radius-lg; transform: translateY(-200%);
+  &:focus { transform: none; }
 }
-
-// 侧边栏
 .sidebar {
-  width: $sidebar-width;
-  height: 100vh;
-  position: fixed;
-  left: 0;
-  top: 0;
-  background: var(--glass-bg);
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
-  border-right: 1px solid var(--glass-border);
-  box-shadow: var(--glass-shadow);
-  display: flex;
-  flex-direction: column;
-  transition: width $transition-normal, background-color 0.3s ease, backdrop-filter 0.3s ease;
-  z-index: $z-sticky;
-
-  .sidebar-collapsed & {
-    width: $sidebar-collapsed-width;
-  }
+  width: $sidebar-width; height: 100dvh; position: fixed; inset: 0 auto 0 0;
+  display: flex; flex-direction: column; background: var(--tech-shell-bg);
+  border-right: 1px solid var(--border-primary); z-index: $z-fixed;
+  .sidebar-collapsed & { width: $sidebar-collapsed-width; }
 }
-
-.sidebar-header {
-  height: $header-height;
-  padding: 0 $spacing-4;
-  display: flex;
-  align-items: center;
-  border-bottom: 1px solid var(--border-primary);
-}
-
-.logo-link {
-  display: flex;
-  align-items: center;
-  gap: $spacing-3;
-  text-decoration: none;
-}
-
-.logo {
-  width: 32px;
-  height: 32px;
-}
-
-.logo-text {
-  font-size: $font-size-xl;
-  font-weight: $font-weight-bold;
-  color: var(--text-primary);
-  transition: opacity $transition-normal;
-
-  .sidebar-collapsed & {
-    opacity: 0;
-    width: 0;
-    overflow: hidden;
-  }
-}
-
-.sidebar-nav {
-  flex: 1;
-  overflow-y: auto;
-  padding: $spacing-4 0;
-}
-
-.nav-section {
-  margin-bottom: $spacing-6;
-}
-
-.nav-section:nth-child(1) .nav-section-title {
-  color: var(--accent-blue);
-  opacity: 0.85;
-}
-
-.nav-section:nth-child(2) .nav-section-title {
-  color: var(--accent-emerald);
-  opacity: 0.85;
-}
-
-.nav-section:nth-child(3) .nav-section-title {
-  color: var(--accent-amber);
-  opacity: 0.85;
-}
-
-.nav-section:nth-child(4) .nav-section-title {
-  color: var(--accent-rose);
-  opacity: 0.85;
-}
-
+.sidebar-header { height: $header-height; min-height: $header-height; padding-inline: $spacing-4; display: flex; align-items: center; }
+.logo-link { display: flex; align-items: center; gap: $spacing-2; }
+.logo { width: 28px; height: 28px; }
+.logo-text { font-size: $font-size-lg; font-weight: $font-weight-semibold; color: var(--text-primary); .sidebar-collapsed & { display: none; } }
+.logo-badge { margin-left: $spacing-1; padding: 2px $spacing-1; border: 1px solid var(--tech-selection-border); border-radius: $radius-sm; color: var(--tech-cyan); background: var(--tech-cyan-soft); font-family: var(--font-family-mono); font-size: $font-size-xs; .sidebar-collapsed & { display: none; } }
+.sidebar-nav { flex: 1; overflow-y: auto; padding: $spacing-3 $spacing-2; overscroll-behavior: contain; }
+.nav-section { margin-bottom: $spacing-3; min-width: 0; }
 .nav-section-title {
-  display: block;
-  padding: 0 $spacing-4;
-  margin-bottom: $spacing-2;
-  font-size: $font-size-xs;
-  font-weight: $font-weight-semibold;
-  color: var(--text-tertiary);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-
-  .sidebar-collapsed & {
-    opacity: 0;
-    height: 0;
-    margin: 0;
-    overflow: hidden;
-  }
+  display: flex; align-items: center; gap: $spacing-2; width: 100%; padding: $spacing-1 $spacing-3; margin-bottom: $spacing-1;
+  border-radius: $radius-md; text-align: left; font-size: $font-size-xs; color: var(--text-tertiary); font-weight: $font-weight-medium;
+  &:hover { background: var(--surface-muted); color: var(--text-primary); }
+  > span:first-child { color: var(--section-accent, var(--text-secondary)); }
+  .sidebar-collapsed & { display: none; }
+  &--static { color: var(--text-secondary); }
 }
-
+.nav-section-count { margin-left: auto; font-variant-numeric: tabular-nums; font-family: var(--font-family-mono); }
+.nav-section-chevron { width: $spacing-3; height: $spacing-3; transition: transform $transition-fast; &.expanded { transform: rotate(90deg); } }
+.nav-active-arrow { width: $spacing-3; height: $spacing-3; flex-shrink: 0; margin-left: auto; color: var(--navigation-accent); .sidebar-collapsed & { display: none; } }
+.sidebar-create {
+  display: flex; align-items: center; justify-content: center; gap: $spacing-2;
+  min-height: var(--control-height); margin: $spacing-2 $spacing-3 0;
+  border: 1px solid var(--tech-selection-border); border-radius: $radius-lg;
+  background: var(--tech-blue-soft); color: var(--tech-blue); font-size: $font-size-sm; font-weight: $font-weight-medium;
+  svg { width: $spacing-4; height: $spacing-4; }
+  &:hover { opacity: 1; border-color: var(--tech-blue); }
+  .sidebar-collapsed & { margin-inline: $spacing-2; span { display: none; } }
+}
 .nav-item {
-  display: flex;
-  align-items: center;
-  gap: $spacing-3;
-  padding: $spacing-3 $spacing-4;
-  margin: 0 $spacing-2;
-  border: 1px solid transparent;
-  border-radius: $radius-lg;
-  color: var(--text-secondary);
-  text-decoration: none;
-  transition: background-color $transition-fast, color $transition-fast, border-color $transition-fast, transform $transition-fast;
-  cursor: pointer;
-
-  &:hover {
-    background-color: var(--bg-hover);
-    color: var(--text-primary);
-    transform: translateX(2px);
-  }
-
-  &.active {
-    color: var(--text-primary);
-    box-shadow: inset 3px 0 0 var(--item-accent, var(--color-primary));
-  }
-
-  .sidebar-collapsed & {
-    justify-content: center;
-    padding: $spacing-3;
-
-    .nav-label,
-    .nav-icon-wrap {
-      // icon wrap stays visible when collapsed
-    }
-
-    .nav-label {
-      display: none;
-    }
-  }
+  display: flex; align-items: center; gap: $spacing-3; padding: $spacing-1 $spacing-3;
+  min-height: var(--control-height); margin-bottom: var(--navigation-item-gap); border: 1px solid transparent;
+  border-radius: $radius-lg; color: var(--text-secondary); font-size: $font-size-sm;
+  transition: background-color $transition-fast, color $transition-fast;
+  &:hover { background: var(--surface-muted); color: var(--text-primary); opacity: 1; }
+  &.active { background: var(--tech-selection-bg); border-color: var(--tech-selection-border); color: var(--tech-selection-text); font-weight: $font-weight-medium; }
+  .sidebar-collapsed & { justify-content: center; padding-inline: $spacing-1; .nav-label { display: none; } }
 }
-
-// 无 accent 类的 nav-item 保持默认图标尺寸
-.nav-item:not([class*='nav-item--']) {
-  .nav-icon {
-    width: 20px;
-    height: 20px;
-    flex-shrink: 0;
-    transition: transform $transition-fast, color $transition-fast;
-  }
-}
-
-.sidebar-footer {
-  padding: $spacing-4;
-  border-top: 1px solid var(--border-primary);
-  display: flex;
-  align-items: center;
-  gap: $spacing-2;
-
-  .nav-item {
-    flex: 1;
-    width: auto;
-  }
-
-  :deep(.theme-switcher-container) {
-    flex-shrink: 0;
-  }
-}
-
-// 主容器
+.sidebar-footer { padding: $spacing-3 $spacing-2; border-top: 1px solid var(--border-primary); }
 .main-container {
-  flex: 1;
-  margin-left: $sidebar-width;
-  display: flex;
-  flex-direction: column;
-  transition: margin-left $transition-normal;
-
-  .sidebar-collapsed & {
-    margin-left: $sidebar-collapsed-width;
-  }
-}
-
-// 顶部栏
-.topbar {
-  height: $header-height;
-  padding: 0 $spacing-6;
-  display: flex;
-  align-items: center;
-  gap: $spacing-4;
-  background: var(--glass-bg);
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
-  border-bottom: 1px solid var(--glass-border);
-  box-shadow: 0 1px 0 var(--glass-border), 0 4px 24px var(--topbar-edge-glow, transparent);
-  position: sticky;
-  top: 0;
-  z-index: $z-sticky;
-  transition: background-color 0.3s ease, backdrop-filter 0.3s ease;
-}
-
-.sidebar-toggle {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  border-radius: $radius-md;
-  color: var(--text-secondary);
-  background: none;
-  border: none;
-  cursor: pointer;
-  transition: all $transition-fast;
-
-  &:hover {
-    background-color: var(--bg-hover);
-    color: var(--text-primary);
-  }
-}
-
-.breadcrumb {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  gap: $spacing-1;
-  font-size: $font-size-sm;
-}
-
-.breadcrumb-item {
-  display: flex;
-  align-items: center;
-  gap: $spacing-1;
-  color: var(--text-secondary);
-
-  a {
-    color: inherit;
-    text-decoration: none;
-
-    &:hover {
-      color: var(--accent-primary);
-    }
-  }
-}
-
-.breadcrumb-separator {
-  width: 16px;
-  height: 16px;
-  color: var(--text-tertiary);
-}
-
-.topbar-actions {
-  display: flex;
-  align-items: center;
-  gap: $spacing-3;
-}
-
-.user-avatar {
-  cursor: pointer;
-  border-radius: $radius-full;
-  transition: transform $transition-fast;
-
-  &:hover {
-    transform: scale(1.05);
-  }
-}
-
-.user-info-dropdown {
-  display: flex;
-  flex-direction: column;
-  gap: $spacing-1;
-
-  .username {
-    font-weight: $font-weight-medium;
-  }
-
-  .email {
-    font-size: $font-size-xs;
-    color: var(--text-tertiary);
-  }
-}
-
-.dropdown-icon {
-  width: 16px;
-  height: 16px;
-  margin-right: $spacing-2;
-}
-
-// 主内容区
-.main-content {
-  flex: 1;
-  padding: $spacing-6;
-  overflow-x: hidden;
-  position: relative;
-
+  position: relative; isolation: isolate; flex: 1; min-width: 0; margin-left: $sidebar-width;
+  .sidebar-collapsed & { margin-left: $sidebar-collapsed-width; }
   &::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    background-image:
-      linear-gradient(var(--hero-grid) 1px, transparent 1px),
-      linear-gradient(90deg, var(--hero-grid) 1px, transparent 1px);
-    background-size: 48px 48px;
-    mask-image: radial-gradient(ellipse 85% 60% at 50% 0%, black 15%, transparent 70%);
-    opacity: 0.65;
-  }
-
-  &__page {
-    min-height: 0;
-    position: relative;
-    z-index: 1;
+    content: ''; position: absolute; inset: $header-height 0 0; z-index: -1; pointer-events: none;
+    background-image: linear-gradient(var(--tech-grid) 1px, transparent 1px), linear-gradient(90deg, var(--tech-grid) 1px, transparent 1px);
+    background-size: var(--tech-grid-size) var(--tech-grid-size);
+    mask-image: var(--tech-grid-mask);
   }
 }
-
-// 移动端响应式
+.topbar {
+  height: $header-height; padding-inline: $spacing-6; display: flex; align-items: center; gap: $spacing-3;
+  position: sticky; top: 0; z-index: $z-sticky; background: var(--tech-shell-bg); border-bottom: 1px solid var(--border-primary); box-shadow: 0 1px 0 var(--tech-edge);
+}
+.sidebar-toggle, .mobile-menu-btn, .mobile-close, .user-menu-trigger {
+  display: grid; place-items: center; width: var(--control-height); height: var(--control-height);
+  flex-shrink: 0; border-radius: $radius-lg; color: var(--text-secondary);
+  &:hover { color: var(--text-primary); background: var(--bg-hover); }
+  svg { width: 18px; height: 18px; }
+}
+.mobile-menu-btn, .mobile-close { display: none; }
+.breadcrumb { flex: 1; min-width: 0; display: flex; align-items: center; font-size: $font-size-sm; }
+.breadcrumb-current { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.breadcrumb-item { display: flex; align-items: center; gap: $spacing-1; color: var(--text-secondary); }
+.breadcrumb-separator { width: $spacing-4; height: $spacing-4; color: var(--text-tertiary); }
+.topbar-actions { display: flex; align-items: center; gap: $spacing-2; }
+.global-search {
+  display: flex; align-items: center; gap: $spacing-2; padding: $spacing-2 $spacing-3;
+  border: 1px solid var(--border-primary); border-radius: $radius-lg; color: var(--text-secondary); font-size: $font-size-xs;
+  &:hover { border-color: var(--border-hover); background: var(--bg-hover); }
+  .icon { width: $spacing-4; height: $spacing-4; }
+  kbd { margin-left: $spacing-4; font-family: inherit; color: var(--text-tertiary); }
+}
+.user-info-dropdown { display: flex; flex-direction: column; gap: $spacing-1; .username { font-weight: $font-weight-medium; } .email { font-size: $font-size-xs; color: var(--text-tertiary); } }
+.dropdown-icon { width: $spacing-4; height: $spacing-4; margin-right: $spacing-2; }
+.main-content { min-width: 0; padding: var(--page-gutter); &__page { min-width: 0; } &:focus { outline: none; } }
 @media (max-width: 768px) {
-  .sidebar {
-    position: fixed;
-    left: -280px;
-    width: 280px;
-    z-index: 1001;
-    transition: left 0.3s ease;
-
-    &.mobile-open {
-      left: 0;
-    }
-  }
-
-  .mobile-overlay {
-    position: fixed;
-    inset: 0;
-    background: var(--bg-overlay);
-    z-index: 1000;
-    animation: fadeIn 0.2s ease;
-  }
-
-  @keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
-  }
-
-  .mobile-close {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 36px;
-    height: 36px;
-    border-radius: $radius-md;
-    color: var(--text-secondary);
-    background: none;
-    border: none;
-    cursor: pointer;
-    margin-left: auto;
-
-    &:hover {
-      background-color: var(--bg-hover);
-    }
-  }
-
-  .mobile-menu-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 36px;
-    height: 36px;
-    border-radius: $radius-md;
-    color: var(--text-secondary);
-    background: none;
-    border: none;
-    cursor: pointer;
-    margin-right: $spacing-2;
-
-    &:hover {
-      background-color: var(--bg-hover);
-    }
-  }
-
-  .main-container {
-    margin-left: 0 !important;
-  }
-
-  .sidebar-collapsed .sidebar {
-    width: 280px;
-  }
-
-  .topbar {
-    padding: 0 $spacing-4;
-  }
-
-  .main-content {
-    padding: $spacing-4;
-  }
-
-  .logo-text {
-    display: block !important;
-    opacity: 1 !important;
-  }
+  .sidebar { width: min(280px, 85vw); transform: translateX(-100%); transition: transform $transition-normal; &.mobile-open { transform: none; box-shadow: var(--shadow-xl); } }
+  .mobile-overlay { position: fixed; inset: 0; background: var(--bg-overlay); z-index: $z-sticky + 5; }
+  .main-container { margin-left: 0; }
+  .mobile-menu-btn, .mobile-close { display: grid; width: var(--control-height-large); height: var(--control-height-large); }
+  .mobile-close { margin-left: auto; }
+  .sidebar-toggle { display: none; }
+  .topbar { padding-inline: $spacing-3; gap: $spacing-2; }
+  .nav-item, .nav-section-title, .sidebar-create { min-height: var(--control-height-large); }
+  .global-search { width: var(--control-height-large); height: var(--control-height-large); padding: $spacing-3; border: 0; justify-content: center; span, kbd { display: none; } }
+  .breadcrumb { font-size: $font-size-xs; }
 }
+</style>
 
-// 平板适配
-@media (min-width: 769px) and (max-width: 1024px) {
-  .mobile-menu-btn {
-    display: none;
-  }
-
-  .mobile-close {
-    display: none;
-  }
-}
-
-@media (min-width: 769px) {
-  .mobile-menu-btn {
-    display: none;
-  }
-
-  .mobile-close {
-    display: none;
-  }
-}
+<style scoped>
+.user-menu-trigger { width: 44px; height: 44px; padding: 0; border: 0; border-radius: 0; background: transparent; }
+.user-menu-trigger:hover, .user-menu-trigger:active { background: transparent; }
+.user-menu-trigger :deep(svg) { width: 100%; height: 100%; }
 </style>

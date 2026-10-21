@@ -1,23 +1,62 @@
 <template>
   <div class="config-form">
-    <el-form :model="localData" label-position="top" size="small">
+    <el-form
+      :model="localData"
+      label-position="top"
+      size="small"
+    >
       <el-form-item label="节点名称">
-        <el-input v-model="localData.label" @change="syncEmit" />
+        <el-input
+          v-model="localData.label"
+          @change="syncEmit"
+        />
       </el-form-item>
       <el-form-item label="输入方式">
-        <el-radio-group v-model="localData.inputMode" @change="syncEmit">
-          <el-radio value="upload">本地上传</el-radio>
-          <el-radio value="url">公网 URL</el-radio>
+        <el-radio-group
+          v-model="localData.inputMode"
+          @change="syncEmit"
+        >
+          <el-radio value="upload">
+            本地上传
+          </el-radio>
+          <el-radio value="url">
+            公网 URL
+          </el-radio>
         </el-radio-group>
       </el-form-item>
-      <el-form-item v-if="localData.inputMode === 'upload'" label="视频文件">
-        <el-upload :auto-upload="false" :show-file-list="false" accept="video/*" :on-change="onFile">
-          <el-button type="primary" :loading="uploading">选择视频</el-button>
+      <el-form-item
+        v-if="localData.inputMode === 'upload'"
+        label="视频文件"
+      >
+        <el-upload
+          :auto-upload="false"
+          :show-file-list="false"
+          accept="video/*"
+          :on-change="onFile"
+        >
+          <el-button
+            type="primary"
+            :loading="uploading"
+          >
+            选择视频
+          </el-button>
         </el-upload>
-        <div v-if="localData.public_url" class="hint">{{ localData.public_url }}</div>
+        <div
+          v-if="localData.public_url"
+          class="hint"
+        >
+          {{ localData.public_url }}
+        </div>
       </el-form-item>
-      <el-form-item v-else label="视频 URL">
-        <el-input v-model="localData.video_input" placeholder="https://..." @change="syncEmit" />
+      <el-form-item
+        v-else
+        label="视频 URL"
+      >
+        <el-input
+          v-model="localData.video_input"
+          placeholder="https://..."
+          @change="syncEmit"
+        />
       </el-form-item>
     </el-form>
   </div>

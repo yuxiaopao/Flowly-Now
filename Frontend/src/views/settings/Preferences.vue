@@ -2,176 +2,132 @@
   <div class="preferences-settings">
     <PageHeader
       compact
-      title="偏好设置"
-      subtitle="自定义外观、编辑器与通知行为"
+      :title="config.title"
+      :subtitle="config.subtitle"
     />
-
-    <div class="preference-group">
-      <h3 class="group-title">
-        外观
-      </h3>
+    <section
+      class="preference-group"
+      aria-labelledby="appearance-title"
+    >
+      <div class="section-heading">
+        <h2 id="appearance-title">
+          {{ config.appearance }}
+        </h2>
+      </div>
       <div class="preference-item preference-item--stacked">
         <div class="preference-info">
-          <span class="preference-label">主题</span>
-          <span class="preference-desc">选择完整支持的四套界面主题</span>
+          <span class="preference-label">{{ config.theme }}</span><span class="preference-desc">{{ config.themeDescription }}</span>
         </div>
-        <div class="theme-switcher-wrap">
-          <ThemeSwitcher variant="pill" />
-        </div>
+        <ThemeSwitcher variant="pill" />
       </div>
-    </div>
-
-    <el-divider />
-
-    <div class="preference-group">
-      <h3 class="group-title">
-        编辑器
-      </h3>
-      <div class="preference-item">
-        <div class="preference-info">
-          <span class="preference-label">自动保存</span>
-          <span class="preference-desc">编辑时自动保存更改</span>
-        </div>
-        <el-switch v-model="preferences.autoSave" />
+    </section>
+    <section
+      class="preference-group"
+      aria-labelledby="editor-preferences-title"
+    >
+      <div class="section-heading">
+        <h2 id="editor-preferences-title">
+          {{ config.editor }}
+        </h2><p>{{ config.editorDescription }}</p>
       </div>
-      <div class="preference-item">
-        <div class="preference-info">
-          <span class="preference-label">对齐网格</span>
-          <span class="preference-desc">拖拽节点时自动对齐网格</span>
-        </div>
-        <el-switch v-model="preferences.snapToGrid" />
-      </div>
-      <div class="preference-item">
-        <div class="preference-info">
-          <span class="preference-label">显示迷你地图</span>
-          <span class="preference-desc">在编辑器右下角显示迷你地图</span>
-        </div>
-        <el-switch v-model="preferences.showMinimap" />
-      </div>
-    </div>
-
-    <el-divider />
-
-    <div class="preference-actions">
-      <AppButton @click="resetPreferences">
-        恢复默认
-      </AppButton>
-      <AppButton
-        variant="primary"
-        @click="savePreferences"
+      <div
+        v-for="item in config.items"
+        :key="item.key"
+        class="preference-item"
       >
-        保存设置
-      </AppButton>
+        <div class="preference-info">
+          <label
+            :id="'preference-' + item.key"
+            :for="'preference-control-' + item.key"
+            class="preference-label"
+          >{{ item.label }}</label><span
+            :id="'preference-hint-' + item.key"
+            class="preference-desc"
+          >{{ item.description }}</span>
+        </div>
+        <el-switch
+          :id="'preference-control-' + item.key"
+          v-model="preferences[item.key]"
+          :aria-label="item.label"
+          :aria-labelledby="'preference-' + item.key"
+          :aria-describedby="'preference-hint-' + item.key"
+        />
+      </div>
+    </section>
+    <p
+      v-if="saveError"
+      class="inline-error"
+      role="alert"
+    >
+      {{ saveError }}
+    </p>
+    <div class="form-footer">
+      <span
+        class="save-status"
+        role="status"
+      >{{ isDirty ? config.unsaved : config.savedStatus }}</span>
+      <div class="form-actions">
+        <AppButton
+          variant="ghost"
+          @click="resetPreferences"
+        >
+          {{ config.reset }}
+        </AppButton>
+        <AppButton
+          :disabled="!isDirty"
+          @click="savePreferences"
+        >
+          {{ config.save }}
+        </AppButton>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { reactive, onMounted } from 'vue'
+import { reactive, computed, ref, onMounted, onUnmounted } from 'vue'
+import { onBeforeRouteLeave } from 'vue-router'
 import { useAppStore } from '@/stores/app'
+import { usePreferencesStore } from '@/stores/preferences'
+import { PREFERENCE_CONFIG as config, PROFILE_COPY } from '@/config/personalCenter'
 import AppButton from '@/components/common/AppButton.vue'
 import ThemeSwitcher from '@/components/common/ThemeSwitcher.vue'
 import PageHeader from '@/components/layout/PageHeader.vue'
 
 const appStore = useAppStore()
-
-const preferences = reactive({
-  theme: 'dark',
-  autoSave: true,
-  snapToGrid: true,
-  showMinimap: true
-})
-
-onMounted(() => {
-  preferences.theme = appStore.theme
-
-  const saved = localStorage.getItem('user_preferences')
-  if (saved) {
-    try {
-      Object.assign(preferences, JSON.parse(saved))
-    } catch (e) {
-      // Invalid JSON
-    }
-  }
-
-  preferences.theme = appStore.theme
-})
-
+const preferencesStore = usePreferencesStore()
+const preferences = reactive({ ...preferencesStore.editor })
+const saveError = ref('')
+const isDirty = computed(() => Object.keys(config.defaults).some(key => preferences[key] !== preferencesStore.editor[key]))
 function savePreferences() {
-  preferences.theme = appStore.theme
-  localStorage.setItem('user_preferences', JSON.stringify(preferences))
-  appStore.success('设置已保存')
+  saveError.value = ''
+  try { preferencesStore.save(preferences); appStore.success(config.saved) }
+  catch { saveError.value = config.error }
 }
-
 function resetPreferences() {
-  appStore.setTheme('dark')
-  Object.assign(preferences, {
-    theme: 'dark',
-    autoSave: true,
-    snapToGrid: true,
-    showMinimap: true
-  })
+  appStore.setTheme(config.defaultTheme)
+  Object.assign(preferences, config.defaults)
   savePreferences()
 }
+function beforeUnload(event) {
+  if (!isDirty.value) return
+  event.preventDefault()
+  event.returnValue = ''
+}
+onBeforeRouteLeave(() => !isDirty.value || appStore.confirm({
+  title: PROFILE_COPY.leaveTitle, message: PROFILE_COPY.leaveMessage, confirmText: PROFILE_COPY.leave, cancelText: PROFILE_COPY.stay,
+}))
+onMounted(() => window.addEventListener('beforeunload', beforeUnload))
+onUnmounted(() => window.removeEventListener('beforeunload', beforeUnload))
 </script>
 
 <style lang="scss" scoped>
 @use '@/assets/styles/variables.scss' as *;
-
-.preference-group {
-  margin-bottom: $spacing-4;
-}
-
-.group-title {
-  font-size: $font-size-sm;
-  font-weight: $font-weight-medium;
-  color: var(--text-secondary);
-  margin: 0 0 $spacing-4;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.preference-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: $spacing-4;
-  padding: $spacing-4 0;
-  border-bottom: 1px solid var(--border-primary);
-
-  &:last-child {
-    border-bottom: none;
-  }
-
-  &--stacked {
-    align-items: flex-start;
-  }
-}
-
-.preference-info {
-  display: flex;
-  flex-direction: column;
-  gap: $spacing-1;
-}
-
-.preference-label {
-  font-weight: $font-weight-medium;
-  color: var(--text-primary);
-}
-
-.preference-desc {
-  font-size: $font-size-sm;
-  color: var(--text-secondary);
-}
-
-.theme-switcher-wrap {
-  flex-shrink: 0;
-}
-
-.preference-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: $spacing-3;
-  margin-top: $spacing-6;
-}
+@use '@/assets/styles/personal-center.scss' as *;
+.preference-group + .preference-group { padding-top: $spacing-6; margin-top: $spacing-6; border-top: 1px solid var(--border-primary); }
+.preference-item { display: flex; justify-content: space-between; align-items: center; gap: $spacing-4; padding-block: $spacing-4; border-bottom: 1px solid var(--border-primary); &:last-child { border-bottom: none; } }
+.preference-info { display: flex; flex-direction: column; gap: $spacing-2; min-width: 0; }
+.preference-label { font-size: $font-size-sm; font-weight: $font-weight-medium; color: var(--text-primary); }
+.preference-desc { font-size: $font-size-sm; line-height: $line-height-normal; color: var(--text-secondary); }
+@media (max-width: $personal-center-form-breakpoint) { .preference-item--stacked { align-items: flex-start; flex-direction: column; } }
 </style>

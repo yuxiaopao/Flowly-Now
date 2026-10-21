@@ -96,18 +96,4 @@ def invalidate_branding_cache(tenant_id):
     })
 
 
-def broadcast_to_monitoring(data):
-    """Broadcast event to monitoring channel."""
-    channel_layer = get_channel_layer_safe()
-    if channel_layer:
-        try:
-            from asgiref.sync import async_to_sync
-            async_to_sync(channel_layer.group_send)(
-                'monitoring',
-                {
-                    'type': 'metric_update',
-                    'data': data
-                }
-            )
-        except Exception as e:
-            logger.error(f"Failed to broadcast to monitoring: {e}")
+from monitoring.broadcasts import broadcast_to_monitoring

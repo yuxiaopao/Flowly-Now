@@ -19,7 +19,7 @@ export const useAppStore = defineStore('app', () => {
   // State
   const theme = ref(normalizeTheme(localStorage.getItem('theme')))
   const sidebarCollapsed = ref(localStorage.getItem('sidebarCollapsed') === 'true')
-  const sidebarWidth = computed(() => sidebarCollapsed.value ? 72 : 260)
+  const sidebarWidth = computed(() => sidebarCollapsed.value ? 64 : 224)
   const isMobile = ref(false)
   const isTablet = ref(false)
   const isDesktop = ref(true)

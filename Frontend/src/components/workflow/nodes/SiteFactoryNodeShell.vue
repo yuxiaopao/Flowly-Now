@@ -6,15 +6,25 @@
     :style="{ '--node-accent': resolvedColor, ...(isExpanded ? resize.sizeStyle.value : {}) }"
     @click.stop="handleSelect"
   >
-    <Handle type="target" :position="Position.Left" />
+    <Handle
+      type="target"
+      :position="Position.Left"
+    />
 
     <div class="node-header">
       <NodeTypeBadge
         :node-type="nodeType"
         :label="badgeLabel || undefined"
       />
-      <button class="action-btn" type="button" @click.stop="toggleExpand">
-        <ChevronDown class="action-icon" :class="{ rotated: isExpanded }" />
+      <button
+        class="action-btn"
+        type="button"
+        @click.stop="toggleExpand"
+      >
+        <ChevronDown
+          class="action-icon"
+          :class="{ rotated: isExpanded }"
+        />
       </button>
     </div>
 
@@ -32,7 +42,10 @@
     </div>
 
     <div class="compact-view">
-      <div v-if="summaryText" class="info-row">
+      <div
+        v-if="summaryText"
+        class="info-row"
+      >
         <span class="info-label">状态</span>
         <span class="info-value">{{ summaryText }}</span>
       </div>
@@ -45,15 +58,34 @@
       </div>
     </div>
 
-    <div v-if="isExpanded" class="expanded-panel" @click.stop>
+    <div
+      v-if="isExpanded"
+      class="expanded-panel"
+      @click.stop
+    >
       <slot name="expanded" />
-      <ul v-if="checks.length" class="check-list">
-        <li v-for="item in checks" :key="item.key" :class="{ ok: item.ok, warn: !item.ok }">
+      <ul
+        v-if="checks.length"
+        class="check-list"
+      >
+        <li
+          v-for="item in checks"
+          :key="item.key"
+          :class="{ ok: item.ok, warn: !item.ok }"
+        >
           <strong>{{ item.label }}</strong> — {{ item.detail }}
         </li>
       </ul>
-      <p v-if="summaryZh" class="summary-text">{{ summaryZh }}</p>
-      <div v-if="!isDesktop && showIframe && !blocked" class="browser-hint">
+      <p
+        v-if="summaryZh"
+        class="summary-text"
+      >
+        {{ summaryZh }}
+      </p>
+      <div
+        v-if="!isDesktop && showIframe && !blocked"
+        class="browser-hint"
+      >
         <p class="browser-hint-text">
           本地预览需在 <strong>Flowly Desktop</strong> 中运行工作流。
           浏览器模式可查看上游返回的 preview_url。
@@ -67,20 +99,46 @@
           复制输出目录
         </button>
       </div>
-      <div v-if="isDesktop && outputDirForCopy" class="local-dir-row">
-        <span class="local-dir-path" :title="outputDirForCopy">{{ outputDirForCopy }}</span>
-        <button type="button" class="copy-dir-btn" @click.stop="openOutputFolder">
+      <div
+        v-if="isDesktop && outputDirForCopy"
+        class="local-dir-row"
+      >
+        <span
+          class="local-dir-path"
+          :title="outputDirForCopy"
+        >{{ outputDirForCopy }}</span>
+        <button
+          type="button"
+          class="copy-dir-btn"
+          @click.stop="openOutputFolder"
+        >
           打开文件夹
         </button>
       </div>
-      <p v-if="previewError" class="preview-error">{{ previewError }}</p>
-      <div v-if="previewLoading" class="env-progress">
+      <p
+        v-if="previewError"
+        class="preview-error"
+      >
+        {{ previewError }}
+      </p>
+      <div
+        v-if="previewLoading"
+        class="env-progress"
+      >
         <p class="preview-loading">
           <Loader class="env-progress-icon spinning" />
           {{ envProgressMessage || '正在准备本地环境…' }}
         </p>
-        <ul v-if="envProgressLog.length" class="env-progress-log">
-          <li v-for="(entry, idx) in envProgressLog" :key="idx">{{ entry }}</li>
+        <ul
+          v-if="envProgressLog.length"
+          class="env-progress-log"
+        >
+          <li
+            v-for="(entry, idx) in envProgressLog"
+            :key="idx"
+          >
+            {{ entry }}
+          </li>
         </ul>
       </div>
       <iframe
@@ -98,7 +156,10 @@
       />
     </div>
 
-    <Handle type="source" :position="Position.Right" />
+    <Handle
+      type="source"
+      :position="Position.Right"
+    />
   </div>
 </template>
 
@@ -292,8 +353,9 @@ onUnmounted(() => {
 })
 
 function toggleExpand() {
-  handleSelect()
-  isExpanded.value = !isExpanded.value
+  const expanded = !isExpanded.value
+  emit('select')
+  isExpanded.value = expanded
 }
 
 function handleChange() {

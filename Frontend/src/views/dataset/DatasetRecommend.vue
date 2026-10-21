@@ -1,14 +1,13 @@
 <template>
-  <div class="dataset-recommend">
+  <PageShell
+    width="wide"
+    class="dataset-recommend"
+  >
     <!-- Page Header -->
-    <div class="page-header">
-      <div class="header-left">
-        <h1>数据集推荐</h1>
-        <p class="subtitle">
-          浏览公开标注数据集，下载并上传用于模型训练
-        </p>
-      </div>
-    </div>
+    <PageHeader
+      title="数据集推荐"
+      subtitle="浏览公开标注数据集，下载并上传用于模型训练"
+    />
 
     <!-- Search and Filter Bar -->
     <div class="filter-bar">
@@ -173,10 +172,12 @@
         </div>
       </div>
     </div>
-  </div>
+  </PageShell>
 </template>
 
 <script setup>
+import PageHeader from '@/components/layout/PageHeader.vue'
+import PageShell from '@/components/layout/PageShell.vue'
 import { ref, computed, onMounted, markRaw } from 'vue'
 import { datasetRecommendApi } from '@/api/datasetRecommend'
 import { ElMessage } from 'element-plus'
@@ -321,28 +322,6 @@ onMounted(() => {
 <style lang="scss" scoped>
 @use '@/assets/styles/variables.scss' as *;
 
-.dataset-recommend {
-  max-width: 1400px;
-  margin: 0 auto;
-}
-
-.page-header {
-  margin-bottom: $spacing-6;
-
-  h1 {
-    font-size: $font-size-2xl;
-    font-weight: $font-weight-bold;
-    margin: 0 0 $spacing-2;
-    color: var(--text-primary);
-  }
-
-  .subtitle {
-    font-size: $font-size-sm;
-    color: var(--text-secondary);
-    margin: 0;
-  }
-}
-
 .filter-bar {
   margin-bottom: $spacing-6;
 }
@@ -433,15 +412,15 @@ onMounted(() => {
 
 .dataset-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--content-card-min-width)), 1fr));
   gap: $spacing-4;
 }
 
 .dataset-card {
   background: var(--bg-secondary);
   border: 1px solid var(--border-primary);
-  border-radius: $radius-xl;
-  padding: $spacing-5;
+  border-radius: var(--content-card-radius);
+  padding: var(--content-card-padding);
   transition: all $transition-normal;
 
   &:hover {

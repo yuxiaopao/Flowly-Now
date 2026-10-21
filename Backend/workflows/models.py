@@ -434,11 +434,15 @@ class WorkflowExecution(models.Model):
         ('pending', '等待中'),
         ('running', '运行中'),
         ('paused', '已暂停'),
+        ('interrupted', '已中断'),  # soft-timeout / worker stop — resumable via checkpoint
         ('completed', '已完成'),
         ('failed', '失败'),
         ('cancelled', '已取消'),
         ('timeout', '超时'),
     ]
+
+    RESUMABLE_STATUSES = frozenset({'paused', 'interrupted'})
+    ACTIVE_STATUSES = frozenset({'queued', 'pending', 'running', 'paused', 'interrupted'})
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
@@ -593,8 +597,13 @@ class WorkflowExecution(models.Model):
 
     @property
     def is_finished(self):
-        """Check if execution has finished (completed, failed, or cancelled)."""
+        """Check if execution has finished (terminal — not resumable)."""
         return self.status in ['completed', 'failed', 'cancelled', 'timeout']
+
+    @property
+    def is_resumable(self):
+        """Paused or interrupted executions can continue from context_snapshot."""
+        return self.status in self.RESUMABLE_STATUSES
 
     def mark_started(self):
         """Mark execution as started."""
@@ -624,6 +633,18 @@ class WorkflowExecution(models.Model):
             self.duration_ms = int((self.completed_at - self.started_at).total_seconds() * 1000)
         self.save(update_fields=['status', 'completed_at', 'error_message', 'error_stack', 'duration_ms'])
 
+    def mark_interrupted(self, error_message=None, context_snapshot=None):
+        """Mark as interrupted (resumable). Does not set completed_at."""
+        self.status = 'interrupted'
+        self.paused_at = timezone.now()
+        if error_message:
+            self.error_message = error_message
+        update_fields = ['status', 'paused_at', 'error_message']
+        if context_snapshot is not None:
+            self.context_snapshot = context_snapshot
+            update_fields.append('context_snapshot')
+        self.save(update_fields=update_fields)
+
     def update_node_status(self, node_id: int, status: str, extra_data: dict = None):
         """Update the status of a specific node."""
         if self.node_status is None:
@@ -650,22 +671,23 @@ class WorkflowExecution(models.Model):
         self.save(update_fields=['execution_logs'])
 
     def pause(self):
-        """Pause the execution."""
+        """Request pause — running worker will cooperatively checkpoint and stop."""
         if self.status == 'running':
             self.status = 'paused'
             self.paused_at = timezone.now()
             self.save(update_fields=['status', 'paused_at'])
 
     def resume(self):
-        """Resume a paused execution."""
-        if self.status == 'paused':
+        """Mark paused/interrupted execution as running (caller must dispatch Celery task)."""
+        if self.status in self.RESUMABLE_STATUSES:
             self.status = 'running'
             self.paused_at = None
-            self.save(update_fields=['status', 'paused_at'])
+            self.error_message = None
+            self.save(update_fields=['status', 'paused_at', 'error_message'])
 
     def cancel(self):
-        """Cancel the execution."""
-        if self.status in ['pending', 'queued', 'running', 'paused']:
+        """Request cancel — running worker exits cooperatively when it polls DB."""
+        if self.status in ['pending', 'queued', 'running', 'paused', 'interrupted']:
             self.status = 'cancelled'
             self.completed_at = timezone.now()
             self.save(update_fields=['status', 'completed_at'])

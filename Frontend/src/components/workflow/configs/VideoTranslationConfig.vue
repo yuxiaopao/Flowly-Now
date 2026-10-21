@@ -6,9 +6,15 @@
       size="small"
     >
       <div class="form-section">
-        <h4 class="section-title">基本信息</h4>
+        <h4 class="section-title">
+          基本信息
+        </h4>
         <el-form-item label="节点名称">
-          <el-input v-model="localData.label" placeholder="视频翻译" @change="handleChange" />
+          <el-input
+            v-model="localData.label"
+            placeholder="视频翻译"
+            @change="handleChange"
+          />
         </el-form-item>
         <el-form-item label="描述">
           <el-input
@@ -22,32 +28,56 @@
       </div>
 
       <div class="form-section">
-        <h4 class="section-title">视频输入</h4>
+        <h4 class="section-title">
+          视频输入
+        </h4>
         <el-form-item label="输入方式">
-          <el-radio-group v-model="localData.inputMode" @change="handleInputModeChange">
-            <el-radio value="upload">本地上传</el-radio>
-            <el-radio value="url">公网 URL</el-radio>
-            <el-radio value="upstream">上游绑定</el-radio>
+          <el-radio-group
+            v-model="localData.inputMode"
+            @change="handleInputModeChange"
+          >
+            <el-radio value="upload">
+              本地上传
+            </el-radio>
+            <el-radio value="url">
+              公网 URL
+            </el-radio>
+            <el-radio value="upstream">
+              上游绑定
+            </el-radio>
           </el-radio-group>
         </el-form-item>
 
-        <el-form-item v-if="localData.inputMode === 'upload'" label="上传视频">
+        <el-form-item
+          v-if="localData.inputMode === 'upload'"
+          label="上传视频"
+        >
           <el-upload
             :auto-upload="false"
             :show-file-list="false"
             accept="video/*,.mp4,.mov,.webm,.mkv"
             :on-change="handleFileChange"
           >
-            <el-button type="primary" :loading="uploading">
+            <el-button
+              type="primary"
+              :loading="uploading"
+            >
               {{ uploading ? '上传中...' : '选择视频文件' }}
             </el-button>
           </el-upload>
-          <div v-if="localData.public_url" class="field-hint">
+          <div
+            v-if="localData.public_url"
+            class="field-hint"
+          >
             已上传：{{ localData.public_url }}
           </div>
         </el-form-item>
 
-        <el-form-item v-else-if="localData.inputMode === 'url'" label="视频 URL" required>
+        <el-form-item
+          v-else-if="localData.inputMode === 'url'"
+          label="视频 URL"
+          required
+        >
           <el-input
             v-model="localData.video_input"
             placeholder="https://example.com/video.mp4"
@@ -55,54 +85,113 @@
           />
         </el-form-item>
 
-        <el-form-item v-else label="上游视频变量">
+        <el-form-item
+          v-else
+          label="上游视频变量"
+        >
           <el-input
             v-model="localData.video_input"
             placeholder="{video_url}"
             @change="handleChange"
           />
-          <div class="field-hint">绑定上游节点输出的 video_url</div>
+          <div class="field-hint">
+            绑定上游节点输出的 video_url
+          </div>
         </el-form-item>
       </div>
 
       <div class="form-section">
-        <h4 class="section-title">语言与配音</h4>
+        <h4 class="section-title">
+          语言与配音
+        </h4>
         <el-form-item label="源语言">
-          <el-select v-model="localData.source_language" @change="handleChange">
-            <el-option v-for="opt in languageOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
+          <el-select
+            v-model="localData.source_language"
+            @change="handleChange"
+          >
+            <el-option
+              v-for="opt in languageOptions"
+              :key="opt.value"
+              :label="opt.label"
+              :value="opt.value"
+            />
           </el-select>
         </el-form-item>
         <el-form-item label="目标语言（可多选）">
-          <el-select v-model="localData.target_languages" multiple @change="handleChange">
-            <el-option v-for="opt in languageOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
+          <el-select
+            v-model="localData.target_languages"
+            multiple
+            @change="handleChange"
+          >
+            <el-option
+              v-for="opt in languageOptions"
+              :key="opt.value"
+              :label="opt.label"
+              :value="opt.value"
+            />
           </el-select>
         </el-form-item>
         <el-form-item label="配音音色 (CosyVoice)">
-          <el-select v-model="localData.voice" @change="handleChange">
-            <el-option label="longanyang（中文男声）" value="longanyang" />
-            <el-option label="longxiaochun（女声）" value="longxiaochun" />
-            <el-option label="longlaotie（男声）" value="longlaotie" />
+          <el-select
+            v-model="localData.voice"
+            @change="handleChange"
+          >
+            <el-option
+              label="longanyang（中文男声）"
+              value="longanyang"
+            />
+            <el-option
+              label="longxiaochun（女声）"
+              value="longxiaochun"
+            />
+            <el-option
+              label="longlaotie（男声）"
+              value="longlaotie"
+            />
           </el-select>
         </el-form-item>
       </div>
 
       <div class="form-section">
-        <h4 class="section-title">输出选项</h4>
+        <h4 class="section-title">
+          输出选项
+        </h4>
         <el-form-item label="字幕格式">
-          <el-select v-model="localData.subtitle_format" @change="handleChange">
-            <el-option label="SRT" value="srt" />
-            <el-option label="VTT" value="vtt" />
-            <el-option label="SRT + VTT" value="both" />
+          <el-select
+            v-model="localData.subtitle_format"
+            @change="handleChange"
+          >
+            <el-option
+              label="SRT"
+              value="srt"
+            />
+            <el-option
+              label="VTT"
+              value="vtt"
+            />
+            <el-option
+              label="SRT + VTT"
+              value="both"
+            />
           </el-select>
         </el-form-item>
         <el-form-item label="口型同步 (VideoRetalk)">
-          <el-switch v-model="localData.lip_sync" @change="handleChange" />
+          <el-switch
+            v-model="localData.lip_sync"
+            @change="handleChange"
+          />
         </el-form-item>
         <el-form-item label="烧录硬字幕">
-          <el-switch v-model="localData.burn_subtitles" @change="handleChange" />
+          <el-switch
+            v-model="localData.burn_subtitles"
+            @change="handleChange"
+          />
         </el-form-item>
         <el-form-item label="音频更长时扩展视频">
-          <el-switch v-model="localData.video_extension" @change="handleChange" />
+          <el-switch
+            v-model="localData.video_extension"
+            @change="handleChange"
+          />
         </el-form-item>
         <el-form-item label="人脸参考图 URL（多人脸场景）">
           <el-input

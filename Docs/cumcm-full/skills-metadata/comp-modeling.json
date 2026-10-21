@@ -1,0 +1,35 @@
+{
+  "skill_name": "comp-modeling",
+  "category": "08_competition_modeling",
+  "tier": "tier2_important",
+  "encrypted": true,
+  "scan": {
+    "name": "comp-modeling",
+    "path": "resources/app/skills/comp-modeling",
+    "has_skill_md_enc": true,
+    "has_skill_md_plain": false,
+    "encrypted": true,
+    "files": {
+      "enc": 2,
+      "plain": 0,
+      "total": 2
+    },
+    "subdirs": [
+      "references"
+    ],
+    "extensions": {
+      ".enc": 2
+    },
+    "readable_assets": []
+  },
+  "artifacts": [
+    "MODELING_REPORT.md"
+  ],
+  "runtime_prompts": [],
+  "used_in_templates": [
+    "comp_cumcm",
+    "comp_mcm"
+  ],
+  "flowly_status": "pending",
+  "replication_strategy": "decrypt_and_port"
+}

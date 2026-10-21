@@ -115,15 +115,15 @@ DEBUG = os.getenv('DEBUG', 'True').lower() in ('true', '1', 'yes')
 **现状**:
 ```yaml
 # docker-compose.yml 第31-34行 (MySQL)
-MYSQL_ROOT_PASSWORD: rootpassword
+MYSQL_ROOT_PASSWORD: <local-database-password>
 MYSQL_PASSWORD: flowly_password
 
 # .env.example 第15行
-DB_PASSWORD=rootpassword
+DB_PASSWORD=<local-database-password>
 ```
 
 **风险**:
-- 使用常见弱密码 `rootpassword`, `flowly_password`
+- 使用常见弱密码 `<local-database-password>`, `flowly_password`
 - 若容器端口暴露，攻击者可直连数据库
 - 风险等级: **高 (High)**
 
@@ -135,7 +135,7 @@ DB_PASSWORD=rootpassword
 2. **.env.example**:
    ```bash
    # 修改前
-   DB_PASSWORD=rootpassword
+   DB_PASSWORD=<local-database-password>
    
    # 修改后
    DB_PASSWORD=<your-strong-database-password-min-16-chars>

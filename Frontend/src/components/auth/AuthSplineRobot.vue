@@ -25,7 +25,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import {
   SPLINE_SCENE_URL,
   bindSplineResize,
@@ -52,6 +52,7 @@ const error = ref('')
 let splineApp = null
 let cleanupResize = null
 let cleanupVisibility = null
+let disposed = false
 
 async function initSpline() {
   await nextTick()
@@ -68,12 +69,16 @@ async function initSpline() {
 
   try {
     await waitForElementSize(container)
-    splineApp = await createSplineApplication(canvas, container, SPLINE_SCENE_URL)
+    if (disposed) return
+    const app = await createSplineApplication(canvas, container, SPLINE_SCENE_URL)
+    if (disposed) { disposeSplineApplication(app); return }
+    splineApp = app
     splineApp.play?.()
     cleanupResize = bindSplineResize(splineApp, canvas, container)
     cleanupVisibility = bindSplineVisibility(splineApp)
     loading.value = false
   } catch (err) {
+    if (disposed) return
     console.error('Spline 加载失败:', err)
     loading.value = false
     error.value = resolveSplineErrorMessage(err)
@@ -84,7 +89,8 @@ onMounted(() => {
   initSpline()
 })
 
-onUnmounted(() => {
+onBeforeUnmount(() => {
+  disposed = true
   cleanupResize?.()
   cleanupResize = null
   cleanupVisibility?.()

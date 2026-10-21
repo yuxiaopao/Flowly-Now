@@ -65,20 +65,19 @@ class CheckpointStorage:
             True if saved successfully
         """
         try:
-            # Store in execution's metadata
-            checkpoints = execution.metadata.get('checkpoints', [])
+            # Store checkpoint history on context_data (WorkflowExecution has no metadata field)
+            base = dict(execution.context_data or {})
+            checkpoints = list(base.get('checkpoints', []))
             checkpoints.append(checkpoint.to_dict())
-
-            # Keep only last 10 checkpoints
             checkpoints = checkpoints[-10:]
 
-            execution.metadata = {
-                **execution.metadata,
+            execution.context_data = {
+                **base,
                 'checkpoints': checkpoints,
                 'last_checkpoint': checkpoint.to_dict(),
-                'last_checkpoint_at': timezone.now().isoformat()
+                'last_checkpoint_at': timezone.now().isoformat(),
             }
-            execution.save(update_fields=['metadata'])
+            execution.save(update_fields=['context_data'])
             return True
 
         except Exception as e:
@@ -99,7 +98,7 @@ class CheckpointStorage:
             CheckpointData or None if no checkpoint exists
         """
         try:
-            metadata = execution.metadata or {}
+            metadata = execution.context_data or {}
             checkpoint_dict = metadata.get('last_checkpoint')
             if checkpoint_dict:
                 return CheckpointData.from_dict(checkpoint_dict)
@@ -125,7 +124,7 @@ class CheckpointStorage:
             CheckpointData or None
         """
         try:
-            checkpoints = execution.metadata.get('checkpoints', [])
+            checkpoints = (execution.context_data or {}).get('checkpoints', [])
             if 0 <= index < len(checkpoints):
                 return CheckpointData.from_dict(checkpoints[index])
             return None
@@ -148,7 +147,7 @@ class CheckpointStorage:
             List of checkpoint summaries
         """
         try:
-            checkpoints = execution.metadata.get('checkpoints', [])
+            checkpoints = (execution.context_data or {}).get('checkpoints', [])
             return [
                 {
                     'index': i,
@@ -168,12 +167,12 @@ class CheckpointStorage:
     def clear_checkpoints(execution: WorkflowExecution) -> bool:
         """Clear all checkpoints for an execution."""
         try:
-            metadata = execution.metadata or {}
+            metadata = dict(execution.context_data or {})
             metadata.pop('checkpoints', None)
             metadata.pop('last_checkpoint', None)
             metadata.pop('last_checkpoint_at', None)
-            execution.metadata = metadata
-            execution.save(update_fields=['metadata'])
+            execution.context_data = metadata
+            execution.save(update_fields=['context_data'])
             return True
 
         except Exception as e:
@@ -244,8 +243,13 @@ class WorkflowCheckpointManager:
         Returns:
             True if there is a checkpoint and execution is resumable
         """
-        if self.execution.status not in ('running', 'paused'):
+        if self.execution.status not in ('running', 'paused', 'interrupted'):
             return False
+
+        # Prefer explicit resume snapshot; fall back to checkpoint history
+        snap = self.execution.context_snapshot or {}
+        if snap.get('visited') is not None or snap.get('node_results'):
+            return True
 
         checkpoint = self.storage.load_latest_checkpoint(self.execution)
         return checkpoint is not None
@@ -341,13 +345,14 @@ class ExecutionResumer:
             return None
 
         # Update execution status
+        base = dict(self.execution.context_data or {})
         self.execution.status = 'running'
-        self.execution.metadata = {
-            **self.execution.metadata,
+        self.execution.context_data = {
+            **base,
             'resumed_from_checkpoint': True,
-            'resume_at': timezone.now().isoformat()
+            'resume_at': timezone.now().isoformat(),
         }
-        self.execution.save(update_fields=['status', 'metadata', 'updated_at'])
+        self.execution.save(update_fields=['status', 'context_data'])
 
         return resume_info
 
@@ -365,15 +370,17 @@ class ExecutionResumer:
         """
         if success:
             self.execution.status = 'completed'
-            self.execution.output = final_output
+            if final_output is not None:
+                self.execution.output_data = final_output
         else:
             self.execution.status = 'failed'
 
-        self.execution.metadata = {
-            **self.execution.metadata,
+        base = dict(self.execution.context_data or {})
+        self.execution.context_data = {
+            **base,
             'resumption_completed': True,
             'resumption_success': success,
-            'completed_at': timezone.now().isoformat()
+            'completed_at': timezone.now().isoformat(),
         }
         self.execution.save()
 

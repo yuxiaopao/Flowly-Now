@@ -48,12 +48,25 @@ class TestAlertAPI:
         assert 'active' in response.data
 
     def test_acknowledge_alert(self, authenticated_client, user):
-        # Skip - backend bug: signal handler references non-existent 'notification_channels' field
-        pass
+        from monitoring.models import Alert, AlertRule
+        rule = AlertRule.objects.create(name='测试告警', owner=user, notify_email=False)
+        alert = Alert.objects.create(rule=rule, title='失败告警', severity='high')
+        response = authenticated_client.post(f'/api/v1/monitoring/alerts/{alert.id}/acknowledge/')
+        assert response.status_code == 200
+        alert.refresh_from_db()
+        assert alert.status == 'acknowledged'
 
     def test_resolve_alert(self, authenticated_client, user):
-        # Skip - backend bug: signal handler references non-existent 'notification_channels' field
-        pass
+        from monitoring.models import Alert, AlertRule
+        rule = AlertRule.objects.create(name='测试告警', owner=user, notify_email=False)
+        alert = Alert.objects.create(rule=rule, title='失败告警', severity='high')
+        response = authenticated_client.post(f'/api/v1/monitoring/alerts/{alert.id}/resolve/', {'note': '故障已修复'})
+        assert response.status_code == 200
+        alert.refresh_from_db()
+        assert alert.status == 'resolved'
+        assert alert.resolved_by == user
+        assert alert.resolved_at is not None
+        assert alert.resolution_note == '故障已修复'
 
     def test_filter_alerts_by_status(self, authenticated_client, user):
         """Test filtering alerts by status."""
@@ -73,6 +86,13 @@ class TestAlertAPI:
 @pytest.mark.django_db
 class TestMetricAPI:
     """Test metric API endpoints."""
+
+    @pytest.mark.parametrize('hours', ['bad', '0', '-1', '1.5'])
+    @pytest.mark.parametrize('endpoint', ['metrics/', 'metrics/aggregate/'])
+    def test_invalid_time_range_returns_validation_error(self, authenticated_client, hours, endpoint):
+        response = authenticated_client.get(f'/api/v1/monitoring/{endpoint}', {'hours': hours})
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert 'hours' in response.data['errors']
 
     def test_list_metrics(self, authenticated_client):
         """Test listing metrics."""

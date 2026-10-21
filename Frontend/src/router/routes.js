@@ -1,4 +1,5 @@
 import { useAuthStore } from '@/stores/auth'
+import { safeAuthRedirect } from '@/utils/authSession'
 
 // 路由配置
 const routes = [
@@ -41,7 +42,7 @@ const routes = [
     path: '/home',
     name: 'Dashboard',
     component: () => import('@/views/dashboard/Home.vue'),
-    meta: { title: '仪表盘', requiresAuth: true, layout: 'default' }
+    meta: { title: '工作台', requiresAuth: true, layout: 'default' }
   },
   {
     path: '/workflows',
@@ -69,9 +70,15 @@ const routes = [
   },
   {
     path: '/workflows/:id/execute',
-    name: 'WorkflowExecute',
-    component: () => import('@/views/workflow/Execute.vue'),
-    meta: { title: '执行工作流', requiresAuth: true, layout: 'default' }
+    redirect: (to) => {
+      if (to.query.execution) {
+        return { path: `/executions/${to.query.execution}` }
+      }
+      if (to.query.replay) {
+        return { path: `/executions/${to.query.replay}` }
+      }
+      return { path: `/workflows/${to.params.id}/edit` }
+    }
   },
 
   // Agent 相关
@@ -79,7 +86,7 @@ const routes = [
     path: '/agents',
     name: 'AgentList',
     component: () => import('@/views/agent/List.vue'),
-    meta: { title: 'Agent 列表', requiresAuth: true, layout: 'default' }
+    meta: { title: '智能体', requiresAuth: true, layout: 'default' }
   },
   {
     path: '/agents/new',
@@ -112,12 +119,13 @@ const routes = [
     meta: { title: 'Agent 市场', requiresAuth: true, layout: 'default' }
   },
 
-  // NL 生成工作流
+  // 语创（对话生成工作流）
   {
     path: '/nl-create',
-    name: 'NLCreator',
+    name: 'FlowSpeak',
+    alias: ['/compose', '/flowspeak'],
     component: () => import('@/views/nl-workflow/Creator.vue'),
-    meta: { title: '自然语言创建', requiresAuth: true, layout: 'default' }
+    meta: { title: '语创', requiresAuth: true, layout: 'default' }
   },
 
   // 知识库 / RAG
@@ -186,6 +194,18 @@ const routes = [
 
   // 识别项目（website_generator 生成站点）
   {
+    path: '/my-sites',
+    name: 'MySites',
+    component: () => import('@/views/assets/MySites.vue'),
+    meta: { title: '我的网站', requiresAuth: true, layout: 'default' }
+  },
+  {
+    path: '/my-weights',
+    name: 'MyWeights',
+    component: () => import('@/views/assets/MyWeights.vue'),
+    meta: { title: '我的权重', requiresAuth: true, layout: 'default' }
+  },
+  {
     path: '/projects/:id',
     name: 'GeneratedSiteProject',
     component: () => import('@/views/projects/GeneratedSiteDetail.vue'),
@@ -197,7 +217,7 @@ const routes = [
     path: '/prompts',
     name: 'PromptList',
     component: () => import('@/views/prompt/List.vue'),
-    meta: { title: 'Prompt 模板', requiresAuth: true, layout: 'default' }
+    meta: { title: '提示词', requiresAuth: true, layout: 'default' }
   },
 
   // 模型管理
@@ -301,6 +321,12 @@ const routes = [
     component: () => import('@/views/execution/History.vue'),
     meta: { title: '执行历史', requiresAuth: true, layout: 'default' }
   },
+  {
+    path: '/executions/:id',
+    name: 'ExecutionDetail',
+    component: () => import('@/views/workflow/Execute.vue'),
+    meta: { title: '执行详情', requiresAuth: true, layout: 'default' }
+  },
 
   // 工作流对比
   {
@@ -327,6 +353,12 @@ const routes = [
         name: 'SettingsProfile',
         component: () => import('@/views/settings/Profile.vue'),
         meta: { title: '个人资料' }
+      },
+      {
+        path: 'avatar',
+        name: 'SettingsAvatar',
+        component: () => import('@/views/settings/Avatar.vue'),
+        meta: { title: 'AI 头像' }
       },
       {
         path: 'api-keys',
@@ -423,10 +455,13 @@ function setupRouterGuard(router) {
       // 如果有 token 但没有用户信息，获取用户信息
       if (!authStore.user) {
         try {
-          await authStore.fetchUserInfo()
+          const user = await authStore.fetchUserInfo()
+          if (!user) {
+            next({ name: 'Login', query: { redirect: to.fullPath } })
+            return
+          }
         } catch (err) {
           // 获取失败，清除 token 并跳转登录
-          authStore.clearAuth()
           next({ name: 'Login', query: { redirect: to.fullPath } })
           return
         }
@@ -435,18 +470,17 @@ function setupRouterGuard(router) {
 
     // 已登录用户访问登录/注册页，重定向到首页
     if (
-      !to.meta.requiresAuth &&
-      to.meta.layout === 'blank' &&
+      ['Login', 'Register', 'Landing'].includes(to.name) &&
       authStore.isAuthenticated
     ) {
-      next({ name: 'Dashboard' })
-      return
-    }
-
-    // 已登录用户访问首页，重定向到仪表盘
-    if (to.path === '/' && authStore.isAuthenticated) {
-      next({ name: 'Dashboard' })
-      return
+      try {
+        if (authStore.user || await authStore.fetchUserInfo()) {
+          next(safeAuthRedirect(to.query.redirect))
+          return
+        }
+      } catch {
+        // Let the login page remain usable when the service is unavailable.
+      }
     }
 
     next()

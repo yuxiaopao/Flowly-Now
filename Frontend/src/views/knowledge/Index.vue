@@ -1,13 +1,13 @@
 <template>
-  <div class="knowledge-base">
-    <div class="page-header">
-      <div class="header-left">
-        <h1>知识库</h1>
-        <p class="subtitle">
-          管理文档集合和 RAG 流水线
-        </p>
-      </div>
-      <div class="header-actions">
+  <PageShell
+    width="wide"
+    class="knowledge-base"
+  >
+    <PageHeader
+      title="知识库"
+      subtitle="管理文档集合和 RAG 流水线"
+    >
+      <template #actions>
         <el-button @click="showPipelineDialog = true">
           <Plus class="btn-icon" />
           新建流水线
@@ -19,8 +19,8 @@
           <Plus class="btn-icon" />
           新建集合
         </el-button>
-      </div>
-    </div>
+      </template>
+    </PageHeader>
 
     <!-- Tabs -->
     <el-tabs
@@ -31,7 +31,7 @@
         label="文档集合"
         name="collections"
       >
-        <div class="collection-toolbar">
+        <PageToolbar>
           <el-checkbox v-model="showProjectOnly">
             仅显示项目 Agent 记忆（project-*）
           </el-checkbox>
@@ -39,7 +39,7 @@
             v-model="teamFilter"
             placeholder="按团队筛选"
             clearable
-            style="width: 200px"
+            class="filter-control"
           >
             <el-option
               label="全部（含个人）"
@@ -56,21 +56,22 @@
               :value="String(t.id)"
             />
           </el-select>
-        </div>
-        <div
+        </PageToolbar>
+        <PageEmptyState
           v-if="collections.length === 0 && !isLoading"
-          class="empty-state"
+          :icon="Database"
+          title="暂无文档集合"
+          description="创建您的第一个文档集合，上传文档构建知识库"
         >
-          <Database class="empty-icon" />
-          <h3>暂无文档集合</h3>
-          <p>创建您的第一个文档集合，上传文档构建知识库</p>
-          <el-button
-            type="primary"
-            @click="showCollectionDialog = true"
-          >
-            创建集合
-          </el-button>
-        </div>
+          <template #actions>
+            <el-button
+              type="primary"
+              @click="showCollectionDialog = true"
+            >
+              创建集合
+            </el-button>
+          </template>
+        </PageEmptyState>
 
         <div
           v-else
@@ -93,6 +94,8 @@
                 <el-button
                   text
                   size="small"
+                
+                  :aria-label="`${collection.name}的更多操作`"
                 >
                   <MoreVertical />
                 </el-button>
@@ -162,20 +165,21 @@
         label="RAG 流水线"
         name="pipelines"
       >
-        <div
+        <PageEmptyState
           v-if="pipelines.length === 0 && !isLoading"
-          class="empty-state"
+          :icon="GitBranch"
+          title="暂无 RAG 流水线"
+          description="创建 RAG 流水线，让 AI 能够基于知识库回答问题"
         >
-          <GitBranch class="empty-icon" />
-          <h3>暂无 RAG 流水线</h3>
-          <p>创建 RAG 流水线，让 AI 能够基于知识库回答问题</p>
-          <el-button
-            type="primary"
-            @click="showPipelineDialog = true"
-          >
-            创建流水线
-          </el-button>
-        </div>
+          <template #actions>
+            <el-button
+              type="primary"
+              @click="showPipelineDialog = true"
+            >
+              创建流水线
+            </el-button>
+          </template>
+        </PageEmptyState>
 
         <div
           v-else
@@ -197,6 +201,8 @@
                 <el-button
                   text
                   size="small"
+                
+                  :aria-label="`${pipeline.name}的更多操作`"
                 >
                   <MoreVertical />
                 </el-button>
@@ -317,9 +323,35 @@
             选择团队后，该团队所有成员均可查看和使用此知识库
           </div>
         </el-form-item>
-        <el-form-item label="Embedding 模型">
+        <el-form-item label="检索方式">
+          <el-select v-model="collectionForm.retrieval_mode">
+            <el-option
+              v-for="mode in RETRIEVAL_MODES"
+              :key="mode.value"
+              :value="mode.value"
+              :label="mode.label"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="分块策略">
+          <el-select v-model="collectionForm.chunk_strategy">
+            <el-option
+              v-for="strategy in CHUNK_STRATEGIES"
+              :key="strategy.value"
+              :value="strategy.value"
+              :label="strategy.label"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item
+          v-if="collectionForm.retrieval_mode !== 'keyword'"
+          label="Embedding 模型"
+        >
           <el-select
             v-model="collectionForm.embedding_model"
+            filterable
+            allow-create
+            default-first-option
             style="width: 100%"
           >
             <el-option
@@ -594,21 +626,32 @@
               :key="idx"
               class="source-item"
             >
+              <el-button
+                link
+                type="primary"
+                @click="router.push(`/knowledge/${selectedPipeline.collection}`)"
+              >
+                [{{ source.citation }}] {{ source.metadata?.title }} · 分块 {{ (source.metadata?.chunk_index ?? 0) + 1 }}
+              </el-button>
               <div class="source-content">
                 {{ source.content }}
               </div>
               <div class="source-score">
-                相似度: {{ (source.score * 100).toFixed(1) }}%
+                相关度: {{ (source.score * 100).toFixed(1) }}%
               </div>
             </div>
           </div>
         </div>
       </div>
     </el-dialog>
-  </div>
+  </PageShell>
 </template>
 
 <script setup>
+import PageEmptyState from '@/components/layout/PageEmptyState.vue'
+import PageToolbar from '@/components/layout/PageToolbar.vue'
+import PageHeader from '@/components/layout/PageHeader.vue'
+import PageShell from '@/components/layout/PageShell.vue'
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useRAGStore } from '@/stores/rag'
@@ -620,6 +663,7 @@ import {
 } from 'lucide-vue-next'
 import { ElMessageBox } from 'element-plus'
 import { APP_CONFIG } from '@/config'
+import { RAG_CONFIG, RETRIEVAL_MODES, CHUNK_STRATEGIES } from '@/config/rag'
 
 const DEFAULT_EMBEDDING_MODEL = APP_CONFIG.embedding.defaultModel
 const ragStore = useRAGStore()
@@ -654,8 +698,10 @@ const collectionForm = reactive({
   vector_store: null,
   tenant: null,
   embedding_model: DEFAULT_EMBEDDING_MODEL,
-  chunk_size: 1000,
-  chunk_overlap: 200
+  retrieval_mode: 'keyword',
+  chunk_strategy: 'recursive',
+  chunk_size: RAG_CONFIG.chunkSize,
+  chunk_overlap: RAG_CONFIG.chunkOverlap
 })
 
 const docForm = reactive({
@@ -672,9 +718,9 @@ const pipelineForm = reactive({
   name: '',
   description: '',
   collection: null,
-  top_k: 5,
-  min_similarity: 0.7,
-  system_prompt: '你是一个有帮助的助手。使用以下上下文信息回答用户问题。',
+  top_k: RAG_CONFIG.topK,
+  min_similarity: RAG_CONFIG.minSimilarity,
+  system_prompt: RAG_CONFIG.systemPrompt,
   include_sources: true
 })
 
@@ -717,6 +763,9 @@ function editCollection(collection) {
     name: collection.name,
     description: collection.description,
     tenant: collection.tenant || null,
+    vector_store: collection.vector_store,
+    retrieval_mode: collection.retrieval_mode,
+    chunk_strategy: collection.chunk_strategy,
     embedding_model: collection.embedding_model,
     chunk_size: collection.chunk_size,
     chunk_overlap: collection.chunk_overlap
@@ -839,6 +888,7 @@ function showQueryDialog(pipeline) {
 async function handleQuery() {
   if (!queryText.value.trim() || !selectedPipeline.value) return
 
+  queryResult.value = null
   try {
     queryResult.value = await ragStore.queryPipeline(selectedPipeline.value.id, queryText.value)
   } catch (err) {
@@ -856,8 +906,10 @@ function resetCollectionForm() {
     description: '',
     tenant: null,
     embedding_model: DEFAULT_EMBEDDING_MODEL,
-    chunk_size: 1000,
-    chunk_overlap: 200
+    retrieval_mode: 'keyword',
+  chunk_strategy: 'recursive',
+  chunk_size: RAG_CONFIG.chunkSize,
+    chunk_overlap: RAG_CONFIG.chunkOverlap
   })
   selectedCollection.value = null
 }
@@ -867,9 +919,9 @@ function resetPipelineForm() {
     name: '',
     description: '',
     collection: null,
-    top_k: 5,
-    min_similarity: 0.7,
-    system_prompt: '你是一个有帮助的助手。使用以下上下文信息回答用户问题。',
+    top_k: RAG_CONFIG.topK,
+    min_similarity: RAG_CONFIG.minSimilarity,
+    system_prompt: RAG_CONFIG.systemPrompt,
     include_sources: true
   })
 }
@@ -890,29 +942,6 @@ onMounted(async () => {
 <style lang="scss" scoped>
 @use '@/assets/styles/variables.scss' as *;
 
-.knowledge-base {
-  padding: $spacing-6;
-}
-
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: $spacing-6;
-
-  h1 {
-    font-size: $font-size-2xl;
-    font-weight: $font-weight-bold;
-    margin: 0;
-  }
-
-  .subtitle {
-    font-size: $font-size-sm;
-    color: var(--text-secondary);
-    margin: $spacing-1 0 0;
-  }
-}
-
 .btn-icon {
   width: 16px;
   height: 16px;
@@ -920,42 +949,17 @@ onMounted(async () => {
 
 .knowledge-tabs {
   :deep(.el-tabs__header) {
-    margin-bottom: $spacing-6;
+    margin-bottom: var(--page-section-gap);
   }
 }
 
-.empty-state {
-  text-align: center;
-  padding: $spacing-12;
 
-  .empty-icon {
-    width: 64px;
-    height: 64px;
-    color: var(--text-tertiary);
-    margin-bottom: $spacing-4;
-  }
-
-  h3 {
-    font-size: $font-size-lg;
-    margin: 0 0 $spacing-2;
-  }
-
-  p {
-    color: var(--text-secondary);
-    margin: 0 0 $spacing-4;
-  }
-}
 
 .collections-grid {
-  margin-bottom: 12px;
-}
-
-.collection-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: $spacing-4;
-  margin-bottom: 12px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--content-card-min-width)), 1fr));
+  gap: var(--content-gap);
+  margin-bottom: var(--page-section-gap);
 }
 
 .team-tag {
@@ -973,7 +977,7 @@ onMounted(async () => {
 }
 .pipelines-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--content-card-min-width)), 1fr));
   gap: $spacing-4;
 }
 
@@ -981,8 +985,8 @@ onMounted(async () => {
 .pipeline-card {
   background: var(--bg-secondary);
   border: 1px solid var(--border-primary);
-  border-radius: $radius-xl;
-  padding: $spacing-4;
+  border-radius: var(--content-card-radius);
+  padding: var(--content-card-padding);
   cursor: pointer;
   transition: all $transition-fast;
 
@@ -1134,5 +1138,4 @@ onMounted(async () => {
   margin-top: $spacing-1;
 }
 </style>
-
 

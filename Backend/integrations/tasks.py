@@ -162,84 +162,46 @@ def cleanup_old_deliveries(days: int = 30):
 
 @shared_task
 def sync_integration(id: int):
-    """
-    Sync data with an external integration.
-
-    Args:
-        id: ID of the integration to sync
-    """
-    try:
-        from .models import Integration
-
-        integration = Integration.objects.get(id=id)
-
-        if not integration.is_connected:
-            return {'status': 'not_connected', 'integration_id': id}
-
-        # Call integration sync based on type
-        if integration.integration_type == 'zapier':
-            result = _sync_zapier(integration)
-        elif integration.integration_type == 'make':
-            result = _sync_make(integration)
-        elif integration.integration_type == 'n8n':
-            result = _sync_n8n(integration)
-        else:
-            result = {'status': 'unsupported_type', 'type': integration.integration_type}
-
-        integration.last_sync_at = timezone.now()
-        integration.save()
-
-        return {
-            'integration_id': id,
-            'integration_type': integration.integration_type,
-            **result
-        }
-
-    except Integration.DoesNotExist:
-        return {'error': f'Integration {id} not found'}
+    """Run the same real adapter used by the API; never report a simulated sync."""
+    from .models import Integration
+    from .catalog import CONNECTORS
+    from .services import run_check, deliver
+    integration = Integration.objects.filter(pk=id, is_active=True, is_connected=True).first()
+    if not integration:
+        return {'success': False, 'message': '集成不存在或尚未连接。'}
+    connector = CONNECTORS.get(integration.integration_type)
+    if not connector:
+        return {'success': False, 'message': '不支持的集成类型。'}
+    if connector['mode'] == 'api':
+        return run_check(integration, read=True)
+    delivery = deliver(integration)
+    return {'success': delivery.status == 'success', 'message': delivery.message}
 
 
-def _sync_zapier(integration):
-    """Sync with Zapier integration."""
-    # Zapier webhook-based integration
-    return {'status': 'synced', 'type': 'zapier'}
-
-
-def _sync_make(integration):
-    """Sync with Make (Integromat) integration."""
-    # Make scenario trigger
-    return {'status': 'synced', 'type': 'make'}
-
-
-def _sync_n8n(integration):
-    """Sync with n8n integration."""
-    # n8n webhook workflow trigger
-    return {'status': 'synced', 'type': 'n8n'}
+@shared_task
+def deliver_integration_event(delivery_id):
+    """Deliver an outbox item once, keeping the result visible to the owner."""
+    from .models import IntegrationDelivery
+    from .services import deliver
+    delivery = IntegrationDelivery.objects.select_related('integration').filter(pk=delivery_id).first()
+    if not delivery:
+        return {'status': 'missing'}
+    integration = delivery.integration
+    if not integration.is_active or not integration.is_connected or delivery.event not in integration.config.get('events', []):
+        IntegrationDelivery.objects.filter(pk=delivery_id, status='pending').update(
+            status='cancelled', message='连接已断开、未验证或事件已取消订阅。', completed_at=timezone.now())
+        return {'status': 'cancelled'}
+    result = deliver(integration, payload=delivery.payload, event_key=delivery.event_key)
+    return {'status': result.status, 'delivery_id': result.pk}
 
 
 @shared_task
 def send_integration_health_check():
-    """
-    Check health of all active integrations.
-    """
+    """Return dated evidence. Scheduled health reporting must not send test messages."""
     from .models import Integration
-
-    integrations = Integration.objects.filter(is_active=True, is_connected=True)
-
-    health_report = []
-    for integration in integrations:
-        # Simple health check
-        healthy = True
-        message = 'OK'
-
-        # Could perform actual health check based on integration type
-        health_report.append({
-            'id': integration.id,
-            'name': integration.name,
-            'type': integration.integration_type,
-            'healthy': healthy,
-            'message': message,
-            'last_sync': integration.last_sync_at.isoformat() if integration.last_sync_at else None
-        })
-
-    return {'integrations': health_report}
+    return {'integrations': [{
+        'id': item.pk, 'name': item.name, 'type': item.integration_type,
+        'healthy': item.is_connected and item.verification_status == 'success',
+        'message': item.last_error or '状态来自最近一次验证，不代表实时在线。',
+        'last_checked_at': item.last_checked_at.isoformat() if item.last_checked_at else None,
+    } for item in Integration.objects.filter(is_active=True)]}

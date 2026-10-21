@@ -153,7 +153,8 @@ def synthesize_segment_tts(
     """
     work = work_dir or Path(settings.MEDIA_ROOT) / 'video_translation' / 'tts' / uuid.uuid4().hex
     work.mkdir(parents=True, exist_ok=True)
-    selected_voice = voice or DASHSCOPE_TTS_VOICES.get(target_lang, 'longanyang')
+    selected_voice = voice or ''
+    # Empty voice is valid for pyttsx3/gtts; DashScope/edge callers pass explicit voice.
 
     paths: List[Path] = []
     for i, seg in enumerate(segments):
@@ -168,11 +169,26 @@ def synthesize_segment_tts(
             paths.append(silent)
             continue
 
-        audio_ref = tts_call(text, selected_voice, 'mp3')
+        audio_ref = tts_call(text, selected_voice, 'wav')
         if str(audio_ref).lower().startswith(('http://', 'https://')):
             local = download_url_to_media(audio_ref, subdir=f'video_translation/tts/{uuid.uuid4().hex}')
         else:
             local = Path(audio_ref)
+        # Normalize to mp3 so FFmpeg concat/probe always see a consistent container
+        mp3_local = work / f'seg_{i}.mp3'
+        if local.suffix.lower() != '.mp3':
+            from workflows.services.video_postprocess import ffmpeg_binary, _run_cmd
+            _run_cmd([
+                ffmpeg_binary(), '-y',
+                '-i', str(local),
+                '-c:a', 'libmp3lame', '-q:a', '4',
+                str(mp3_local),
+            ])
+            local = mp3_local
+        elif local.resolve() != mp3_local.resolve():
+            import shutil
+            shutil.copy2(local, mp3_local)
+            local = mp3_local
         start = float(seg.get('start') or 0)
         end = float(seg.get('end') or start)
         target = max(end - start, 0.1)

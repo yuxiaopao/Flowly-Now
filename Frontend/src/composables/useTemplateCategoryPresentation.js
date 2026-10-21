@@ -2,6 +2,7 @@ import {
   Sparkles, Bot, FileText, Database, Brain, Zap,
   Settings, MessageSquare, Code, Globe, Clock, Video, BookOpen,
 } from 'lucide-vue-next'
+import { TEMPLATE_CATEGORY_LABELS } from '@/config/productUi'
 import { getCssColor } from '@/utils/chartTheme'
 import { getTemplateCategory } from '@/utils/workflowTransform'
 
@@ -133,8 +134,13 @@ export function findTemplateCategory(template, categories = []) {
   return categories.find((cat) => (cat.slug ?? cat.id) === slug) || null
 }
 
+export function resolveCategoryLabel(category) {
+  return TEMPLATE_CATEGORY_LABELS[category?.slug ?? category?.id] ?? category?.name ?? ''
+}
+
 export function getTemplateCategoryDisplayName(template, categories = []) {
-  return (
+  const slug = getTemplateCategorySlug(template, categories)
+  return TEMPLATE_CATEGORY_LABELS[slug] ?? (
     template?.categoryName
     ?? template?.category_name
     ?? template?.displayCategory

@@ -187,6 +187,7 @@ const artifactResult = computed(() => extractExecutionArtifacts({
 
 const visibleGroups = computed(() =>
   ARTIFACT_GROUPS.filter((group) => (artifactResult.value.grouped[group.id] || []).length > 0)
+    .sort((a, b) => Number(b.id === 'video') - Number(a.id === 'video'))
 )
 
 const groupIconMap = {
@@ -325,6 +326,7 @@ function onMediaError(event) {
   gap: 12px;
 
   &.grid-prompt,
+  &.grid-video,
   &.grid-file,
   &.grid-subtitle,
   &.grid-data {

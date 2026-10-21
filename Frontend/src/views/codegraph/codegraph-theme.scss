@@ -1,0 +1,128 @@
+/* CodeGraph shell — clean panels; glow reserved for graph nodes only */
+
+.codegraph-shell {
+  --cg-cyan: #22d3ee;
+  --cg-teal: #2dd4bf;
+  --cg-rose: #fb7185;
+  --cg-panel-bg: var(--bg-secondary);
+  --cg-panel-border: var(--border-primary);
+  --cg-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --cg-control-gap: 10px;
+  --cg-control-padding: 8px 12px;
+  --cg-caption-size: 12px;
+  --cg-minimap-bottom: 64px;
+  --cg-panel-inset: 8px;
+  --cg-mobile-panel-width: min(88vw, 340px);
+  --cg-overlay-bg: rgb(0 0 0 / 45%);
+  --cg-page-inset: 24px;
+
+  position: relative;
+  isolation: isolate;
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  overflow: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .codegraph-shell *, .codegraph-shell *::before, .codegraph-shell *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+.codegraph-shell .cg-panel {
+  position: relative;
+  background: var(--cg-panel-bg);
+  border: 1px solid var(--cg-panel-border);
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  overflow: hidden;
+
+  &.detail-block {
+    overflow: hidden;
+  }
+}
+
+.codegraph-shell .cg-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 14px 8px;
+}
+
+.codegraph-shell .cg-panel-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+
+  svg {
+    width: 16px;
+    height: 16px;
+    color: var(--cg-cyan);
+  }
+}
+
+.codegraph-shell .cg-glow-text {
+  color: var(--text-primary);
+}
+
+.codegraph-shell .cg-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-primary);
+
+  &.live {
+    color: var(--cg-teal);
+    border-color: rgba(45, 212, 191, 0.35);
+  }
+
+  &.offline {
+    color: var(--text-tertiary);
+  }
+}
+
+.codegraph-shell .cg-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.codegraph-shell .cg-btn-glow {
+  border: 1px solid var(--border-primary) !important;
+  background: var(--bg-tertiary) !important;
+  color: var(--text-primary) !important;
+
+  &:hover {
+    border-color: rgba(34, 211, 238, 0.45) !important;
+    color: #e0faff !important;
+  }
+}
+
+.codegraph-shell .cg-list-item {
+  border-radius: 8px;
+  border: 1px solid transparent;
+  transition: background 0.15s ease, border-color 0.15s ease;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--bg-hover);
+    border-color: var(--border-secondary);
+  }
+
+  &.active {
+    background: rgba(34, 211, 238, 0.08);
+    border-color: rgba(34, 211, 238, 0.28);
+  }
+}

@@ -10,6 +10,7 @@ import {
 export const useWorkflowStore = defineStore('workflow', () => {
   // State
   const workflows = ref([])
+  const totalCount = ref(0)
   const currentWorkflow = ref(null)
   const nodes = ref([])
   const edges = ref([])
@@ -33,6 +34,7 @@ export const useWorkflowStore = defineStore('workflow', () => {
   const modelsLoading = ref(false)
   const toolsLoading = ref(false)
   const nodeTypesLoading = ref(false)
+  let workflowListRequestId = 0
 
   // Getters
   const hasUnsavedChanges = computed(() => isDirty.value)
@@ -48,17 +50,24 @@ export const useWorkflowStore = defineStore('workflow', () => {
 
   // Actions
   async function fetchWorkflows(params = {}) {
+    const requestId = ++workflowListRequestId
     isLoading.value = true
     error.value = null
     try {
       const response = await workflowApi.getList(params)
-      workflows.value = response.results || response
+      if (requestId !== workflowListRequestId) return response
+      const results = response?.results ?? (Array.isArray(response) ? response : [])
+      workflows.value = results
+      const apiCount = response?.count ?? response?.total
+      totalCount.value = Number.isFinite(Number(apiCount))
+        ? Number(apiCount)
+        : results.length
       return response
     } catch (err) {
-      error.value = err.message
+      if (requestId === workflowListRequestId) error.value = err.message
       throw err
     } finally {
-      isLoading.value = false
+      if (requestId === workflowListRequestId) isLoading.value = false
     }
   }
 
@@ -443,6 +452,7 @@ export const useWorkflowStore = defineStore('workflow', () => {
     isSaving,
     isDirty,
     error,
+    totalCount,
     executionHistory,
     currentExecution,
     canvasViewport,

@@ -59,6 +59,14 @@ export const integrationsApi = {
     return request.post(`/integrations/integrations/${id}/connect/`)
   },
 
+  testIntegration(id) {
+    return request.post(`/integrations/integrations/${id}/test/`)
+  },
+
+  getIntegrationDeliveries(id) {
+    return request.get(`/integrations/integrations/${id}/deliveries/`)
+  },
+
   disconnectIntegration(id) {
     return request.post(`/integrations/integrations/${id}/disconnect/`)
   },

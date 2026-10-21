@@ -1,5 +1,8 @@
 <template>
-  <div class="dataset-detail-page">
+  <PageShell
+    width="wide"
+    class="dataset-detail-page"
+  >
     <!-- Back Button and Header -->
     <div class="page-header">
       <el-button
@@ -288,10 +291,11 @@
         </div>
       </el-tab-pane>
     </el-tabs>
-  </div>
+  </PageShell>
 </template>
 
 <script setup>
+import PageShell from '@/components/layout/PageShell.vue'
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -305,6 +309,9 @@ const route = useRoute()
 const router = useRouter()
 
 const datasetId = computed(() => route.params.id)
+const datasetApiOptions = computed(() => ({
+  source: route.query.source === 'generic' ? 'generic' : 'training',
+}))
 
 const dataset = ref({
   name: '',
@@ -333,29 +340,63 @@ const loadingStats = ref(false)
 
 const activeTab = ref('preview')
 
+const PREVIEWABLE_DATASET_FORMATS = new Set(['csv', 'json', 'jsonl', 'txt', 'text', 'tsv'])
+
+function supportsDatasetPreview(format) {
+  return PREVIEWABLE_DATASET_FORMATS.has(String(format || '').toLowerCase())
+}
+
+function normalizePreviewResponse(response = {}) {
+  const rawRows = Array.isArray(response.preview)
+    ? response.preview
+    : Array.isArray(response.rows)
+      ? response.rows
+      : []
+  const columns = Array.isArray(response.columns)
+    ? response.columns.map((column) => typeof column === 'string' ? column : column?.name).filter(Boolean)
+    : rawRows.length && typeof rawRows[0] === 'object' && !Array.isArray(rawRows[0])
+      ? Object.keys(rawRows[0])
+      : dataset.value.columns || []
+  const rows = rawRows.map((row) => {
+    if (!Array.isArray(row)) return row
+    return columns.reduce((record, column, index) => {
+      record[column] = row[index]
+      return record
+    }, {})
+  })
+  return { rows, columns }
+}
+
 async function loadDataset() {
   try {
-    const response = await datasetApi.get(datasetId.value)
+    const response = await datasetApi.get(datasetId.value, datasetApiOptions.value)
     dataset.value = {
       id: response.id,
       name: response.name || response.fileName || `Dataset ${response.id}`,
       description: response.description || '',
       format: response.format || response.fileType || 'csv',
-      size: response.size || response.fileSize || 0,
-      rowCount: response.rowCount || response.rows || 0,
+      size: response.size ?? response.sizeBytes ?? response.size_bytes ?? response.fileSize ?? 0,
+      rowCount: response.rowCount ?? response.row_count ?? response.rows ?? 0,
       columns: response.columns || [],
       createdAt: response.createdAt || response.created_at || new Date().toISOString()
     }
+    return true
   } catch (error) {
-    console.error('Failed to load dataset:', error)
     ElMessage.error('加载数据集失败')
     router.push('/datasets')
+    return false
   }
 }
 
 function mapColumnStats(columnStats) {
   if (Array.isArray(columnStats)) {
-    return columnStats
+    return columnStats.map((stats) => ({
+      ...stats,
+      type: stats.type || stats.dtype || 'string',
+      nullCount: stats.nullCount ?? stats.null_count ?? 0,
+      unique: stats.unique ?? stats.unique_count ?? 0,
+      distribution: stats.distribution || [],
+    }))
   }
   if (!columnStats || typeof columnStats !== 'object') {
     return []
@@ -373,22 +414,29 @@ function mapColumnStats(columnStats) {
 async function loadStats() {
   loadingStats.value = true
   try {
-    const response = await datasetApi.stats(datasetId.value)
+    const response = await datasetApi.stats(datasetId.value, datasetApiOptions.value)
     const columnStats = response.column_stats || response.columnStats || {}
-    const nullCount = Object.values(columnStats).reduce(
-      (sum, col) => sum + (col?.null_count ?? col?.nullCount ?? 0),
-      0,
-    )
+    let mappedStats = mapColumnStats(columnStats)
+    if (!mappedStats.length && Array.isArray(response.columns)) {
+      mappedStats = response.columns.map((name) => ({
+        name,
+        type: response.numeric_stats?.[name] ? 'number' : 'string',
+        nullCount: response.null_counts?.[name] ?? 0,
+        unique: response.unique_counts?.[name] ?? 0,
+        sample: '-',
+        distribution: [],
+      }))
+    }
+    const nullCount = mappedStats.reduce((sum, col) => sum + Number(col.nullCount || 0), 0)
 
     datasetStats.value = {
       totalRows: response.row_count ?? response.rowCount ?? dataset.value.rowCount ?? 0,
-      columns: response.column_count ?? response.columnCount ?? dataset.value.columns?.length ?? 0,
-      memory: response.size ?? dataset.value.size ?? 0,
+      columns: response.column_count ?? response.columnCount ?? (Array.isArray(response.columns) ? response.columns.length : response.columns) ?? dataset.value.columns?.length ?? 0,
+      memory: response.size_bytes ?? response.sizeBytes ?? response.size ?? dataset.value.size ?? 0,
       nullCount,
     }
-    columnDetails.value = mapColumnStats(columnStats)
+    columnDetails.value = mappedStats
   } catch (error) {
-    console.error('Failed to load stats:', error)
     ElMessage.error('加载统计信息失败')
     datasetStats.value = {
       totalRows: dataset.value.rowCount || 0,
@@ -403,16 +451,18 @@ async function loadStats() {
 }
 
 async function loadPreview() {
+  if (!supportsDatasetPreview(dataset.value.format)) {
+    previewData.value = []
+    previewColumns.value = dataset.value.columns || []
+    return
+  }
   loadingPreview.value = true
   try {
-    const response = await datasetApi.preview(datasetId.value, previewPage.value)
-    previewData.value = response.preview || response.rows || []
-    previewColumns.value = response.columns || dataset.value.columns || []
-    if (!previewColumns.value.length && previewData.value.length && typeof previewData.value[0] === 'object') {
-      previewColumns.value = Object.keys(previewData.value[0])
-    }
+    const response = await datasetApi.preview(datasetId.value, previewPage.value, datasetApiOptions.value)
+    const normalized = normalizePreviewResponse(response)
+    previewData.value = normalized.rows
+    previewColumns.value = normalized.columns
   } catch (error) {
-    console.error('Failed to load preview:', error)
     ElMessage.error('加载数据预览失败')
     previewData.value = []
     previewColumns.value = dataset.value.columns || []
@@ -423,7 +473,7 @@ async function loadPreview() {
 
 async function downloadDataset() {
   try {
-    const blob = await datasetApi.download(datasetId.value)
+    const blob = await datasetApi.download(datasetId.value, datasetApiOptions.value)
     const filename = `${dataset.value.name || 'dataset'}.${dataset.value.format || 'csv'}`
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
@@ -499,21 +549,18 @@ function formatDate(dateStr) {
   })
 }
 
-onMounted(() => {
-  loadDataset()
-  loadStats()
-  loadPreview()
+onMounted(async () => {
+  const loaded = await loadDataset()
+  if (!loaded) return
+  await Promise.all([
+    loadStats(),
+    loadPreview(),
+  ])
 })
 </script>
 
 <style lang="scss" scoped>
 @use '@/assets/styles/variables.scss' as *;
-
-.dataset-detail-page {
-  padding: $spacing-6;
-  max-width: 1400px;
-  margin: 0 auto;
-}
 
 .page-header {
   margin-bottom: $spacing-6;

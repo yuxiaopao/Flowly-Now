@@ -88,15 +88,16 @@ class TestUserAPIKeySerializer:
 
     def test_create_serializer_masks_key(self, user):
         from gateway.serializers import UserAPIKeyCreateSerializer
+        from types import SimpleNamespace
         data = {
             'name': 'My Key',
             'provider': 'openai',
             'api_key': 'sk-very-secret-key-12345',
         }
-        serializer = UserAPIKeyCreateSerializer(data=data)
+        serializer = UserAPIKeyCreateSerializer(data=data, context={'request': SimpleNamespace(user=user)})
         assert serializer.is_valid()
-        instance = serializer.save(user=user)
-        masked = instance.get_masked_key()
+        instance = serializer.save()
+        masked = instance.get_masked_data()
         # Model implementation: first 4 chars + "..." + last 4 chars
         assert masked.startswith('sk-v')
         assert '...' in masked

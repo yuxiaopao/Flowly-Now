@@ -232,6 +232,12 @@ class WorkflowExecutionSerializer(serializers.ModelSerializer):
     )
     duration = serializers.FloatField(read_only=True)
     node_status_summary = serializers.SerializerMethodField()
+    is_resumable = serializers.SerializerMethodField()
+    has_checkpoint = serializers.SerializerMethodField()
+    can_continue = serializers.SerializerMethodField()
+    continue_hint = serializers.SerializerMethodField()
+    artifact_outputs = serializers.SerializerMethodField()
+    progress = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = WorkflowExecution
@@ -239,12 +245,16 @@ class WorkflowExecutionSerializer(serializers.ModelSerializer):
             'id', 'workflow', 'workflow_name', 'status', 'status_display',
             'input_data', 'output_data', 'error_message',
             'node_status', 'node_status_summary',
-            'started_at', 'completed_at', 'duration',
+            'started_at', 'completed_at', 'paused_at', 'duration',
+            'progress', 'is_resumable', 'has_checkpoint',
+            'can_continue', 'continue_hint',
             'triggered_by', 'triggered_by_name', 'trigger_type',
-            'task_id', 'version'
+            'task_id', 'version', 'trigger_source', 'queued_at', 'artifact_outputs'
         ]
         read_only_fields = [
-            'id', 'started_at', 'completed_at', 'duration'
+            'id', 'started_at', 'completed_at', 'paused_at', 'duration',
+            'progress', 'is_resumable', 'has_checkpoint',
+            'can_continue', 'continue_hint',
         ]
 
     def get_node_status_summary(self, obj) -> dict:
@@ -256,13 +266,52 @@ class WorkflowExecutionSerializer(serializers.ModelSerializer):
             'running': 0,
             'completed': 0,
             'failed': 0,
-            'skipped': 0
+            'skipped': 0,
+            'paused': 0,
+            'interrupted': 0,
         }
         for node_data in node_status.values():
             status = node_data if isinstance(node_data, str) else node_data.get('status', '')
             if status in summary:
                 summary[status] += 1
         return summary
+
+    def get_artifact_outputs(self, obj):
+        return [
+            {'node_id': str(row.node_id), 'node_name': row.node.name,
+             'status': row.status, 'output_data': row.output_data}
+            for row in obj.node_executions.all() if row.output_data
+        ]
+
+    def get_is_resumable(self, obj) -> bool:
+        from .execution_control import has_resumable_snapshot
+        if obj.status in getattr(obj, 'RESUMABLE_STATUSES', ('paused', 'interrupted')) and (
+            has_resumable_snapshot(obj)
+        ):
+            return True
+        try:
+            from .services.partial_retry import analyze_continue
+            return bool(analyze_continue(obj).get('can_continue'))
+        except Exception:
+            return False
+
+    def get_has_checkpoint(self, obj) -> bool:
+        from .execution_control import has_resumable_snapshot
+        return has_resumable_snapshot(obj)
+
+    def get_can_continue(self, obj) -> bool:
+        try:
+            from .services.partial_retry import analyze_continue
+            return bool(analyze_continue(obj).get('can_continue'))
+        except Exception:
+            return False
+
+    def get_continue_hint(self, obj) -> str:
+        try:
+            from .services.partial_retry import analyze_continue
+            return analyze_continue(obj).get('hint') or ''
+        except Exception:
+            return ''
 
 
 class WorkflowExecutionCreateSerializer(serializers.ModelSerializer):
@@ -1064,6 +1113,35 @@ class WorkflowTemplateDetailSerializer(serializers.ModelSerializer):
 
     def get_creator_name(self, obj):
         return obj.created_by.username if obj.created_by else ''
+
+
+class WorkflowTemplateWriteSerializer(serializers.ModelSerializer):
+    """Serializer for creating and updating workflow templates."""
+
+    category = serializers.PrimaryKeyRelatedField(
+        queryset=TemplateCategory.objects.filter(is_active=True),
+        required=False,
+    )
+
+    class Meta:
+        model = WorkflowTemplate
+        fields = [
+            'id', 'category', 'name', 'description', 'difficulty', 'tags',
+            'thumbnail_url', 'workflow_data', 'variables_schema',
+            'estimated_duration', 'required_apis', 'is_public', 'is_active'
+        ]
+        read_only_fields = ['id']
+
+    def validate(self, attrs):
+        if self.instance is None and not attrs.get('category'):
+            raise serializers.ValidationError({'category': 'This field is required.'})
+        return attrs
+
+    def create(self, validated_data):
+        request = self.context.get('request')
+        if request and request.user and request.user.is_authenticated:
+            validated_data['created_by'] = request.user
+        return super().create(validated_data)
 
 
 class WorkflowTemplateCreateFromSerializer(serializers.Serializer):

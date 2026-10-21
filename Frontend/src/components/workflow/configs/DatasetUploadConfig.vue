@@ -399,7 +399,7 @@
 import { ref, reactive, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Upload, FolderOpen, X, Search, Loader, Check, Tag } from 'lucide-vue-next'
+import { Upload, FolderOpen, X, Search, Loader, Check, Tag, RefreshCw as Refresh } from 'lucide-vue-next'
 import { datasetApi, createDatasetFormData, formatFileSize, detectFormatFromFilename } from '@/api/dataset'
 import { annotationApi } from '@/api/annotation'
 

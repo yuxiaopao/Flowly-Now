@@ -28,6 +28,7 @@ class WorkflowType(Enum):
     WEB_SCRAPE_EMAIL = "web_scrape_email"
     YOLO_DETECTION = "yolo_detection"
     EMOTION_DETECTION = "emotion_detection"
+    CUMCM = "cumcm"
     GENERIC = "generic"
 
 
@@ -64,6 +65,7 @@ class WorkflowGenerationPrompt:
             WorkflowType.WEB_SCRAPE_EMAIL: cls._web_scrape_email_prompt(),
             WorkflowType.YOLO_DETECTION: cls._yolo_detection_prompt(),
             WorkflowType.EMOTION_DETECTION: cls._emotion_detection_prompt(),
+            WorkflowType.CUMCM: cls._cumcm_prompt(),
             WorkflowType.GENERIC: cls._generic_prompt(),
         }
         return prompts.get(workflow_type, cls._generic_prompt())
@@ -100,6 +102,18 @@ LLM节点config格式：
 
 Input节点config格式：
 {"input_name": "变量名（英文）", "input_type": "text/number/object"}
+
+Code节点config格式（必须可执行，运行时为 Python）：
+{"language": "python", "code": "使用 input 读取上游数据，最终赋值给 output"}
+CUMCM/科学计算 Code 节点可使用 numpy/scipy/pandas/matplotlib(Agg)；禁止 os/subprocess/eval。
+
+Loop节点config格式：
+{"loop_type": "for_each", "items_source": "input", "item_variable": "item", "max_iterations": 10}
+
+Image/Video节点config格式：
+图像：{"provider": "agnes", "model": "agnes-image-2.1-flash", "prompt": "{prompt}", "size": "1024x1024"}
+视频：{"provider": "agnes", "model": "agnes-video-v2.0", "prompt": "{prompt}", "inputImage": "{images.0.url}", "duration": 5}
+禁止编造系统不存在的字段（如 script 代替 code、item_var 代替 item_variable、任意 {{中间变量}} 假引用）。
 """
 
     @classmethod
@@ -600,6 +614,31 @@ LLM prompt 应引用上游变量 {url}、{data}。邮件 SMTP 默认 smtp.qq.com
         ]
         return base
 
+    @classmethod
+    def _cumcm_prompt(cls) -> "WorkflowGenerationPrompt":
+        """Prompt for CUMCM mathematical modeling full pipeline."""
+        from .cumcm_prompts import CUMCM_WORKFLOW_GENERATION_SYSTEM, cumcm_few_shot_example
+
+        base = cls._generic_prompt()
+        base.system_prompt = CUMCM_WORKFLOW_GENERATION_SYSTEM
+        base.few_shot_examples = [cumcm_few_shot_example()]
+        base.user_template = """## 用户需求
+{description}
+
+## 可用节点类型
+{node_types}
+
+## 输出格式要求
+{format_instructions}
+
+## CUMCM 流水线要点
+1. 必须含 input(赛题JSON) → llm(解析/分解) → code(预处理/求解/图表) → llm(论文各章) → file_writer
+2. 子问题并行链路：每问 pick→model→solver→interpret 四节点
+3. solver_type 写入 llm 模型建立节点的 JSON 输出，供 code 求解节点路由
+4. 论文输出遵守 Markdown/docx 规范（## 章节标题、$$公式$$ (n)、中文图题≤15字）
+5. 只输出 JSON，不要有其他内容"""
+        return base
+
     def format(
         self,
         description: str,
@@ -771,6 +810,7 @@ class ConversationPrompt:
 5. **网站采集+排版+发邮件**：确认目标网站 URL、收件邮箱、是否 HTML 邮件
 6. **手机网页+发邮件**：若用户要移动端 HTML 页面并发送邮件，确认页面主题、收件邮箱
 7. **多模态/Agnes**：文生图/文生视频场景推荐使用 agnes-image / agnes-video 节点
+8. **CUMCM/数学建模竞赛**：确认赛题、子问题数、数据附件、求解类型（LP/回归/时序/蒙特卡洛）、是否要图表与 Markdown 论文；就绪后生成完整多阶段流水线（非单 LLM 节点）
 
 ## 回复风格
 - 使用中文，语气专业、简洁、友好
@@ -788,7 +828,8 @@ class ConversationPrompt:
 - 信息足够时在末尾单独一行输出：[READY_TO_GENERATE]
 - 网站采集+发邮件：确认目标 URL 与收件邮箱即可
 - 手机网页+发邮件：确认主题与收件邮箱即可
-- 多模态：确认文生图/文生视频与提示词来源"""
+- 多模态：确认文生图/文生视频与提示词来源
+- CUMCM/数学建模：确认子问题数与数据即可，就绪后生成完整流水线"""
 
     SYSTEM_EDITOR = """你是 Flowly 画布排布助手。用户正在编辑器中调整**已有工作流**，你的职责是协助理解结构并给出可执行的排布/修改建议。
 
@@ -796,7 +837,8 @@ class ConversationPrompt:
 1. **少说多做**：当用户要求添加、删除、连接、排布节点时，后端会自动执行并应用到画布；你只需用 1-2 句话说明做了什么或还需什么信息
 2. **结合画布**：回复必须基于当前节点类型与连线结构，不要重复询问已知信息
 3. **视频翻译分节点**：video_upload → subtitle_generation → 每种语言独立链路（subtitle_translate → segment_dubbing → lip_sync → subtitle_burn）→ output
-4. **配置提醒**：指出未配置的必填项（如 SMTP、API Key、模型名），但不要输出完整 JSON
+4. **CUMCM 编辑器**：用户提到数学建模/CUMCM/国赛时，优先 enrich_cumcm 重建完整流水线（含求解/图表/论文节点）
+5. **配置提醒**：指出未配置的必填项（如 SMTP、API Key、模型名），但不要输出完整 JSON
 
 ## 回复风格
 - 中文，专业简洁，单次 80-220 字
@@ -824,6 +866,19 @@ class ConversationPrompt:
             system_content = cls.SYSTEM
         else:
             system_content = cls.SYSTEM_FAST
+
+        try:
+            from nl_to_workflow.cumcm_enrichment import is_cumcm_intent
+            from nl_to_workflow.cumcm_prompts import cumcm_conversation_hints
+
+            combined_text = f'{user_message} ' + ' '.join(
+                (m.get('content') or '') for m in session_messages if m.get('role') == 'user'
+            )
+            if is_cumcm_intent(combined_text):
+                system_content += cumcm_conversation_hints()
+        except Exception:
+            pass
+
         messages: List[Dict[str, str]] = [{"role": "system", "content": system_content}]
 
         if current_workflow and current_workflow.get('nodes'):

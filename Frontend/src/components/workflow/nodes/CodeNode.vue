@@ -24,8 +24,8 @@
     <div class="node-name-section">
       <input
         :id="id ? `node-label-${id}` : undefined"
-        name="node-label"
         v-model="localName"
+        name="node-label"
         class="node-name-input"
         placeholder="代码节点..."
         @blur="handleChange"
@@ -135,10 +135,9 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
-import { Code, ChevronDown, Terminal, CheckCircle, XCircle, Loader, Copy, Check } from 'lucide-vue-next'
+import { ChevronDown, Terminal, CheckCircle, XCircle, Loader, Copy, Check } from 'lucide-vue-next'
 import { useExecutionStore } from '@/stores/execution'
 import NodeTypeBadge from '@/components/workflow/nodes/NodeTypeBadge.vue'
-import { useNodePresentation } from '@/composables/useNodePresentation'
 
 
 const props = defineProps({
@@ -148,7 +147,6 @@ const props = defineProps({
 })
 
 const NODE_TYPE = 'code'
-const { nodeIcon, nodeColor, nodeLabel } = useNodePresentation(NODE_TYPE)
 
 const emit = defineEmits(['select'])
 const { updateNodeData } = useVueFlow()
@@ -206,8 +204,9 @@ watch(() => props.data, (d) => {
 }, { deep: true })
 
 function toggleExpand() {
-  handleSelect()
-  isExpanded.value = !isExpanded.value
+  const expanded = !isExpanded.value
+  emit('select')
+  isExpanded.value = expanded
 }
 
 function handleChange() {

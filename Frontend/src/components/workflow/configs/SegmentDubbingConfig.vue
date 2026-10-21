@@ -1,19 +1,46 @@
 <template>
   <div class="config-form">
-    <el-form :model="localData" label-position="top" size="small">
+    <el-form
+      :model="localData"
+      label-position="top"
+      size="small"
+    >
       <el-form-item label="节点名称">
-        <el-input v-model="localData.label" @change="syncEmit" />
+        <el-input
+          v-model="localData.label"
+          @change="syncEmit"
+        />
       </el-form-item>
       <el-form-item label="目标语言">
-        <el-select v-model="localData.target_language" @change="syncEmit">
-          <el-option v-for="o in langs" :key="o.v" :label="o.l" :value="o.v" />
+        <el-select
+          v-model="localData.target_language"
+          @change="syncEmit"
+        >
+          <el-option
+            v-for="o in langs"
+            :key="o.v"
+            :label="o.l"
+            :value="o.v"
+          />
         </el-select>
       </el-form-item>
       <el-form-item label="配音音色">
-        <el-select v-model="localData.voice" @change="syncEmit">
-          <el-option label="longanyang" value="longanyang" />
-          <el-option label="longxiaochun" value="longxiaochun" />
-          <el-option label="longlaotie" value="longlaotie" />
+        <el-select
+          v-model="localData.voice"
+          @change="syncEmit"
+        >
+          <el-option
+            label="longanyang"
+            value="longanyang"
+          />
+          <el-option
+            label="longxiaochun"
+            value="longxiaochun"
+          />
+          <el-option
+            label="longlaotie"
+            value="longlaotie"
+          />
         </el-select>
       </el-form-item>
     </el-form>

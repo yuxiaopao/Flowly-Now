@@ -14,6 +14,14 @@ app = Celery('flowly')
 # the configuration object to child processes.
 app.config_from_object('django.conf:settings', namespace='CELERY')
 
+# Concurrent workflow executions: use prefork/threads with -c N.
+# Avoid --pool=solo when multiple workflows must run at once.
+app.conf.update(
+    worker_prefetch_multiplier=int(os.getenv('CELERY_WORKER_PREFETCH_MULTIPLIER', '1')),
+    task_acks_late=True,
+    task_reject_on_worker_lost=True,
+)
+
 # Load task modules from all registered Django apps.
 app.autodiscover_tasks()
 

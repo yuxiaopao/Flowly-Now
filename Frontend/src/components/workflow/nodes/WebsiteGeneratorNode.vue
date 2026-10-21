@@ -1,6 +1,7 @@
 <template>
   <div
-    :style="{ '--node-accent': nodeColor }" class="domain-node web-gen-node"
+    :style="{ '--node-accent': nodeColor }"
+    class="domain-node web-gen-node"
     :class="{ selected, expanded: isExpanded, 'is-running': isRunning, 'is-completed': isCompleted, 'is-failed': isFailed }"
     @click.stop="handleSelect"
   >
@@ -25,8 +26,8 @@
     <div class="node-name-section">
       <input
         :id="id ? `node-label-${id}` : undefined"
-        name="node-label"
         v-model="localName"
+        name="node-label"
         class="node-name-input"
         placeholder="节点名称..."
         @blur="handleChange"
@@ -228,13 +229,22 @@
             placeholder="生成的网站输出路径"
             @change="handleChange"
           >
-            <template v-if="isDesktop" #append>
-              <el-button size="small" @click="pickOutputDir">
+            <template
+              v-if="isDesktop"
+              #append
+            >
+              <el-button
+                size="small"
+                @click="pickOutputDir"
+              >
                 <FolderOpen class="btn-icon-inline" />
               </el-button>
             </template>
           </el-input>
-          <p v-if="isDesktop" class="config-hint">
+          <p
+            v-if="isDesktop"
+            class="config-hint"
+          >
             将写入你选择的本地文件夹
           </p>
         </div>
@@ -366,8 +376,9 @@ watch(() => props.data, (d) => {
 }, { deep: true })
 
 function toggleExpand() {
-  handleSelect()
-  isExpanded.value = !isExpanded.value
+  const expanded = !isExpanded.value
+  emit('select')
+  isExpanded.value = expanded
 }
 
 function handleChange() {

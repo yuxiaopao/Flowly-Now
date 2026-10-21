@@ -2,7 +2,7 @@
 DRF 统一响应渲染器
 将所有 API 响应包装为统一格式：
 成功: { code: 200, message: "success", data: {...} }
-错误: { code: 4xx/5xx, message: "错误描述", data: null, errors: {...} }
+错误: { code: 4xx/5xx, message: "错误描述", data: 执行追踪信息或 null, errors: {...} }
 """
 
 from rest_framework.renderers import JSONRenderer
@@ -46,8 +46,8 @@ class UnifiedJSONRenderer(JSONRenderer):
             if isinstance(data, dict):
                 message = (
                     data.get('detail')
-                    or data.get('message')
                     or data.get('error')
+                    or data.get('message')
                     or '请求失败'
                 )
                 errors = data.get('errors')
@@ -57,7 +57,7 @@ class UnifiedJSONRenderer(JSONRenderer):
             wrapped = {
                 'code': status_code,
                 'message': message,
-                'data': None,
+                'data': data if isinstance(data, dict) and data.get('execution_id') else None,
                 'errors': errors
             }
 

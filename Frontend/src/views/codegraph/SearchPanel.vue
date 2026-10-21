@@ -4,26 +4,31 @@
       <el-input
         v-model="searchQuery"
         placeholder="搜索文件..."
+        aria-label="搜索图谱文件"
+        :disabled="!store.currentProject"
         :prefix-icon="Search"
         clearable
         @input="handleSearch"
         @clear="handleClear"
+        @keydown.enter.prevent="selectFirstResult"
       />
     </div>
 
     <!-- 搜索结果 -->
     <div
-      v-if="searchResults.length > 0"
+      v-if="searchResults.length > 0 && !loading"
       class="search-results"
     >
       <div class="results-header">
         <span class="results-count">{{ searchResults.length }} 个结果</span>
       </div>
       <div class="results-list">
-        <div
+        <button
           v-for="result in searchResults"
           :key="result.id"
           class="result-item"
+          type="button"
+          :title="result.path"
           @click="handleSelect(result)"
         >
           <component
@@ -40,7 +45,7 @@
           >
             {{ result.type }}
           </el-tag>
-        </div>
+        </button>
       </div>
     </div>
 
@@ -57,7 +62,20 @@
 
     <!-- 无结果 -->
     <div
-      v-else-if="searchQuery && !loading"
+      v-else-if="store.searchError"
+      class="search-loading"
+      role="alert"
+    >
+      <span>{{ store.searchError }}</span>
+      <el-button
+        size="small"
+        @click="handleSearch"
+      >
+        {{ CODE_GRAPH.messages.retry }}
+      </el-button>
+    </div>
+    <div
+      v-else-if="searchQuery.trim() && !loading"
       class="no-results"
     >
       <el-empty
@@ -69,7 +87,9 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed, onUnmounted, watch } from 'vue'
+import { storeToRefs } from 'pinia'
+import { CODE_GRAPH } from '@/config/codeGraph'
 import { useCodeGraphStore } from '@/stores/codeGraph'
 import { Search, File, FileCode, FileText } from 'lucide-vue-next'
 import { Loading } from '@element-plus/icons-vue'
@@ -79,36 +99,36 @@ const emit = defineEmits(['select'])
 const store = useCodeGraphStore()
 
 const searchQuery = ref('')
-const searchResults = ref([])
-const loading = ref(false)
+const { searchResults } = storeToRefs(store)
+const pending = ref(false)
+const loading = computed(() => pending.value || store.searchLoading)
 
 let searchTimer = null
 
-async function handleSearch() {
-  if (searchTimer) {
-    clearTimeout(searchTimer)
-  }
-
-  if (!searchQuery.value.trim()) {
-    searchResults.value = []
-    return
-  }
-
-  searchTimer = setTimeout(async () => {
-    loading.value = true
-    try {
-      await store.search(searchQuery.value)
-      searchResults.value = store.searchResults
-    } finally {
-      loading.value = false
-    }
-  }, 300)
+function handleSearch() {
+  clearTimeout(searchTimer)
+  store.clearSearch()
+  pending.value = Boolean(searchQuery.value.trim())
+  if (!pending.value) return
+  searchTimer = setTimeout(() => {
+    pending.value = false
+    store.search(searchQuery.value)
+  }, CODE_GRAPH.searchDebounceMs)
 }
 
 function handleClear() {
   searchQuery.value = ''
-  searchResults.value = []
+  pending.value = false
+  clearTimeout(searchTimer)
+  store.clearSearch()
 }
+
+function selectFirstResult() {
+  if (!loading.value && searchResults.value[0]) handleSelect(searchResults.value[0])
+}
+
+watch(() => store.currentProject?.id, handleClear)
+onUnmounted(() => clearTimeout(searchTimer))
 
 function handleSelect(result) {
   emit('select', result)
@@ -144,16 +164,26 @@ function getTypeTagType(type) {
 
 <style lang="scss" scoped>
 .search-panel {
-  padding: 12px;
-  border-bottom: 1px solid var(--border-color);
+  padding: 12px 12px 8px;
 }
 
 .search-input-wrapper {
   margin-bottom: 8px;
+
+  :deep(.el-input__wrapper) {
+    background: rgba(255, 255, 255, 0.04);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08) inset;
+    transition: box-shadow 0.25s ease;
+
+    &:hover,
+    &.is-focus {
+      box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.4) inset;
+    }
+  }
 }
 
 .search-results {
-  max-height: 300px;
+  max-height: 240px;
   overflow-y: auto;
 }
 
@@ -173,22 +203,29 @@ function getTypeTagType(type) {
 }
 
 .result-item {
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  background: transparent;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px;
-  border-radius: 6px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid transparent;
   cursor: pointer;
-  transition: background 0.2s;
+  transition: background 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease, transform 0.25s ease;
 
-  &:hover {
+  &:hover,
+  &:focus-visible {
     background: var(--bg-hover);
+    border-color: var(--border-secondary);
   }
 
   .file-icon {
     width: 16px;
     height: 16px;
-    color: var(--text-secondary);
+    color: #22d3ee;
     flex-shrink: 0;
   }
 

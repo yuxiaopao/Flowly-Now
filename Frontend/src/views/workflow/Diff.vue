@@ -1,13 +1,12 @@
 <template>
-  <div class="workflow-diff-page">
-    <div class="page-header">
-      <div class="header-left">
-        <h1>工作流对比</h1>
-        <p class="subtitle">
-          比较两个工作流的差异
-        </p>
-      </div>
-    </div>
+  <PageShell
+    width="wide"
+    class="workflow-diff-page"
+  >
+    <PageHeader
+      title="工作流对比"
+      subtitle="比较两个工作流的差异"
+    />
 
     <!-- Workflow Selection -->
     <el-card
@@ -150,10 +149,10 @@
                 v-model="visualView"
                 size="small"
               >
-                <el-radio-button label="side">
+                <el-radio-button value="side">
                   并排
                 </el-radio-button>
-                <el-radio-button label="unified">
+                <el-radio-button value="unified">
                   统一
                 </el-radio-button>
               </el-radio-group>
@@ -425,10 +424,12 @@
       <h3>选择两个工作流开始对比</h3>
       <p>选择上方的工作流 A 和工作流 B，系统将分析它们之间的差异</p>
     </div>
-  </div>
+  </PageShell>
 </template>
 
 <script setup>
+import PageHeader from '@/components/layout/PageHeader.vue'
+import PageShell from '@/components/layout/PageShell.vue'
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import {
@@ -700,24 +701,6 @@ onMounted(async () => {
 </script>
 
 <style lang="scss" scoped>
-.workflow-diff-page {
-  padding: 24px;
-}
-
-.page-header {
-  margin-bottom: 24px;
-
-  h1 {
-    margin: 0;
-    font-size: 24px;
-    font-weight: 600;
-  }
-
-  .subtitle {
-    margin: 8px 0 0;
-    color: var(--el-text-color-secondary);
-  }
-}
 
 .selection-card {
   margin-bottom: 24px;

@@ -1,491 +1,308 @@
-/**
- * CodeGraph Pinia Store
- */
-
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, shallowRef, computed } from 'vue'
 import * as codegraphApi from '@/api/codegraph'
+import { CODE_GRAPH } from '@/config/codeGraph'
+import { edgeEndpoint, fileNodes, graphError, graphRelationships } from '@/utils/codeGraph'
 
 export const useCodeGraphStore = defineStore('codegraph', () => {
-  // ============ 状态 ============
   const projects = ref([])
   const currentProject = ref(null)
-  const nodes = ref([])
-  const edges = ref([])
-  const stats = ref({})
-  const cycles = ref([])
-  const hotspots = ref([])
-  const modules = ref([])
-  const moduleDependencies = ref([])
-
+  // Layout engines own mutable coordinates; API graph data stays immutable.
+  const nodes = shallowRef([])
+  const edges = shallowRef([])
+  const stats = shallowRef({})
+  const cycles = shallowRef([])
+  const hotspots = shallowRef([])
   const loading = ref(false)
   const analyzing = ref(false)
   const wsConnected = ref(false)
   const error = ref(null)
-
   const searchQuery = ref('')
-  const searchResults = ref([])
+  const searchResults = shallowRef([])
   const searchLoading = ref(false)
-
+  const searchError = ref(null)
   const selectedNode = ref(null)
-  const hoveredNode = ref(null)
-
-  const filters = ref({
-    module: null,
-    type: null,
-    minCentrality: 0,
-  })
-
-  const layout = ref('force') // force | tree | dagre
-  const zoom = ref(1)
-  const viewCenter = ref({ x: 0, y: 0 })
-
+  const fileExplanation = shallowRef(null)
+  const fileExplainLoading = ref(false)
+  const fileExplainError = ref(null)
+  const filters = ref({ module: null, type: null, minCentrality: 0 })
+  const layout = ref(CODE_GRAPH.defaultLayout)
+  let projectVersion = 0
+  let projectsSeq = 0
+  let graphSeq = 0
+  let searchSeq = 0
+  let explainSeq = 0
+  let graphController = null
+  let searchController = null
+  let explainController = null
   let ws = null
   let wsReconnectTimer = null
+  let reconnectAttempt = 0
+  let graphRevision = ''
 
-  // ============ 计算属性 ============
-  const filteredNodes = computed(() => {
-    let result = nodes.value
-
-    if (filters.value.module) {
-      result = result.filter(n => n.module === filters.value.module)
-    }
-    if (filters.value.type) {
-      result = result.filter(n => n.type === filters.value.type)
-    }
-    if (filters.value.minCentrality > 0) {
-      result = result.filter(n => n.centrality >= filters.value.minCentrality)
-    }
-
-    return result
-  })
-
+  const allFiles = computed(() => fileNodes(nodes.value))
+  const moduleOptions = computed(() => [...new Set(allFiles.value.map(node => node.module || 'root'))].sort())
+  const typeOptions = computed(() => [...new Set(allFiles.value.map(node => node.type))].sort())
+  const filteredNodes = computed(() => nodes.value.filter(node =>
+    (!filters.value.module || (node.module || 'root') === filters.value.module)
+    && (!filters.value.type || node.type === filters.value.type)
+    && (node.centrality || 0) >= filters.value.minCentrality))
   const filteredEdges = computed(() => {
-    if (filteredNodes.value.length === nodes.value.length) {
-      return edges.value
-    }
-
-    const nodeIds = new Set(filteredNodes.value.map(n => n.id))
-    return edges.value.filter(e =>
-      nodeIds.has(e.source) && nodeIds.has(e.target)
-    )
+    const ids = new Set(filteredNodes.value.map(node => node.id))
+    return edges.value.filter(edge => ids.has(edgeEndpoint(edge.source)) && ids.has(edgeEndpoint(edge.target)))
   })
-
-  const nodesByModule = computed(() => {
-    const grouped = {}
-    filteredNodes.value.forEach(node => {
-      if (!grouped[node.module]) {
-        grouped[node.module] = []
-      }
-      grouped[node.module].push(node)
-    })
-    return grouped
-  })
-
+  const relationships = computed(() => graphRelationships(nodes.value, edges.value))
   const hasCycles = computed(() => cycles.value.length > 0)
+  const hasFilters = computed(() => Boolean(filters.value.module || filters.value.type || filters.value.minCentrality))
 
-  // ============ Actions ============
-
-  function unwrapList(response) {
-    if (Array.isArray(response)) return response
-    if (Array.isArray(response?.results)) return response.results
-    return []
+  function applyGraph(response) {
+    const data = response?.data ?? response
+    nodes.value = data.nodes || []
+    edges.value = data.edges || []
+    stats.value = data.stats || {}
+    cycles.value = data.cycles || []
+    hotspots.value = data.hotspots || []
+    graphRevision = data.lastUpdated || data.last_updated || ''
+    if (selectedNode.value) selectNode(nodes.value.find(node => node.id === selectedNode.value.id) || null)
   }
 
-  /**
-   * 获取项目列表
-   */
   async function fetchProjects() {
+    const seq = ++projectsSeq
     loading.value = true
     error.value = null
     try {
       const response = await codegraphApi.getProjects()
-      projects.value = response.projects || unwrapList(response)
+      if (seq !== projectsSeq) return
+      const data = response?.data ?? response
+      projects.value = data?.projects || data?.results || (Array.isArray(data) ? data : [])
     } catch (err) {
-      error.value = err.message || '获取项目列表失败'
-      console.error('Failed to fetch projects:', err)
+      if (seq === projectsSeq) error.value = graphError(err, CODE_GRAPH.messages.projectsFailed)
     } finally {
-      loading.value = false
+      if (seq === projectsSeq) loading.value = false
     }
   }
 
-  /**
-   * 选择项目
-   */
   async function selectProject(projectId) {
-    const project = projects.value.find(p => p.id === projectId)
-    if (project) {
-      currentProject.value = project
-      await fetchGraphData(projectId)
-      connectWebSocket(projectId)
-    }
+    const project = projects.value.find(item => String(item.id) === String(projectId))
+    if (!project) return false
+    reset()
+    currentProject.value = project
+    const version = projectVersion
+    const success = await fetchGraphData(project.id)
+    if (version === projectVersion && success) connectWebSocket(project.id)
+    return success
   }
 
-  /**
-   * 获取图数据
-   */
   async function fetchGraphData(projectId, forceRefresh = false) {
+    const seq = ++graphSeq
+    const version = projectVersion
+    graphController?.abort()
+    graphController = new AbortController()
     loading.value = true
     error.value = null
     try {
-      const response = await codegraphApi.getGraphData(projectId, forceRefresh)
-      const data = response
-
-      nodes.value = data.nodes || []
-      edges.value = data.edges || []
-      stats.value = data.stats || {}
-      cycles.value = data.cycles || []
-      hotspots.value = data.hotspots || []
+      const response = await codegraphApi.getGraphData(projectId, forceRefresh, { signal: graphController.signal })
+      if (seq !== graphSeq || version !== projectVersion) return false
+      applyGraph(response)
+      return true
     } catch (err) {
-      error.value = err.message || '获取图数据失败'
-      console.error('Failed to fetch graph data:', err)
+      if (seq === graphSeq && version === projectVersion && err.code !== 'ERR_CANCELED') {
+        error.value = graphError(err, CODE_GRAPH.messages.graphFailed)
+      }
+      return false
     } finally {
-      loading.value = false
+      if (seq === graphSeq && version === projectVersion) loading.value = false
     }
   }
 
-  /**
-   * 重新分析
-   */
   async function reanalyze() {
-    if (!currentProject.value) return
-
+    if (!currentProject.value || analyzing.value) return false
+    const projectId = currentProject.value.id
+    const version = projectVersion
+    ++graphSeq
+    graphController?.abort()
+    loading.value = false
     analyzing.value = true
     error.value = null
     try {
-      await codegraphApi.analyzeProject(currentProject.value.id, {
-        force_refresh: true,
-        include_cycles: true,
-        include_hotspots: true,
+      const response = await codegraphApi.analyzeProject(projectId, {
+        force_refresh: true, include_cycles: true, include_hotspots: true,
       })
-      await fetchGraphData(currentProject.value.id, true)
+      if (version !== projectVersion) return false
+      const data = response?.data ?? response
+      // Analyze already returns the graph; do not parse the project twice.
+      if (data.analysis) applyGraph(data.analysis)
+      else if (!await fetchGraphData(projectId)) return false
+      if (version !== projectVersion) return false
+      if (!ws) connectWebSocket(projectId)
+      return true
     } catch (err) {
-      error.value = err.message || '分析失败'
-      console.error('Failed to reanalyze:', err)
+      if (version === projectVersion) error.value = graphError(err, CODE_GRAPH.messages.analysisFailed)
+      return false
     } finally {
-      analyzing.value = false
+      if (version === projectVersion) analyzing.value = false
     }
   }
 
-  /**
-   * 获取模块列表
-   */
-  async function fetchModules() {
-    if (!currentProject.value) return
-
-    try {
-      const response = await codegraphApi.getModules(currentProject.value.id)
-      modules.value = response.modules || []
-    } catch (err) {
-      console.error('Failed to fetch modules:', err)
-    }
+  function clearSearch() {
+    ++searchSeq
+    searchController?.abort()
+    searchQuery.value = ''
+    searchResults.value = []
+    searchError.value = null
+    searchLoading.value = false
   }
 
-  /**
-   * 获取模块依赖关系
-   */
-  async function fetchModuleDependencies() {
-    if (!currentProject.value) return
-
-    try {
-      const response = await codegraphApi.getModuleDependencies(currentProject.value.id)
-      moduleDependencies.value = response.dependencies || []
-    } catch (err) {
-      console.error('Failed to fetch module dependencies:', err)
-    }
-  }
-
-  /**
-   * 搜索文件
-   */
   async function search(query) {
-    if (!currentProject.value || !query.trim()) {
-      searchResults.value = []
-      return
-    }
-
-    searchLoading.value = true
+    clearSearch()
     searchQuery.value = query
+    if (!currentProject.value || !query.trim()) return
+    const seq = searchSeq
+    const version = projectVersion
+    searchController = new AbortController()
+    searchLoading.value = true
     try {
-      const response = await codegraphApi.searchFiles(currentProject.value.id, query, {
-        limit: 50,
-      })
-      searchResults.value = response.results || []
+      const response = await codegraphApi.searchFiles(currentProject.value.id, query.trim(), {
+        limit: CODE_GRAPH.searchLimit,
+      }, { signal: searchController.signal })
+      if (seq === searchSeq && version === projectVersion) searchResults.value = response.results || []
     } catch (err) {
-      console.error('Failed to search:', err)
-      searchResults.value = []
+      if (seq === searchSeq && version === projectVersion && err.code !== 'ERR_CANCELED') {
+        searchError.value = graphError(err, CODE_GRAPH.messages.searchFailed)
+      }
     } finally {
-      searchLoading.value = false
+      if (seq === searchSeq && version === projectVersion) searchLoading.value = false
     }
   }
 
-  /**
-   * 获取文件内容
-   */
-  async function fetchFileContent(filePath) {
-    if (!currentProject.value) return null
-
-    try {
-      const response = await codegraphApi.getFileContent(
-        currentProject.value.id,
-        filePath
-      )
-      return response
-    } catch (err) {
-      console.error('Failed to fetch file content:', err)
-      return null
-    }
-  }
-
-  /**
-   * 选择节点
-   */
   function selectNode(node) {
+    if (selectedNode.value?.id !== node?.id || !node) {
+      ++explainSeq
+      explainController?.abort()
+      fileExplanation.value = null
+      fileExplainError.value = null
+      fileExplainLoading.value = false
+    }
     selectedNode.value = node
   }
 
-  /**
-   * 悬停节点
-   */
-  function hoverNode(node) {
-    hoveredNode.value = node
-  }
-
-  /**
-   * 清除选择
-   */
-  function clearSelection() {
-    selectedNode.value = null
-    hoveredNode.value = null
-  }
-
-  /**
-   * 设置过滤器
-   */
-  function setFilter(key, value) {
-    filters.value[key] = value
-  }
-
-  /**
-   * 重置过滤器
-   */
-  function resetFilters() {
-    filters.value = {
-      module: null,
-      type: null,
-      minCentrality: 0,
-    }
-  }
-
-  /**
-   * 设置布局
-   */
-  function setLayout(newLayout) {
-    layout.value = newLayout
-  }
-
-  /**
-   * 设置缩放
-   */
-  function setZoom(newZoom) {
-    zoom.value = Math.max(0.1, Math.min(3, newZoom))
-  }
-
-  /**
-   * 设置视图中心
-   */
-  function setViewCenter(x, y) {
-    viewCenter.value = { x, y }
-  }
-
-  /**
-   * 连接 WebSocket
-   */
-  function connectWebSocket(projectId) {
-    disconnectWebSocket()
-
-    const wsUrl = codegraphApi.getWebSocketUrl(projectId)
-
+  async function explainFile(node) {
+    if (!currentProject.value || !node?.path) return null
+    const seq = ++explainSeq
+    const version = projectVersion
+    explainController?.abort()
+    explainController = new AbortController()
+    fileExplanation.value = null
+    fileExplainLoading.value = true
+    fileExplainError.value = null
     try {
-      ws = new WebSocket(wsUrl)
-
-      ws.onopen = () => {
-        wsConnected.value = true
-        console.log('WebSocket connected')
-        ws.send(JSON.stringify({ type: 'subscribe' }))
-      }
-
-      ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data)
-          handleWSMessage(data)
-        } catch (err) {
-          console.error('Failed to parse WS message:', err)
-        }
-      }
-
-      ws.onclose = () => {
-        wsConnected.value = false
-        console.log('WebSocket disconnected')
-        // 自动重连
-        wsReconnectTimer = setTimeout(() => {
-          if (currentProject.value) {
-            connectWebSocket(currentProject.value.id)
-          }
-        }, 5000)
-      }
-
-      ws.onerror = (err) => {
-        console.error('WebSocket error:', err)
-        wsConnected.value = false
-      }
+      const result = await codegraphApi.explainFile(currentProject.value.id, {
+        path: node.path, module: node.module, type: node.type,
+        indegree: node.indegree || 0, outdegree: node.outdegree || 0, centrality: node.centrality || 0,
+      }, { signal: explainController.signal })
+      if (seq !== explainSeq || version !== projectVersion) return null
+      fileExplanation.value = result
+      return result
     } catch (err) {
-      console.error('Failed to connect WebSocket:', err)
+      if (seq === explainSeq && version === projectVersion && err.code !== 'ERR_CANCELED') {
+        fileExplainError.value = graphError(err, CODE_GRAPH.messages.explainFailed)
+      }
+      return null
+    } finally {
+      if (seq === explainSeq && version === projectVersion) fileExplainLoading.value = false
     }
   }
 
-  /**
-   * 断开 WebSocket
-   */
+  function clearSelection() { selectNode(null) }
+  function setFilter(key, value) { filters.value[key] = value }
+  function resetFilters() { filters.value = { module: null, type: null, minCentrality: 0 } }
+  function setLayout(value) {
+    if (CODE_GRAPH.layouts.some(item => item.value === value)) layout.value = value
+  }
+
   function disconnectWebSocket() {
-    if (ws) {
-      ws.close()
-      ws = null
-    }
-    if (wsReconnectTimer) {
-      clearTimeout(wsReconnectTimer)
-      wsReconnectTimer = null
+    if (wsReconnectTimer) clearTimeout(wsReconnectTimer)
+    wsReconnectTimer = null
+    const socket = ws
+    ws = null
+    if (socket) {
+      // A deliberate close must never schedule a reconnect.
+      socket.onopen = socket.onmessage = socket.onclose = socket.onerror = null
+      socket.close()
     }
     wsConnected.value = false
   }
 
-  /**
-   * 处理 WebSocket 消息
-   */
-  function handleWSMessage(data) {
-    switch (data.type) {
-      case 'graph_update':
-        if (data.event === 'full_refresh') {
-          fetchGraphData(currentProject.value.id, false)
-        }
-        break
-
-      case 'full_refresh':
-        fetchGraphData(currentProject.value.id, false)
-        break
-
-      case 'file_modified':
-        // 文件变化，标记需要刷新
-        console.log('File modified:', data.file)
-        break
-
-      case 'pong':
-        // 心跳响应
-        break
-
-      case 'connected':
-      case 'subscribed':
-      case 'subscription_confirmed':
-        break
-
-      case 'error':
-        console.error('CodeGraph WS error:', data.message || data)
-        break
-
-      default:
-        console.log('Unknown WS message type:', data.type)
-    }
-  }
-
-  /**
-   * 请求刷新
-   */
-  function requestRefresh() {
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: 'request_refresh' }))
-    }
-  }
-
-  /**
-   * 发送心跳
-   */
-  function sendPing() {
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: 'ping' }))
-    }
-  }
-
-  /**
-   * 重置状态
-   */
-  function reset() {
+  function connectWebSocket(projectId) {
     disconnectWebSocket()
+    const version = projectVersion
+    const isCurrent = socket => ws === socket && version === projectVersion
+    const scheduleReconnect = () => {
+      if (version !== projectVersion || !currentProject.value) return
+      const delay = Math.min(CODE_GRAPH.reconnectMs * (2 ** reconnectAttempt++), CODE_GRAPH.reconnectMaxMs)
+      wsReconnectTimer = setTimeout(() => connectWebSocket(projectId), delay)
+    }
+    try {
+      const socket = new WebSocket(codegraphApi.getWebSocketUrl(projectId))
+      ws = socket
+      socket.onopen = () => {
+        if (!isCurrent(socket)) return
+        reconnectAttempt = 0
+        wsConnected.value = true
+        socket.send(JSON.stringify({ type: 'subscribe' }))
+      }
+      socket.onmessage = event => {
+        if (!isCurrent(socket)) return
+        try {
+          const data = JSON.parse(event.data)
+          const revision = data.data?.last_updated || data.data?.lastUpdated
+          if (revision && revision === graphRevision) return
+          if ((data.type === 'full_refresh' || (data.type === 'graph_update' && data.event === 'full_refresh'))
+            && !analyzing.value && !loading.value) fetchGraphData(projectId)
+        } catch (err) { console.warn('Invalid CodeGraph message:', err) }
+      }
+      socket.onclose = () => {
+        if (!isCurrent(socket)) return
+        ws = null
+        wsConnected.value = false
+        scheduleReconnect()
+      }
+      socket.onerror = () => { if (isCurrent(socket)) wsConnected.value = false }
+    } catch { scheduleReconnect() }
+  }
+
+  function sendPing() {
+    if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'ping' }))
+  }
+
+  function reset() {
+    ++projectVersion
+    ++projectsSeq
+    ++graphSeq
+    graphController?.abort()
+    disconnectWebSocket()
+    reconnectAttempt = 0
+    graphRevision = ''
+    clearSearch()
+    clearSelection()
+    resetFilters()
     currentProject.value = null
     nodes.value = []
     edges.value = []
     stats.value = {}
     cycles.value = []
     hotspots.value = []
-    modules.value = []
-    moduleDependencies.value = []
-    selectedNode.value = null
-    hoveredNode.value = null
-    searchResults.value = []
+    loading.value = analyzing.value = false
     error.value = null
   }
 
   return {
-    // 状态
-    projects,
-    currentProject,
-    nodes,
-    edges,
-    stats,
-    cycles,
-    hotspots,
-    modules,
-    moduleDependencies,
-    loading,
-    analyzing,
-    wsConnected,
-    error,
-    searchQuery,
-    searchResults,
-    searchLoading,
-    selectedNode,
-    hoveredNode,
-    filters,
-    layout,
-    zoom,
-    viewCenter,
-
-    // 计算属性
-    filteredNodes,
-    filteredEdges,
-    nodesByModule,
-    hasCycles,
-
-    // Actions
-    fetchProjects,
-    selectProject,
-    fetchGraphData,
-    reanalyze,
-    fetchModules,
-    fetchModuleDependencies,
-    search,
-    fetchFileContent,
-    selectNode,
-    hoverNode,
-    clearSelection,
-    setFilter,
-    resetFilters,
-    setLayout,
-    setZoom,
-    setViewCenter,
-    connectWebSocket,
-    disconnectWebSocket,
-    requestRefresh,
-    sendPing,
-    reset,
+    projects, currentProject, nodes, edges, stats, cycles, hotspots, loading, analyzing,
+    wsConnected, error, searchQuery, searchResults, searchLoading, searchError,
+    selectedNode, fileExplanation, fileExplainLoading, fileExplainError, filters, layout,
+    allFiles, moduleOptions, typeOptions, filteredNodes, filteredEdges, relationships, hasCycles, hasFilters,
+    fetchProjects, selectProject, fetchGraphData, reanalyze, search, clearSearch, explainFile,
+    selectNode, clearSelection, setFilter, resetFilters, setLayout, connectWebSocket,
+    disconnectWebSocket, sendPing, reset,
   }
 })

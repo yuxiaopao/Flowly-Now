@@ -6,7 +6,10 @@
     :class="{ selected, 'is-running': isRunning, 'is-completed': isCompleted, 'is-failed': isFailed }"
     @click.stop="handleSelect"
   >
-    <Handle type="target" :position="Position.Left" />
+    <Handle
+      type="target"
+      :position="Position.Left"
+    />
 
     <div class="node-header">
       <NodeTypeBadge :node-type="NODE_TYPE" />
@@ -24,8 +27,15 @@
       >
     </div>
 
-    <div class="upload-body nodrag nopan nowheel" @mousedown.stop @pointerdown.stop>
-      <div v-if="previewUrl" class="player-wrap">
+    <div
+      class="upload-body nodrag nopan nowheel"
+      @mousedown.stop
+      @pointerdown.stop
+    >
+      <div
+        v-if="previewUrl"
+        class="player-wrap"
+      >
         <video
           :key="previewUrl"
           class="video-player"
@@ -36,17 +46,29 @@
           @click.stop
         />
       </div>
-      <div v-else class="upload-placeholder">
+      <div
+        v-else
+        class="upload-placeholder"
+      >
         <Upload class="upload-icon" />
         <span>选择或拖拽视频</span>
       </div>
 
       <div class="upload-actions">
         <label class="upload-btn">
-          <input type="file" accept="video/*,.mp4,.mov,.webm,.mkv" hidden @change="onFilePick">
+          <input
+            type="file"
+            accept="video/*,.mp4,.mov,.webm,.mkv"
+            hidden
+            @change="onFilePick"
+          >
           <span>{{ uploading ? '上传中...' : '本地上传' }}</span>
         </label>
-        <button type="button" class="link-btn" @click.stop="toggleUrlInput">
+        <button
+          type="button"
+          class="link-btn"
+          @click.stop="toggleUrlInput"
+        >
           {{ showUrlInput ? '隐藏 URL' : '公网 URL' }}
         </button>
       </div>
@@ -60,19 +82,38 @@
         @click.stop
       >
 
-      <div v-if="localConfig.public_url || localConfig.video_input" class="meta-row">
+      <div
+        v-if="localConfig.public_url || localConfig.video_input"
+        class="meta-row"
+      >
         <span class="meta-label">源</span>
         <span class="meta-value">{{ shortUrl(localConfig.public_url || localConfig.video_input) }}</span>
       </div>
     </div>
 
-    <div v-if="isRunning" class="status-row running">
+    <div
+      v-if="isRunning"
+      class="status-row running"
+    >
       <Loader class="spin" /> 解析视频中...
     </div>
-    <div v-else-if="isCompleted" class="status-row done">已就绪</div>
-    <div v-else-if="isFailed" class="status-row fail">{{ outputError || '失败' }}</div>
+    <div
+      v-else-if="isCompleted"
+      class="status-row done"
+    >
+      已就绪
+    </div>
+    <div
+      v-else-if="isFailed"
+      class="status-row fail"
+    >
+      {{ outputError || '失败' }}
+    </div>
 
-    <Handle type="source" :position="Position.Right" />
+    <Handle
+      type="source"
+      :position="Position.Right"
+    />
 
     <div
       class="resize-handle"

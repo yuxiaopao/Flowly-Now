@@ -132,6 +132,21 @@ def resolve_executable_model(model: str) -> str:
     model = str(model or '').strip()
     if not model or is_ollama_model(model):
         return model
+    # Agnes chat placeholders used by NL generators → canonical chat model
+    model_lower = model.lower()
+    if model_lower in {'agnes-llm-v1', 'agnes-llm', 'agnes-chat', 'agnes-llm-v2'} or (
+        model_lower.startswith('agnes-llm') and 'image' not in model_lower and 'video' not in model_lower
+    ):
+        nl_model = str(getattr(settings, 'NL_WORKFLOW_MODEL', None) or '').strip()
+        if nl_model:
+            return nl_model
+        # Prefer Agnes when configured; avoid routing to local Ollama when it is offline.
+        if str(getattr(settings, 'AGNES_API_KEY', None) or '').strip():
+            return 'agnes-2.0-flash'
+        ollama_fallback = str(getattr(settings, 'DEFAULT_LLM_MODEL', None) or '').strip()
+        if ollama_fallback:
+            return ollama_fallback
+        return 'agnes-2.0-flash'
     if re.match(r'^llm\d+$', model, re.I) or model.lower() in {'langchain', 'gpt', 'openai'}:
         fallback = (
             getattr(settings, 'NL_WORKFLOW_MODEL', None)
@@ -150,39 +165,6 @@ def _is_meaningful_llm_cache_output(output_data: Any) -> bool:
         return False
     text = output_data.get('text') or output_data.get('content') or ''
     return bool(str(text).strip())
-
-
-def _is_meaningful_output_cache_output(output_data: Any) -> bool:
-    """Output cache with unreplaced {placeholders} or incomplete structured media is stale."""
-    if not output_data or not isinstance(output_data, dict):
-        return False
-
-    fmt = str(output_data.get('_format') or output_data.get('format') or '').lower()
-    if fmt in ('chart', 'graph'):
-        labels = output_data.get('labels')
-        values = output_data.get('values')
-        if not (isinstance(labels, list) and isinstance(values, list)):
-            return False
-    elif fmt in ('audio', 'sound', 'voice'):
-        if not (output_data.get('audio_url') or output_data.get('audio')):
-            return False
-    elif fmt in ('video', 'mp4'):
-        if not (output_data.get('video_url') or output_data.get('video')):
-            return False
-    elif fmt in ('image', 'img', 'picture'):
-        has_image = (
-            output_data.get('url')
-            or output_data.get('image_url')
-            or output_data.get('image')
-            or (isinstance(output_data.get('images'), list) and output_data.get('images'))
-        )
-        if not has_image:
-            return False
-
-    result = output_data.get('result') or output_data.get('text') or ''
-    if not isinstance(result, str):
-        return True
-    return not re.search(r'\{[a-zA-Z_][a-zA-Z0-9_]*\}', result)
 
 
 def handle_ollama_errors(func: Callable) -> Callable:
@@ -288,25 +270,40 @@ def get_provider_for_model(model: str, registry=None):
 
 
 def resolve_execution_context(context: Dict[str, Any]) -> Dict[str, Any]:
-    """Flatten ExecutionContext.to_dict() for node runners that expect top-level keys."""
+    """Flatten ExecutionContext.to_dict() for node runners that expect top-level keys.
+
+    IMPORTANT: Do NOT flatten every node_outputs entry onto the top level.
+    Parallel shot chains all emit keys like image_prompt / video_url; last-wins
+    flattening made all 12 branches generate identical media. Prefer:
+      input_data → variables → explicit _branch_upstream (direct predecessors)
+    """
     if not context:
         return {}
     if 'variables' not in context and 'node_outputs' not in context:
         return context
 
+    node_outputs = context.get('node_outputs') or {}
     merged: Dict[str, Any] = {}
     merged.update(context.get('input_data') or {})
     merged.update(context.get('variables') or {})
-    # Node outputs override stale variables (e.g. new training output_dir vs cached website paths)
-    for output in (context.get('node_outputs') or {}).values():
-        if isinstance(output, dict):
-            for key, value in output.items():
-                if not str(key).startswith('_'):
-                    merged[key] = value
+
+    # Branch-local overlay from direct predecessors (set by WorkflowExecutor)
+    branch = context.get('_branch_upstream')
+    if isinstance(branch, dict):
+        for key, value in branch.items():
+            if str(key).startswith('_'):
+                continue
+            if value not in (None, ''):
+                merged[key] = value
+
+    # Keep full per-node outputs for collect / fan-in scripts
+    merged['node_outputs'] = node_outputs
     merged['_execution'] = {
-        'node_outputs': context.get('node_outputs') or {},
+        'node_outputs': node_outputs,
         'metadata': context.get('metadata') or {},
     }
+    if isinstance(branch, dict):
+        merged['_branch_upstream'] = branch
     return merged
 
 
@@ -387,28 +384,16 @@ class LangChainService:
             self._registry = get_provider_registry()
         return self._registry
 
-    def execute_node(
-        self,
-        node_type: str,
-        node_config: Dict[str, Any],
-        input_data: Dict[str, Any],
-        timeout_seconds: Optional[int] = None,
-        use_cache: bool = True
-    ) -> Dict[str, Any]:
-        """
-        Execute a workflow node based on its type with optional timeout.
-        
-        Args:
-            node_type: Type of the node to execute
-            node_config: Configuration for the node
-            input_data: Input data for the node
-            timeout_seconds: Optional timeout in seconds
-            use_cache: Whether to use execution cache (default True)
-            
-        Returns:
-            Dict with execution result including 'success', 'output', and metadata
-        """
-        executors = {
+    def get_node_executors(self) -> Dict[str, Callable]:
+        """Share the actual runtime registry with workflow validation."""
+        return {
+            'start': self.run_trigger_node,
+            'end': self.run_trigger_node,
+            'manual': self.run_trigger_node,
+            'trigger': self.run_trigger_node,
+            'schedule': self.run_trigger_node,
+            'webhook': self.run_trigger_node,
+            'form': self.run_trigger_node,
             'llm': self.run_llm_node,
             'prompt': self.run_prompt_node,
             'condition': self.run_condition_node,
@@ -423,6 +408,8 @@ class LangChainService:
             'email': self.run_email_node,
             'delay': self.run_delay_node,
             'data_transform': self.run_transform_node,
+            'transform': self.run_transform_node,
+            'template': self.run_text_template_node,
             # Multimodal & Generation
             'image_generation': self.run_image_generation_node,
             'video_generation': self.run_video_generation_node,
@@ -460,6 +447,7 @@ class LangChainService:
             'embedding': self.run_embedding_node,
             'vector_store': self.run_vector_store_node,
             'retriever': self.run_retriever_node,
+            'rag': self.run_retriever_node,
             'reranker': self.run_reranker_node,
             # Agent System
             'agent': self.run_agent_node,
@@ -513,28 +501,56 @@ class LangChainService:
             'wechat_work': self.run_wechat_work_node,
         }
 
+    def run_trigger_node(self, node_config: Dict[str, Any], input_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Receive the payload supplied by a trigger or a manual test run."""
+        branch_input = input_data.get('_branch_upstream')
+        original_input = input_data.get('input_data')
+        if isinstance(branch_input, dict):
+            payload = branch_input
+        elif isinstance(original_input, dict):
+            payload = original_input
+        else:
+            payload = {key: value for key, value in input_data.items() if key not in ('variables', 'node_outputs', 'metadata') and not key.startswith('_')}
+        return {'success': True, 'output': dict(payload), 'message': '已接收触发输入'}
+
+    def execute_node(
+        self,
+        node_type: str,
+        node_config: Dict[str, Any],
+        input_data: Dict[str, Any],
+        timeout_seconds: Optional[int] = None,
+        use_cache: bool = True
+    ) -> Dict[str, Any]:
+        """Execute a registered node, keeping failures and cache inputs accurate."""
+        executors = self.get_node_executors()
         executor = executors.get(node_type)
 
         if not executor:
             return {
-                'success': True,
-                'output': input_data,
-                'message': f'Skipping unknown node type: {node_type}'
+                'success': False,
+                'error': f'不支持的节点类型：{node_type}，请安装或实现对应执行器',
+                'error_type': 'unsupported_node',
+                'node_type': node_type,
             }
 
-        resolved_context = resolve_execution_context(input_data)
+        node_config = dict(node_config or {})
+        from .workflow_validation import validate_imported_node
+        import_errors = validate_imported_node(node_type, node_config)
+        if import_errors:
+            return {'success': False, 'error': '；'.join(import_errors), 'error_type': 'n8n_compatibility', 'node_type': node_type}
 
-        # Context-dependent nodes must not use config-only cache (stale weights/paths)
-        if node_type in (
-            'yolo_training', 'model_training', 'dataset_upload',
-            'project_profiler', 'website_generator', 'environment_provision',
-            'site_qa', 'site_preview', 'project_agent',
-            'image_generation', 'video_generation', 'audio_generation', 'image_editing',
-            'subtitle_generation', 'video_translation',
-            'video_upload', 'subtitle_translate', 'segment_dubbing', 'lip_sync', 'subtitle_burn',
-            'output',
-        ):
-            use_cache = False
+        resolved_context = resolve_execution_context(input_data)
+        if node_type in ('json_transform', 'csv_transform'):
+            resolved_context = {
+                **resolved_context,
+                'input_data': input_data.get('input_data', input_data),
+                'variables': input_data.get('variables', {}),
+            }
+        if node_config.get('n8n_type') == 'n8n-nodes-base.noOp':
+            return self.run_trigger_node(node_config, resolved_context)
+
+        # Only expensive, read-only computation is eligible for cache reuse.
+        use_cache = use_cache and node_type in ('llm', 'prompt', 'embedding')
 
         # Normalize LLM-related configs (placeholder models, camelCase fields)
         if node_type in ('llm', 'prompt', 'openai_api'):
@@ -543,14 +559,13 @@ class LangChainService:
             if resolved_model:
                 node_config['model'] = resolved_model
 
+        cache_config = {'node_config': node_config, 'input_data': resolved_context}
         # === Check cache first ===
         if use_cache:
-            cached_output = self.cache_service.get(node_config, node_type)
+            cached_output = self.cache_service.get(cache_config, node_type)
             if cached_output is not None:
                 if node_type in ('llm', 'prompt', 'openai_api') and not _is_meaningful_llm_cache_output(cached_output):
                     logger.info(f"Cache HIT ignored for {node_type}: empty LLM output")
-                elif node_type == 'output' and not _is_meaningful_output_cache_output(cached_output):
-                    logger.info("Cache HIT ignored for output: unreplaced template placeholders")
                 else:
                     logger.debug(f"Cache HIT for {node_type}")
                     return {
@@ -584,12 +599,9 @@ class LangChainService:
                     output_to_cache = result.get('output')
                     if node_type in ('llm', 'prompt', 'openai_api'):
                         if _is_meaningful_llm_cache_output(output_to_cache):
-                            self.cache_service.set(node_config, node_type, output_to_cache)
-                    elif node_type == 'output':
-                        if _is_meaningful_output_cache_output(output_to_cache):
-                            self.cache_service.set(node_config, node_type, output_to_cache)
+                            self.cache_service.set(cache_config, node_type, output_to_cache)
                     else:
-                        self.cache_service.set(node_config, node_type, output_to_cache)
+                        self.cache_service.set(cache_config, node_type, output_to_cache)
             else:
                 self._execution_stats['failed_calls'] += 1
             
@@ -734,47 +746,83 @@ class LangChainService:
             input_variable=input_variable
         )
 
-        try:
-            if is_ollama_model(model):
-                result = self._execute_ollama(
-                    model=model,
-                    messages=messages,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                    streaming=streaming,
-                    ollama_base_url=getattr(settings, 'OLLAMA_BASE_URL', None),
-                    timeout=config.get('timeout', OLLAMA_CHAT_TIMEOUT)
-                )
-            else:
-                result = self._execute_via_registry(
-                    model=model,
-                    messages=messages,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                    streaming=streaming
-                )
+        max_attempts = max(1, int(config.get('max_retries', config.get('retry_count', 0)) or 0) + 1)
+        last_exc: Exception | None = None
+        result = None
 
-            duration_ms = calculate_duration_ms(start_time)
-            
-            return {
-                'success': True,
-                'output': {
-                    'text': result.get('content', ''),
-                    'usage': result.get('usage', {}),
-                    'finish_reason': result.get('finish_reason', 'stop'),
-                    'model': model
-                },
-                'model': model,
+        for attempt in range(max_attempts):
+            try:
+                if is_ollama_model(model):
+                    result = self._execute_ollama(
+                        model=model,
+                        messages=messages,
+                        temperature=temperature,
+                        max_tokens=max_tokens,
+                        streaming=streaming,
+                        ollama_base_url=getattr(settings, 'OLLAMA_BASE_URL', None),
+                        timeout=config.get('timeout', OLLAMA_CHAT_TIMEOUT)
+                    )
+                else:
+                    result = self._execute_via_registry(
+                        model=model,
+                        messages=messages,
+                        temperature=temperature,
+                        max_tokens=max_tokens,
+                        streaming=streaming
+                    )
+                last_exc = None
+                break
+            except (requests.exceptions.ConnectionError, requests.exceptions.Timeout, TimeoutError, OSError) as e:
+                last_exc = e
+                logger.warning(
+                    'LLM transient error (attempt %s/%s) model=%s: %s',
+                    attempt + 1,
+                    max_attempts,
+                    model,
+                    e,
+                )
+                if attempt + 1 < max_attempts:
+                    time.sleep(min(8.0, 1.5 * (attempt + 1)))
+                    continue
+                raise
+            except Exception as e:
+                # OpenAI SDK / httpx may wrap network failures.
+                msg = str(e).lower()
+                if any(tok in msg for tok in ('connection', 'timeout', 'timed out', 'temporarily')) and attempt + 1 < max_attempts:
+                    last_exc = e
+                    logger.warning(
+                        'LLM retriable error (attempt %s/%s) model=%s: %s',
+                        attempt + 1,
+                        max_attempts,
+                        model,
+                        e,
+                    )
+                    time.sleep(min(8.0, 1.5 * (attempt + 1)))
+                    continue
+                raise
+
+        if result is None:
+            if last_exc:
+                if isinstance(last_exc, requests.exceptions.ConnectionError):
+                    raise OllamaConnectionError() from last_exc
+                if isinstance(last_exc, (requests.exceptions.Timeout, TimeoutError)):
+                    raise ModelTimeoutError(config.get('timeout', 120)) from last_exc
+                raise last_exc
+            raise RuntimeError('LLM execution returned no result')
+
+        duration_ms = calculate_duration_ms(start_time)
+        return {
+            'success': True,
+            'output': {
+                'text': result.get('content', ''),
                 'usage': result.get('usage', {}),
-                'duration_ms': duration_ms
-            }
-
-        except requests.exceptions.ConnectionError:
-            raise OllamaConnectionError()
-        except requests.exceptions.Timeout:
-            raise ModelTimeoutError(config.get('timeout', 120))
-        except json.JSONDecodeError as e:
-            raise JSONDecodeWorkflowError(f"响应格式错误: {str(e)}")
+                'finish_reason': result.get('finish_reason', 'stop'),
+                'model': model
+            },
+            'model': model,
+            'usage': result.get('usage', {}),
+            'duration_ms': duration_ms
+        }
 
     def _resolve_input_text(
         self,
@@ -1581,7 +1629,7 @@ class LangChainService:
         - Pre-execution security validation
         - Timeout via SIGKILL
         """
-        from .sandbox_service import SandboxService
+        from .sandbox_service import get_sandbox_service
         
         code = config.get('code', '')
         timeout = config.get('timeout', TOOL_TIMEOUT_DEFAULT)
@@ -1595,7 +1643,7 @@ class LangChainService:
             }
         
         # Pre-validate code for obvious security issues
-        sandbox = SandboxService(timeout=timeout, max_memory_mb=max_memory_mb)
+        sandbox = get_sandbox_service(timeout=timeout, max_memory_mb=max_memory_mb)
         validation = sandbox.validate_code(code)
         if not validation['valid']:
             return {
@@ -1611,11 +1659,30 @@ class LangChainService:
             variables = input_data.get('variables')
             if isinstance(variables, dict) and input_variable in variables:
                 sandbox_input = {input_variable: variables[input_variable]}
-            elif input_variable in input_data:
+            elif input_variable in input_data and input_variable not in (
+                'variables', 'node_outputs', 'input_data', 'metadata'
+            ):
                 sandbox_input = {input_variable: input_data[input_variable]}
             else:
                 resolved = self._resolve_input_text(input_data, input_variable)
                 sandbox_input = {input_variable: resolved if resolved is not None else {}}
+            # Collect/fan-in scripts need the full execution context, not only last text.
+            # Wrap string/scalar payloads so node_outputs can always be attached.
+            if 'node_outputs' in (code or ''):
+                base = sandbox_input.get(input_variable)
+                if not isinstance(base, dict):
+                    if isinstance(base, str):
+                        base = {'text': base, 'input': base}
+                    elif base is None:
+                        base = {}
+                    else:
+                        base = {'value': base, 'text': str(base)}
+                sandbox_input[input_variable] = {
+                    **base,
+                    'node_outputs': input_data.get('node_outputs') or {},
+                    'variables': input_data.get('variables') or {},
+                    'input_data': input_data.get('input_data') or {},
+                }
         else:
             sandbox_input = {input_variable: input_data}
         
@@ -1853,6 +1920,13 @@ class LangChainService:
         
         tool_name = config.get('tool', config.get('tool_name', ''))
         tool_params = config.get('parameters', config.get('tool_args', {}))
+        if isinstance(tool_params, str):
+            try:
+                tool_params = json.loads(tool_params or '{}')
+            except json.JSONDecodeError:
+                return {'success': False, 'error': '工具参数必须是有效的JSON对象', 'error_type': 'tool_error'}
+        if not isinstance(tool_params, dict):
+            return {'success': False, 'error': '工具参数必须是JSON对象', 'error_type': 'tool_error'}
         if not tool_params and tool_name == 'calculator':
             expr = config.get('expression')
             if expr:
@@ -1860,6 +1934,7 @@ class LangChainService:
         custom_handler = config.get('handler')
 
         tools = {
+            'embroidery_3d': self._tool_embroidery_3d,
             'search': self._tool_search,
             'calculator': self._tool_calculator,
             'json_parser': self._tool_json_parser,
@@ -1943,6 +2018,10 @@ class LangChainService:
     # Built-in Tool Implementations
     # ========================================================================
     
+    def _tool_embroidery_3d(self, params: Dict, input_data: Dict) -> Dict:
+        from .embroidery_3d import execute
+        return execute(params, input_data)
+
     def _tool_search(self, params: Dict, input_data: Dict) -> Dict:
         """Search tool - performs web search."""
         query = params.get('query', '')
@@ -2358,11 +2437,11 @@ class LangChainService:
         assignments = config.get('assignments', [])
         # 兼容编辑器/NL 生成的扁平配置 {name, value}
         if not assignments:
-            legacy_name = config.get('name') or config.get('variable_name')
+            legacy_name = config.get('name') or config.get('variable_name') or config.get('variableName')
             if legacy_name:
                 assignments = [{
                     'name': legacy_name,
-                    'value': config.get('value', ''),
+                    'value': config.get('value', config.get('variableValue', config.get('variable_value', ''))),
                     'source': config.get('source', 'static'),
                     'type': config.get('type', 'string'),
                 }]
@@ -2624,14 +2703,54 @@ class LangChainService:
         continue_on_error: bool
     ) -> tuple:
         """Execute for_each loop."""
+        variables = input_data.get('variables') if isinstance(input_data.get('variables'), dict) else {}
         if items_source == 'input':
             items = input_data.get('items', [])
         elif items_source == 'variable':
             var_name = input_data.get('items_variable', 'items')
             items = input_data.get(var_name, [])
+        else:
+            items = items or []
+
+        # Schema-agnostic fallbacks when NL leaves items empty / miswired.
+        if not items:
+            for key in ('data', 'items', 'result', 'chapters', 'shots', 'scenes', 'enriched_shots'):
+                candidate = input_data.get(key)
+                if isinstance(candidate, list) and candidate:
+                    items = candidate
+                    break
+            if not items:
+                for key in ('data', 'items', 'result', 'chapters', 'shots', 'scenes'):
+                    candidate = variables.get(key)
+                    if isinstance(candidate, list) and candidate:
+                        items = candidate
+                        break
+            if not items:
+                text = input_data.get('text') or variables.get('text')
+                if isinstance(text, str) and text.strip():
+                    parsed = None
+                    try:
+                        parsed = json.loads(text.strip())
+                    except Exception:
+                        start = text.find('[')
+                        end = text.rfind(']')
+                        if start >= 0 and end > start:
+                            try:
+                                parsed = json.loads(text[start:end + 1])
+                            except Exception:
+                                parsed = None
+                    if isinstance(parsed, list):
+                        items = parsed
+                    elif isinstance(parsed, dict):
+                        for key in ('chapters', 'items', 'shots', 'scenes', 'data', 'result'):
+                            if isinstance(parsed.get(key), list):
+                                items = parsed[key]
+                                break
 
         if not isinstance(items, (list, tuple, dict)):
             items = [items]
+        if isinstance(items, dict):
+            items = list(items.values())
 
         results = []
         iteration_count = 0
@@ -2865,9 +2984,11 @@ class LangChainService:
         """Execute input node."""
         # 兼容两种配置键：编辑器/执行器使用 variable_name，NL 生成使用 input_name
         variable_name = config.get('variable_name') or config.get('input_name') or 'input'
-        prompt = config.get('prompt', 'Please provide input')
+        prompt = config.get('prompt', '请提供输入内容')
         required = config.get('required', True)
         default_value = config.get('default')
+        if default_value is None:
+            default_value = config.get('default_value')
         validation = config.get('validation', None)
 
         value = input_data.get(variable_name)
@@ -2890,7 +3011,7 @@ class LangChainService:
         if required and value is None:
             return {
                 'success': False,
-                'error': f"Required input missing: {variable_name}. {prompt}",
+                'error': f"缺少必填输入：{variable_name}。{prompt}",
                 'error_type': 'validation'
             }
 
@@ -3074,8 +3195,21 @@ class LangChainService:
     ) -> Dict[str, Any]:
         """Execute data transformation node."""
         start_time = time.time()
+
+        # NL often emits data_transform + operation=parse_array; route to JSON runner.
+        operation = str(config.get('operation') or '').strip().lower()
+        if operation in ('parse_array', 'parse', 'parse_json', 'to_array', 'extract_array'):
+            return self.run_json_transform_node(config, input_data)
         
         transform_type = config.get('transform_type', 'map')
+        # Alias: when NL puts parse_array into transform_type
+        if str(transform_type).strip().lower() in (
+            'parse_array', 'parse', 'parse_json', 'to_array', 'extract_array'
+        ):
+            routed = dict(config)
+            routed['operation'] = transform_type
+            return self.run_json_transform_node(routed, input_data)
+
         source_path = config.get('source_path', '')
         target_path = config.get('target_path', 'result')
         mapping = config.get('mapping', {})
@@ -3083,6 +3217,20 @@ class LangChainService:
 
         try:
             if transform_type == 'map':
+                # Empty mapping + LLM JSON text → treat as parse_array (common NL mistake)
+                if not mapping:
+                    text = (
+                        input_data.get('text')
+                        or input_data.get('content')
+                        or (
+                            (input_data.get('variables') or {}).get('text')
+                            if isinstance(input_data.get('variables'), dict) else None
+                        )
+                    )
+                    if isinstance(text, str) and text.strip() and ('[' in text or '{' in text):
+                        routed = dict(config)
+                        routed['operation'] = 'parse_array'
+                        return self.run_json_transform_node(routed, input_data)
                 result = self._transform_map(input_data, mapping)
             elif transform_type == 'filter':
                 condition = config.get('condition', '')
@@ -3544,26 +3692,62 @@ class LangChainService:
         prompt = str(prompt or '').strip()
         if prompt and not re.search(r'\{[a-zA-Z_][\w.]*\}', prompt):
             return prompt
-        for key in ('prompt', 'text', 'user_input', 'userInput', 'input', 'description'):
+        # Prefer media-specific fields already on the flattened context
+        # (includes _branch_upstream overlay from the executor).
+        for key in (
+            'image_prompt', 'video_motion_prompt', 'prompt', 'text',
+            'user_input', 'userInput', 'input', 'description', 'scene', 'action',
+        ):
             candidate = context.get(key)
             if candidate is not None and str(candidate).strip():
-                return str(candidate).strip()
+                # Skip unresolved templates
+                text = str(candidate).strip()
+                if re.search(r'\{[a-zA-Z_][\w.]*\}', text):
+                    continue
+                return text
         nested = context.get('input_data')
         if isinstance(nested, dict):
-            for key in ('prompt', 'text', 'user_input', 'userInput', 'input', 'description'):
+            for key in (
+                'image_prompt', 'video_motion_prompt', 'prompt', 'text',
+                'user_input', 'userInput', 'input', 'description',
+            ):
                 candidate = nested.get(key)
                 if candidate is not None and str(candidate).strip():
-                    return str(candidate).strip()
+                    text = str(candidate).strip()
+                    if re.search(r'\{[a-zA-Z_][\w.]*\}', text):
+                        continue
+                    return text
+        # Last resort: only use node_outputs when a single shot owns the key.
+        # Never last-wins across parallel branches (that caused identical 12-shot media).
+        nos = context.get('node_outputs')
+        if isinstance(nos, dict):
+            prefer = []
+            tmpl = str(template or '')
+            if 'image_prompt' in tmpl or field == 'prompt':
+                prefer.extend(['image_prompt', 'video_motion_prompt', 'prompt'])
+            if 'video_motion' in tmpl:
+                prefer = ['video_motion_prompt', 'image_prompt', 'prompt']
+            if not prefer:
+                prefer = ['image_prompt', 'video_motion_prompt', 'prompt']
+            for key in prefer:
+                matches = []
+                for out in nos.values():
+                    if isinstance(out, dict) and out.get(key):
+                        matches.append(str(out.get(key)).strip())
+                if len(matches) == 1:
+                    return matches[0]
         return prompt
 
     def _resolve_input_image(self, node_config: Dict[str, Any], context: Dict[str, Any]) -> str:
-        """Resolve image-to-video input from config templates or upstream image output."""
+        """Resolve image-to-video / image-editing input from config templates or upstream output."""
         raw = (
             node_config.get('inputImage')
             or node_config.get('input_image')
             or node_config.get('input_image_url')
+            or node_config.get('image')
             or context.get('inputImage')
             or context.get('input_image')
+            or context.get('image')
             or ''
         )
         if raw:
@@ -3580,6 +3764,33 @@ class LangChainService:
             if isinstance(first, str):
                 return first.strip()
         return ''
+
+    def _resolve_reference_images(self, config: Dict, context: Dict, *, encode_local=False) -> list:
+        references = config.get('referenceImages') or config.get('reference_images') or []
+        if not isinstance(references, list):
+            raise ValueError('参考图片必须是URL数组')
+        resolved = []
+        for value in references:
+            if not isinstance(value, str):
+                raise ValueError('参考图片地址必须是字符串')
+            url = self._render_template(value, context)
+            if '{' in url or '}' in url:
+                raise ValueError('参考图片变量尚未生成')
+            if encode_local:
+                from pathlib import Path
+                import base64
+                import mimetypes
+                from .media_service import local_path_from_public_url
+                path = local_path_from_public_url(url)
+                if path is not None:
+                    path = path.resolve()
+                    if not path.is_relative_to(Path(settings.MEDIA_ROOT).resolve()) or not path.is_file():
+                        raise ValueError('参考图片必须是已上传的媒体文件')
+                    if path.suffix.lower() not in ('.png','.jpg','.jpeg','.webp') or path.stat().st_size > 15*1024*1024:
+                        raise ValueError('参考图片格式无效或超过15MB')
+                    url = 'data:'+mimetypes.guess_type(path.name)[0]+';base64,'+base64.b64encode(path.read_bytes()).decode('ascii')
+            resolved.append(url)
+        return resolved
 
     def get_execution_stats(self) -> Dict[str, Any]:
         """Get execution statistics."""
@@ -3735,9 +3946,20 @@ class LangChainService:
 
         raise WorkflowExecutionError(f'DashScope 任务超时（{timeout_seconds}s），task_id={task_id}')
 
-    def _agnes_credential(self) -> tuple:
+    def _agnes_credential(self, credential_id=None) -> tuple:
         """Resolve (api_key, base_url) for Agnes AI OpenAI-compatible API."""
-        api_key = self._get_credential('agnes') or (getattr(settings, 'AGNES_API_KEY', '') or '').strip()
+        if credential_id:
+            from workflows.models import APICredential
+            try:
+                credential = APICredential.objects.get(pk=credential_id,owner_id=self.user_id,service_type='agnes',is_active=True)
+            except (APICredential.DoesNotExist, ValueError) as exc:
+                raise WorkflowExecutionError('指定的Agnes凭证不存在、未启用或不属于当前用户','configuration') from exc
+            if not credential.verify_integrity():
+                raise WorkflowExecutionError('Agnes凭证完整性检查失败','configuration')
+            api_key = credential.get_decrypted_data()
+            credential.update_last_used()
+        else:
+            api_key = self._get_credential('agnes') or (getattr(settings, 'AGNES_API_KEY', '') or '').strip()
         if not api_key:
             raise WorkflowExecutionError(
                 'Agnes API Key 未配置。请在 .env 中设置 AGNES_API_KEY，或在「凭证中心」新增 agnes 类型的凭证。',
@@ -3764,6 +3986,44 @@ class LangChainService:
             pass
         return resp.text[:500]
 
+    @staticmethod
+    def _extract_agnes_video_url(result: Optional[Dict[str, Any]]) -> str:
+        """Extract playable video URL from Agnes task payload (top-level or nested)."""
+        if not isinstance(result, dict):
+            return ''
+        for key in ('url', 'video_url', 'video', 'output_url'):
+            value = result.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        metadata = result.get('metadata')
+        if isinstance(metadata, dict):
+            for key in ('url', 'video_url', 'video', 'output_url'):
+                value = metadata.get(key)
+                if isinstance(value, str) and value.strip():
+                    return value.strip()
+        data = result.get('data')
+        if isinstance(data, dict):
+            nested = LangChainService._extract_agnes_video_url(data)
+            if nested:
+                return nested
+        output = result.get('output')
+        if isinstance(output, dict):
+            nested = LangChainService._extract_agnes_video_url(output)
+            if nested:
+                return nested
+        if isinstance(output, str) and output.strip():
+            return output.strip()
+        results = result.get('results')
+        if isinstance(results, list) and results:
+            first = results[0]
+            if isinstance(first, dict):
+                nested = LangChainService._extract_agnes_video_url(first)
+                if nested:
+                    return nested
+            if isinstance(first, str) and first.strip():
+                return first.strip()
+        return ''
+
     def _poll_agnes_video_task(
         self,
         task_id: str,
@@ -3772,16 +4032,19 @@ class LangChainService:
         timeout_seconds: int = 900,
         poll_interval: int = 5,
         progress_meta: Optional[Dict[str, Any]] = None,
+        model: str = '',
     ) -> Dict[str, Any]:
         """Poll Agnes video generation task until completed."""
         headers = {'Authorization': f'Bearer {api_key}'}
         max_attempts = max(1, timeout_seconds // poll_interval)
         ssl_retries = 0
         max_ssl_retries = 5
+        from .agnes_video import poll_request
+        poll_url, poll_params = poll_request(base_url, task_id, model)
         with self._agnes_httpx_client(timeout=60) as client:
             for _ in range(max_attempts):
                 try:
-                    resp = client.get(f'{base_url}/videos/{task_id}', headers=headers)
+                    resp = client.get(poll_url, headers=headers, params=poll_params)
                 except httpx.HTTPError as exc:
                     ssl_retries += 1
                     if ssl_retries > max_ssl_retries:
@@ -3946,7 +4209,8 @@ class LangChainService:
         }
 
     def _image_generation_demo_output(self, prompt: str) -> Dict[str, Any]:
-        seed = abs(hash(str(prompt or 'demo'))) % 100000
+        import hashlib
+        seed = int(hashlib.md5(str(prompt or 'demo').encode('utf-8')).hexdigest()[:8], 16) % 100000
         return {
             'success': True,
             'output': {
@@ -3997,37 +4261,116 @@ class LangChainService:
                 images = [{'url': img.url, 'revised_prompt': getattr(img, 'revised_prompt', '')} for img in response.data]
                 return {'success': True, 'output': {'images': images, 'count': len(images)}}
             elif provider == 'agnes':
-                api_key, base_url = self._agnes_credential()
+                api_key, base_url = self._agnes_credential(node_config.get('credentialId') or node_config.get('credential_id'))
                 from openai import OpenAI
                 agnes_model = model if model and model.startswith('agnes-image') else 'agnes-image-2.1-flash'
-                allowed_sizes = {'1024x1024', '1792x1024', '1024x1792', '1024x768', '768x1024'}
+                allowed_sizes = {'1024x1024', '1792x1024', '1024x1792', '1024x768', '768x1024', '1K','2K','3K','4K'}
                 agnes_size = (size or '1024x1024').replace('*', 'x').replace('X', 'x')
                 if agnes_size not in allowed_sizes:
                     agnes_size = '1024x1024'
-                client = OpenAI(api_key=api_key, base_url=base_url)
-                response = client.images.generate(
-                    model=agnes_model,
-                    prompt=prompt,
-                    size=agnes_size,
-                    n=max(1, min(4, int(n or 1))),
-                )
-                images = []
-                for img in response.data:
-                    item = {'url': getattr(img, 'url', '') or ''}
-                    if getattr(img, 'b64_json', None):
-                        item['base64'] = img.b64_json
-                    if getattr(img, 'revised_prompt', None):
-                        item['revised_prompt'] = img.revised_prompt
-                    if item.get('url') or item.get('base64'):
-                        images.append(item)
+                client = OpenAI(api_key=api_key, base_url=base_url, timeout=120.0, max_retries=0)
+                references = self._resolve_reference_images(node_config, context, encode_local=True)
+                extra_body = {}
+                if references:
+                    extra_body['extra_body'] = {'image': references, 'response_format': 'url'}
+                if node_config.get('ratio'):
+                    extra_body['ratio'] = node_config['ratio']
+                # Agnes often returns 503 busy — retry with backoff, do NOT fake picsum stills.
+                attempts = max(1, int(node_config.get('max_retries') or 5))
+                last_err = None
+                for attempt in range(attempts):
+                    try:
+                        response = client.images.generate(
+                            model=agnes_model,
+                            prompt=prompt,
+                            size=agnes_size,
+                            n=max(1, min(4, int(n or 1))),
+                            **({'extra_body': extra_body} if extra_body else {}),
+                        )
+                        images = []
+                        for img in response.data:
+                            item = {'url': getattr(img, 'url', '') or ''}
+                            if getattr(img, 'b64_json', None):
+                                item['base64'] = img.b64_json
+                            if getattr(img, 'revised_prompt', None):
+                                item['revised_prompt'] = img.revised_prompt
+                            if item.get('url') or item.get('base64'):
+                                images.append(item)
+                        if not images:
+                            raise WorkflowExecutionError('Agnes image generation returned empty images')
+                        return {
+                            'success': True,
+                            'output': {
+                                'images': images,
+                                'count': len(images),
+                                'provider': 'agnes',
+                                'model': agnes_model,
+                            }
+                        }
+                    except Exception as exc:
+                        last_err = exc
+                        msg = str(exc)
+                        retriable = any(
+                            tok in msg
+                            for tok in (
+                                'timed out', 'Timeout', 'Connection', '503',
+                                'Service busy', 'ServiceUnavailable', '429', '502', '504',
+                                '500', 'do_request_failed', 'upstream_error',
+                            )
+                        )
+                        logger.warning(
+                            'Agnes image attempt %s/%s failed: %s',
+                            attempt + 1, attempts, msg[:200],
+                        )
+                        if (not retriable) or attempt >= attempts - 1:
+                            break
+                        # Longer backoff on provider busy
+                        time.sleep(min(45.0, 4.0 * (2 ** attempt)))
+                # Secondary provider: OpenAI-compatible image API when configured
+                openai_key = self._get_credential('openai')
+                if openai_key and node_config.get('allow_provider_fallback', True):
+                    try:
+                        logger.warning(
+                            'Agnes image failed (%s); trying OpenAI image fallback', last_err,
+                        )
+                        oa = OpenAI(
+                            api_key=openai_key,
+                            base_url=getattr(settings, 'OPENAI_BASE_URL', None) or None,
+                            timeout=120.0,
+                            max_retries=0,
+                        )
+                        oa_model = 'dall-e-3'
+                        oa_size = agnes_size if agnes_size in {'1024x1024', '1792x1024', '1024x1792'} else '1024x1024'
+                        response = oa.images.generate(
+                            model=oa_model,
+                            prompt=(prompt or '')[:3900],
+                            size=oa_size,
+                            n=1,
+                        )
+                        images = [
+                            {
+                                'url': getattr(img, 'url', '') or '',
+                                'revised_prompt': getattr(img, 'revised_prompt', '') or '',
+                            }
+                            for img in response.data
+                            if getattr(img, 'url', None)
+                        ]
+                        if images:
+                            return {
+                                'success': True,
+                                'output': {
+                                    'images': images,
+                                    'count': len(images),
+                                    'provider': 'openai-fallback',
+                                    'model': oa_model,
+                                    'warning': f'agnes failed; used openai fallback: {last_err}',
+                                },
+                            }
+                    except Exception as oa_exc:
+                        logger.warning('OpenAI image fallback failed: %s', oa_exc)
                 return {
-                    'success': True,
-                    'output': {
-                        'images': images,
-                        'count': len(images),
-                        'provider': 'agnes',
-                        'model': agnes_model,
-                    }
+                    'success': False,
+                    'error': f'Agnes image generation failed after {attempts} attempts: {last_err}',
                 }
             elif provider == 'dashscope':
                 api_key, base_url = self._dashscope_credential()
@@ -4167,22 +4510,51 @@ class LangChainService:
         fps: int = 24,
         resolution: str = '720p',
         input_image: str = '',
+        *,
+        shot_index: int = 0,
+        title: str = '',
+        action: str = '',
     ) -> Dict[str, Any]:
-        seed = abs(hash(str(prompt or 'demo'))) % 100000
-        thumb = input_image or f'https://picsum.photos/seed/{seed}/640/360'
+        """Distinct local placeholder per shot — never reuse one stock URL."""
+        import re
+        from workflows.services.media_service import save_output_file
+        from workflows.services.video_postprocess import render_storyboard_placeholder_clip
+
+        idx = int(shot_index or 0)
+        if idx <= 0:
+            m = re.search(r'[Ss]hot\s*(\d+)', str(prompt or ''))
+            if not m:
+                m = re.search(r'镜\s*(\d+)', str(prompt or ''))
+            idx = int(m.group(1)) if m else (abs(hash(str(prompt or 'demo'))) % 12) + 1
+        title = title or (str(prompt or '').split('.')[0][:40] if prompt else f'镜头{idx}')
+        action = action or str(prompt or '')[:80]
+        try:
+            local = render_storyboard_placeholder_clip(
+                shot_index=idx,
+                title=title,
+                action=action,
+                duration_sec=float(duration or 5),
+            )
+            saved = save_output_file(local, subdir='workflow_placeholders')
+            video_url = saved.get('public_url') or saved.get('local_path') or str(local)
+        except Exception as exc:
+            logger.warning('placeholder clip render failed, using remote stub: %s', exc)
+            video_url = 'https://www.w3schools.com/html/mov_bbb.mp4'
         return {
             'success': True,
             'output': {
-                'video_url': 'https://www.w3schools.com/html/mov_bbb.mp4',
-                'thumbnail': thumb,
+                'video_url': video_url,
+                'thumbnail': input_image or '',
                 'status': 'completed',
-                'duration': duration,
+                'duration': float(duration or 5),
                 'fps': fps,
                 'resolution': resolution,
                 'demo': True,
+                'provider': 'local-placeholder',
                 'prompt': prompt,
                 'input_image': input_image,
-                'mode': 'image_to_video' if input_image else 'text_to_video',
+                'shot_index': idx,
+                'mode': 'placeholder',
             },
         }
 
@@ -4194,20 +4566,52 @@ class LangChainService:
         duration: int,
         resolution: str,
         input_image: str,
+        timeout_seconds: int = 180,
+        mode: str = None,
+        reference_images: list = None,
+        last_frame: str = None,
+        seed: int = None,
+        submit_attempts: int = 6,
+        credential_id: str = None,
+        submit_interval_seconds: int = 0,
     ) -> Dict[str, Any]:
-        api_key, base_url = self._agnes_credential()
+        api_key, base_url = self._agnes_credential(credential_id)
         headers = {'Authorization': f'Bearer {api_key}', 'Content-Type': 'application/json'}
         agnes_model = model if model and model.startswith('agnes-video') else 'agnes-video-v2.0'
-        payload = {'model': agnes_model, 'prompt': prompt}
-        if input_image:
-            payload['image'] = input_image
-        with self._agnes_httpx_client(timeout=VIDEO_GENERATION_TIMEOUT) as client:
-            resp = client.post(f'{base_url}/videos', headers=headers, json=payload)
-            if resp.status_code >= 400:
-                raise WorkflowExecutionError(f'Agnes 视频生成任务创建失败: {self._agnes_error_detail(resp)}')
-            created = resp.json()
-        task_id = created.get('id') or created.get('task_id')
-        if not task_id:
+        from .agnes_video import MODERN_MODELS, build_video_payload, reserve_submission
+        payload = build_video_payload(agnes_model, prompt, duration, resolution, input_image, mode=mode, reference_images=reference_images, last_frame=last_frame, seed=seed)
+        created = None
+        last_create_err = ''
+        with self._agnes_httpx_client(timeout=min(120, VIDEO_GENERATION_TIMEOUT)) as client:
+            attempts = max(1, min(6, int(submit_attempts)))
+            for attempt in range(attempts):
+                reserve_submission(self.user_id,submit_interval_seconds,lambda:self._report_progress({'status':'queued','progress':0,'provider':'agnes','message':'等待当前账号视频请求窗口，按限速提交'}))
+                resp = client.post(f'{base_url}/videos', headers=headers, json=payload)
+                if resp.status_code < 400:
+                    created = resp.json()
+                    break
+                detail = self._agnes_error_detail(resp)
+                last_create_err = detail
+                detail_l = str(detail).lower()
+                # Provider backpressure — wait and retry instead of soft-failing the shot
+                if any(tok in detail_l for tok in ('queue is full', 'rate limit', 'too many', '429', 'busy')):
+                    if attempt == attempts-1:
+                        break
+                    wait_s = min(90, 10 * (attempt + 1))
+                    logger.warning(
+                        'Agnes video queue busy (attempt %s/%s), sleep %ss: %s',
+                        attempt + 1, attempts, wait_s, detail,
+                    )
+                    time.sleep(wait_s)
+                    continue
+                raise WorkflowExecutionError(f'Agnes 视频生成任务创建失败: {detail}')
+            if created is None:
+                raise WorkflowExecutionError(
+                    f'Agnes 视频生成任务创建失败（队列繁忙已重试）: {last_create_err}'
+                )
+        task_id = (created or {}).get('id') or (created or {}).get('task_id')
+        poll_id = (created or {}).get('video_id') if agnes_model in MODERN_MODELS else task_id
+        if not poll_id:
             raise WorkflowExecutionError(f'Agnes 视频生成未返回 task_id: {created}')
         progress_meta = {
             'input_image': input_image,
@@ -4224,12 +4628,13 @@ class LangChainService:
             'message': self._format_video_progress_message('queued', 0, 'agnes'),
         })
         result = self._poll_agnes_video_task(
-            task_id, api_key, base_url,
-            timeout_seconds=1800,
+            poll_id, api_key, base_url,
+            timeout_seconds=max(60, int(timeout_seconds or 180)),
             poll_interval=5,
             progress_meta=progress_meta,
+            model=agnes_model,
         )
-        video_url = result.get('url') or result.get('video_url') or ''
+        video_url = self._extract_agnes_video_url(result)
         if not video_url:
             raise WorkflowExecutionError(f'Agnes 视频生成完成但未返回 video_url: {result}')
         return {
@@ -4240,11 +4645,14 @@ class LangChainService:
                 'provider': 'agnes',
                 'model': agnes_model,
                 'task_id': task_id,
+                'video_id': poll_id,
                 'duration': float(result.get('seconds') or duration or 5),
                 'resolution': resolution,
                 'prompt': prompt,
-                'input_image': input_image,
-                'mode': 'image_to_video' if input_image else 'text_to_video',
+                'input_image': input_image if payload.get('mode') != 'reference' else '',
+                'mode': 'reference_to_video' if payload.get('mode') == 'reference' else ('image_to_video' if input_image else 'text_to_video'),
+                'generation_mode': payload.get('mode'),
+                'reference_images': reference_images or [],
             },
         }
 
@@ -4260,36 +4668,75 @@ class LangChainService:
         fps = node_config.get('fps', 24)
         resolution = node_config.get('resolution', '720p')
         input_image = self._resolve_input_image(node_config, context)
+        # Demo / picsum stills are not useful for Agnes i2v — prefer text-to-video.
+        if input_image and any(
+            tok in str(input_image).lower()
+            for tok in ('picsum.photos', 'demo', 'placeholder')
+        ):
+            logger.info('Skipping non-production input_image for video: %s', str(input_image)[:120])
+            input_image = ''
         resolution_map = {'720p': 720, '1080p': 1080, '4k': 2160}
         height = resolution_map.get(resolution, 720)
+        shot_index = 0
+        try:
+            shot_index = int(
+                context.get('shot_index')
+                or (context.get('variables') or {}).get('shot_index')
+                or 0
+            )
+        except Exception:
+            shot_index = 0
+        shot_title = str(context.get('title') or '')
+        shot_action = str(context.get('action') or '')
 
         try:
             # Demo mode: no API key needed, return a simulated video result
             import os
             if not os.environ.get('REPLICATE_API_KEY') and provider == 'replicate':
-                return {
-                    'success': True,
-                    'output': {
-                        'video_url': f'https://www.w3schools.com/html/mov_bbb.mp4',
-                        'thumbnail': input_image or f'https://picsum.photos/seed/{hash(prompt) % 100000}/640/360',
-                        'status': 'completed',
-                        'duration': duration,
-                        'fps': fps,
-                        'resolution': resolution,
-                        'demo': True,
-                        'prompt': prompt,
-                        'input_image': input_image,
-                        'mode': 'image_to_video' if input_image else 'text_to_video',
-                    }
-                }
-            if provider == 'agnes':
-                return self._execute_agnes_video_generation(
-                    model=model,
+                return self._video_generation_demo_output(
                     prompt=prompt,
                     duration=duration,
+                    fps=fps,
                     resolution=resolution,
                     input_image=input_image,
+                    shot_index=shot_index,
+                    title=shot_title,
+                    action=shot_action,
                 )
+            if provider == 'agnes':
+                # Always call Agnes. Missing still → text-to-video with motion prompt.
+                # Do NOT short-circuit to local title-card placeholders.
+                try:
+                    return self._execute_agnes_video_generation(
+                        model=model,
+                        prompt=prompt,
+                        duration=duration,
+                        resolution=resolution,
+                        input_image=input_image if (
+                            input_image and not any(
+                                tok in str(input_image).lower()
+                                for tok in ('picsum.photos', 'placeholder', 'demo')
+                            )
+                        ) else '',
+                        timeout_seconds=int(
+                            node_config.get('timeout')
+                            or node_config.get('timeout_seconds')
+                            or 600
+                        ),
+                        mode=node_config.get('mode'),
+                        reference_images=self._resolve_reference_images(node_config, context),
+                        last_frame=self._render_template(node_config.get('lastFrame') or node_config.get('last_frame') or '', context),
+                        seed=node_config.get('seed'),
+                        submit_attempts=node_config.get('submit_attempts', 6),
+                        credential_id=node_config.get('credentialId') or node_config.get('credential_id'),
+                        submit_interval_seconds=node_config.get('submit_interval_seconds',0),
+                    )
+                except Exception as agnes_exc:
+                    logger.error('Agnes video failed: %s', agnes_exc)
+                    return {
+                        'success': False,
+                        'error': f'Agnes video generation failed: {agnes_exc}',
+                    }
             if provider == 'dashscope':
                 api_key, base_url = self._dashscope_credential()
                 headers = {
@@ -4447,6 +4894,105 @@ class LangChainService:
             },
         }
 
+    def _synthesize_audio_with_fallbacks(
+        self,
+        *,
+        text: str,
+        voice: str,
+        audio_format: str,
+        speed: float,
+        preferred: str,
+        target_language: str = 'zh',
+    ) -> Dict[str, Any]:
+        """Try multiple TTS backends so short-drama finishing never dies on network TTS."""
+        from pathlib import Path as _Path
+        import base64
+        import tempfile
+
+        preferred = (preferred or 'auto').lower()
+        order = []
+        if preferred in ('edge_tts', 'agnes', 'agnes-tts', 'agnes_tts'):
+            order = ['edge_tts', 'gtts', 'pyttsx3']
+        elif preferred == 'gtts':
+            order = ['gtts', 'pyttsx3', 'edge_tts']
+        elif preferred in ('pyttsx3', 'local_tts'):
+            order = ['pyttsx3', 'gtts', 'edge_tts']
+        else:
+            order = ['pyttsx3', 'gtts', 'edge_tts']
+
+        errors = []
+        for backend in order:
+            try:
+                if backend == 'edge_tts':
+                    from workflows.services.video_translation.constants import EDGE_TTS_VOICES
+                    from workflows.services.video_translation.media_providers import synthesize_edge_tts
+                    ds_voice = voice if voice and '-' in str(voice) else EDGE_TTS_VOICES.get(
+                        target_language or 'zh', 'zh-CN-XiaoxiaoNeural',
+                    )
+                    if target_language in ('zh', 'zh-cn', 'cn') and (not voice or voice == 'alloy'):
+                        ds_voice = 'zh-CN-XiaoxiaoNeural'
+                    tmp = _Path(tempfile.gettempdir()) / f'flowly_edge_tts_{uuid.uuid4().hex}.{audio_format or "mp3"}'
+                    synthesize_edge_tts(text, voice=ds_voice, output_path=tmp)
+                    audio_b64 = base64.b64encode(tmp.read_bytes()).decode()
+                    return {
+                        'success': True,
+                        'output': {
+                            'audio_base64': audio_b64,
+                            'format': audio_format or 'mp3',
+                            'provider': 'edge_tts',
+                            'voice': ds_voice,
+                            'duration_est': max(1, len(text) / (5 * (speed or 1.0))),
+                        },
+                    }
+                if backend == 'gtts':
+                    from gtts import gTTS
+                    from workflows.services.video_translation.constants import GTTS_LANG_CODES
+                    lang = GTTS_LANG_CODES.get(target_language or 'zh', 'zh-cn')
+                    if target_language in ('zh', 'zh-cn', 'cn'):
+                        lang = 'zh-cn'
+                    tmp = _Path(tempfile.gettempdir()) / f'flowly_gtts_{uuid.uuid4().hex}.mp3'
+                    gTTS(text or ' ', lang=lang).save(str(tmp))
+                    audio_b64 = base64.b64encode(tmp.read_bytes()).decode()
+                    return {
+                        'success': True,
+                        'output': {
+                            'audio_base64': audio_b64,
+                            'format': 'mp3',
+                            'provider': 'gtts',
+                            'voice': lang,
+                            'duration_est': max(1, len(text) / (5 * (speed or 1.0))),
+                        },
+                    }
+                if backend == 'pyttsx3':
+                    from workflows.services.video_translation.media_providers import synthesize_pyttsx3
+                    tmp = _Path(tempfile.gettempdir()) / f'flowly_pyttsx3_{uuid.uuid4().hex}.wav'
+                    synthesize_pyttsx3(
+                        text or ' ',
+                        output_path=tmp,
+                        voice_id=voice if voice and voice != 'alloy' else None,
+                        language=target_language,
+                    )
+                    audio_b64 = base64.b64encode(tmp.read_bytes()).decode()
+                    return {
+                        'success': True,
+                        'output': {
+                            'audio_base64': audio_b64,
+                            'format': 'wav',
+                            'provider': 'pyttsx3',
+                            'voice': voice or 'system-default',
+                            'duration_est': max(1, len(text) / (5 * (speed or 1.0))),
+                        },
+                    }
+            except Exception as exc:
+                errors.append(f'{backend}: {exc}')
+                logger.warning('TTS backend %s failed: %s', backend, exc)
+
+        logger.error('All TTS backends failed: %s', errors)
+        out = self._audio_generation_demo_output(text, audio_format or 'mp3')
+        out['output']['warning'] = '; '.join(errors)[:500]
+        out['output']['fallback'] = True
+        return out
+
     def run_audio_generation_node(self, node_config: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
         """
         Audio/TTS Generation Node
@@ -4535,71 +5081,24 @@ class LangChainService:
                     import base64
                     audio_b64 = base64.b64encode(resp.content).decode()
                     return {'success': True, 'output': {'audio_base64': audio_b64, 'format': 'mp3'}}
-            elif provider == 'edge_tts':
-                from pathlib import Path as _Path
-                import tempfile
-                from workflows.services.video_translation.constants import EDGE_TTS_VOICES
-                from workflows.services.video_translation.media_providers import synthesize_edge_tts
-                ds_voice = voice if voice and '-' in voice else EDGE_TTS_VOICES.get(
-                    node_config.get('target_language') or context.get('target_language') or 'en',
-                    'en-US-JennyNeural',
+            elif provider in (
+                'edge_tts', 'gtts', 'pyttsx3', 'local_tts', 'auto',
+                'agnes', 'agnes-tts', 'agnes_tts',
+            ):
+                # Cascading TTS: edge → gTTS → local pyttsx3 → demo (never hard-fail film)
+                return self._synthesize_audio_with_fallbacks(
+                    text=text,
+                    voice=voice,
+                    audio_format=audio_format,
+                    speed=speed or 1.0,
+                    preferred=provider,
+                    target_language=(
+                        node_config.get('target_language')
+                        or context.get('target_language')
+                        or node_config.get('language')
+                        or 'zh'
+                    ),
                 )
-                tmp = _Path(tempfile.gettempdir()) / f'flowly_edge_tts_{uuid.uuid4().hex}.{audio_format}'
-                synthesize_edge_tts(text, voice=ds_voice, output_path=tmp)
-                import base64
-                audio_b64 = base64.b64encode(tmp.read_bytes()).decode()
-                return {
-                    'success': True,
-                    'output': {
-                        'audio_base64': audio_b64,
-                        'format': audio_format,
-                        'provider': 'edge_tts',
-                        'voice': ds_voice,
-                        'duration_est': max(1, len(text) / (5 * (speed or 1.0))),
-                    },
-                }
-            elif provider in ('pyttsx3', 'local_tts'):
-                from pathlib import Path as _Path
-                import tempfile
-                from workflows.services.video_translation.media_providers import synthesize_pyttsx3
-                fmt = audio_format if audio_format in ('wav', 'mp3') else 'wav'
-                tmp = _Path(tempfile.gettempdir()) / f'flowly_pyttsx3_{uuid.uuid4().hex}.{fmt}'
-                synthesize_pyttsx3(text, output_path=tmp, voice_id=voice or None)
-                import base64
-                audio_b64 = base64.b64encode(tmp.read_bytes()).decode()
-                return {
-                    'success': True,
-                    'output': {
-                        'audio_base64': audio_b64,
-                        'format': fmt,
-                        'provider': 'pyttsx3',
-                        'voice': voice or 'system-default',
-                        'duration_est': max(1, len(text) / (5 * (speed or 1.0))),
-                    },
-                }
-            elif provider == 'gtts':
-                from pathlib import Path as _Path
-                import tempfile
-                from gtts import gTTS
-                from workflows.services.video_translation.constants import GTTS_LANG_CODES
-                lang = GTTS_LANG_CODES.get(
-                    node_config.get('target_language') or context.get('target_language') or 'en',
-                    'en',
-                )
-                tmp = _Path(tempfile.gettempdir()) / f'flowly_gtts_{uuid.uuid4().hex}.mp3'
-                gTTS(text, lang=lang).save(str(tmp))
-                import base64
-                audio_b64 = base64.b64encode(tmp.read_bytes()).decode()
-                return {
-                    'success': True,
-                    'output': {
-                        'audio_base64': audio_b64,
-                        'format': 'mp3',
-                        'provider': 'gtts',
-                        'voice': lang,
-                        'duration_est': max(1, len(text) / (5 * (speed or 1.0))),
-                    },
-                }
             else:
                 return {'success': False, 'error': f'Unknown audio provider: {provider}'}
         except Exception as e:
@@ -4607,7 +5106,18 @@ class LangChainService:
             if provider == 'openai' and any(token in err for token in ('AuthenticationError', 'Unauthorized', '401', 'invalid_api_key')):
                 logger.warning('OpenAI audio generation auth failed, using demo output: %s', e)
                 return self._audio_generation_demo_output(text, audio_format)
-            return {'success': False, 'error': str(e)}
+            logger.warning('Audio generation failed (%s), falling back: %s', provider, e)
+            try:
+                return self._synthesize_audio_with_fallbacks(
+                    text=text,
+                    voice=voice,
+                    audio_format=audio_format,
+                    speed=speed or 1.0,
+                    preferred='auto',
+                    target_language=node_config.get('language') or 'zh',
+                )
+            except Exception:
+                return self._audio_generation_demo_output(text, audio_format)
 
     def run_subtitle_generation_node(self, node_config: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -4635,12 +5145,19 @@ class LangChainService:
             else str(input_path)
         )
         if not rendered_path or '{' in rendered_path:
+            urls = context.get('video_urls') if isinstance(context.get('video_urls'), list) else []
+            first_list_url = next((u for u in urls if isinstance(u, str) and u.strip()), '')
             rendered_path = (
                 context.get('video_url')
                 or context.get('source_video_url')
                 or context.get('public_url')
-                or str(input_path)
+                or first_list_url
+                or ''
             )
+            if not rendered_path or '{' in str(rendered_path):
+                raise WorkflowExecutionError(
+                    '字幕节点缺少可用 video_url（上游拼接未产出或模板未解析）'
+                )
 
         try:
             if provider == 'dashscope':
@@ -4954,13 +5471,15 @@ class LangChainService:
                 or node_config.get('tts_provider')
                 or getattr(settings, 'VIDEO_TRANSLATION_TTS_PROVIDER', 'pyttsx3')
             )
+            # Local SAPI TTS always emits WAV; normalize format so FFmpeg can probe it
+            audio_format = 'wav' if str(tts_provider).lower() in ('pyttsx3', 'local_tts') else (fmt or 'mp3')
             result = self.run_audio_generation_node(
                 {
                     'provider': tts_provider,
                     'model': node_config.get('tts_model') or 'tts-1',
                     'text': text,
                     'voice': voice,
-                    'format': fmt,
+                    'format': audio_format,
                     'target_language': node_config.get('target_language'),
                 },
                 context,
@@ -4975,7 +5494,8 @@ class LangChainService:
             import tempfile
             audio_b64 = output.get('audio_base64')
             if audio_b64:
-                tmp = Path(tempfile.gettempdir()) / f'flowly_tts_{uuid.uuid4().hex}.{fmt}'
+                out_fmt = output.get('format') or audio_format or 'wav'
+                tmp = Path(tempfile.gettempdir()) / f'flowly_tts_{uuid.uuid4().hex}.{out_fmt}'
                 tmp.write_bytes(base64.b64decode(audio_b64))
                 return save_output_file(tmp, subdir='video_translation/tts')['local_path']
             raise WorkflowExecutionError('TTS 未返回音频')
@@ -5016,7 +5536,8 @@ class LangChainService:
         """
         provider = node_config.get('provider', 'openai')
         model = node_config.get('model', 'dall-e-2')
-        image = node_config.get('image') or node_config.get('inputImage') or context.get('image') or context.get('inputImage') or ''
+        # Resolve {images.0.url} etc. the same way as video_generation
+        image = self._resolve_input_image(node_config, context)
         instruction_template = node_config.get('instruction') or node_config.get('prompt') or ''
         instruction = (
             self._render_template(instruction_template, context)
@@ -5024,6 +5545,8 @@ class LangChainService:
             else (context.get('instruction') or context.get('prompt') or '')
         )
         mask = node_config.get('mask', '')
+        if mask and '{' in str(mask):
+            mask = self._render_template(str(mask), context)
 
         try:
             if provider == 'openai':
@@ -5122,10 +5645,21 @@ class LangChainService:
             compute_path_size_bytes,
         )
 
-        source = node_config.get('source', 'upload')
-        path_template = node_config.get('path', '')
+        external_inputs = context.get('input_data') if isinstance(context.get('input_data'), dict) else {}
+        source = node_config.get('source') or node_config.get('sourceType') or 'upload'
+        path_template = node_config.get('path', '') or node_config.get('sourcePath', '')
         path = self._render_template(path_template, context) if path_template else context.get('path', '')
-        path = path or node_config.get('datasetPath', '') or node_config.get('filePath', '')
+        path = (
+            path
+            or node_config.get('datasetPath', '')
+            or node_config.get('filePath', '')
+            or context.get('dataset_path', '')
+            or context.get('datasetPath', '')
+            or context.get('dataset_yaml_path', '')
+            or external_inputs.get('dataset_path', '')
+            or external_inputs.get('datasetPath', '')
+            or external_inputs.get('dataset_yaml_path', '')
+        )
         format_type = node_config.get('format', 'csv')
         name = node_config.get('label', 'Dataset') or node_config.get('name', 'Dataset')
         description = node_config.get('description', '')
@@ -5541,7 +6075,9 @@ class LangChainService:
 
         gpu_info = self._detect_gpu()
 
-        cfg = node_config.get('config', {}) or {}
+        nested_cfg = node_config.get('config', {}) if isinstance(node_config.get('config'), dict) else {}
+        cfg = {key: value for key, value in (node_config or {}).items() if key != 'config'}
+        cfg.update(nested_cfg)
 
         dataset_yaml_path = node_config.get('datasetYamlPath', '') or cfg.get('datasetYamlPath', '') or context.get('dataset_yaml_path', '')
         dataset_path = node_config.get('datasetPath', '') or cfg.get('datasetPath', '') or context.get('dataset_path', '')
@@ -5567,11 +6103,65 @@ class LangChainService:
             or ('cpu' if execution_mode == 'local' else None)
         )
 
-        output_dir = cfg.get('runtime', {}).get('storagePath') or cfg.get('outputDir') or f'./outputs/yolo_{uuid.uuid4().hex[:8]}'
+        reuse_job_id = (
+            cfg.get('reuseTrainingJobId')
+            or cfg.get('reuse_training_job_id')
+            or node_config.get('reuseTrainingJobId')
+        )
+        skip_if_reused = cfg.get('skipTrainingIfReused', bool(reuse_job_id))
+
+        if reuse_job_id and skip_if_reused:
+            try:
+                from training.models import TrainingJob
+
+                reuse_qs = TrainingJob.objects.filter(
+                    id=reuse_job_id,
+                    training_kind='yolo',
+                    status='completed',
+                ).exclude(best_weight_path='')
+                if self.user_id:
+                    reuse_qs = reuse_qs.filter(created_by_id=self.user_id)
+                reused_job = reuse_qs.first()
+                if reused_job:
+                    metrics = reused_job.metrics if isinstance(reused_job.metrics, dict) else {}
+                    best_weight = reused_job.best_weight_path or reused_job.model_path or ''
+                    logger.info('YOLO training skipped — reusing completed job %s', reused_job.id)
+                    return {
+                        'success': True,
+                        'output': {
+                            'training_run_id': str(reused_job.id),
+                            'training_status': 'reused',
+                            'reused': True,
+                            'execution_mode': execution_mode,
+                            'dataset_id': reused_job.dataset_id or dataset_id,
+                            'dataset_yaml_path': reused_job.dataset_yaml_path or dataset_yaml_path,
+                            'class_names': reused_job.class_names or class_names,
+                            'yolo_version': reused_job.yolo_version or yolo_version,
+                            'model_variant': reused_job.model_variant or model_variant,
+                            'gpu_info': gpu_info,
+                            'output_dir': reused_job.config.get('output_dir') if isinstance(reused_job.config, dict) else output_dir,
+                            'epochs': reused_job.total_epochs or epochs,
+                            'model_path': best_weight,
+                            'best_weight_path': best_weight,
+                            'last_weight_path': reused_job.last_weight_path or best_weight,
+                            'final_metrics': metrics,
+                            'reuse_message': f'已复用已有权重: {reused_job.name}',
+                        },
+                    }
+            except Exception as reuse_exc:
+                logger.warning('YOLO weight reuse lookup failed: %s', reuse_exc)
+
+        output_dir = cfg.get('runtime', {}).get('storagePath') or cfg.get('outputDir') or node_config.get('outputDir') or f'./outputs/yolo_{uuid.uuid4().hex[:8]}'
         output_dir_path = Path(output_dir)
         if not output_dir_path.is_absolute():
             output_dir_path = (Path(settings.BASE_DIR) / output_dir_path).resolve()
         output_dir = str(output_dir_path)
+
+        def resolve_dataset_source_mode() -> str:
+            source_config = cfg.get('datasetSource') or node_config.get('datasetSource') or context.get('dataset_source_mode', '')
+            if isinstance(source_config, dict):
+                source_config = source_config.get('mode') or source_config.get('type') or ''
+            return str(source_config or '')[:50]
 
         try:
             from training.models import TrainingJob
@@ -5603,6 +6193,7 @@ class LangChainService:
                 config={
                     **cfg,
                     'output_dir': output_dir,
+                    'base_weight_uri': cfg.get('base_weight_uri') or cfg.get('baseWeightUri') or cfg.get('baseModel'),
                     'batch_size': training.get('batchSize', training.get('batch_size', 16)),
                     'image_size': training.get('imageSize', training.get('image_size', 640)),
                     'learning_rate': training.get('learningRate', training.get('learning_rate', 0.01)),
@@ -5611,7 +6202,7 @@ class LangChainService:
                 dataset_id=dataset_id,
                 dataset_path=dataset_path or '',
                 dataset_yaml_path=dataset_yaml_path or '',
-                dataset_source_mode=cfg.get('datasetSource', '') or node_config.get('datasetSource', {}).get('mode', '') or context.get('dataset_source_mode', ''),
+                dataset_source_mode=resolve_dataset_source_mode(),
                 annotation_project_id=annotation_project_id,
                 class_names=class_names,
                 total_epochs=epochs,
@@ -5645,6 +6236,7 @@ class LangChainService:
                 'output_dir': output_dir,
                 'device': device_preference,
                 'config': yolo_job.config,
+                'base_weight_uri': yolo_job.config.get('base_weight_uri'),
             }
 
             with open(config_path, 'w', encoding='utf-8') as f:
@@ -5731,6 +6323,7 @@ class LangChainService:
                 script_path = Path(__file__).parent.parent.parent / 'scripts' / 'train_model.py'
 
             env = os.environ.copy()
+            env.setdefault('YOLO_CONFIG_DIR', '/tmp/Ultralytics')
             try:
                 with open(cfg_path_str, 'r', encoding='utf-8') as cfg_file:
                     train_cfg = json.load(cfg_file)
@@ -6933,6 +7526,11 @@ class LangChainService:
                 'recommended_template': profile.get('recommended_template', website_type),
                 'class_names': profile.get('class_names', class_names),
                 'class_display_names': profile.get('class_display_names', {}),
+                'class_entities': profile.get('class_entities', []),
+                'required_node_configs': profile.get('required_node_configs', []),
+                'stack_contract': profile.get('stack_contract', {}),
+                'page_sections': profile.get('page_sections', []),
+                'api_endpoints': profile.get('api_endpoints', []),
                 'copy_hints': profile.get('copy_hints', []),
                 'risk_notes': profile.get('risk_notes', []),
                 'website_type': website_type,
@@ -6959,7 +7557,19 @@ class LangChainService:
         wizard = node_config.get('wizard') or context.get('wizard') or {}
         if isinstance(profile, dict) and profile.get('recommended_template') and not node_config.get('websiteType'):
             website_type = profile.get('recommended_template', website_type)
-        training_run_id = node_config.get('trainingRunId', '') or context.get('training_run_id', '')
+        model_artifact_manifest = (
+            node_config.get('modelArtifactManifest')
+            or node_config.get('model_artifact_manifest')
+            or context.get('model_artifact_manifest')
+            or context.get('modelArtifactManifest')
+            or {}
+        )
+        training_run_id = (
+            node_config.get('trainingRunId', '')
+            or node_config.get('trainingJobId', '')
+            or context.get('training_run_id', '')
+            or model_artifact_manifest.get('trainingJobId', '')
+        )
         model_path = (
             node_config.get('modelPath', '')
             or context.get('best_weight_path', '')
@@ -7015,11 +7625,13 @@ class LangChainService:
         if training_run_id:
             try:
                 from training.models import TrainingJob
+                from training.artifacts import build_model_artifact_manifest
                 run = TrainingJob.objects.get(id=training_run_id)
+                model_artifact_manifest = model_artifact_manifest or build_model_artifact_manifest(run)
                 kind = run.training_kind or 'generic'
-                labels = run.class_names or labels
+                labels = model_artifact_manifest.get('labels') or run.class_names or labels
                 if kind == 'yolo':
-                    model_path = run.best_weight_path or run.model_path or model_path
+                    model_path = model_artifact_manifest.get('bestWeightPath') or run.best_weight_path or run.model_path or model_path
                     framework = 'ultralytics'
                     website_type = 'detection'
                 elif kind == 'clip_ret':
@@ -7058,12 +7670,26 @@ class LangChainService:
             labels=labels,
             framework=framework,
             website_type=website_type,
-            frontend_framework=frontend_framework,
-            backend_framework=backend_framework,
+            frontend_framework='vue',
+            backend_framework='flask',
             output_dir=output_dir,
             port=port,
-            status='generating',
+            status='profiling',
             training_run_id=training_run_id or '',
+            model_artifact_manifest=model_artifact_manifest or {},
+            site_brief=node_config.get('siteBrief') or node_config.get('site_brief') or {'profile': profile, 'wizard': wizard},
+            required_features=node_config.get('requiredFeatures') or node_config.get('required_features') or ['imageRecognition', 'videoRecognition', 'factRecognition', 'historyRecords'],
+            theme_profile=node_config.get('themeProfile') or node_config.get('theme_profile') or {
+                'uiTone': wizard.get('uiTone'),
+                'primaryColor': wizard.get('primaryColor'),
+            },
+            environment_config={
+                **(node_config.get('environmentConfig') or node_config.get('environment_config') or {}),
+                'dbEngine': 'mysql',
+                'outputDir': output_dir,
+                'modelPath': model_path,
+            },
+            agent_memory_enabled=bool(node_config.get('agentMemoryEnabled', node_config.get('agent_memory_enabled', True))),
             show_in_nav=True,
         )
 
@@ -7076,8 +7702,8 @@ class LangChainService:
                     'labels': labels,
                     'framework': framework,
                     'website_type': website_type,
-                    'frontend_framework': frontend_framework,
-                    'backend_framework': backend_framework,
+                    'frontend_framework': 'vue',
+                    'backend_framework': 'flask',
                     'port': port,
                     'name': name,
                     'description': description,
@@ -7086,7 +7712,12 @@ class LangChainService:
                     'index_dir': index_dir,
                     'metrics': clip_metrics,
                     'base_model': context.get('base_model', 'simple-bow'),
-                    'dbEngine': wizard.get('dbEngine') or wizard.get('db_engine') or node_config.get('dbEngine', 'sqlite'),
+                    'model_artifact_manifest': model_artifact_manifest or {},
+                    'required_features': site.required_features,
+                    'site_brief': site.site_brief,
+                    'theme_profile': site.theme_profile,
+                    'environment_config': site.environment_config,
+                    'dbEngine': 'mysql',
                 })
                 result = generator.generate()
                 if not result.get('success'):
@@ -7158,8 +7789,10 @@ class LangChainService:
                 'wizard': wizard,
                 'qa_profile': qa_profile,
                 'website_type': website_type,
-                'frontend_framework': frontend_framework,
-                'backend_framework': backend_framework,
+                'frontend_framework': 'vue',
+                'backend_framework': 'flask',
+                'model_artifact_manifest': model_artifact_manifest or {},
+                'required_features': site.required_features,
                 'inference_endpoint': site.inference_endpoint or (
                     f'http://localhost:{port}/search/text'
                     if website_type in ('clip_retrieval', 'retrieval')
@@ -7307,7 +7940,7 @@ class LangChainService:
         return {'success': True, 'output': {**result, 'site_id': sf['site_id'], 'output_dir': sf['output_dir']}}
 
     def run_environment_provision_node(self, node_config: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
-        """Environment provision: disk, paths, port, GPU manifest."""
+        """Environment provision: disk, paths, port, GPU, MySQL, custom path grants."""
         from website_generator.site_factory.environment import run_environment_checks
 
         output_dir = node_config.get('outputDir', '') or context.get('output_dir', '')
@@ -7319,6 +7952,26 @@ class LangChainService:
         site_id = str(node_config.get('generatedSiteId', '') or context.get('site_id', '') or '')
         runtime_mode = node_config.get('runtimeMode', 'desktop')
         port = node_config.get('port') or context.get('assigned_port') or context.get('port')
+        db_engine = (
+            node_config.get('dbEngine')
+            or node_config.get('db_engine')
+            or (node_config.get('environmentConfig') or {}).get('dbEngine')
+            or context.get('db_engine')
+            or 'mysql'
+        )
+        mysql_config = (
+            node_config.get('mysqlConfig')
+            or node_config.get('mysql_config')
+            or (node_config.get('environmentConfig') or {}).get('mysql')
+            or context.get('mysql_config')
+            or {}
+        )
+        custom_paths = node_config.get('customPaths') or node_config.get('custom_paths') or []
+        if isinstance(custom_paths, str):
+            custom_paths = [p.strip() for p in custom_paths.replace('，', ',').split(',') if p.strip()]
+        require_path_grant = bool(
+            node_config.get('requirePathGrant', node_config.get('require_path_grant', False))
+        )
 
         if not output_dir:
             return {'success': False, 'error': '输出目录未指定，请先运行网站生成节点（及可选的后端/前端/UI 节点）'}
@@ -7329,10 +7982,14 @@ class LangChainService:
             site_id=site_id,
             runtime_mode=runtime_mode,
             assigned_port=int(port) if port else None,
+            db_engine=db_engine,
+            mysql_config=mysql_config if isinstance(mysql_config, dict) else {},
+            custom_paths=custom_paths,
+            require_path_grant=require_path_grant,
         )
 
         return {
-            'success': True,
+            'success': bool(result.get('ready')),
             'output': {
                 'ready': result['ready'],
                 'runtime_manifest': result['runtime_manifest'],
@@ -7341,11 +7998,14 @@ class LangChainService:
                 'output_dir': output_dir,
                 'model_path': model_path,
                 'site_id': site_id,
+                'db_engine': db_engine,
+                'paths_granted': (result.get('runtime_manifest') or {}).get('paths_granted', []),
             },
+            'error': None if result.get('ready') else '环境检查未全部通过，请查看 checks',
         }
 
     def run_site_qa_node(self, node_config: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
-        """Full site QA: L1–L4 with gate green/yellow/red."""
+        """Full site QA: L1–L4 with gate green/yellow/red; optional auto-fix loop."""
         from website_generator.site_factory.qa_runner import run_site_qa
         from website_generator.models import GeneratedSite
 
@@ -7360,6 +8020,8 @@ class LangChainService:
         site_id = str(node_config.get('generatedSiteId', '') or context.get('site_id', '') or '')
         port = node_config.get('port') or context.get('assigned_port') or context.get('port')
         skip_playwright = bool(node_config.get('skipPlaywright', False))
+        auto_fix = bool(node_config.get('autoFix', node_config.get('auto_fix', True)))
+        max_fix_rounds = max(1, min(5, int(node_config.get('maxFixRounds') or node_config.get('max_fix_rounds') or 2)))
 
         metrics = context.get('metrics') or {}
         if isinstance(metrics, dict) and not metrics:
@@ -7379,43 +8041,90 @@ class LangChainService:
         if not output_dir:
             return {'success': False, 'error': '输出目录未指定'}
 
-        qa_result = run_site_qa(
-            output_dir=output_dir,
-            model_path=model_path,
-            website_type=website_type,
-            qa_profile=qa_profile,
-            metrics=metrics,
-            port=int(port) if port else None,
-            skip_playwright=skip_playwright,
-            generated_site_id=site_id,
-        )
+        fix_rounds: list = []
+        qa_result = None
+        for attempt in range(max_fix_rounds + 1):
+            qa_result = run_site_qa(
+                output_dir=output_dir,
+                model_path=model_path,
+                website_type=website_type,
+                qa_profile=qa_profile,
+                metrics=metrics,
+                port=int(port) if port else None,
+                skip_playwright=skip_playwright,
+                generated_site_id=site_id,
+            )
+            gate = qa_result.get('gate')
+            if gate == 'green' or not auto_fix or attempt >= max_fix_rounds:
+                break
+            if gate not in ('red', 'yellow'):
+                break
 
-        if site_id:
+            # Auto-fix: invoke site code review role agent, then re-QA
+            try:
+                from website_generator.site_factory.role_agents import run_site_code_review
+                profile = context.get('profile') or {}
+                wizard = context.get('wizard') or node_config.get('wizard') or {}
+                review = run_site_code_review(
+                    output_dir,
+                    website_type=website_type,
+                    profile=profile if isinstance(profile, dict) else {},
+                    wizard=wizard if isinstance(wizard, dict) else {},
+                    model_path=model_path,
+                    port=int(port) if port else None,
+                    agent_mode=node_config.get('agentMode') or 'auto',
+                    max_rounds=1,
+                )
+                fix_rounds.append({
+                    'attempt': attempt + 1,
+                    'pre_gate': gate,
+                    'review_success': bool(review.get('success')),
+                    'review_summary': review.get('summary') or review.get('reply') or '',
+                })
+            except Exception as exc:
+                fix_rounds.append({
+                    'attempt': attempt + 1,
+                    'pre_gate': gate,
+                    'review_success': False,
+                    'review_summary': str(exc),
+                })
+                break
+
+        if site_id and qa_result:
             try:
                 site = GeneratedSite.objects.filter(id=site_id).first()
                 if site:
                     site.last_qa_gate = qa_result['gate']
-                    site.last_qa_report = qa_result.get('qa_report', {})
+                    site.last_qa_report = {
+                        **(qa_result.get('qa_report') or {}),
+                        'auto_fix_rounds': fix_rounds,
+                    }
                     site.save(update_fields=['last_qa_gate', 'last_qa_report'])
             except Exception:
                 logger.warning('Failed to persist QA report for site %s', site_id)
 
+        summary = qa_result['summary_zh'] if qa_result else 'QA 未执行'
+        if fix_rounds:
+            summary = f"{summary}（已自动修复 {len(fix_rounds)} 轮）"
+
         return {
-            'success': qa_result['gate'] != 'red',
+            'success': (qa_result or {}).get('gate') != 'red',
             'output': {
-                'gate': qa_result['gate'],
-                'qa_gate': qa_result['gate'],
-                'layers': qa_result['layers'],
-                'metrics': qa_result['metrics'],
-                'report_path': qa_result['report_path'],
-                'summary_zh': qa_result['summary_zh'],
-                'recommendations': qa_result.get('recommendations', []),
-                'assigned_port': qa_result['assigned_port'],
-                'preview_url': qa_result.get('preview_url'),
+                'gate': (qa_result or {}).get('gate'),
+                'qa_gate': (qa_result or {}).get('gate'),
+                'layers': (qa_result or {}).get('layers'),
+                'metrics': (qa_result or {}).get('metrics'),
+                'report_path': (qa_result or {}).get('report_path'),
+                'summary_zh': summary,
+                'recommendations': (qa_result or {}).get('recommendations', []),
+                'assigned_port': (qa_result or {}).get('assigned_port'),
+                'preview_url': (qa_result or {}).get('preview_url'),
                 'output_dir': output_dir,
                 'site_id': site_id,
+                'auto_fix': auto_fix,
+                'fix_rounds': fix_rounds,
             },
-            'error': None if qa_result['gate'] != 'red' else qa_result['summary_zh'],
+            'error': None if (qa_result or {}).get('gate') != 'red' else summary,
         }
 
     def run_site_preview_node(self, node_config: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
@@ -7504,6 +8213,9 @@ class LangChainService:
             return {'success': False, 'error': '未找到 GeneratedSite，请先完成网站生成'}
 
         user = context.get('user')
+        sync_system = node_config.get('syncSystemAgent')
+        if sync_system is None:
+            sync_system = node_config.get('sync_system_agent', True)
         result = run_agent_for_site(
             site,
             message,
@@ -7512,6 +8224,7 @@ class LangChainService:
             confirm_core_edit=bool(node_config.get('confirmCoreEdit', False)),
             user=user,
             agent_mode=node_config.get('agentMode') or 'auto',
+            sync_system_agent=bool(sync_system),
         )
 
         if not result.get('success'):
@@ -7529,6 +8242,8 @@ class LangChainService:
                 'preview_status': result.get('preview_status'),
                 'site_id': str(site.id),
                 'rag_collection_id': result.get('rag_collection_id'),
+                'rag_status': result.get('rag_status'),
+                'system_agent_sync': result.get('system_agent_sync'),
                 'blocked': result.get('blocked', False),
             },
             'error': None if result.get('qa_gate') != 'red' else result.get('reply'),
@@ -7741,7 +8456,7 @@ class LangChainService:
         enable_rerank = node_config.get('enableRerank', False)
 
         try:
-            provider = node_config.get('provider', context.get('vector_provider', 'chroma'))
+            provider = node_config.get('provider') or ('knowledge_base' if node_config.get('collectionId') or node_config.get('collection_id') else context.get('vector_provider', 'chroma'))
             index_name = node_config.get('indexName', context.get('vector_index', 'default'))
 
             if provider == 'knowledge_base':
@@ -7799,11 +8514,17 @@ class LangChainService:
                     }
                     for r in results.get('matches', [])
                 ]
+            elif provider == 'qdrant':
+                from qdrant_client import QdrantClient
+                client = QdrantClient(url=node_config.get('url', 'http://localhost:6333'), api_key=self._get_credential('qdrant'))
+                try:
+                    results = client.query_points(collection_name=index_name, query=query_embedding, limit=top_k, with_payload=True).points
+                    docs = [{'text': (r.payload or {}).get('text', (r.payload or {}).get('content', '')),
+                             'score': r.score, 'id': str(r.id), 'metadata': r.payload or {}} for r in results]
+                finally:
+                    client.close()
             else:
-                docs = [
-                    {'text': f'Sample result {i+1} for: {query}', 'score': 1.0 - i*0.1, 'id': f'doc_{i}'}
-                    for i in range(top_k)
-                ]
+                return {'success': False, 'error': f'不支持的检索来源: {provider}'}
 
             if enable_rerank and docs:
                 rerank_result = self.run_reranker_node(
@@ -7839,18 +8560,24 @@ class LangChainService:
             return {'success': False, 'error': 'knowledge_base 检索节点缺少 collectionId 配置'}
 
         from rag.models import DocumentCollection
+        from rag.access import accessible_collections
+        from django.contrib.auth import get_user_model
         from rag.services import RAGService
 
         try:
-            collection = DocumentCollection.objects.get(id=collection_id)
+            user = get_user_model().objects.filter(id=self.user_id).first() if self.user_id else None
+            collection = accessible_collections(user).get(id=collection_id)
         except DocumentCollection.DoesNotExist:
-            return {'success': False, 'error': f'知识库集合 {collection_id} 不存在'}
+            return {'success': False, 'error': '知识库不存在或当前执行用户无权访问。'}
         except (ValueError, TypeError):
             return {'success': False, 'error': f'知识库集合 ID 格式无效: {collection_id}'}
 
-        rag_service = RAGService(collection=collection, top_k=top_k, min_similarity=0.0)
-        rag_service.initialize()
-        results = rag_service.retrieve(query)
+        rag_service = RAGService(collection=collection, top_k=top_k, min_similarity=node_config.get('minSimilarity', 0.0))
+        filters = node_config.get('filter') or {}
+        if isinstance(filters, str):
+            import json
+            filters = json.loads(filters)
+        results = rag_service.retrieve(query, filters)
 
         docs = [
             {
@@ -7880,6 +8607,8 @@ class LangChainService:
                 'provider': 'knowledge_base',
                 'index_name': collection.name,
                 'collection_id': str(collection.id),
+                'context': '\n\n'.join(f'[{i}] {doc["metadata"].get("title", "")}\n{doc["text"]}' for i, doc in enumerate(docs, 1)),
+                'sources': [doc['metadata'] for doc in docs],
             }
         }
 
@@ -8060,6 +8789,41 @@ Return a JSON object:
         except Exception as e:
             return {'success': False, 'error': str(e)}
 
+    def _resolve_file_writer_payload(
+        self,
+        node_config: Dict[str, Any],
+        context: Dict[str, Any],
+    ) -> Any:
+        """Resolve file_writer body from config template + upstream node outputs."""
+        upstream = context.get('_branch_upstream') or {}
+        variables = context.get('variables') or {}
+        render_ctx = {**context, **variables, **upstream}
+
+        content_template = node_config.get('content') or node_config.get('body') or ''
+        if content_template:
+            rendered = self._render_template(str(content_template), render_ctx)
+            if rendered != content_template or '{' not in str(content_template):
+                return rendered
+
+        for source in (upstream, variables, context):
+            if not isinstance(source, dict):
+                continue
+            for key in ('content', 'text', 'table_markdown', 'data', 'markdown'):
+                val = source.get(key)
+                if isinstance(val, str) and val.strip():
+                    return val
+
+        out = context.get('output')
+        if isinstance(out, dict):
+            for key in ('content', 'text', 'table_markdown', 'data', 'markdown'):
+                val = out.get(key)
+                if isinstance(val, str) and val.strip():
+                    return val
+            if out:
+                return out
+
+        return context.get('data', context.get('output', {}))
+
     def run_file_writer_node(self, node_config: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
         """
         File Writer Node
@@ -8069,7 +8833,7 @@ Return a JSON object:
         path = self._render_template(path_template, context) if path_template else context.get('path', '')
         format = node_config.get('format', 'json')
         overwrite = node_config.get('overwrite', True)
-        data = context.get('data', context.get('output', {}))
+        data = self._resolve_file_writer_payload(node_config, context)
 
         try:
             import os
@@ -8094,8 +8858,35 @@ Return a JSON object:
                 import pandas as pd
                 df = pd.DataFrame(data) if isinstance(data, list) else pd.DataFrame([data])
                 df.to_excel(path, index=False)
+            elif format == 'docx':
+                from nl_to_workflow.cumcm_docx import markdown_to_docx
+
+                if isinstance(data, dict):
+                    md = (
+                        data.get('content')
+                        or data.get('text')
+                        or data.get('markdown')
+                        or ''
+                    )
+                else:
+                    md = str(data or '')
+                if not md.strip():
+                    return {'success': False, 'error': 'No markdown content for docx export'}
+                written = markdown_to_docx(md, path)
+                return {
+                    'success': True,
+                    'output': {'path': str(written), 'format': 'docx', 'written': True},
+                }
             else:
-                content = data if isinstance(data, str) else str(data)
+                if isinstance(data, dict):
+                    content = (
+                        data.get('content')
+                        or data.get('text')
+                        or data.get('table_markdown')
+                        or json.dumps(data, ensure_ascii=False, indent=2)
+                    )
+                else:
+                    content = data if isinstance(data, str) else str(data)
                 with open(path, 'w', encoding='utf-8') as f:
                     f.write(content)
 
@@ -8134,99 +8925,16 @@ Return a JSON object:
             return {'success': False, 'error': str(e)}
 
     def run_csv_transform_node(self, node_config: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        CSV Transform Node
-        Performs ETL operations on CSV data.
-        """
-        operation = node_config.get('operation', 'filter')
-        params = node_config.get('params', {})
-        data = context.get('data', [])
+        from .data_transform import run_csv_transform
+        return run_csv_transform(self, node_config, context)
 
-        try:
-            import pandas as pd
-            df = pd.DataFrame(data) if data else pd.DataFrame()
-
-            if operation == 'filter':
-                column = params.get('column', '')
-                value = params.get('value', '')
-                op = params.get('operator', '==')
-                if column and column in df.columns:
-                    if op == '==':
-                        df = df[df[column] == value]
-                    elif op == '!=':
-                        df = df[df[column] != value]
-                    elif op == '>':
-                        df = df[df[column] > float(value)]
-                    elif op == '<':
-                        df = df[df[column] < float(value)]
-                    elif op == 'contains':
-                        df = df[df[column].astype(str).str.contains(value, na=False)]
-            elif operation == 'aggregate':
-                column = params.get('column', '')
-                agg_func = params.get('aggFunc', 'sum')
-                if column and column in df.columns:
-                    result = getattr(df[column], agg_func)()
-                    return {'success': True, 'output': {'result': float(result), 'column': column, 'operation': f'{agg_func}({column})'}}
-            elif operation == 'join':
-                right_data = params.get('rightData', [])
-                on = params.get('on', '')
-                right_df = pd.DataFrame(right_data)
-                if on and on in df.columns and on in right_df.columns:
-                    df = df.merge(right_df, on=on)
-            elif operation == 'pivot':
-                index = params.get('index', '')
-                columns = params.get('columns', '')
-                values = params.get('values', '')
-                if all(x in df.columns for x in [index, columns, values]):
-                    df = df.pivot_table(index=index, columns=columns, values=values)
-
-            return {'success': True, 'output': {'data': df.to_dict('records'), 'columns': list(df.columns), 'rows': len(df), 'operation': operation}}
-        except ImportError:
-            return {'success': False, 'error': 'pandas required. Install with: pip install pandas'}
-        except Exception as e:
-            return {'success': False, 'error': str(e)}
+    def _extract_json_payload(self, context: Dict[str, Any]) -> Any:
+        from .data_transform import extract_payload
+        return extract_payload(context)
 
     def run_json_transform_node(self, node_config: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        JSON Transform Node
-        Performs transformations on JSON data.
-        """
-        operation = node_config.get('operation', 'map')
-        data = context.get('data', context.get('output', {}))
-        schema = node_config.get('schema', {})
-
-        try:
-            if operation == 'map':
-                mappings = schema.get('mappings', {})
-                if isinstance(data, dict):
-                    result = {}
-                    for k, v in mappings.items():
-                        result[k] = data.get(v, None)
-                elif isinstance(data, list):
-                    result = [{k: item.get(v, None) for k, v in mappings.items()} for item in data]
-                else:
-                    result = data
-            elif operation == 'filter':
-                condition = schema.get('condition', '')
-                if isinstance(data, list):
-                    key = condition.split('.')[1] if '.' in condition else condition
-                    result = [item for item in data if item.get(key)]
-                else:
-                    result = data
-            elif operation == 'flatten':
-                if isinstance(data, dict):
-                    result = json.dumps(data)
-                else:
-                    result = data
-            elif operation == 'merge':
-                other = context.get('other_data', {})
-                result = {**(data if isinstance(data, dict) else {}), **(other if isinstance(other, dict) else {})}
-            else:
-                result = data
-
-            return {'success': True, 'output': {'data': result, 'operation': operation}}
-        except Exception as e:
-            return {'success': False, 'error': str(e)}
+        from .data_transform import run_json_transform
+        return run_json_transform(self, node_config, context)
 
     # ========================================================================
     # Control Flow & Integration Node Executors

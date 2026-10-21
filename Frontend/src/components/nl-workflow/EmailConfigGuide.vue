@@ -5,6 +5,11 @@
   >
     <div
       class="guide-header"
+      role="button"
+      tabindex="0"
+      :aria-expanded="isExpanded"
+      @keydown.enter="toggle"
+      @keydown.space.prevent="toggle"
       @click="toggle"
     >
       <div class="guide-title">
@@ -34,14 +39,17 @@
           type="danger"
           class="guide-tag"
         >
-          需要配置
+          {{ configStatus === 'unknown' ? '待核对' : '需要配置' }}
         </el-tag>
-        <button class="toggle-btn">
+        <span
+          class="toggle-btn"
+          aria-hidden="true"
+        >
           <ChevronDown
             class="toggle-icon"
             :class="{ rotated: isExpanded }"
           />
-        </button>
+        </span>
       </div>
     </div>
 
@@ -142,6 +150,7 @@
                   <code class="example-value">{{ item.example }}</code>
                   <button
                     class="copy-btn"
+                    :aria-label="`复制${item.field}示例`"
                     @click.stop="copyToClipboard(item.example)"
                   >
                     <Copy class="copy-icon" />
@@ -156,15 +165,15 @@
         <div class="smtp-reference">
           <div class="section-label">
             <Server class="section-icon" />
-            常用 SMTP 快速配置
+            SMTP 参数参考，点击复制
           </div>
           <div class="smtp-grid">
-            <div
+            <button
               v-for="provider in smtpProviders"
               :key="provider.name"
               class="smtp-card"
-              :class="{ selected: selectedProvider === provider.name }"
-              @click="applyProvider(provider)"
+              :aria-label="`复制 ${provider.name} SMTP 参数`"
+              @click="copyToClipboard(`${provider.host}:${provider.port} (${provider.encrypt})`)"
             >
               <div class="smtp-name">
                 {{ provider.name }}
@@ -174,7 +183,7 @@
                 <span class="smtp-port">:{{ provider.port }}</span>
                 <span class="smtp-encrypt">{{ provider.encrypt }}</span>
               </div>
-            </div>
+            </button>
           </div>
         </div>
 
@@ -212,6 +221,8 @@ import {
   Server, ExternalLink, Settings, CheckCircle, Copy
 } from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
+import { useAppStore } from '@/stores/app'
+import { NL_CREATOR, NL_SMTP_REFERENCE } from '@/config/nlCreator'
 
 const props = defineProps({
   guidance: {
@@ -221,17 +232,14 @@ const props = defineProps({
 })
 
 const router = useRouter()
-const isExpanded = ref(true)
-const selectedProvider = ref(null)
+const isExpanded = ref(false)
+const appStore = useAppStore()
 
-const smtpProviders = [
-  { name: 'Gmail', host: 'smtp.gmail.com', port: '587', encrypt: 'TLS' },
-  { name: 'QQ邮箱', host: 'smtp.qq.com', port: '587', encrypt: 'TLS' },
-  { name: '163邮箱', host: 'smtp.163.com', port: '465', encrypt: 'SSL' },
-  { name: '企业邮箱', host: 'smtp.company.com', port: '465', encrypt: 'SSL' },
-]
+const smtpProviders = NL_SMTP_REFERENCE
 
 const configStatus = computed(() => {
+  if (!props.guidance?.configured_fields && !props.guidance?.config) return 'unknown'
+  if (props.guidance?.missing_fields?.length) return 'missing'
   const items = props.guidance?.items || []
   const requiredItems = items.filter(i => i.required)
   if (requiredItems.length === 0) return 'complete'
@@ -242,6 +250,7 @@ const configStatus = computed(() => {
 })
 
 function isFieldConfigured(field) {
+  if (props.guidance?.configured_fields) return Boolean(props.guidance.configured_fields[field])
   const config = props.guidance?.config || {}
   return !!config[field]
 }
@@ -254,24 +263,16 @@ function handleLinkClick(path) {
   if (path.startsWith('/')) {
     router.push(path)
   } else {
-    window.open(path, '_blank')
+    if (/^https?:\/\//i.test(path)) window.open(path, '_blank', 'noopener,noreferrer')
   }
-}
-
-function applyProvider(provider) {
-  selectedProvider.value = provider.name
 }
 
 async function copyToClipboard(text) {
   try {
     await navigator.clipboard.writeText(text)
+    appStore.success(NL_CREATOR.copySuccess)
   } catch {
-    const ta = document.createElement('textarea')
-    ta.value = text
-    document.body.appendChild(ta)
-    ta.select()
-    document.execCommand('copy')
-    document.body.removeChild(ta)
+    appStore.error(NL_CREATOR.copyError)
   }
 }
 </script>
@@ -667,12 +668,6 @@ async function copyToClipboard(text) {
     background: var(--bg-hover);
     border-color: var(--accent-amber-soft);
     transform: translateY(-1px);
-  }
-
-  &.selected {
-    background: var(--warning-bg);
-    border-color: var(--warning);
-    box-shadow: 0 0 0 2px var(--accent-amber-soft);
   }
 
   .smtp-name {

@@ -5,7 +5,10 @@
     @click="$emit('select')"
   >
     <div class="node-header">
-      <NodeTypeBadge :node-type="NODE_TYPE" compact />
+      <NodeTypeBadge
+        :node-type="NODE_TYPE"
+        compact
+      />
     </div>
     <div class="node-body">
       <div

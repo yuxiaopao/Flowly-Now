@@ -93,6 +93,13 @@ urlpatterns = [
     path('workflows/executions/<uuid:pk>/retry/', WorkflowExecutionViewSet.as_view({
         'post': 'retry'
     }), name='execution-retry'),
+    path('workflows/executions/<uuid:pk>/retry_failed/', WorkflowExecutionViewSet.as_view({
+        'post': 'retry_failed'
+    }), name='execution-retry-failed'),
+    path('workflows/executions/<uuid:pk>/continue/', WorkflowExecutionViewSet.as_view({
+        'get': 'continue_execution',
+        'post': 'continue_execution'
+    }), name='execution-continue'),
     path('workflows/executions/<uuid:pk>/pause/', WorkflowExecutionViewSet.as_view({
         'post': 'pause'
     }), name='execution-pause'),

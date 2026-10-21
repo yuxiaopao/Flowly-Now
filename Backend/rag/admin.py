@@ -49,7 +49,7 @@ class DocumentCollectionAdmin(admin.ModelAdmin):
             'fields': ('name', 'description', 'vector_store', 'owner')
         }),
         ('Embedding配置', {
-            'fields': ('embedding_model', 'chunk_size', 'chunk_overlap')
+            'fields': ('retrieval_mode', 'embedding_model', 'chunk_strategy', 'chunk_size', 'chunk_overlap')
         }),
         ('统计', {
             'fields': ('document_count', 'chunk_count')
@@ -88,7 +88,10 @@ class DocumentAdmin(admin.ModelAdmin):
 
     @admin.action(description='重新处理选中的文档')
     def reprocess_documents(self, request, queryset):
-        queryset.update(status='pending')
+        from .pipeline import DocumentProcessor
+        results = [DocumentProcessor(document.collection).process_document(document) for document in queryset]
+        completed = sum(result['success'] for result in results)
+        self.message_user(request, f'{completed} 个文档完成，{len(results) - completed} 个失败；请查看文档状态。')
 
     @admin.action(description='标记为失败')
     def mark_as_failed(self, request, queryset):

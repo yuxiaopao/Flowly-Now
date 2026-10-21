@@ -1,16 +1,14 @@
 <template>
-  <div class="augmentation-status-page">
+  <PageShell
+    width="wide"
+    class="augmentation-status-page"
+  >
     <!-- Header -->
-    <div class="page-header">
-      <div class="header-left">
-        <h1 class="page-title">
-          数据增强任务
-        </h1>
-        <p class="page-subtitle">
-          查看和管理数据增强任务状态
-        </p>
-      </div>
-      <div class="header-actions">
+    <PageHeader
+      title="数据增强任务"
+      subtitle="查看和管理数据增强任务状态"
+    >
+      <template #actions>
         <el-button
           :loading="loading"
           @click="loadJobs"
@@ -18,153 +16,113 @@
           <RefreshCw :size="16" />
           刷新
         </el-button>
-      </div>
-    </div>
+      </template>
+    </PageHeader>
 
     <!-- Statistics Cards -->
-    <div class="stats-grid">
-      <div class="stat-card">
-        <div
-          class="stat-icon"
-          style="background: rgba(59, 130, 246, 0.1); color: #3b82f6;"
-        >
-          <Layers :size="24" />
-        </div>
-        <div class="stat-content">
-          <div class="stat-value">
-            {{ statistics.totalJobs ?? statistics.total_jobs ?? 0 }}
-          </div>
-          <div class="stat-label">
-            总任务数
-          </div>
-        </div>
-      </div>
-
-      <div class="stat-card">
-        <div
-          class="stat-icon"
-          style="background: rgba(16, 185, 129, 0.1); color: #10b981;"
-        >
-          <CheckCircle :size="24" />
-        </div>
-        <div class="stat-content">
-          <div class="stat-value">
-            {{ statistics.completedJobs ?? statistics.completed_jobs ?? 0 }}
-          </div>
-          <div class="stat-label">
-            已完成
-          </div>
-        </div>
-      </div>
-
-      <div class="stat-card">
-        <div
-          class="stat-icon"
-          style="background: rgba(245, 158, 11, 0.1); color: #f59e0b;"
-        >
-          <Loader :size="24" />
-        </div>
-        <div class="stat-content">
-          <div class="stat-value">
-            {{ statistics.runningJobs ?? statistics.running_jobs ?? 0 }}
-          </div>
-          <div class="stat-label">
-            运行中
-          </div>
-        </div>
-      </div>
-
-      <div class="stat-card">
-        <div
-          class="stat-icon"
-          style="background: rgba(239, 68, 68, 0.1); color: #ef4444;"
-        >
-          <XCircle :size="24" />
-        </div>
-        <div class="stat-content">
-          <div class="stat-value">
-            {{ statistics.failedJobs ?? statistics.failed_jobs ?? 0 }}
-          </div>
-          <div class="stat-label">
-            失败
-          </div>
-        </div>
-      </div>
-    </div>
+    <StatGrid>
+      <StatCard
+        label="总任务数"
+        :value="statistics.totalJobs ?? statistics.total_jobs ?? 0"
+        :icon="Layers"
+        tone="primary"
+        :loading="loading"
+      />
+      <StatCard
+        label="已完成"
+        :value="statistics.completedJobs ?? statistics.completed_jobs ?? 0"
+        :icon="CheckCircle"
+        tone="success"
+        :loading="loading"
+      />
+      <StatCard
+        label="运行中"
+        :value="statistics.runningJobs ?? statistics.running_jobs ?? 0"
+        :icon="Loader"
+        tone="warning"
+        :loading="loading"
+      />
+      <StatCard
+        label="失败"
+        :value="statistics.failedJobs ?? statistics.failed_jobs ?? 0"
+        :icon="XCircle"
+        tone="danger"
+        :loading="loading"
+      />
+    </StatGrid>
 
     <!-- Filters -->
-    <div class="filters-bar">
-      <div class="filter-group">
-        <el-select
-          v-model="filters.status"
-          placeholder="状态筛选"
-          clearable
-          @change="handleFilterChange"
-        >
-          <el-option
-            label="全部"
-            value=""
-          />
-          <el-option
-            label="等待中"
-            value="pending"
-          />
-          <el-option
-            label="运行中"
-            value="running"
-          />
-          <el-option
-            label="已完成"
-            value="completed"
-          />
-          <el-option
-            label="失败"
-            value="failed"
-          />
-        </el-select>
+    <PageToolbar>
+      <el-select
+        v-model="filters.status"
+        placeholder="状态筛选"
+        clearable
+        @change="handleFilterChange"
+      >
+        <el-option
+          label="全部"
+          value=""
+        />
+        <el-option
+          label="等待中"
+          value="pending"
+        />
+        <el-option
+          label="运行中"
+          value="running"
+        />
+        <el-option
+          label="已完成"
+          value="completed"
+        />
+        <el-option
+          label="失败"
+          value="failed"
+        />
+      </el-select>
 
-        <el-select
-          v-model="filters.strategy"
-          placeholder="策略筛选"
-          clearable
-          @change="handleFilterChange"
-        >
-          <el-option
-            label="全部"
-            value=""
-          />
-          <el-option
-            label="几何变换"
-            value="geometric"
-          />
-          <el-option
-            label="颜色变换"
-            value="color"
-          />
-          <el-option
-            label="噪声注入"
-            value="noise"
-          />
-          <el-option
-            label="混合增强"
-            value="mixup"
-          />
-          <el-option
-            label="全部策略"
-            value="all"
-          />
-        </el-select>
-      </div>
+      <el-select
+        v-model="filters.strategy"
+        placeholder="策略筛选"
+        clearable
+        @change="handleFilterChange"
+      >
+        <el-option
+          label="全部"
+          value=""
+        />
+        <el-option
+          label="几何变换"
+          value="geometric"
+        />
+        <el-option
+          label="颜色变换"
+          value="color"
+        />
+        <el-option
+          label="噪声注入"
+          value="noise"
+        />
+        <el-option
+          label="混合增强"
+          value="mixup"
+        />
+        <el-option
+          label="全部策略"
+          value="all"
+        />
+      </el-select>
+      
 
       <el-input
         v-model="filters.search"
         placeholder="搜索数据集名称..."
         prefix-icon="Search"
         clearable
-        style="width: 250px"
+        class="search-input"
         @input="handleSearchDebounced"
       />
-    </div>
+    </PageToolbar>
 
     <!-- Jobs Table -->
     <div class="table-container">
@@ -531,10 +489,15 @@
         </div>
       </div>
     </el-drawer>
-  </div>
+  </PageShell>
 </template>
 
 <script setup>
+import StatCard from '@/components/layout/StatCard.vue'
+import StatGrid from '@/components/layout/StatGrid.vue'
+import PageToolbar from '@/components/layout/PageToolbar.vue'
+import PageHeader from '@/components/layout/PageHeader.vue'
+import PageShell from '@/components/layout/PageShell.vue'
 import { ref, reactive, onMounted, onUnmounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -693,7 +656,7 @@ const retryJob = async (job) => {
 const viewOutputDataset = (job) => {
   const datasetId = job.outputDataset || job.output_dataset
   if (datasetId) {
-    router.push(`/datasets/${datasetId}`)
+    router.push({ path: `/datasets/${datasetId}`, query: { source: 'generic' } })
   }
 }
 
@@ -780,101 +743,9 @@ onUnmounted(() => {
 <style lang="scss" scoped>
 @use '@/assets/styles/variables.scss' as *;
 
-.augmentation-status-page {
-  padding: $spacing-5;
-  max-width: 1400px;
-  margin: 0 auto;
-}
 
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: $spacing-5;
 
-  .page-title {
-    font-size: 1.5rem;
-    font-weight: 600;
-    color: var(--text-primary);
-    margin: 0 0 $spacing-1;
-  }
 
-  .page-subtitle {
-    font-size: $font-size-sm;
-    color: var(--text-secondary);
-    margin: 0;
-  }
-}
-
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: $spacing-4;
-  margin-bottom: $spacing-5;
-
-  @media (max-width: 1024px) {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  @media (max-width: 640px) {
-    grid-template-columns: 1fr;
-  }
-}
-
-.stat-card {
-  display: flex;
-  align-items: center;
-  gap: $spacing-4;
-  padding: $spacing-4;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-primary);
-  border-radius: $radius-lg;
-  transition: box-shadow 0.2s;
-
-  &:hover {
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  }
-
-  .stat-icon {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 48px;
-    height: 48px;
-    border-radius: $radius-md;
-  }
-
-  .stat-content {
-    .stat-value {
-      font-size: 1.5rem;
-      font-weight: 600;
-      color: var(--text-primary);
-      line-height: 1.2;
-    }
-
-    .stat-label {
-      font-size: $font-size-sm;
-      color: var(--text-secondary);
-    }
-  }
-}
-
-.filters-bar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: $spacing-4;
-  margin-bottom: $spacing-4;
-  padding: $spacing-4;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-primary);
-  border-radius: $radius-lg;
-
-  .filter-group {
-    display: flex;
-    gap: $spacing-3;
-  }
-}
 
 .table-container {
   background: var(--bg-primary);

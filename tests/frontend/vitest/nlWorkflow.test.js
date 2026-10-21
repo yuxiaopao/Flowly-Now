@@ -231,7 +231,8 @@ describe('NL Workflow Store', () => {
         description: 'Create a chatbot',
         name: 'My Chatbot',
         model: 'gpt-4',
-        temperature: 0.7
+        temperature: 0.7,
+        async: false
       })
       expect(nlStore.currentSessionId).toBe(1)
       expect(nlStore.generatedWorkflow).toEqual(mockNLWorkflow)

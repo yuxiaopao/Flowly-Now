@@ -2,6 +2,7 @@
 // Centralized management for tool display labels (i18n-ready)
 
 export const TOOL_LABELS = {
+  embroidery_3d: '三维数字刺绣',
   calculator: '计算器',
   search: '搜索',
   weather: '天气',

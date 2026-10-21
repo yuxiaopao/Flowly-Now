@@ -1,0 +1,113 @@
+// AI 工作台的视觉令牌。黑白和高对比主题采用中性默认值。
+:root {
+  --tech-blue: var(--color-primary-light);
+  --tech-cyan: var(--text-secondary);
+  --tech-violet: var(--text-secondary);
+  --tech-blue-soft: var(--surface-muted);
+  --tech-cyan-soft: var(--surface-muted);
+  --tech-violet-soft: var(--surface-muted);
+  --tech-grid: transparent;
+  --tech-grid-size: 40px;
+  --tech-app-bg: var(--bg-primary);
+  --tech-shell-bg: var(--bg-secondary);
+  --tech-hero-bg: var(--bg-secondary);
+  --tech-card-highlight: none;
+  --tech-border: var(--border-secondary);
+  --tech-selection-bg: var(--surface-strong);
+  --tech-selection-border: var(--border-hover);
+  --tech-selection-text: var(--text-primary);
+  --tech-button-border: var(--border-primary);
+  --tech-button-shadow: var(--shadow-sm);
+  --tech-core-glow: transparent;
+  --tech-edge: transparent;
+  --tech-grid-mask: linear-gradient(to bottom, black, transparent 720px);
+  --tech-circuit-height: 224px;
+  --tech-circuit-node-width: 132px;
+  --tech-circuit-core-size: 112px;
+  --tech-circuit-loop-duration: 2.4s;
+}
+
+[data-theme='dark'], .dark {
+  --bg-primary: oklch(17% 0.032 265);
+  --bg-secondary: oklch(22% 0.034 265);
+  --bg-tertiary: oklch(25% 0.036 265);
+  --bg-elevated: oklch(28% 0.037 265);
+  --bg-hover: oklch(30% 0.04 265);
+  --border-primary: oklch(34% 0.035 265);
+  --border-secondary: oklch(40% 0.042 265);
+  --border-hover: oklch(54% 0.07 265);
+  --tech-blue: oklch(78% 0.13 255);
+  --tech-cyan: oklch(82% 0.12 205);
+  --tech-violet: oklch(80% 0.14 300);
+  --tech-blue-soft: oklch(65% 0.18 255 / 0.14);
+  --tech-cyan-soft: oklch(75% 0.13 205 / 0.12);
+  --tech-violet-soft: oklch(72% 0.17 300 / 0.14);
+  --tech-grid: oklch(64% 0.08 255 / 0.065);
+  --tech-core-glow: oklch(69% 0.16 265 / 0.2);
+  --tech-app-bg:
+    radial-gradient(ellipse 70% 40% at 90% 0%, oklch(42% 0.12 275 / 0.18), transparent 78%),
+    radial-gradient(ellipse 60% 50% at 0% 35%, oklch(40% 0.08 220 / 0.09), transparent 75%),
+    var(--bg-primary);
+  --tech-shell-bg: linear-gradient(170deg, oklch(23% 0.042 265), var(--bg-primary));
+  --tech-hero-bg:
+    radial-gradient(ellipse 46% 115% at 77% 45%, oklch(43% 0.14 270 / 0.36), transparent 80%),
+    radial-gradient(ellipse 45% 110% at 100% 5%, oklch(42% 0.09 210 / 0.2), transparent 70%),
+    var(--bg-secondary);
+  --tech-card-highlight: linear-gradient(135deg, oklch(68% 0.1 255 / 0.055), transparent 65%);
+  --tech-border: oklch(47% 0.065 265 / 0.68);
+  --tech-selection-bg: linear-gradient(110deg, oklch(53% 0.15 260 / 0.24), oklch(50% 0.11 270 / 0.1));
+  --tech-selection-border: oklch(64% 0.12 255 / 0.3);
+  --tech-selection-text: oklch(90% 0.055 235);
+  --tech-button-border: oklch(75% 0.11 255 / 0.4);
+  --tech-button-shadow: 0 4px 18px oklch(55% 0.2 265 / 0.22), inset 0 1px 0 oklch(90% 0.04 255 / 0.18);
+  --tech-edge: oklch(66% 0.12 255 / 0.15);
+  --button-primary-bg: oklch(55% 0.2 265);
+  --button-primary-hover-bg: oklch(60% 0.2 265);
+  --button-primary-shadow: var(--tech-button-shadow);
+}
+
+[data-theme='light'], .light {
+  --tech-blue: oklch(48% 0.18 260);
+  --tech-cyan: oklch(43% 0.095 210);
+  --tech-violet: oklch(48% 0.19 300);
+  --tech-blue-soft: oklch(65% 0.16 255 / 0.09);
+  --tech-cyan-soft: oklch(65% 0.11 205 / 0.09);
+  --tech-violet-soft: oklch(65% 0.16 300 / 0.08);
+  --tech-grid: oklch(55% 0.08 255 / 0.07);
+  --tech-core-glow: oklch(68% 0.13 265 / 0.1);
+  --tech-app-bg: radial-gradient(ellipse 80% 50% at 95% 0%, oklch(91% 0.035 265 / 0.6), transparent 80%), var(--bg-primary);
+  --tech-hero-bg: linear-gradient(115deg, var(--bg-secondary) 5%, oklch(96% 0.015 245) 70%, oklch(95% 0.02 275));
+  --tech-card-highlight: linear-gradient(135deg, oklch(70% 0.1 255 / 0.035), transparent 65%);
+  --tech-border: oklch(78% 0.04 265);
+  --tech-selection-bg: var(--tech-blue-soft);
+  --tech-selection-border: oklch(65% 0.16 255 / 0.2);
+  --tech-selection-text: var(--tech-blue);
+  --tech-button-border: oklch(55% 0.18 255 / 0.4);
+  --tech-button-shadow: 0 4px 14px oklch(55% 0.18 265 / 0.16);
+  --tech-edge: oklch(65% 0.1 255 / 0.12);
+  --button-primary-shadow: var(--tech-button-shadow);
+}
+
+// 这些主题自己的变量必须覆盖继承的彩色令牌。
+[data-theme='pure-bw'], .pure-bw,
+[data-theme='high-contrast'], .high-contrast {
+  --tech-blue: var(--text-primary);
+  --tech-cyan: var(--text-secondary);
+  --tech-violet: var(--text-primary);
+  --tech-blue-soft: var(--surface-muted);
+  --tech-cyan-soft: var(--surface-muted);
+  --tech-violet-soft: var(--surface-muted);
+  --tech-grid: transparent;
+  --tech-app-bg: var(--bg-primary);
+  --tech-shell-bg: var(--bg-secondary);
+  --tech-hero-bg: var(--bg-secondary);
+  --tech-card-highlight: none;
+  --tech-border: var(--border-secondary);
+  --tech-selection-bg: var(--surface-strong);
+  --tech-selection-border: var(--border-hover);
+  --tech-selection-text: var(--text-primary);
+  --tech-button-border: var(--border-hover);
+  --tech-button-shadow: none;
+  --tech-core-glow: transparent;
+  --tech-edge: transparent;
+}

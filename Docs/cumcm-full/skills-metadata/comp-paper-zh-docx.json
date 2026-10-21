@@ -1,0 +1,28 @@
+{
+  "skill_name": "comp-paper-zh-docx",
+  "category": "08_competition_modeling",
+  "tier": null,
+  "encrypted": true,
+  "scan": {
+    "name": "comp-paper-zh-docx",
+    "path": "resources/app/skills/comp-paper-zh-docx",
+    "has_skill_md_enc": true,
+    "has_skill_md_plain": false,
+    "encrypted": true,
+    "files": {
+      "enc": 1,
+      "plain": 0,
+      "total": 1
+    },
+    "subdirs": [],
+    "extensions": {
+      ".enc": 1
+    },
+    "readable_assets": []
+  },
+  "artifacts": [],
+  "runtime_prompts": [],
+  "used_in_templates": [],
+  "flowly_status": "pending",
+  "replication_strategy": "decrypt_and_port"
+}

@@ -5,6 +5,11 @@
   >
     <div
       class="guide-header"
+      role="button"
+      tabindex="0"
+      :aria-expanded="isExpanded"
+      @keydown.enter="toggle"
+      @keydown.space.prevent="toggle"
       @click="toggle"
     >
       <div class="guide-title">
@@ -39,12 +44,15 @@
         >
           需要配置
         </el-tag>
-        <button class="toggle-btn">
+        <span
+          class="toggle-btn"
+          aria-hidden="true"
+        >
           <ChevronDown
             class="toggle-icon"
             :class="{ rotated: isExpanded }"
           />
-        </button>
+        </span>
       </div>
     </div>
 
@@ -139,6 +147,7 @@
                   <code class="example-value">{{ item.example }}</code>
                   <button
                     class="copy-btn"
+                    :aria-label="`复制${item.field}示例`"
                     @click.stop="copyToClipboard(item.example)"
                   >
                     <Copy class="copy-icon" />
@@ -188,6 +197,9 @@ import {
   Copy, ExternalLink, Bot, Code2, Database, Globe, Zap, Clock
 } from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
+import { guidanceFieldConfigured } from '@/utils/nlCreator'
+import { useAppStore } from '@/stores/app'
+import { NL_CREATOR } from '@/config/nlCreator'
 
 const props = defineProps({
   guidance: {
@@ -197,7 +209,8 @@ const props = defineProps({
 })
 
 const router = useRouter()
-const isExpanded = ref(true)
+const isExpanded = ref(false)
+const appStore = useAppStore()
 
 const ICON_MAP = {
   llm: Bot,
@@ -221,14 +234,14 @@ const NODE_TYPE_LABELS = {
   tool: '工具',
 }
 
-const nodeType = computed(() => props.guidance?.node_type || 'tool')
+const nodeType = computed(() => props.guidance?.node_type || props.guidance?.nodeType || 'tool')
 
 const nodeTypeLabel = computed(() => NODE_TYPE_LABELS[nodeType.value] || '节点')
 
 const iconComponent = computed(() => ICON_MAP[nodeType.value] || Zap)
 
-const missingFields = computed(() => props.guidance?.missing_fields || [])
-const quickLinks = computed(() => props.guidance?.quick_links || [])
+const missingFields = computed(() => (props.guidance?.items || []).filter(item => item.required && !isFieldConfigured(item.field)).map(item => item.field))
+const quickLinks = computed(() => props.guidance?.quick_links || props.guidance?.quickLinks || [])
 
 const configStatus = computed(() => {
   const items = props.guidance?.items || []
@@ -242,7 +255,7 @@ const configStatus = computed(() => {
 
 function isFieldConfigured(field) {
   const config = props.guidance?.config || {}
-  return !!config[field]
+  return guidanceFieldConfigured(config, field)
 }
 
 function toggle() {
@@ -253,20 +266,16 @@ function handleLinkClick(path) {
   if (path.startsWith('/')) {
     router.push(path)
   } else {
-    window.open(path, '_blank')
+    if (/^https?:\/\//i.test(path)) window.open(path, '_blank', 'noopener,noreferrer')
   }
 }
 
 async function copyToClipboard(text) {
   try {
     await navigator.clipboard.writeText(text)
+    appStore.success(NL_CREATOR.copySuccess)
   } catch {
-    const ta = document.createElement('textarea')
-    ta.value = text
-    document.body.appendChild(ta)
-    ta.select()
-    document.execCommand('copy')
-    document.body.removeChild(ta)
+    appStore.error(NL_CREATOR.copyError)
   }
 }
 </script>

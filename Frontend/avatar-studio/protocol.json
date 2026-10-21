@@ -1,0 +1,11 @@
+{
+  "channel": "flowly:avatar-studio",
+  "version": 1,
+  "request": "capture",
+  "response": "captured",
+  "ready": "ready",
+  "ping": "ping",
+  "storagePrefix": "flowly:avatar-studio:",
+  "requestTimeoutMs": 30000,
+  "readyTimeoutMs": 20000
+}

@@ -19,7 +19,8 @@ class TestWorkflowAPI:
         """Test that authenticated users can list their workflows."""
         response = authenticated_client.get('/api/v1/workflows/')
         assert response.status_code == status.HTTP_200_OK
-        assert 'results' in response.data or isinstance(response.data, list)
+        assert response.data['data']['count'] == 1
+        assert response.data['data']['results'][0]['id'] == str(workflow.id)
 
     def test_create_workflow(self, authenticated_client):
         """Test creating a new workflow."""
@@ -99,8 +100,9 @@ class TestWorkflowAPI:
         assert response.data['name'] == 'Updated Workflow Name'
 
     def test_delete_workflow(self, authenticated_client, workflow):
-        # Skip - backend bug: soft delete not implemented properly
-        pass
+        response = authenticated_client.delete(f'/api/v1/workflows/{workflow.id}/')
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        assert authenticated_client.get(f'/api/v1/workflows/{workflow.id}/').status_code == status.HTTP_404_NOT_FOUND
 
 
 @pytest.mark.django_db

@@ -2,11 +2,29 @@
 Health check API views.
 """
 
+import os
+
 from django.db import connection
-from django.conf import settings
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
+
+
+def _check_redis() -> bool:
+    """Ping Redis using the same env vars as Celery/cache/channel layers."""
+    import redis
+
+    cache_url = os.getenv('REDIS_CACHE_URL', '').strip()
+    if cache_url:
+        client = redis.from_url(cache_url, socket_connect_timeout=2)
+        client.ping()
+        return True
+
+    host = os.getenv('REDIS_HOST', 'localhost')
+    port = int(os.getenv('REDIS_PORT', '6379'))
+    client = redis.Redis(host=host, port=port, socket_connect_timeout=2)
+    client.ping()
+    return True
 
 
 class HealthCheckView(APIView):
@@ -32,18 +50,14 @@ class HealthCheckView(APIView):
             health['status'] = 'unhealthy'
             health['error'] = str(e)
         
-        # Check Redis connection
+        # Check Redis connection (optional — does not flip overall status)
         try:
-            if settings.CHANNEL_LAYERS:
-                import redis
-                redis_host = settings.REDIS_HOST if hasattr(settings, 'REDIS_HOST') else 'localhost'
-                redis_port = settings.REDIS_PORT if hasattr(settings, 'REDIS_PORT') else 6379
-                r = redis.Redis(host=redis_host, port=redis_port, socket_connect_timeout=1)
-                r.ping()
+            if _check_redis():
                 health['redis'] = 'connected'
+            else:
+                health['redis'] = 'disconnected'
         except Exception:
             health['redis'] = 'disconnected'
-            # Redis is optional, don't mark as unhealthy
         
         status_code = 200 if health['status'] == 'healthy' else 503
         return Response(health, status=status_code)

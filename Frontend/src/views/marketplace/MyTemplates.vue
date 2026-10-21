@@ -91,14 +91,14 @@
                 :size="12"
                 fill="currentColor"
               />
-              Featured
+              精选
             </span>
             <span
               v-if="isTemplatePublic(item)"
               class="meta-badge published"
             >
               <Globe :size="12" />
-              Published
+              已发布
             </span>
           </div>
           <div class="row-actions">
@@ -304,14 +304,15 @@ function getCategoryAccentClass(category) {
 function formatDate(d) {
   if (!d) return '—'
   const date = new Date(d)
+  if (Number.isNaN(date.getTime())) return '—'
   const now = new Date()
   const diff = now - date
   const days = Math.floor(diff / (1000 * 60 * 60 * 24))
   
-  if (days === 0) return 'Today'
-  if (days === 1) return 'Yesterday'
-  if (days < 7) return `${days} days ago`
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  if (days === 0) return '今天'
+  if (days === 1) return '昨天'
+  if (days > 1 && days < 7) return `${days} 天前`
+  return date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })
 }
 
 function getEmptyIcon() {
@@ -350,7 +351,12 @@ function openTemplate(item) {
 }
 
 function editTemplate(item) {
-  router.push({ name: 'WorkflowEdit', params: { id: item.workflow_id || item.id } })
+  const workflowId = item.workflowId || item.workflow_id
+  if (workflowId) {
+    router.push({ name: 'WorkflowEdit', params: { id: workflowId } })
+    return
+  }
+  router.push({ name: 'TemplateDetail', params: { id: item.id } })
 }
 
 function buildDuplicateSlug(name) {
@@ -362,21 +368,29 @@ function buildDuplicateSlug(name) {
   return `${base}-copy-${Date.now()}`
 }
 
+function getTemplateCategoryId(template) {
+  const category = template?.category
+  if (category && typeof category === 'object') return category.id
+  return category || template?.categoryId || template?.category_id || null
+}
+
 async function duplicateTemplate(item) {
   try {
     const source = item.workflowData || item.workflow_data
       ? item
       : await store.fetchTemplate(item.id)
+    const categoryId = getTemplateCategoryId(source) || getTemplateCategoryId(item)
     const duplicated = await store.createTemplate({
       name: `${source.name || item.name} (副本)`,
       slug: buildDuplicateSlug(source.name || item.name),
       description: source.description || item.description || '',
-      category: source.category || item.category || null,
+      category: categoryId,
       tags: source.tags || item.tags || [],
       workflowData: source.workflowData || source.workflow_data || {},
       nodes: source.nodes || [],
       edges: source.edges || [],
-      isPublished: false,
+      isPublic: false,
+      isActive: true,
     })
     myTemplates.value.unshift(duplicated)
     appStore.success('模板已复制')
@@ -471,7 +485,7 @@ onMounted(() => {
   border-bottom: 1px solid var(--border-primary);
 
   .tabs-container {
-    max-width: 1200px;
+    max-width: 100%;
     margin: 0 auto;
     display: flex;
     gap: 4px;
@@ -518,8 +532,8 @@ onMounted(() => {
 
 // Content
 .templates-content {
-  padding: 24px;
-  max-width: 1200px;
+  padding: 0;
+  max-width: 100%;
   margin: 0 auto;
 }
 
@@ -836,7 +850,7 @@ onMounted(() => {
   }
 
   .templates-content {
-    padding: 16px;
+    padding: 0;
   }
 
   .templates-list .template-row {
