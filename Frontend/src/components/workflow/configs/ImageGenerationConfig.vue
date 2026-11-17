@@ -41,6 +41,10 @@
             @change="handleProviderChange"
           >
             <el-option
+              label="Ming AI (gpt-image-2.5-flare)"
+              value="ming"
+            />
+            <el-option
               label="OpenAI (DALL-E)"
               value="openai"
             />
@@ -239,8 +243,8 @@ const emit = defineEmits(['update:modelValue', 'change'])
 const localData = reactive({
   label: '',
   description: '',
-  provider: 'openai',
-  model: 'dall-e-3',
+  provider: 'ming',
+  model: 'gpt-image-2.5-flare',
   prompt: '',
   size: '1024x1024',
   quality: 'standard',
@@ -255,6 +259,7 @@ const defaultModels = {
   replicate: 'sdxl',
   dashscope: 'wanx2.1-t2i-turbo',
   agnes: 'agnes-image-2.1-flash',
+  ming: 'gpt-image-2.5-flare',
   zimage_local: 'Tongyi-MAI/Z-Image-Turbo'
 }
 

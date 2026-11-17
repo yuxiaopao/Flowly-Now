@@ -41,6 +41,10 @@
             @change="handleProviderChange"
           >
             <el-option
+              label="Ming AI (muse-video)"
+              value="ming"
+            />
+            <el-option
               label="Replicate"
               value="replicate"
             />
@@ -255,8 +259,8 @@ const emit = defineEmits(['update:modelValue', 'change'])
 const localData = reactive({
   label: '',
   description: '',
-  provider: 'replicate',
-  model: '',
+  provider: 'ming',
+  model: 'muse-video',
   prompt: '',
   duration: 4,
   fps: 24,
@@ -294,7 +298,8 @@ const referenceImagesText = computed({
 
 const defaultModels = {
   dashscope: 'wanx2.1-t2v-turbo',
-  agnes: 'agnes-video-v2.0'
+  agnes: 'agnes-video-v2.0',
+  ming: 'muse-video'
 }
 
 const handleProviderChange = () => {

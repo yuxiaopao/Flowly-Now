@@ -353,6 +353,22 @@ class MediaNodeExecutor:
         base_url = (getattr(settings, 'AGNES_BASE_URL', '') or 'https://apihub.agnes-ai.com/v1').rstrip('/')
         return api_key, base_url
 
+    def _ming_credential(self, kind: str = 'image') -> tuple:
+        """Resolve (api_key, base_url) for Ming AI (替代 Agnes 的多模态服务)."""
+        if kind == 'video':
+            api_key = (getattr(settings, 'MING_VIDEO_API_KEY', '') or '').strip()
+            model = getattr(settings, 'MING_VIDEO_MODEL', 'muse-video')
+        else:
+            api_key = (getattr(settings, 'MING_IMAGE_API_KEY', '') or '').strip()
+            model = getattr(settings, 'MING_IMAGE_MODEL', 'gpt-image-2.5-flare')
+        if not api_key:
+            raise WorkflowExecutionError(
+                f'Ming AI {kind} API Key 未配置。请在 .env 中设置 MING_{"VIDEO" if kind == "video" else "IMAGE"}_API_KEY。',
+                'configuration',
+            )
+        base_url = (getattr(settings, 'MING_BASE_URL', '') or 'https://api.ming-ai.top/v1').rstrip('/')
+        return api_key, base_url, model
+
     def _agnes_httpx_client(self, timeout: float = 60) -> 'httpx.Client':
         """Agnes HTTP client — disable system proxy to avoid SSL EOF on Windows."""
         return httpx.Client(timeout=timeout, trust_env=False)
@@ -620,6 +636,8 @@ class MediaNodeExecutor:
             model = node_config.get('model') or 'wanx2.1-t2i-turbo'
         elif provider == 'agnes':
             model = node_config.get('model') or 'agnes-image-2.1-flash'
+        elif provider == 'ming':
+            model = node_config.get('model') or getattr(settings, 'MING_IMAGE_MODEL', 'gpt-image-2.5-flare')
         else:
             model = node_config.get('model', 'dall-e-3')
         prompt = self._resolve_prompt_from_context(node_config, context, field='prompt')
@@ -757,6 +775,40 @@ class MediaNodeExecutor:
                     'success': False,
                     'error': f'Agnes image generation failed after {attempts} attempts: {last_err}',
                 }
+            elif provider == 'ming':
+                api_key, base_url, ming_model = self._ming_credential('image')
+                from openai import OpenAI
+                client = OpenAI(api_key=api_key, base_url=base_url, timeout=120.0, max_retries=0)
+                ming_size = (size or '1024x1024').replace('*', 'x').replace('X', 'x')
+                try:
+                    response = client.images.generate(
+                        model=ming_model,
+                        prompt=(prompt or '')[:3900],
+                        size=ming_size,
+                        n=max(1, min(4, int(n or 1))),
+                    )
+                    images = []
+                    for img in response.data:
+                        item = {'url': getattr(img, 'url', '') or ''}
+                        if getattr(img, 'b64_json', None):
+                            item['base64'] = img.b64_json
+                        if getattr(img, 'revised_prompt', None):
+                            item['revised_prompt'] = img.revised_prompt
+                        if item.get('url') or item.get('base64'):
+                            images.append(item)
+                    if not images:
+                        raise WorkflowExecutionError('Ming image generation returned empty images')
+                    return {
+                        'success': True,
+                        'output': {
+                            'images': images,
+                            'count': len(images),
+                            'provider': 'ming',
+                            'model': ming_model,
+                        },
+                    }
+                except Exception as exc:
+                    return {'success': False, 'error': f'Ming image generation failed: {exc}'}
             elif provider == 'dashscope':
                 api_key, base_url = self._dashscope_credential()
                 headers = {
@@ -1041,6 +1093,85 @@ class MediaNodeExecutor:
             },
         }
 
+    def _execute_ming_video_generation(
+        self,
+        *,
+        prompt: str,
+        duration: int,
+        resolution: str,
+        input_image: str,
+        timeout_seconds: int = 600,
+        poll_interval: int = 5,
+        submit_attempts: int = 6,
+    ) -> Dict[str, Any]:
+        api_key, base_url, ming_model = self._ming_credential('video')
+        headers = {'Authorization': f'Bearer {api_key}', 'Content-Type': 'application/json'}
+        payload = {
+            'model': ming_model,
+            'prompt': prompt,
+            'duration': int(duration or 5),
+            'resolution': resolution or '1080p',
+            'input_image': input_image or '',
+        }
+        created = None
+        last_err = ''
+        with self._agnes_httpx_client(timeout=min(120, timeout_seconds)) as client:
+            attempts = max(1, min(6, int(submit_attempts)))
+            for attempt in range(attempts):
+                try:
+                    resp = client.post(f'{base_url}/videos', headers=headers, json=payload)
+                except httpx.HTTPError as exc:
+                    last_err = str(exc)
+                    time.sleep(min(60, 5 * (attempt + 1)))
+                    continue
+                if resp.status_code < 400:
+                    created = resp.json()
+                    break
+                last_err = self._agnes_error_detail(resp)
+                if any(tok in str(last_err).lower() for tok in ('429', 'busy', 'rate', 'queue')):
+                    time.sleep(min(60, 5 * (attempt + 1)))
+                    continue
+                raise WorkflowExecutionError(f'Ming 视频生成任务创建失败: {last_err}')
+        if created is None:
+            raise WorkflowExecutionError(f'Ming 视频生成任务创建失败: {last_err}')
+        task_id = (created or {}).get('id') or (created or {}).get('task_id')
+        if not task_id:
+            raise WorkflowExecutionError(f'Ming 视频生成未返回任务 ID: {created}')
+        max_attempts = max(1, int(timeout_seconds) // int(poll_interval))
+        with self._agnes_httpx_client(timeout=60) as client:
+            for _ in range(max_attempts):
+                resp = client.get(f'{base_url}/videos/{task_id}', headers=headers)
+                if resp.status_code >= 400:
+                    raise WorkflowExecutionError(f'Ming 视频任务查询失败: {self._agnes_error_detail(resp)}')
+                data = resp.json()
+                status = (data.get('status') or '').lower()
+                progress = data.get('progress', 0)
+                self._report_progress({
+                    'status': status,
+                    'task_status': status,
+                    'progress': progress,
+                    'task_id': task_id,
+                    'provider': 'ming',
+                    'message': self._format_video_progress_message(status, progress, 'ming'),
+                })
+                if status in ('completed', 'succeeded', 'success'):
+                    video_url = self._extract_agnes_video_url(data)
+                    if not video_url:
+                        raise WorkflowExecutionError('Ming 视频生成完成但未返回可播放 URL')
+                    return {
+                        'success': True,
+                        'output': {
+                            'video_url': video_url,
+                            'provider': 'ming',
+                            'model': ming_model,
+                            'task_id': task_id,
+                        },
+                    }
+                if status in ('failed', 'error', 'cancelled'):
+                    raise WorkflowExecutionError(f'Ming 视频生成失败: {self._agnes_error_detail(resp)}')
+                time.sleep(int(poll_interval))
+        raise WorkflowExecutionError('Ming 视频生成超时')
+
     def run_video_generation_node(self, node_config: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
         """
         Video Generation Node
@@ -1048,6 +1179,8 @@ class MediaNodeExecutor:
         """
         provider = node_config.get('provider', 'replicate')
         model = node_config.get('model', '')
+        if provider == 'ming' and not model:
+            model = getattr(settings, 'MING_VIDEO_MODEL', 'muse-video')
         prompt = self._resolve_prompt_from_context(node_config, context, field='prompt')
         duration = node_config.get('duration', 4)
         fps = node_config.get('fps', 24)
@@ -1122,6 +1255,29 @@ class MediaNodeExecutor:
                         'success': False,
                         'error': f'Agnes video generation failed: {agnes_exc}',
                     }
+            if provider == 'ming':
+                try:
+                    return self._execute_ming_video_generation(
+                        prompt=prompt,
+                        duration=duration,
+                        resolution=resolution,
+                        input_image=input_image if (
+                            input_image and not any(
+                                tok in str(input_image).lower()
+                                for tok in ('picsum.photos', 'placeholder', 'demo')
+                            )
+                        ) else '',
+                        timeout_seconds=int(
+                            node_config.get('timeout')
+                            or node_config.get('timeout_seconds')
+                            or 600
+                        ),
+                        poll_interval=int(node_config.get('poll_interval') or 5),
+                        submit_attempts=node_config.get('submit_attempts', 6),
+                    )
+                except Exception as ming_exc:
+                    logger.error('Ming video failed: %s', ming_exc)
+                    return {'success': False, 'error': f'Ming video generation failed: {ming_exc}'}
             if provider == 'dashscope':
                 api_key, base_url = self._dashscope_credential()
                 headers = {

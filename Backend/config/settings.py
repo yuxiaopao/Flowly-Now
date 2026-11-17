@@ -608,6 +608,15 @@ AGNES_BASE_URL = (
     os.getenv('AGNES_BASE_URL') or 'https://apihub.agnes-ai.com/v1'
 ).strip().rstrip('/')
 
+# Ming AI 多模态 API（替代 Agnes：gpt-image-2.5 文生图 / muse-video 文生视频）
+MING_BASE_URL = (
+    os.getenv('MING_BASE_URL') or 'https://api.ming-ai.top/v1'
+).strip().rstrip('/')
+MING_IMAGE_API_KEY = os.getenv('MING_IMAGE_API_KEY', '').strip()
+MING_VIDEO_API_KEY = os.getenv('MING_VIDEO_API_KEY', '').strip()
+MING_IMAGE_MODEL = os.getenv('MING_IMAGE_MODEL', 'gpt-image-2.5-flare').strip()
+MING_VIDEO_MODEL = os.getenv('MING_VIDEO_MODEL', 'muse-video').strip()
+
 # Ollama (local LLM) configuration
 OLLAMA_BASE_URL = os.getenv('OLLAMA_BASE_URL', 'http://localhost:11434')
 OLLAMA_MODEL = os.getenv('OLLAMA_MODEL', DEFAULT_OLLAMA_MODEL)
