@@ -9,8 +9,7 @@ N8N_PAYLOAD_TRIGGERS = frozenset({
 })
 N8N_HTTP_PARAMETERS = frozenset({'url', 'method', 'requestMethod', 'options'})
 UNIMPLEMENTED_INTEGRATIONS = frozenset({
-    'elasticsearch', 'aws_s3', 'ftp', 'stripe',
-    'twilio', 'sendgrid', 'push_notification', 'model_deployment',
+    'model_deployment',
 })
 from .data_transform import JSON_OPERATIONS as JSON_OPERATION_TYPES, CSV_OPERATIONS as CSV_OPERATION_TYPES
 

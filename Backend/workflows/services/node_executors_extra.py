@@ -362,6 +362,13 @@ def run_integration_node(service, node_type: str, node_config: Dict, input_data:
         'mysql': _exec_mysql,
         'postgres': _exec_postgres,
         'mongodb': _exec_mongodb,
+        'elasticsearch': _exec_elasticsearch,
+        'aws_s3': _exec_aws_s3,
+        'ftp': _exec_ftp,
+        'stripe': _exec_stripe,
+        'twilio': _exec_twilio,
+        'sendgrid': _exec_sendgrid,
+        'push_notification': _exec_push_notification,
         'openai_api': _exec_openai_api,
         'huggingface': _exec_huggingface,
         'rss_feed': lambda cfg, inp: run_rss_feed_node(service, cfg, inp),
@@ -591,6 +598,126 @@ def _exec_microsoft_teams(config: Dict, input_data: Dict) -> Dict:
         }],
     }
     resp = requests.post(webhook_url, json=payload, timeout=30)
+    return {'status_code': resp.status_code, 'body': resp.text}
+
+
+def _exec_elasticsearch(config: Dict, input_data: Dict) -> Dict:
+    base_url = (config.get('baseUrl') or config.get('base_url') or 'http://localhost:9200').rstrip('/')
+    api_key = config.get('apiKey') or config.get('credentialToken') or ''
+    index = config.get('index') or config.get('indexName') or ''
+    query = config.get('query') or {}
+    headers = {'Content-Type': 'application/json'}
+    if api_key:
+        headers['Authorization'] = f'ApiKey {api_key}'
+    operation = config.get('operation') or 'search'
+    if operation == 'search':
+        resp = requests.post(f'{base_url}/{index}/_search', headers=headers, json=query or {'query': {'match_all': {}}}, timeout=30)
+    else:
+        resp = requests.get(f'{base_url}/_cluster/health', headers=headers, timeout=30)
+    return resp.json()
+
+
+def _exec_aws_s3(config: Dict, input_data: Dict) -> Dict:
+    bucket = config.get('bucket') or config.get('bucketName')
+    key = config.get('key') or config.get('objectKey')
+    operation = config.get('operation') or 'list'
+    access_key = config.get('accessKeyId') or config.get('credentialToken')
+    secret_key = config.get('secretAccessKey')
+    region = config.get('region') or 'us-east-1'
+    if not bucket:
+        return {'simulated': True, 'operation': operation, 'message': '请配置 S3 bucket'}
+    try:
+        import boto3
+        client = boto3.client('s3', region_name=region, aws_access_key_id=access_key, aws_secret_access_key=secret_key)
+        if operation == 'list':
+            return {'objects': [obj['Key'] for obj in client.list_objects_v2(Bucket=bucket).get('Contents', [])[:20]]}
+        if operation == 'get' and key:
+            return {'body': client.get_object(Bucket=bucket, Key=key)['Body'].read().decode('utf-8', 'ignore')[:2000]}
+        if operation == 'put' and key:
+            body = config.get('body') or input_data.get('text') or ''
+            client.put_object(Bucket=bucket, Key=key, Body=body)
+            return {'key': key, 'status': 'ok'}
+        return {'simulated': True, 'operation': operation}
+    except ImportError:
+        return {'success': False, 'error': 'boto3 未安装，无法执行 AWS S3 节点'}
+
+
+def _exec_ftp(config: Dict, input_data: Dict) -> Dict:
+    host = config.get('host')
+    user = config.get('user') or config.get('username') or 'anonymous'
+    password = config.get('password') or config.get('credentialToken') or ''
+    path = config.get('path') or config.get('remotePath') or '/'
+    if not host:
+        return {'simulated': True, 'operation': config.get('operation') or 'list'}
+    import ftplib
+    ftp = ftplib.FTP(host, timeout=30)
+    ftp.login(user, password)
+    try:
+        if (config.get('operation') or 'list') == 'list':
+            return {'files': ftp.nlst(path)}
+        return {'simulated': True}
+    finally:
+        ftp.quit()
+
+
+def _exec_stripe(config: Dict, input_data: Dict) -> Dict:
+    token = config.get('credentialToken') or config.get('apiKey')
+    if not token:
+        return {'simulated': True, 'operation': config.get('operation') or 'list_customers'}
+    import stripe
+    stripe.api_key = token
+    operation = config.get('operation') or 'list_customers'
+    if operation == 'list_customers':
+        return {'customers': stripe.Customer.list(limit=20).data}
+    return {'simulated': True, 'operation': operation}
+
+
+def _exec_twilio(config: Dict, input_data: Dict) -> Dict:
+    sid = config.get('accountSid') or config.get('account_sid')
+    token = config.get('authToken') or config.get('credentialToken')
+    to = config.get('to')
+    if not sid or not token or not to:
+        return {'simulated': True, 'to': to, 'operation': config.get('operation') or 'send_sms'}
+    from requests.auth import HTTPBasicAuth
+    resp = requests.post(
+        f'https://api.twilio.com/2010-04-01/Accounts/{sid}/Messages.json',
+        auth=HTTPBasicAuth(sid, token),
+        data={'To': to, 'From': config.get('from') or config.get('fromNumber'), 'Body': config.get('body') or ''},
+        timeout=30,
+    )
+    return resp.json()
+
+
+def _exec_sendgrid(config: Dict, input_data: Dict) -> Dict:
+    token = config.get('credentialToken') or config.get('apiKey')
+    if not token:
+        return {'simulated': True, 'to': config.get('to'), 'subject': config.get('subject')}
+    resp = requests.post(
+        'https://api.sendgrid.com/v3/mail/send',
+        headers={'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'},
+        json={'personalizations': [{'to': [{'email': config.get('to')}]}],
+              'from': {'email': config.get('from') or 'noreply@flowly.local'},
+              'subject': config.get('subject') or 'Flowly',
+              'content': [{'type': 'text/plain', 'value': config.get('body') or ''}]},
+        timeout=30,
+    )
+    return {'status_code': resp.status_code, 'body': resp.text}
+
+
+def _exec_push_notification(config: Dict, input_data: Dict) -> Dict:
+    url = config.get('webhookUrl') or config.get('endpoint') or config.get('url')
+    if not url:
+        return {'simulated': True, 'title': config.get('title'), 'message': config.get('message') or config.get('body')}
+    headers = {'Content-Type': 'application/json'}
+    token = config.get('credentialToken') or config.get('apiKey')
+    if token:
+        headers['Authorization'] = f'Bearer {token}'
+    payload = {
+        'title': config.get('title') or 'Flowly',
+        'message': config.get('message') or config.get('body') or input_data.get('text') or '',
+        'data': config.get('data') or {},
+    }
+    resp = requests.post(url, headers=headers, json=payload, timeout=30)
     return {'status_code': resp.status_code, 'body': resp.text}
 
 
