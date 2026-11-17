@@ -6,6 +6,7 @@ import uuid as uuid_lib
 
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
+from config.constants import WORKFLOW_CARD_PREVIEW
 from tenants.access import can_edit_workflow
 from .models import (
     Workflow, Node, Edge, WorkflowExecution, NodeExecution,
@@ -338,6 +339,7 @@ class WorkflowListSerializer(serializers.ModelSerializer):
     canvas_preview = serializers.SerializerMethodField()
     edges_preview = serializers.SerializerMethodField()
     can_edit = serializers.SerializerMethodField()
+    config = serializers.SerializerMethodField()
 
     class Meta:
         model = Workflow
@@ -356,42 +358,59 @@ class WorkflowListSerializer(serializers.ModelSerializer):
         request = self.context.get('request')
         if not request:
             return False
+        if '_list_can_edit' in obj.__dict__:
+            return bool(obj.__dict__['_list_can_edit'])
         return can_edit_workflow(request.user, obj)
+
+    def get_config(self, obj):
+        """Keep card metadata while sending the image only in canvas_preview."""
+        config = obj.config or {}
+        if not isinstance(config, dict):
+            return config
+        return {key: value for key, value in config.items() if key not in ('canvas_preview', 'canvasPreview')}
 
     def get_canvas_preview(self, obj):
         """Return saved editor canvas screenshot (base64 JPEG in config)."""
-        preview = (obj.config or {}).get('canvas_preview', '')
+        config = obj.config or {}
+        if not isinstance(config, dict):
+            return ''
+        preview = config.get('canvas_preview') or config.get('canvasPreview') or ''
         if not preview or not isinstance(preview, str):
             return ''
-        if len(preview) > 300_000:
+        if len(preview) > WORKFLOW_CARD_PREVIEW['max_data_url_length']:
             return ''
         return preview
 
     def get_edges_preview(self, obj):
         """Return lightweight edge list for card fallback preview."""
+        edges = getattr(obj, 'list_preview_edges', None)
+        if edges is None:
+            edges = obj.edges.all()[:WORKFLOW_CARD_PREVIEW['max_edges']]
         return [
             {
                 'id': str(edge.id),
                 'source': str(edge.source_node_id),
                 'target': str(edge.target_node_id),
             }
-            for edge in obj.edges.all()[:50]
+            for edge in edges
         ]
 
     def get_nodes_preview(self, obj):
         """Return normalized node positions for card fallback preview."""
-        nodes = list(obj.nodes.all()[:30])
+        nodes = getattr(obj, 'list_preview_nodes', None)
+        if nodes is None:
+            nodes = list(obj.nodes.all()[:WORKFLOW_CARD_PREVIEW['max_nodes']])
         if not nodes:
             return []
         xs = [float(n.position_x) for n in nodes]
         ys = [float(n.position_y) for n in nodes]
         min_x, max_x = min(xs), max(xs)
         min_y, max_y = min(ys), max(ys)
-        padding = 40
+        padding = WORKFLOW_CARD_PREVIEW['padding']
         scale = 1.0
-        content_w = max(max_x - min_x + padding * 2, 200)
-        content_h = max(max_y - min_y + padding * 2, 120)
-        view_w, view_h = 220, 100
+        content_w = max(max_x - min_x + padding * 2, WORKFLOW_CARD_PREVIEW['minimum_width'])
+        content_h = max(max_y - min_y + padding * 2, WORKFLOW_CARD_PREVIEW['minimum_height'])
+        view_w, view_h = WORKFLOW_CARD_PREVIEW['width'], WORKFLOW_CARD_PREVIEW['height']
         if content_w > view_w or content_h > view_h:
             scale = min(view_w / content_w, view_h / content_h)
 
@@ -536,7 +555,7 @@ class WorkflowCreateSerializer(serializers.ModelSerializer):
     def validate_config(self, value):
         if value and isinstance(value, dict):
             preview = value.get('canvas_preview', '')
-            if preview and len(str(preview)) > 300_000:
+            if preview and len(str(preview)) > WORKFLOW_CARD_PREVIEW['max_data_url_length']:
                 raise serializers.ValidationError(
                     '画布预览图过大，请重新保存'
                 )

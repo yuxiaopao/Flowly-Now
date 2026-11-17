@@ -3,8 +3,7 @@ Validation utilities for forms and data.
 """
 
 import re
-from typing import Any, Dict, List, Optional, Tuple, Callable
-from decimal import Decimal, InvalidOperationationError
+from typing import Any, Dict, List
 
 
 class ValidationError(Exception):

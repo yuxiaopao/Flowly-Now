@@ -23,6 +23,21 @@ class GeneratedSiteSerializer(serializers.ModelSerializer):
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     frontend_display = serializers.CharField(source='get_frontend_framework_display', read_only=True)
     backend_display = serializers.CharField(source='get_backend_framework_display', read_only=True)
+    source = serializers.SerializerMethodField()
+    can_rebuild = serializers.SerializerMethodField()
+    rebuild_notice = serializers.SerializerMethodField()
+
+    def get_source(self, obj):
+        from .provenance import source_information
+        return source_information(obj, getattr(self.context.get('request'), 'user', None))
+
+    def get_can_rebuild(self, obj):
+        from .provenance import can_manage_site
+        return can_manage_site(getattr(self.context.get('request'), 'user', None), obj)
+
+    def get_rebuild_notice(self, obj):
+        from .provenance import COPY_NOTICE
+        return COPY_NOTICE
 
     class Meta:
         model = GeneratedSite
@@ -42,7 +57,7 @@ class GeneratedSiteSerializer(serializers.ModelSerializer):
             'codegraph_project_id', 'show_in_nav',
             'last_qa_gate', 'last_qa_report', 'last_preview_url',
             'preview_status', 'rag_collection_id', 'last_agent_reply',
-            'tenant', 'created_by', 'created_at', 'completed_at',
+            'tenant', 'created_by', 'created_at', 'completed_at', 'source', 'can_rebuild', 'rebuild_notice',
         ]
         read_only_fields = [
             'id', 'status', 'progress', 'generated_files', 'error_message',
@@ -83,14 +98,30 @@ class GeneratedSiteCreateSerializer(serializers.ModelSerializer):
         }
 
     def validate(self, data):
+        forbidden = {'source_workflow', 'source_workflow_id', 'source_node', 'source_node_id', 'source_execution', 'source_execution_id', 'created_by'}
+        if forbidden.intersection(self.initial_data):
+            raise serializers.ValidationError('Source and creator fields are recorded by the server only.')
+        from .provenance import team_role
+        request = self.context.get('request')
+        if data.get('tenant') and (not request or team_role(request.user, data['tenant']) not in ('owner', 'admin', 'member')):
+            raise serializers.ValidationError({'tenant': 'Active editor membership is required.'})
         training_job_id = data.pop('training_job_id', '') or data.get('training_run_id', '')
         if training_job_id:
             data['training_run_id'] = training_job_id
 
         manifest = dict(data.get('model_artifact_manifest') or {})
-        if training_job_id and not manifest:
-            manifest = self._manifest_from_training_job(training_job_id)
-            data['model_artifact_manifest'] = manifest
+        manifest_job_id = manifest.get('trainingJobId')
+        if manifest_job_id:
+            self._manifest_from_training_job(manifest_job_id)
+            if training_job_id and str(manifest_job_id) != str(training_job_id):
+                raise serializers.ValidationError('Training manifest and job must refer to the same record.')
+        if training_job_id:
+            canonical_manifest = self._manifest_from_training_job(training_job_id)
+            if not manifest:
+                manifest = canonical_manifest
+                data['model_artifact_manifest'] = manifest
+        if hasattr(self, '_training_job_tenant'):
+            data.setdefault('tenant', self._training_job_tenant)
 
         if manifest:
             self._apply_manifest_defaults(data, manifest)
@@ -129,8 +160,16 @@ class GeneratedSiteCreateSerializer(serializers.ModelSerializer):
         try:
             from training.artifacts import build_model_artifact_manifest
 
-            return build_model_artifact_manifest(TrainingJob.objects.get(id=training_job_id))
-        except TrainingJob.DoesNotExist as exc:
+            from .provenance import authorize_training_job
+            from uuid import UUID
+            job = TrainingJob.objects.get(id=UUID(str(training_job_id)))
+            request = self.context.get('request')
+            authorize_training_job(getattr(request, 'user', None), job)
+            if 'tenant' in self.initial_data and str(self.initial_data['tenant']) != str(job.tenant_id):
+                raise serializers.ValidationError({'tenant': 'Training job and site must belong to the same space.'})
+            self._training_job_tenant = job.tenant
+            return build_model_artifact_manifest(job)
+        except (TrainingJob.DoesNotExist, ValueError, TypeError) as exc:
             raise serializers.ValidationError({'training_run_id': f'Training job {training_job_id} does not exist'}) from exc
 
     def _apply_manifest_defaults(self, data: Dict[str, Any], manifest: Dict[str, Any]) -> None:

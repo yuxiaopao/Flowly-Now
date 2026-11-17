@@ -1,89 +1,34 @@
-# Flowly local services — venv-only Django + Celery
-# Usage: powershell -ExecutionPolicy Bypass -File E:\Flowly-now\scripts\start-flowly-services.ps1
+# Local Flowly lifecycle. No queue cleanup, automatic migration, or global kill.
+[CmdletBinding()]
+param(
+  [ValidateSet('start', 'status', 'stop', 'restart')]
+  [string]$Action = 'start',
+  [ValidateSet('api', 'worker', 'beat')]
+  [string[]]$Services = @('api', 'worker', 'beat'),
+  [string]$ApiHost,
+  [Nullable[int]]$ApiPort,
+  [Nullable[int]]$Workers,
+  [ValidateRange(1, 600)]
+  [int]$StartupTimeout = 30,
+  [ValidateRange(1, 600)]
+  [int]$StopTimeout = 15,
+  [switch]$Json
+)
 
-$ErrorActionPreference = "Continue"
-$Root = Split-Path -Parent $PSScriptRoot
-$VenvPython = Join-Path $Root ".venv\Scripts\python.exe"
-$Backend = Join-Path $Root "Backend"
-$Reports = Join-Path $Root "test-reports"
-
-if (-not (Test-Path $VenvPython)) {
-  Write-Error "Missing venv python: $VenvPython"
+$ErrorActionPreference = 'Stop'
+$Root = (Resolve-Path -LiteralPath (Split-Path -Parent $PSScriptRoot)).Path
+$VenvPython = Join-Path $Root '.venv\Scripts\python.exe'
+if (-not (Test-Path -LiteralPath $VenvPython -PathType Leaf)) {
+  Write-Error "缺少项目虚拟环境：$VenvPython。请按部署指南安装依赖；未启动或停止任何服务。"
   exit 1
 }
-
-New-Item -ItemType Directory -Force -Path $Reports | Out-Null
-
-function Stop-FlowlyPy {
-  Get-CimInstance Win32_Process -Filter "Name='python.exe'" |
-    Where-Object {
-      $_.CommandLine -and (
-        $_.CommandLine -match 'manage\.py runserver' -or
-        $_.CommandLine -match 'celery -A config'
-      )
-    } |
-    ForEach-Object {
-      Write-Host "Stopping PID $($_.ProcessId)"
-      Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
-    }
-}
-
-Write-Host "=== Stopping existing Django/Celery ==="
-Stop-FlowlyPy
-Start-Sleep -Seconds 2
-
-# Clear stuck Celery unacked messages (best-effort)
-Write-Host "=== Purging Redis celery unacked (best-effort) ==="
-& $VenvPython -c @"
-import os, django
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
-django.setup()
-from config.celery import app
-import redis
-r = redis.from_url(app.conf.broker_url)
-print('deleted unacked', r.delete('unacked'), r.delete('unacked_index'))
-try:
-    print('purge', app.control.purge())
-except Exception as e:
-    print('purge skip', e)
-"@
-
-Write-Host "=== Starting Django (venv) ==="
-Start-Process -FilePath $VenvPython `
-  -ArgumentList "manage.py runserver 127.0.0.1:8000 --noreload" `
-  -WorkingDirectory $Backend `
-  -RedirectStandardOutput (Join-Path $Reports "django_runserver.out.txt") `
-  -RedirectStandardError (Join-Path $Reports "django_runserver.err.txt") `
-  -WindowStyle Hidden
-
-Write-Host "=== Starting Celery solo (venv) ==="
-Start-Process -FilePath $VenvPython `
-  -ArgumentList "-m celery -A config worker -l INFO -P solo" `
-  -WorkingDirectory $Backend `
-  -RedirectStandardOutput (Join-Path $Reports "celery_worker.out.txt") `
-  -RedirectStandardError (Join-Path $Reports "celery_worker.err.txt") `
-  -WindowStyle Hidden
-
-Start-Sleep -Seconds 6
-
-Write-Host "=== Health ==="
-try {
-  $code = (Invoke-WebRequest -Uri "http://127.0.0.1:8000/admin/" -UseBasicParsing -TimeoutSec 8).StatusCode
-  Write-Host "Django admin HTTP $code"
-} catch {
-  Write-Host "Django NOT ready: $($_.Exception.Message)"
-}
-
-Get-CimInstance Win32_Process -Filter "Name='python.exe'" |
-  Where-Object { $_.CommandLine -match 'runserver|celery -A config' } |
-  ForEach-Object {
-    $cmd = $_.CommandLine
-    if ($cmd.Length -gt 140) { $cmd = $cmd.Substring(0, 140) }
-    $kind = if ($cmd -match '\\.venv\\') { 'VENV' } else { 'SYSTEM' }
-    Write-Host "$kind PID=$($_.ProcessId) $cmd"
-  }
-
-Write-Host "Done."
-Write-Host "Note: On this Windows setup, venv python may spawn a system-python child that owns :8000."
-Write-Host "That is OK as long as the parent is .venv and Backend code is loaded from cwd."
-Write-Host "Do NOT kill only the system child — kill both parent+child via this script instead."
+$Cli = Join-Path $PSScriptRoot 'local_service_cli.py'
+$CliArguments = @($Cli, '--workspace', $Root, '--action', $Action, '--startup-timeout', $StartupTimeout, '--stop-timeout', $StopTimeout)
+if ($PSBoundParameters.ContainsKey('ApiHost')) { $CliArguments += @('--api-host', $ApiHost) }
+if ($PSBoundParameters.ContainsKey('ApiPort')) { $CliArguments += @('--api-port', $ApiPort) }
+if ($PSBoundParameters.ContainsKey('Workers')) { $CliArguments += @('--workers', $Workers) }
+if ($Json) { $CliArguments += '--json' }
+$CliArguments += '--services'
+$CliArguments += $Services
+& $VenvPython @CliArguments
+exit $LASTEXITCODE

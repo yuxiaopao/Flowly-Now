@@ -4,13 +4,35 @@
 
 import Cookies from 'js-cookie'
 
+const DEVELOPMENT_API_URL = 'http://localhost:8000'
+const explicitApiUrl = (import.meta.env.VITE_API_URL || '').trim().replace(/\/+$/, '')
+const explicitWsUrl = (import.meta.env.VITE_WS_URL || '').trim().replace(/\/+$/, '')
+const devBackendUrl = import.meta.env.DEV ? (import.meta.env.VITE_DEV_BACKEND_URL || '').trim().replace(/\/+$/, '') : ''
+const browserOrigin = typeof window !== 'undefined' && /^https?:$/.test(window.location.protocol)
+  ? window.location.origin : ''
+const productionWeb = import.meta.env.PROD && import.meta.env.MODE !== 'electron' && Boolean(browserOrigin)
+
+function isLoopbackEndpoint(value) {
+  try {
+    const url = new URL(value.includes('://') ? value : `http://${value}`)
+    const host = url.hostname.toLowerCase().replace(/\.$/, '')
+    return host === 'localhost' || host.endsWith('.localhost') || host === '[::1]' || /^127\./.test(host)
+  } catch {
+    return false
+  }
+}
+
+function canApplyRuntimeEndpoint(value, explicitValue) {
+  return value && !explicitValue && !(productionWeb && isLoopbackEndpoint(value))
+}
+
 export const APP_CONFIG = {
   // 应用信息
   appName: 'Flowly',
-  appFullName: 'Flowly - AI Agent 工作流编排平台',
+  appFullName: 'Flowly · AI 应用交付工作台',
 
-  // API 配置 - 从环境变量读取，默认为本地开发服务器
-  apiBaseUrl: (import.meta.env.DEV && import.meta.env.VITE_DEV_BACKEND_URL) || import.meta.env.VITE_API_URL || 'http://localhost:8000',
+  // Web production defaults to its reverse proxy; Electron retains an explicit cloud endpoint.
+  apiBaseUrl: devBackendUrl || explicitApiUrl || (productionWeb ? browserOrigin : DEVELOPMENT_API_URL),
   apiPrefix: import.meta.env.VITE_API_PREFIX || '/api/v1',
 
   // 请求超时配置 (毫秒) - 从环境变量读取
@@ -22,8 +44,16 @@ export const APP_CONFIG = {
   // 重试次数配置 - 从环境变量读取
   maxRetries: Number(import.meta.env.VITE_API_MAX_RETRIES) || 1,
 
+  executionRealtime: {
+    maxReconnectAttempts: 5,
+    reconnectDelayMs: 1000,
+    heartbeatIntervalMs: 30000,
+    connectionTimeoutMs: Number(import.meta.env.VITE_WS_CONNECT_TIMEOUT_MS) || 10000,
+    pollIntervalMs: 3000,
+  },
+
   // WebSocket 配置
-  wsUrl: (import.meta.env.DEV && import.meta.env.VITE_DEV_BACKEND_URL?.replace(/^http/, 'ws')) || import.meta.env.VITE_WS_URL || '',
+  wsUrl: devBackendUrl.replace(/^http/, 'ws') || explicitWsUrl,
 
   // 向量存储默认配置
   vectorStore: {
@@ -117,21 +147,10 @@ export function getApiUrl(path = '') {
 // 生成完整的 API Base URL
 export function getApiBaseUrl() {
   // An explicit local proxy target must survive public runtime configuration.
-  if (import.meta.env.DEV && import.meta.env.VITE_DEV_BACKEND_URL && typeof window !== 'undefined') {
+  if (devBackendUrl && browserOrigin) {
     return `${window.location.origin}${APP_CONFIG.apiPrefix}`
   }
-  let origin = APP_CONFIG.apiBaseUrl || ''
-  // Docker FE (5200/nginx): dev .env.local may bake :5210; use same-origin /api via nginx.
-  if (typeof window !== 'undefined') {
-    const loc = window.location
-    const onDockerFe = loc.port === '5200' || (loc.port === '' && loc.hostname !== 'localhost')
-    if (onDockerFe && (origin.includes(':5210') || origin.includes('localhost:5173'))) {
-      origin = loc.origin
-    }
-  }
-  if (!origin && typeof window !== 'undefined') {
-    origin = window.location.origin
-  }
+  const origin = (APP_CONFIG.apiBaseUrl || browserOrigin || DEVELOPMENT_API_URL).replace(/\/+$/, '')
   return `${origin}${APP_CONFIG.apiPrefix}`
 }
 
@@ -155,11 +174,11 @@ export function syncApiClientBaseUrl() {
 export function applyRuntimeConfig(runtime) {
   if (!runtime || typeof runtime !== 'object') return
 
-  if (runtime.api_base_url) {
-    APP_CONFIG.apiBaseUrl = runtime.api_base_url
+  if (canApplyRuntimeEndpoint(runtime.api_base_url, explicitApiUrl)) {
+    APP_CONFIG.apiBaseUrl = runtime.api_base_url.replace(/\/+$/, '')
   }
-  if (runtime.ws_url) {
-    APP_CONFIG.wsUrl = runtime.ws_url
+  if (canApplyRuntimeEndpoint(runtime.ws_url, explicitWsUrl)) {
+    APP_CONFIG.wsUrl = runtime.ws_url.replace(/\/+$/, '')
   }
   if (runtime.llm) {
     if (runtime.llm.default_model) APP_CONFIG.llm.defaultModel = runtime.llm.default_model
@@ -185,18 +204,18 @@ export function applyRuntimeConfig(runtime) {
     }
   }
 
-  if (import.meta.env.DEV && import.meta.env.VITE_DEV_BACKEND_URL) {
-    APP_CONFIG.apiBaseUrl = import.meta.env.VITE_DEV_BACKEND_URL
-    APP_CONFIG.wsUrl = import.meta.env.VITE_DEV_BACKEND_URL.replace(/^http/, 'ws')
+  if (devBackendUrl) {
+    APP_CONFIG.apiBaseUrl = devBackendUrl
+    APP_CONFIG.wsUrl = devBackendUrl.replace(/^http/, 'ws')
   }
   syncApiClientBaseUrl()
 }
 
-function resolveApiHost() {
+function resolveApiEndpoint() {
   try {
-    return new URL(APP_CONFIG.apiBaseUrl).host
+    return new URL(APP_CONFIG.apiBaseUrl, browserOrigin || DEVELOPMENT_API_URL)
   } catch {
-    return window.location.host
+    return new URL(browserOrigin || DEVELOPMENT_API_URL)
   }
 }
 
@@ -204,29 +223,31 @@ function resolveApiHost() {
 function appendAccessToken(url) {
   const token = Cookies.get('access_token') || localStorage.getItem('access_token')
   if (!token) return url
-  const separator = url.includes('?') ? '&' : '?'
-  return `${url}${separator}token=${encodeURIComponent(token)}`
+  const target = new URL(url)
+  target.searchParams.set('token', token)
+  return target.toString()
 }
 
 /** 构建 WebSocket URL（支持 VITE_WS_URL 为完整 ws(s):// 地址或 host） */
 export function getWebSocketUrl(path = '') {
+  if (/^wss?:\/\//.test(path)) return appendAccessToken(path)
   const normalizedPath = path.startsWith('/') ? path : `/${path}`
   const configured = (APP_CONFIG.wsUrl || '').trim()
 
   let wsUrl
-  if (import.meta.env.DEV && import.meta.env.VITE_DEV_BACKEND_URL) {
+  const apiEndpoint = resolveApiEndpoint()
+  const socketProtocol = apiEndpoint.protocol === 'https:' ? 'wss:' : 'ws:'
+  if (devBackendUrl && browserOrigin) {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     wsUrl = `${protocol}//${window.location.host}${normalizedPath}`
   } else if (configured) {
     if (configured.startsWith('ws://') || configured.startsWith('wss://')) {
       wsUrl = `${configured.replace(/\/$/, '')}${normalizedPath}`
     } else {
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-      wsUrl = `${protocol}//${configured.replace(/\/$/, '')}${normalizedPath}`
+      wsUrl = `${socketProtocol}//${configured.replace(/\/$/, '')}${normalizedPath}`
     }
   } else {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    wsUrl = `${protocol}//${resolveApiHost()}${normalizedPath}`
+    wsUrl = `${socketProtocol}//${apiEndpoint.host}${normalizedPath}`
   }
 
   return appendAccessToken(wsUrl)
@@ -240,8 +261,8 @@ export function getTenantDomain(tenantSlug) {
 // 导出默认配置
 export default APP_CONFIG
 
-/** 后端 API 完整前缀 URL，用于 Webhook/SSE 等不能走 Vite 代理的场景 */
+/** 与普通请求使用同一公开入口，供 Webhook/SSE 等直接 URL 使用。 */
 export function getPublicApiUrl(path = '') {
   const normalizedPath = path.startsWith('/') ? path : `/${path}`
-  return `${APP_CONFIG.apiBaseUrl}${APP_CONFIG.apiPrefix}${normalizedPath}`
+  return `${getApiBaseUrl()}${normalizedPath}`
 }

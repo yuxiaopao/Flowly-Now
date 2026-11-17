@@ -1,124 +1,270 @@
-"""
-Real model evaluation logic.
-"""
-
-import os
+"""CPU inference over real samples; never deserialize executable Python objects."""
+import csv
 import json
-import numpy as np
-from typing import Dict, Any, List
+import math
+from pathlib import Path
+import zipfile
+from .constants import MAX_FEATURES, MAX_MODEL_PARAMETERS, MAX_SAMPLES
 
 
-def evaluate_pytorch_classifier(model_path: str, test_data: List, labels: List[str]) -> Dict[str, float]:
-    """
-    Real PyTorch classifier evaluation.
-    Loads the model and computes actual metrics.
-    """
-    try:
-        import torch
-        from torch.utils.data import DataLoader, TensorDataset
-
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
-        checkpoint = torch.load(model_path, map_location=device, weights_only=False)
-        model = checkpoint.get('model', checkpoint) if isinstance(checkpoint, dict) else checkpoint
-        if hasattr(model, 'eval'):
-            model = model.to(device)
-
-        metrics = {
-            'accuracy': 0.0,
-            'precision': 0.0,
-            'recall': 0.0,
-            'f1': 0.0,
-        }
-
-        if test_data:
-            X_test = torch.tensor([d['features'] for d in test_data], dtype=torch.float32)
-            y_test = torch.tensor([d['label'] for d in test_data], dtype=torch.long)
-
-            test_loader = DataLoader(TensorDataset(X_test, y_test), batch_size=32)
-
-            correct = 0
-            total = 0
-            all_preds = []
-            all_labels = []
-
-            with torch.no_grad():
-                for X_batch, y_batch in test_loader:
-                    X_batch, y_batch = X_batch.to(device), y_batch.to(device)
-                    outputs = model(X_batch)
-                    _, predicted = torch.max(outputs.data, 1)
-                    total += y_batch.size(0)
-                    correct += (predicted == y_batch).sum().item()
-                    all_preds.extend(predicted.cpu().numpy())
-                    all_labels.extend(y_batch.cpu().numpy())
-
-            if total > 0:
-                metrics['accuracy'] = round(correct / total, 4)
-
-                from sklearn.metrics import precision_score, recall_score, f1_score
-                if len(set(all_labels)) > 1:
-                    metrics['precision'] = round(precision_score(all_labels, all_preds, average='weighted', zero_division=0), 4)
-                    metrics['recall'] = round(recall_score(all_labels, all_preds, average='weighted', zero_division=0), 4)
-                    metrics['f1'] = round(f1_score(all_labels, all_preds, average='weighted', zero_division=0), 4)
-
-        return metrics
-
-    except ImportError:
-        raise ImportError('torch and sklearn are required for PyTorch evaluation')
-    except FileNotFoundError:
-        raise FileNotFoundError(f'Model not found: {model_path}')
-    except Exception as e:
-        raise RuntimeError(f'Evaluation failed: {str(e)}')
+def _number(value):
+    if isinstance(value, bool):
+        raise ValueError('特征必须是有限数值。')
+    number = float(value)
+    if not math.isfinite(number):
+        raise ValueError('特征包含 NaN 或无穷大。')
+    return number
 
 
-def evaluate_csv_classification(model_path: str, csv_path: str, label_col: str, features: List[str]) -> Dict[str, float]:
-    """
-    Evaluate a CSV file using a loaded model.
-    """
-    try:
-        import pandas as pd
-        import torch
-        from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+def read_tabular_data(path, label_column=None, features=None):
+    path = Path(path)
+    if path.suffix.lower() == '.csv':
+        with path.open(encoding='utf-8-sig', newline='') as source:
+            reader = csv.DictReader(source)
+            columns = reader.fieldnames or []
+            if len(set(columns)) != len(columns) or len(columns) < 2:
+                raise ValueError('CSV 必须有唯一表头、至少一个特征和标签列。')
+            label_column = label_column or ('label' if 'label' in columns else columns[-1])
+            features = features or [name for name in columns if name != label_column]
+            if label_column not in columns or not features or any(name not in columns or name == label_column for name in features):
+                raise ValueError('指定的标签列或特征列不存在。')
+            values, labels = [], []
+            for row in reader:
+                if len(values) >= MAX_SAMPLES:
+                    raise ValueError('测试样本数超过限制。')
+                if None in row or any(row.get(name) is None or not str(row[name]).strip() for name in [*features, label_column]):
+                    raise ValueError('测试数据包含缺列或空值，未丢弃样本。')
+                values.append([_number(row[name]) for name in features])
+                labels.append(row[label_column])
+    elif path.suffix.lower() == '.json':
+        data = json.loads(path.read_text(encoding='utf-8-sig'))
+        values, labels = data.get('features'), data.get('labels')
+        if not isinstance(values, list) or not isinstance(labels, list):
+            raise ValueError('JSON 必须包含 features 二维数组和 labels 数组。')
+        values = [[_number(value) for value in row] for row in values]
+        names = data.get('feature_names')
+        if names is not None:
+            if not isinstance(names, list) or len(set(names)) != len(names) or any(not isinstance(name, str) for name in names):
+                raise ValueError('JSON feature_names 必须是唯一的列名数组。')
+            if any(len(row) != len(names) for row in values):
+                raise ValueError('JSON 特征列名数量与样本维度不一致。')
+            if features:
+                if any(name not in names for name in features):
+                    raise ValueError('JSON 缺少模型要求的特征列。')
+                values = [[row[names.index(name)] for name in features] for row in values]
+    else:
+        raise ValueError('通用分类评测需要已登记的 CSV 或 JSON 标注数据。')
+    if not values or len(values) != len(labels) or len(values) > MAX_SAMPLES:
+        raise ValueError('测试样本不能为空，特征与标签数量必须一致且不超过限制。')
+    width = len(values[0])
+    if not 0 < width <= MAX_FEATURES or any(len(row) != width for row in values):
+        raise ValueError('样本特征维度为空、不一致或超过限制。')
+    return values, labels
 
-        df = pd.read_csv(csv_path)
-        if label_col not in df.columns:
-            raise ValueError(f'Label column {label_col} not found. Available: {list(df.columns)}')
-        if not all(f in df.columns for f in features):
-            raise ValueError(f'Some feature columns not found in CSV')
 
-        X = df[features].values
-        y_true = df[label_col].values
-
-        checkpoint = torch.load(model_path, map_location='cpu', weights_only=False)
-        model = checkpoint.get('model', checkpoint) if isinstance(checkpoint, dict) else checkpoint
-        if hasattr(model, 'eval'):
-            model.eval()
-
-        X_tensor = torch.tensor(X, dtype=torch.float32)
-        with torch.no_grad():
-            outputs = model(X_tensor)
-            _, y_pred = torch.max(outputs, 1)
-            y_pred = y_pred.numpy()
-
-        metrics = {
-            'accuracy': round(accuracy_score(y_true, y_pred), 4),
-            'precision': round(precision_score(y_true, y_pred, average='weighted', zero_division=0), 4),
-            'recall': round(recall_score(y_true, y_pred, average='weighted', zero_division=0), 4),
-            'f1': round(f1_score(y_true, y_pred, average='weighted', zero_division=0), 4),
-        }
-
-        return metrics
-
-    except ImportError:
-        raise ImportError('pandas, torch, and sklearn are required for CSV evaluation')
-    except Exception as e:
-        raise RuntimeError(f'CSV evaluation failed: {str(e)}')
+def _checkpoint(path):
+    import torch
+    if Path(path).suffix.lower() == '.safetensors':
+        from safetensors.torch import load_file
+        return {'model_state_dict': load_file(str(path), device='cpu')}
+    if not zipfile.is_zipfile(path):
+        raise ValueError('仅接受 ZIP tensor checkpoint；旧任意 pickle 模型请导出安全权重。')
+    with zipfile.ZipFile(path) as archive:
+        if any(name.endswith('/constants.pkl') for name in archive.namelist()):
+            raise ValueError('TorchScript 不能伪装成普通 checkpoint，请使用登记的 .torchscript 导出。')
+    result = torch.load(str(path), map_location='cpu', weights_only=True)
+    if not isinstance(result, dict):
+        raise ValueError('模型必须是已知结构的 tensor checkpoint。')
+    return result
 
 
-def evaluate_mock(labels: List[str]) -> Dict[str, float]:
-    """Fallback when no model file is available."""
-    import random
-    base = {l: random.uniform(0.75, 0.97) for l in labels}
-    total = sum(base.values())
-    base = {k: round(v / total, 4) for k, v in base.items()}
-    return base
+def _mlp(checkpoint, configuration):
+    import torch
+    state = checkpoint.get('model_state_dict')
+    if state is None:
+        state = checkpoint.get('state_dict')
+    if not isinstance(state, dict) or not state or any(not isinstance(value, torch.Tensor) for value in state.values()):
+        raise ValueError('模型不含通用分类器所需的真实 state_dict。')
+    config = {**configuration, **(checkpoint.get('config') if isinstance(checkpoint.get('config'), dict) else {})}
+    dimensions = [config.get('input_dim', 784), *(config.get('hidden_dims', [256, 128])), config.get('output_dim', 10)]
+    if any(isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= MAX_FEATURES for value in dimensions):
+        raise ValueError('模型维度配置无效或超过限制。')
+    if sum((left + 1) * right for left, right in zip(dimensions, dimensions[1:])) > MAX_MODEL_PARAMETERS:
+        raise ValueError('模型参数量超过评测限制。')
+    dropout = float(config.get('dropout', .2))
+    if not math.isfinite(dropout) or not 0 <= dropout < 1:
+        raise ValueError('模型 dropout 配置无效。')
+    layers = []
+    for index, (left, right) in enumerate(zip(dimensions, dimensions[1:])):
+        layers.append(torch.nn.Linear(left, right))
+        if index < len(dimensions) - 2:
+            layers.append(torch.nn.ReLU())
+            if dropout:
+                layers.append(torch.nn.Dropout(dropout))
+    model = torch.nn.Sequential(*layers)
+    model.load_state_dict(state, strict=True)
+    return model.eval(), dimensions[0], dimensions[-1]
+
+
+def classification_metrics(expected, predicted, probabilities, labels):
+    if not expected or len(expected) != len(predicted):
+        raise ValueError('没有实际可评分样本，不能生成零分占位指标。')
+    count = len(expected)
+    matrix = [[0 for _ in labels] for _ in labels]
+    for truth, guess in zip(expected, predicted):
+        if not 0 <= truth < len(labels) or not 0 <= guess < len(labels):
+            raise ValueError('真实或预测类别超出模型类别范围。')
+        matrix[truth][guess] += 1
+    precision = recall = f1 = 0.0
+    for index, row in enumerate(matrix):
+        support, true_positive = sum(row), row[index]
+        predicted_count = sum(line[index] for line in matrix)
+        precision += support * (true_positive / predicted_count if predicted_count else 0.0)
+        recall += support * (true_positive / support if support else 0.0)
+        f1 += support * (2 * true_positive / (support + predicted_count) if support + predicted_count else 0.0)
+    result = {'sample_count': count, 'accuracy': sum(matrix[index][index] for index in range(len(labels))) / count,
+        'precision': precision / count, 'recall': recall / count, 'f1': f1 / count,
+        'classes': labels, 'confusion_matrix': matrix}
+    class_aucs = [_binary_auc([int(value == index) for value in expected], [row[index] for row in probabilities])
+                  for index in ([1] if len(labels) == 2 else range(len(labels)))]
+    result['auc'] = sum(class_aucs) / len(class_aucs) if class_aucs and all(value is not None for value in class_aucs) else None
+    return result
+
+
+def _binary_auc(expected, scores):
+    positives = sum(expected)
+    negatives = len(expected) - positives
+    if not positives or not negatives:
+        return None
+    ordered = sorted(zip(scores, expected))
+    positive_rank_sum = 0.0
+    index = 0
+    while index < len(ordered):
+        end = index + 1
+        while end < len(ordered) and ordered[end][0] == ordered[index][0]:
+            end += 1
+        average_rank = (index + 1 + end) / 2
+        positive_rank_sum += average_rank * sum(label for _, label in ordered[index:end])
+        index = end
+    return (positive_rank_sum - positives * (positives + 1) / 2) / (positives * negatives)
+
+
+def _label_indices(values, classes):
+    result = []
+    for value in values:
+        if str(value) in classes:
+            result.append(classes.index(str(value)))
+        else:
+            try:
+                number = float(value)
+            except (ValueError, TypeError):
+                raise ValueError('测试标签不属于模型的已登记类别。') from None
+            if not math.isfinite(number) or not number.is_integer() or not 0 <= number < len(classes):
+                raise ValueError('测试标签索引超出真实模型类别。')
+            index = int(number)
+            result.append(index)
+    return result
+
+
+def evaluate_pytorch_classifier(model_path, test_data, labels, configuration=None, training_data=None):
+    """Preserve the callable interface, requiring real samples and safe weights."""
+    if not test_data:
+        raise ValueError('测试样本不能为空。')
+    values = [[_number(value) for value in sample['features']] for sample in test_data]
+    return _tabular_inference(model_path, values, [sample['label'] for sample in test_data], labels, configuration or {}, training_data)
+
+
+def _tabular_inference(model_path, values, targets, labels, configuration, training_data=None, checkpoint=None):
+    import torch
+    if Path(model_path).suffix.lower() == '.torchscript':
+        model = torch.jit.load(str(model_path), map_location='cpu').eval()
+        input_dim, output_dim = len(values[0]), len(labels)
+        config = {}
+    else:
+        checkpoint = checkpoint if checkpoint is not None else _checkpoint(model_path)
+        model, input_dim, output_dim = _mlp(checkpoint, configuration)
+        config = {**configuration, **(checkpoint.get('config') if isinstance(checkpoint.get('config'), dict) else {})}
+    if not values or any(len(row) != input_dim for row in values):
+        raise ValueError('测试特征列与模型输入维度不一致。')
+    labels = [str(value) for value in labels] if labels else [str(index) for index in range(output_dim)]
+    if len(labels) != output_dim or len(set(labels)) != len(labels):
+        raise ValueError('真实类别数与模型输出维度不一致。')
+    inputs = torch.tensor(values, dtype=torch.float32)
+    preprocessing = 'raw_features'
+    metadata = checkpoint.get('preprocessing', {}) if isinstance(checkpoint, dict) else {}
+    if metadata:
+        from training.tabular_artifacts import SCHEMA_VERSION
+        if metadata.get('schema') != SCHEMA_VERSION or metadata.get('kind') not in ('none', 'standardize'):
+            raise ValueError('模型的标准化元数据版本或类型不受支持。')
+        if metadata['kind'] == 'standardize':
+            if not isinstance(metadata.get('mean'), list) or not isinstance(metadata.get('std'), list):
+                raise ValueError('模型缺少完整的标准化统计量。')
+            config['input_mean'], config['input_std'] = metadata.get('mean'), metadata.get('std')
+    if config.get('input_mean') is not None or config.get('input_std') is not None:
+        means = [_number(value) for value in config.get('input_mean', [])]
+        scales = [_number(value) for value in config.get('input_std', [])]
+        if len(means) != input_dim or len(scales) != input_dim or any(scale < 0 for scale in scales):
+            raise ValueError('模型记录的标准化参数无效或维度不匹配。')
+        inputs = (inputs - torch.tensor(means)) / (torch.tensor(scales) + 1e-8)
+        preprocessing = 'recorded_standardization'
+    elif not metadata and config.get('dataset_path'):
+        if not training_data:
+            raise ValueError('旧模型训练使用标准化，但未记录scaler；请关联已登记的原训练数据，不能使用测试集重算。')
+        label = None
+        if Path(training_data).suffix.lower() == '.csv':
+            with open(training_data, encoding='utf-8-sig', newline='') as stream:
+                header = next(csv.reader(stream), [])
+            label = header[-1] if header else None
+        original, _ = read_tabular_data(training_data, label)
+        if any(len(row) != input_dim for row in original):
+            raise ValueError('原训练数据特征维度与模型不一致。')
+        tensor = torch.tensor(original, dtype=torch.float32)
+        inputs = (inputs - tensor.mean(dim=0)) / (tensor.std(dim=0, unbiased=False) + 1e-8)
+        preprocessing = 'training_dataset_standardization'
+    with torch.inference_mode():
+        logits = model(inputs)
+        if not isinstance(logits, torch.Tensor) or tuple(logits.shape) != (len(values), output_dim) or not torch.isfinite(logits).all():
+            raise ValueError('模型没有返回有效的分类 logits。')
+        probabilities = logits.softmax(dim=1).tolist()
+        predicted = logits.argmax(dim=1).tolist()
+    result = classification_metrics(_label_indices(targets, labels), predicted, probabilities, labels)
+    result['preprocessing'] = preprocessing
+    return result
+
+
+def evaluate_csv_classification(model_path, csv_path, label_col=None, features=None, labels=None, configuration=None, training_data=None):
+    configuration = configuration or {}
+    checkpoint = None if Path(model_path).suffix.lower() == '.torchscript' else _checkpoint(model_path)
+    config = {**configuration, **(checkpoint.get('config', {}) if checkpoint else {})}
+    metadata = checkpoint.get('preprocessing', {}) if checkpoint else {}
+    stored_features = metadata.get('feature_names') or config.get('feature_names') or []
+    stored_label = metadata.get('label_column') or config.get('label_column')
+    if not stored_features and not metadata and config.get('dataset_path') and training_data and Path(training_data).suffix.lower() == '.csv':
+        with open(training_data, encoding='utf-8-sig', newline='') as source:
+            original_header = next(csv.reader(source), [])
+        stored_features, stored_label = original_header[:-1], original_header[-1] if original_header else None
+    if stored_features:
+        if not isinstance(stored_features, list) or any(not isinstance(name, str) for name in stored_features) or len(set(stored_features)) != len(stored_features):
+            raise ValueError('模型的训练特征列描述无效。')
+        if features and set(features) != set(stored_features):
+            raise ValueError('所选特征列与模型训练Schema不一致。')
+        features = stored_features
+    values, targets = read_tabular_data(csv_path, label_col or stored_label, features)
+    result = _tabular_inference(model_path, values, targets, labels or [], configuration, training_data, checkpoint)
+    result['feature_columns'] = features or []
+    return result
+
+
+def evaluate_request(request):
+    model, dataset, params = request['model'], request['dataset'], request['parameters']
+    kind = request['training_kind']
+    if kind == 'yolo':
+        from .image_evaluators import evaluate_yolo
+        return evaluate_yolo(model, dataset, params, request['class_names'])
+    if kind == 'clip_cls':
+        from .image_evaluators import evaluate_clip
+        return evaluate_clip(model, dataset, params, request['class_names'])
+    if kind != 'generic':
+        raise ValueError('该模型类型尚无已验证适配器；请使用通用分类、CLIP分类或YOLO产物。')
+    return evaluate_csv_classification(model, dataset, params.get('label_column'), params.get('features'),
+        request['class_names'], request['model_configuration'], request.get('training_dataset'))

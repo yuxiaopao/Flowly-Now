@@ -6,6 +6,25 @@
       subtitle="管理您的订阅计划和账单"
     />
 
+    <div
+      v-if="billingStore.error"
+      class="billing-feedback"
+      role="alert"
+    >
+      <span>部分订阅数据加载失败：{{ billingStore.error }}</span>
+      <el-button
+        :loading="billingStore.isLoading"
+        @click="loadBilling"
+      >
+        重新加载
+      </el-button>
+    </div>
+    <p
+      v-if="!availablePlans.length"
+      class="billing-empty-plans"
+    >
+      当前未提供可订购套餐，请联系管理员配置报价后再升级。
+    </p>
     <!-- Current Plan -->
     <div class="current-plan-section">
       <el-card shadow="never">
@@ -18,12 +37,15 @@
               {{ currentPlan.name }}
             </div>
             <div class="plan-details">
-              <h3>{{ currentPlan.price }}<span v-if="currentPlan.price !== '免费'">/月</span></h3>
+              <h3>{{ currentPlan.price }}<span v-if="currentPlan.quoted && currentPlan.price !== '免费'">/{{ currentPlan.cycle }}</span></h3>
               <p>包含 {{ planFeatureLimits.max_workflows }} 个工作流，{{ planFeatureLimits.max_members }} 位成员</p>
             </div>
           </div>
           <div class="plan-actions">
-            <el-button @click="showUpgradeDialog = true">
+            <el-button
+              :disabled="!upgradeOptions.length"
+              @click="showUpgradeDialog = true"
+            >
               升级套餐
             </el-button>
             <el-button
@@ -37,7 +59,10 @@
         </div>
 
         <!-- Usage Stats -->
-        <div class="usage-section">
+        <div
+          v-if="billingStore.currentUsage"
+          class="usage-section"
+        >
           <h4>当前使用量</h4>
           <div class="usage-grid">
             <div class="usage-item">
@@ -164,10 +189,10 @@
         >
           <template #default="{ row }">
             <el-tag
-              :type="row.status === 'paid' ? 'success' : 'warning'"
+              :type="BILLING_STATUS_TONES[row.status] || 'info'"
               size="small"
             >
-              {{ row.status === 'paid' ? '已支付' : '待支付' }}
+              {{ BILLING_STATUS_LABELS[row.status] || '未知' }}
             </el-tag>
           </template>
         </el-table-column>
@@ -181,8 +206,10 @@
               v-if="row.status === 'paid'"
               size="small"
               text
+              :loading="downloadingInvoices.has(row.id)"
+              @click="downloadInvoice(row)"
             >
-              下载
+              下载凭证
             </el-button>
           </template>
         </el-table-column>
@@ -262,6 +289,8 @@ import { Check, AlertTriangle } from 'lucide-vue-next'
 import { ElMessageBox } from 'element-plus'
 import { useAppStore } from '@/stores/app'
 import { useBillingStore } from '@/stores/billing'
+import { billingApi } from '@/api/billing'
+import { mapBillingHistory, BILLING_STATUS_LABELS, BILLING_STATUS_TONES } from '@/utils/billingHistory'
 import PageHeader from '@/components/layout/PageHeader.vue'
 
 const appStore = useAppStore()
@@ -271,6 +300,7 @@ const showUpgradeDialog = ref(false)
 const showCancelDialog = ref(false)
 const selectedPlan = ref(null)
 const isUpgrading = ref(false)
+const downloadingInvoices = ref(new Set())
 
 const currentPlan = computed(() => {
   const sub = billingStore.subscription
@@ -283,18 +313,25 @@ const currentPlan = computed(() => {
   if (!sub) {
     return {
       type: 'free',
-      name: '免费版',
-      price: '免费',
+      name: '订阅数据尚未提供',
+      price: '—',
+      quoted: false,
       color: planColors.free,
     }
   }
   const planType = sub.planType ?? sub.plan_type ?? 'free'
   const planName = sub.planName ?? sub.plan_type_display ?? sub.planTypeDisplay ?? planType
-  const monthlyPrice = sub.monthlyPrice ?? sub.monthly_price
+  const cycle = sub.billingCycle ?? sub.billing_cycle ?? 'monthly'
+  const tiers = billingStore.plans?.[planType]?.tiers || []
+  const tier = tiers.find(item => (item.billingCycle ?? item.billing_cycle) === cycle)
+  const quotedPrice = tier?.price ?? sub.monthlyPrice ?? sub.monthly_price
+  const currency = tier?.currency ?? sub.currency
   return {
     type: planType,
     name: planName,
-    price: monthlyPrice ? `¥${monthlyPrice}` : '免费',
+    price: quotedPrice == null ? '未提供报价' : Number(quotedPrice) === 0 ? '免费' : `${currency || ''} ${quotedPrice}`.trim(),
+    quoted: quotedPrice != null,
+    cycle: cycle === 'yearly' ? '年' : '月',
     color: planColors[planType] || '#3b82f6',
   }
 })
@@ -322,46 +359,7 @@ const availablePlans = computed(() => {
   const plans = []
   const plansData = billingStore.plans
 
-  if (Object.keys(plansData).length === 0) {
-    return [
-      {
-        type: 'free',
-        name: '免费版',
-        price: '免费',
-        description: '适合个人用户入门体验',
-        featured: false,
-        action: '开始使用',
-        highlights: ['5 个工作流', '每月 100 次执行', '1 位团队成员', '基础支持']
-      },
-      {
-        type: 'starter',
-        name: '入门版',
-        price: '¥99',
-        description: '适合小型团队和项目',
-        featured: false,
-        action: '升级',
-        highlights: ['20 个工作流', '每月 1,000 次执行', '5 位团队成员', '优先级支持']
-      },
-      {
-        type: 'professional',
-        name: '专业版',
-        price: '¥299',
-        description: '适合成长中的团队',
-        featured: true,
-        action: '升级',
-        highlights: ['100 个工作流', '每月 10,000 次执行', '20 位团队成员', '高级节点', '版本历史', '优先支持']
-      },
-      {
-        type: 'enterprise',
-        name: '企业版',
-        price: '¥999',
-        description: '适合大型组织',
-        featured: false,
-        action: '联系销售',
-        highlights: ['无限工作流', '无限执行次数', '无限团队成员', '自定义域名', 'SSO', '专属支持']
-      }
-    ]
-  }
+  if (Object.keys(plansData).length === 0) return []
 
   for (const [planType, value] of Object.entries(plansData)) {
     const tiers = value?.tiers || []
@@ -377,7 +375,7 @@ const availablePlans = computed(() => {
     plans.push({
       type,
       name: value.name || tier.planTypeDisplay || tier.plan_type_display || type,
-      price: priceVal > 0 ? `¥${priceVal}` : '免费',
+      price: priceVal > 0 ? `${tier.currency || ''} ${priceVal}`.trim() : '免费',
       description: value.description || '',
       featured: type === 'professional',
       action: type === currentPlan.value.type ? '当前套餐' : (type === 'enterprise' ? '联系销售' : '升级'),
@@ -401,14 +399,30 @@ const upgradeOptions = computed(() => {
 
 const billingHistory = computed(() => {
   const list = Array.isArray(billingStore.invoices) ? billingStore.invoices : []
-  return list.map(inv => ({
-    date: inv.period_start ? inv.period_start.substring(0, 7) : inv.created_at?.substring(0, 7),
-    description: inv.description || `${inv.invoice_number} - 发票`,
-    amount: inv.total_amount ? `¥${inv.total_amount}` : '-',
-    status: inv.status?.toLowerCase() || 'paid',
-    id: inv.id
-  }))
+  return list.map(mapBillingHistory)
 })
+
+async function downloadInvoice(row) {
+  if (downloadingInvoices.value.has(row.id)) return
+  downloadingInvoices.value.add(row.id)
+  let url
+  try {
+    const blob = await billingApi.downloadInvoice(row.id)
+    url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `billing-${row.id}.html`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    appStore.success('账单凭证已下载，可打开后打印或保存为 PDF')
+  } catch {
+    appStore.error('账单凭证下载失败，请稍后重试')
+  } finally {
+    if (url) URL.revokeObjectURL(url)
+    downloadingInvoices.value.delete(row.id)
+  }
+}
 
 const getProgressColor = (percentage) => {
   if (percentage >= 90) return '#ef4444'
@@ -461,17 +475,21 @@ const cancelSubscription = async () => {
   }
 }
 
-onMounted(async () => {
+async function loadBilling() {
+  billingStore.error = null
   await billingStore.fetchSubscription()
   await Promise.all([
     billingStore.fetchPlans(),
     billingStore.fetchUsage(),
     billingStore.fetchInvoices(),
   ])
-})
+}
+onMounted(loadBilling)
 </script>
 
 <style lang="scss" scoped>
+.billing-feedback { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--delivery-space-md); margin-bottom: var(--delivery-space-lg); padding: var(--delivery-space-lg); border: 1px solid var(--border-primary); border-radius: var(--radius-lg); background: var(--error-bg); font-size: 0.875rem; }
+.billing-empty-plans { margin-bottom: var(--delivery-space-lg); color: var(--text-secondary); font-size: 0.875rem; }
 
 .current-plan-section {
   margin-bottom: 32px;

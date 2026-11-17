@@ -1,5 +1,31 @@
 <template>
   <div
+    v-if="isDesktop"
+    class="run-views"
+    aria-label="训练详情视图"
+  >
+    <button
+      type="button"
+      :aria-pressed="activeView === 'charts'"
+      @click="activeView = 'charts'"
+    >
+      图表分析与模型对比
+    </button>
+    <button
+      type="button"
+      :aria-pressed="activeView === 'details'"
+      @click="activeView = 'details'"
+    >
+      实时记录、网络与导出
+    </button>
+  </div>
+  <YoloRunAnalytics
+    v-if="activeView === 'charts'"
+    :job-id="binding.jobId"
+  />
+  <div
+    v-if="isDesktop"
+    v-show="activeView === 'details'"
     ref="monitorHost"
     class="training-live"
     data-testid="training-live"
@@ -14,8 +40,11 @@ import { useAppStore } from '@/stores/app'
 import template from '@/components/training/live/template.html?raw'
 import styles from '@/components/training/live/monitor.css?inline'
 import { mountTrainingMonitor } from '@/components/training/live/renderer'
+import YoloRunAnalytics from './YoloRunAnalytics.vue'
 
 const monitorHost = ref(null)
+const activeView = ref('charts')
+const isDesktop = Boolean(window.flowlyDesktop?.training?.monitor)
 const authStore = useAuthStore()
 const appStore = useAppStore()
 const props = defineProps({ binding: { type: Object, required: true } })
@@ -61,6 +90,7 @@ function mount() {
 }
 
 onMounted(() => {
+  if (!monitorHost.value) return
   root = monitorHost.value.attachShadow({ mode: 'open' })
   mount()
 })
@@ -73,4 +103,8 @@ onUnmounted(() => dispose?.())
 
 <style scoped>
 .training-live { width: 100%; min-width: 0; }
+.run-views { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.run-views button { padding: 8px 12px; font: inherit; color: var(--text-secondary); background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 6px; cursor: pointer; }
+.run-views button[aria-pressed=true] { color: var(--primary-color); border-color: var(--primary-color); }
+.run-views button:focus-visible { outline: 2px solid var(--primary-color); outline-offset: 3px; }
 </style>

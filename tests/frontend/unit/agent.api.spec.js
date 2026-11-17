@@ -97,16 +97,16 @@ describe('agentApi.debug', () => {
 })
 
 describe('agentApi.getDebugHistory', () => {
-  it('GET /agents/:id/debug/history/', async () => {
+  it('GET /agents/:id/debug_history/', async () => {
     await agentApi.getDebugHistory(1)
-    expect(mockRequest.get).toHaveBeenCalledWith('/agents/1/debug/history/', {})
+    expect(mockRequest.get).toHaveBeenCalledWith('/agents/1/debug_history/', {})
   })
 })
 
 describe('agentApi.clearDebugHistory', () => {
-  it('DELETE /agents/:id/debug/history/', async () => {
+  it('DELETE /agents/:id/debug_history/', async () => {
     await agentApi.clearDebugHistory(1)
-    expect(mockRequest.delete).toHaveBeenCalledWith('/agents/1/debug/history/')
+    expect(mockRequest.delete).toHaveBeenCalledWith('/agents/1/debug_history/')
   })
 })
 
@@ -164,6 +164,6 @@ describe('agentApi.sendMessage', () => {
 describe('agentApi.streamChat', () => {
   it('stream /agents/:id/stream_chat/', async () => {
     await agentApi.streamChat(1, { message: '你好' })
-    expect(mockRequest.stream).toHaveBeenCalledWith('/agents/1/stream_chat/', { message: '你好' })
+    expect(mockRequest.stream).toHaveBeenCalledWith('/agents/1/stream_chat/', { message: '你好' }, {})
   })
 })

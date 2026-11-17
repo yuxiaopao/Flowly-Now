@@ -9,6 +9,7 @@ export const websiteGeneratorApi = {
   download: (id) => api.get(`/website-generator/${id}/download/`, { responseType: 'blob' }),
   deploy: (id) => api.post(`/website-generator/${id}/deploy/`),
   agentMessage: (id, data) => api.post(`/website-generator/${id}/agent/message/`, data),
+  rebuildWorkflow: (id, idempotencyKey) => api.post(`/website-generator/${encodeURIComponent(id)}/rebuild-workflow/`, {}, { headers: { 'Idempotency-Key': idempotencyKey }, skipErrorToast: true }),
   generateFromTraining: (trainingRunId, name) => api.post('/website-generator/generate/', normalizeGeneratePayload({
     training_run_id: trainingRunId,
     name: name || `YOLO Detection - ${new Date().toLocaleDateString('zh-CN')}`,

@@ -56,6 +56,7 @@ urlpatterns = [
     path('api/v1/auth/', include('users.urls')),
     path('api/v1/', include('core.urls')),
     path('api/v1/', include('workflows.urls')),
+    path('api/v1/applications/', include('applications.urls')),
     path('api/v1/datasets/', include('datasets.urls')),
     path('api/v1/agents/', include('agents.urls')),
     path('api/v1/nl-workflow/', include('nl_to_workflow.urls')),

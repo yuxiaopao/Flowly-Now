@@ -3,15 +3,19 @@ Views for Desktop Agent management.
 """
 
 import logging
-from django.db import models
+from django.db import transaction
 from django.utils import timezone
 from rest_framework import viewsets, status
-from rest_framework.decorators import action, permission_classes
+from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.permissions import IsAuthenticated
+from rest_framework import serializers
+from rest_framework.exceptions import APIException
+from training.models import TrainingJob
 
 from .models_desktop import DesktopAgent
 from .serializers_desktop import DesktopAgentSerializer, DesktopAgentRegisterSerializer
+from .desktop_jobs import bind_training_job, desktop_agent_group
 
 logger = logging.getLogger(__name__)
 
@@ -20,26 +24,27 @@ class DesktopAgentViewSet(viewsets.ModelViewSet):
     """
     ViewSet for DesktopAgent management.
 
-    Agents can register themselves without authentication (using agent_id).
-    Authenticated users can manage agents they own.
+    Cloud-connected agents are authenticated and private to their owner.
     """
 
     queryset = DesktopAgent.objects.all()
-
-    def get_permissions(self):
-        if self.action in ('register', 'heartbeat'):
-            return [AllowAny()]
-        return [IsAuthenticated()]
+    permission_classes = [IsAuthenticated]
 
     def get_serializer_class(self):
-        if self.action == 'register':
+        if self.action in ('register', 'create'):
             return DesktopAgentRegisterSerializer
         return DesktopAgentSerializer
 
     def get_queryset(self):
         if self.request.user.is_authenticated:
             return DesktopAgent.objects.filter(owner=self.request.user)
-        return DesktopAgent.objects.filter(owner__isnull=True)
+        return DesktopAgent.objects.none()
+
+    def perform_create(self, serializer):
+        serializer.save(owner=self.request.user)
+
+    def create(self, request, *args, **kwargs):
+        return self.register(request)
 
     @action(detail=False, methods=['post'])
     def register(self, request):
@@ -50,19 +55,18 @@ class DesktopAgentViewSet(viewsets.ModelViewSet):
         serializer = DesktopAgentRegisterSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        agent, created = DesktopAgent.objects.update_or_create(
-            agent_id=serializer.validated_data['agent_id'],
-            defaults={
-                **serializer.validated_data,
-                'status': 'online',
-                'connected_at': timezone.now(),
-            }
-        )
-
-        # If user is authenticated, associate the agent
-        if request.user.is_authenticated:
-            agent.owner = request.user
-            agent.save(update_fields=['owner'])
+        values = {**serializer.validated_data, 'status': 'online', 'connected_at': timezone.now()}
+        with transaction.atomic():
+            agent, created = DesktopAgent.objects.select_for_update().get_or_create(
+                agent_id=values['agent_id'], defaults={**values, 'owner': request.user},
+            )
+            if agent.owner_id != request.user.pk:
+                return Response({'error': '设备已存在，请使用新的 Agent ID 注册',
+                                 'errors': {'code': 'agent_identity_conflict'}}, status=status.HTTP_409_CONFLICT)
+            if not created:
+                for field, value in values.items():
+                    setattr(agent, field, value)
+                agent.save()
 
         logger.info(f"DesktopAgent {'registered' if created else 'updated'}: {agent.agent_id}")
         return Response(
@@ -81,8 +85,9 @@ class DesktopAgentViewSet(viewsets.ModelViewSet):
             return Response({'error': 'agent_id required'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            agent = DesktopAgent.objects.get(agent_id=agent_id)
-            agent.status = request.data.get('status', 'online')
+            agent = self.get_queryset().get(agent_id=agent_id)
+            agent.status = serializers.ChoiceField(choices=DesktopAgent.STATUS_CHOICES).run_validation(
+                request.data.get('status', 'online'))
             agent.last_seen = timezone.now()
             agent.save(update_fields=['status', 'last_seen'])
             return Response({'ok': True, 'status': agent.status})
@@ -95,7 +100,7 @@ class DesktopAgentViewSet(viewsets.ModelViewSet):
         List all online agents that support YOLO training.
         Used by the cloud when dispatching a training job.
         """
-        queryset = DesktopAgent.objects.filter(
+        queryset = self.get_queryset().filter(
             gpu_available=True,
             supports_yolo_training=True,
             status__in=['online']
@@ -105,6 +110,7 @@ class DesktopAgentViewSet(viewsets.ModelViewSet):
         return Response(DesktopAgentSerializer(agents, many=True).data)
 
     @action(detail=False, methods=['post'])
+    @transaction.atomic
     def dispatch_training(self, request):
         """
         Dispatch a training job to a specific agent via WebSocket.
@@ -121,7 +127,7 @@ class DesktopAgentViewSet(viewsets.ModelViewSet):
             return Response({'error': 'agent_id required'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            agent = DesktopAgent.objects.get(agent_id=agent_id, status='online')
+            agent = self.get_queryset().select_for_update().get(agent_id=agent_id, status='online')
         except DesktopAgent.DoesNotExist:
             return Response({'error': 'Agent not online'}, status=status.HTTP_404_NOT_FOUND)
 
@@ -131,20 +137,28 @@ class DesktopAgentViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Send training command to agent via its WebSocket group
-        channel_layer = get_channel_layer()
-        async_to_sync(channel_layer.group_send)(
-            f'agent_{agent_id}',
-            {
-                'type': 'training_command',
-                'command': 'start',
-                'job_config': job_config,
-            }
-        )
+        job, job_config = bind_training_job(request.user, agent, job_config)
 
-        # Update agent status
         agent.status = 'training'
         agent.save(update_fields=['status'])
+
+        def publish_command():
+            try:
+                channel_layer = get_channel_layer()
+                async_to_sync(channel_layer.group_send)(desktop_agent_group(agent.pk), {
+                    'type': 'training_command', 'command': 'start', 'job_config': job_config,
+                })
+            except Exception as error:
+                TrainingJob.objects.filter(pk=job.pk, status='queued').update(
+                    status='failed', error_message='训练指令发送失败，请重试', completed_at=timezone.now(),
+                )
+                DesktopAgent.objects.filter(pk=agent.pk, status='training').update(status='online')
+                logger.exception('Failed to dispatch training to %s', agent_id)
+                failure = APIException('训练指令发送失败，请重试')
+                failure.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+                raise failure from error
+
+        transaction.on_commit(publish_command)
 
         logger.info(f"Training dispatched to agent {agent_id}")
         return Response({
@@ -152,6 +166,7 @@ class DesktopAgentViewSet(viewsets.ModelViewSet):
             'agent_id': agent_id,
             'cloud_url': agent.cloud_url,
             'status': 'dispatched',
+            'job_id': str(job.pk),
         })
 
     @action(detail=True, methods=['post'])
@@ -169,7 +184,7 @@ class DesktopAgentViewSet(viewsets.ModelViewSet):
 
         channel_layer = get_channel_layer()
         async_to_sync(channel_layer.group_send)(
-            f'agent_{agent.agent_id}',
+            desktop_agent_group(agent.pk),
             {
                 'type': 'get_status',
             }

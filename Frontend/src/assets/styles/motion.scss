@@ -3,6 +3,31 @@
 // 引入位置：main.js（在 themes.scss 之后）
 
 // ============================================
+// 0. 运动曲线令牌（全局统一时长与缓动）
+// ============================================
+
+:root {
+  // 进场：快速减速出，约 250ms
+  --flowly-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --flowly-duration-out: 250ms;
+
+  // 离场：加速入，约 150ms
+  --flowly-ease-in: cubic-bezier(0.55, 0, 1, 0.45);
+  --flowly-duration-in: 150ms;
+
+  // 页面内移动 / 展开：标准缓入缓出，约 300ms
+  --flowly-ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --flowly-duration-in-out: 300ms;
+
+  // 加载旋转：匀速
+  --flowly-ease-linear: linear;
+  --flowly-duration-spin: 0.8s;
+
+  // 数字滚动：接近目标变慢
+  --flowly-duration-roll: 0.6s;
+}
+
+// ============================================
 // 1. 关键帧
 // ============================================
 
@@ -218,7 +243,252 @@
 }
 
 // ============================================
-// 7. 无障碍：尊重用户减少动效偏好
+// 7. 12 连交互工具类
+// 说明：结构 / 静止状态不包裹媒体查询；只有 transition / animation
+//       包在 prefers-reduced-motion: no-preference 中，减少动效时状态直接切换。
+// ============================================
+
+@keyframes flowly-switch-stretch {
+  0%   { transform: scaleX(1); }
+  45%  { transform: scaleX(1.6); }
+  70%  { transform: scaleX(0.9); }
+  100% { transform: scaleX(1); }
+}
+
+@keyframes flowly-switch-stretch-back {
+  0%   { transform: scaleX(1); }
+  45%  { transform: scaleX(1.6); }
+  100% { transform: scaleX(1); }
+}
+
+@keyframes flowly-check-draw {
+  from { stroke-dashoffset: var(--flowly-check-length, 24); }
+  to   { stroke-dashoffset: 0; }
+}
+
+@keyframes flowly-check-clip {
+  from { clip-path: inset(0 100% 0 0); }
+  to   { clip-path: inset(0 0 0 0); }
+}
+
+@keyframes flowly-number-roll {
+  from { transform: translateY(0); }
+  to   { transform: translateY(var(--flowly-roll-distance, -2em)); }
+}
+
+// 4. 弹性开关：给 el-switch 根节点加 .flowly-switch-thumb，
+//    滑钮在 toggle 时横向拉长成胶囊再回圆。
+.flowly-switch-thumb {
+  .el-switch__action {
+    will-change: transform;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .el-switch__action {
+      transition: transform var(--flowly-duration-out) var(--flowly-ease-out);
+    }
+
+    &.is-checked .el-switch__action {
+      animation: flowly-switch-stretch var(--flowly-duration-out) var(--flowly-ease-out);
+    }
+
+    &:not(.is-checked) .el-switch__action {
+      animation: flowly-switch-stretch-back var(--flowly-duration-in) var(--flowly-ease-in);
+    }
+  }
+}
+
+// 5. 勾选画出来：SVG 对勾路径加 .flowly-check-path 描边画出；
+//    也可挂在 el-checkbox 上，对勾用裁剪从左下到右上渐显。
+.flowly-check-draw {
+  .flowly-check-path {
+    stroke-dasharray: var(--flowly-check-length, 24);
+    stroke-dashoffset: 0;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .flowly-check-path {
+      animation: flowly-check-draw 0.2s var(--flowly-ease-out) both;
+    }
+
+    &.el-checkbox.is-checked .el-checkbox__inner::after {
+      animation: flowly-check-clip 0.2s var(--flowly-ease-out) both;
+    }
+  }
+}
+
+// 6. 液态滑块：给 el-slider 根节点加 .flowly-liquid-slider，
+//    轨道、滑钮、数值同步使用同一时长曲线。
+.flowly-liquid-slider {
+  @media (prefers-reduced-motion: no-preference) {
+    .el-slider__runway,
+    .el-slider__bar,
+    .el-slider__button-wrapper,
+    .el-slider__button {
+      transition: all var(--flowly-duration-in-out) var(--flowly-ease-in-out);
+    }
+  }
+}
+
+// 7. 数字滚动：给数字列加 .flowly-number-roll，
+//    通过 --flowly-roll-distance 控制滚动距离，接近目标变慢。
+.flowly-number-roll {
+  display: inline-block;
+
+  @media (prefers-reduced-motion: no-preference) {
+    animation: flowly-number-roll var(--flowly-duration-roll) var(--flowly-ease-out) forwards;
+  }
+}
+
+// 8. 骨架屏：占位条宽高由使用方按真实内容设置（内联样式或自定义类），
+//    数据到达后原位替换即可，不产生跳动。
+.flowly-skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--surface-muted);
+  border-radius: var(--radius-sm, 0.25rem);
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, var(--surface-strong), transparent);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    &::after {
+      animation: shimmer-sweep 1.6s ease-in-out infinite;
+    }
+  }
+}
+
+// 9. 卡片翻面：Y 轴翻转，正反两面隐藏 backface。
+.flowly-flip-card {
+  perspective: 1200px;
+
+  &__inner {
+    position: relative;
+    transform-style: preserve-3d;
+  }
+
+  &.is-flipped &__inner {
+    transform: rotateY(180deg);
+  }
+
+  &__front,
+  &__back {
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+  }
+
+  &__back {
+    position: absolute;
+    inset: 0;
+    transform: rotateY(180deg);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    &__inner {
+      transition: transform var(--flowly-duration-in-out) var(--flowly-ease-in-out);
+    }
+  }
+}
+
+// 10. 汉堡变叉：三条线中间淡出、上下旋转交叉。
+.flowly-hamburger-to-x {
+  display: inline-flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  width: 24px;
+  height: 24px;
+  cursor: pointer;
+
+  &__line {
+    display: block;
+    width: 100%;
+    height: 2px;
+    border-radius: 2px;
+    background: currentColor;
+  }
+
+  &.is-open &__line:nth-child(1) {
+    transform: translateY(7px) rotate(45deg);
+  }
+
+  &.is-open &__line:nth-child(2) {
+    opacity: 0;
+  }
+
+  &.is-open &__line:nth-child(3) {
+    transform: translateY(-7px) rotate(-45deg);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    &__line {
+      transition: transform var(--flowly-duration-in-out) var(--flowly-ease-in-out),
+                  opacity var(--flowly-duration-in) var(--flowly-ease-in);
+    }
+  }
+}
+
+// 11. 卡片堆叠：下方卡片下移并略微缩小、露出边缘。
+.flowly-card-stack {
+  > * {
+    transform-origin: top center;
+  }
+
+  > *:nth-child(2) { transform: translateY(8px) scale(0.98); }
+  > *:nth-child(3) { transform: translateY(16px) scale(0.96); }
+  > *:nth-child(4) { transform: translateY(24px) scale(0.94); }
+
+  @media (prefers-reduced-motion: no-preference) {
+    > * {
+      transition: transform var(--flowly-duration-in-out) var(--flowly-ease-in-out);
+    }
+  }
+}
+
+// ============================================
+// 7.5 全局接入：Element Plus 控件默认获得对应微交互
+// ============================================
+
+@media (prefers-reduced-motion: no-preference) {
+  // 弹性开关：圆点在移动过程中拉长成胶囊，到位后回弹
+  .el-switch .el-switch__action {
+    transition: transform var(--flowly-duration-out) var(--flowly-ease-out),
+      left var(--flowly-duration-out) var(--flowly-ease-out);
+  }
+  .el-switch.is-checked .el-switch__action {
+    animation: flowly-switch-stretch var(--flowly-duration-out) var(--flowly-ease-out);
+  }
+
+  // 勾选画出来：对勾用裁切渐显（约 200ms）
+  .el-checkbox__inner::after {
+    animation: flowly-check-clip 0.2s var(--flowly-ease-out) both;
+  }
+
+  // 液态滑块：轨道、滑钮同步使用同一时长与曲线
+  .el-slider__runway,
+  .el-slider__bar,
+  .el-slider__button-wrapper {
+    transition: all var(--flowly-duration-in-out) var(--flowly-ease-in-out);
+  }
+
+  // 数字滚动：统计数字更新时使用减速曲线
+  .stat-card__value,
+  .el-statistic__number {
+    animation: flowly-number-roll var(--flowly-duration-roll) var(--flowly-ease-out);
+  }
+
+  // 加载旋转图标：匀速循环
+  .el-loading-spinner .circular {
+    animation: rotating var(--flowly-duration-spin) var(--flowly-ease-linear) infinite !important;
+  }
+}
+
+// ============================================
+// 8. 无障碍：尊重用户减少动效偏好
 // ============================================
 
 @media (prefers-reduced-motion: reduce) {

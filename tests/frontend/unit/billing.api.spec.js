@@ -106,7 +106,7 @@ describe('billingApi.getInvoice', () => {
 describe('billingApi.downloadInvoice', () => {
   it('GET /billing/invoices/:id/download/', async () => {
     await billingApi.downloadInvoice(1)
-    expect(mockRequest.get).toHaveBeenCalledWith('/billing/invoices/1/download/')
+    expect(mockRequest.get).toHaveBeenCalledWith('/billing/invoices/1/download/', {}, { responseType: 'blob' })
   })
 })
 

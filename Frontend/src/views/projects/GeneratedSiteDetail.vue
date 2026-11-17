@@ -83,11 +83,41 @@
           查看 CodeGraph
         </el-button>
         <el-button
+          v-if="site.source?.status === 'available'"
+          data-testid="site-source-workflow"
           @click="openWorkflowEditor"
         >
-          在工作流中编辑
+          {{ site.source.canEdit ? '编辑源工作流' : '查看源工作流' }}
+        </el-button>
+        <el-button
+          v-if="site.canRebuild"
+          :loading="rebuilding"
+          :disabled="rebuilding"
+          data-testid="site-rebuild-workflow"
+          @click="rebuildWorkflow"
+        >
+          基于项目创建工作流副本
         </el-button>
       </div>
+      <p
+        v-if="site.source?.message"
+        class="page-desc"
+      >
+        {{ site.source.message }}
+      </p>
+      <p
+        v-if="site.canRebuild"
+        class="page-desc"
+      >
+        {{ site.rebuildNotice }}
+      </p>
+      <el-alert
+        v-if="rebuildError"
+        :title="rebuildError"
+        type="error"
+        show-icon
+        :closable="false"
+      />
 
       <div
         v-if="site.outputDir"
@@ -168,8 +198,8 @@
 
 <script setup>
 import PageShell from '@/components/layout/PageShell.vue'
-import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { websiteGeneratorApi } from '@/api/websiteGenerator'
 
@@ -181,6 +211,11 @@ const loading = ref(true)
 const error = ref('')
 const deploying = ref(false)
 const downloading = ref(false)
+const rebuilding = ref(false)
+const rebuildError = ref('')
+let rebuildKey = ''
+let siteRevision = 0
+let navigatingToCopy = false
 let pollTimer = null
 
 const statusTagType = computed(() => {
@@ -191,16 +226,21 @@ const statusTagType = computed(() => {
 })
 
 async function fetchSite() {
+  const revision = siteRevision
+  const id = route.params.id
   try {
-    site.value = await websiteGeneratorApi.get(route.params.id)
+    const result = await websiteGeneratorApi.get(id)
+    if (revision !== siteRevision) return
+    site.value = result
     error.value = ''
     if (site.value?.status === 'generating') {
       pollTimer = window.setTimeout(fetchSite, 3000)
     }
   } catch (e) {
+    if (revision !== siteRevision) return
     error.value = e?.message || '加载识别项目失败'
   } finally {
-    loading.value = false
+    if (revision === siteRevision) loading.value = false
   }
 }
 
@@ -254,7 +294,32 @@ function openRagCollection() {
 }
 
 function openWorkflowEditor() {
-  router.push('/workflows/new?template=yolo-detection')
+  const source = site.value?.source
+  if (source?.status !== 'available' || !source.workflowId) return
+  router.push(`/workflows/${encodeURIComponent(source.workflowId)}${source.canEdit ? '/edit' : ''}`)
+}
+
+async function rebuildWorkflow() {
+  if (rebuilding.value || !site.value?.canRebuild) return
+  if (!rebuildKey) rebuildKey = Array.from(crypto.getRandomValues(new Uint8Array(16)), value => value.toString(16).padStart(2, '0')).join('')
+  rebuilding.value = true
+  rebuildError.value = ''
+  const revision = siteRevision
+  try {
+    const result = await websiteGeneratorApi.rebuildWorkflow(site.value.id, rebuildKey)
+    if (revision !== siteRevision) return
+    if (!result?.workflowId) throw new Error('服务未返回工作流编号，请重试以确认上次创建结果。')
+    navigatingToCopy = true
+    await router.push(`/workflows/${encodeURIComponent(result.workflowId)}/edit`)
+  } catch (failure) {
+    if (revision === siteRevision) {
+      const payload = failure.response?.data
+      const explanation = payload?.message || payload?.detail || payload?.error
+      rebuildError.value = typeof explanation === 'string' ? explanation : Array.isArray(explanation) ? explanation.join('；') : failure.response ? '副本创建失败，请检查项目资源与权限后重试。' : '副本创建结果未确认，请重试；相同请求标识可避免重复创建。'
+    }
+  } finally {
+    if (revision === siteRevision) { rebuilding.value = false; navigatingToCopy = false }
+  }
 }
 
 function copyText(text) {
@@ -265,9 +330,24 @@ function copyText(text) {
   })
 }
 
-onMounted(fetchSite)
-onUnmounted(() => {
+function beforeUnload(event) { if (rebuilding.value) { event.preventDefault(); event.returnValue = '' } }
+onBeforeRouteLeave(() => !rebuilding.value || navigatingToCopy)
+onBeforeRouteUpdate(() => !rebuilding.value)
+watch(() => route.params.id, () => {
+  siteRevision++
   if (pollTimer) clearTimeout(pollTimer)
+  site.value = null
+  loading.value = true
+  error.value = ''
+  rebuildError.value = ''
+  rebuildKey = ''
+  fetchSite()
+}, { immediate: true })
+onMounted(() => window.addEventListener('beforeunload', beforeUnload))
+onUnmounted(() => {
+  siteRevision++
+  if (pollTimer) clearTimeout(pollTimer)
+  window.removeEventListener('beforeunload', beforeUnload)
 })
 </script>
 

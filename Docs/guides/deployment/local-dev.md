@@ -5,7 +5,7 @@
 | 软件 | 版本 | 说明 |
 |------|------|------|
 | Python | 3.12+ | 推荐使用 pyenv 或 conda |
-| Node.js | 20+ | 前端构建 |
+| Node.js | 24 | 前端与桌面构建（与 CI/Docker 一致） |
 | MySQL | 8.0+ | 主数据库 (端口 3306) |
 | PostgreSQL | 16+ | 向量数据库 (端口 5432) |
 | Redis | 7+ | 缓存和消息队列 |
@@ -55,6 +55,12 @@ python manage.py runserver 127.0.0.1:8000
 # 前端 .env 需配置：VITE_WS_URL=ws://127.0.0.1:8000
 # WebSocket 鉴权：浏览器握手无法带 Authorization 头，前端 getWebSocketUrl() 会自动追加 ?token=<JWT>
 ```
+
+根目录 `requirements.txt` 引入共同后端依赖 `Backend/requirements.txt` 和本地模型扩展
+`Backend/requirements-local-models.txt`。仅运行 API 时可只安装前者；完整本地开发与模型加载测试使用根入口。
+安装前按 CPU/CUDA 环境选择匹配的 `torch` / `torchvision`，不要把 Windows CUDA 环境的 `pip freeze`
+直接用于 Linux 镜像。CI 和后端镜像使用固定的 CPU wheel 组合；模型扩展保留现有版本上限，diffusers 源码固定到具体提交。
+这些输入文件尚不是全量传递依赖锁；发布锁应分别在目标 Linux CPU 与 Windows CUDA 环境生成并验证。
 
 ### 3.1 演示数据与 API 冒烟
 

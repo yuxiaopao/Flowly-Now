@@ -20,6 +20,8 @@ GROUNDING_INSTRUCTION = (
 )
 NO_EVIDENCE_MESSAGE = '知识库中没有找到足够的相关资料，无法据此回答。请补充文档或调整检索条件。'
 DEFAULT_STORE_NAME = '本地知识库存储'
+DEFAULT_STORE_TYPE = 'memory'
+ACTIVE_TEAM_STATUSES = ('active', 'trial')
 LOCAL_STORE_TYPES = frozenset({'memory', 'ollama'})
 TEXT_EXTENSIONS = frozenset({'.txt', '.md', '.markdown', '.csv', '.json', '.html', '.htm'})
 FILE_EXTENSIONS = TEXT_EXTENSIONS | {'.pdf', '.docx', '.xlsx', '.pptx'}

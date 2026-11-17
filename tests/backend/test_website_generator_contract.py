@@ -17,7 +17,7 @@ pytestmark = pytest.mark.django_db
 
 
 @patch('threading.Thread')
-def test_generate_site_accepts_training_manifest_contract(thread_mock, authenticated_client):
+def test_generate_site_accepts_training_manifest_contract(thread_mock, authenticated_client, user):
     thread_mock.return_value.start.return_value = None
     with tempfile.TemporaryDirectory(prefix='flowly-site-contract-') as temp_dir:
         temp_path = Path(temp_dir)
@@ -31,7 +31,7 @@ def test_generate_site_accepts_training_manifest_contract(thread_mock, authentic
             best_weight_path=str(temp_path / 'best.pt'),
             config={'base_weight_uri': 'yolo11x.pt'},
             total_epochs=1,
-            created_by=None,
+            created_by=user,
         )
 
         output_dir = temp_path / 'site-output'

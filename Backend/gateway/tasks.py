@@ -134,21 +134,8 @@ def verify_api_key_connection(api_key):
     Verify that a unified credential can connect to its provider.
     """
     try:
-        from .gateway_service import GatewayService
-
-        provider = getattr(api_key, 'service_type', None)
-        decrypted_key = api_key.get_decrypted_data()
-
-        if not provider or not decrypted_key:
-            return False
-
-        gateway = GatewayService(user=api_key.owner, api_key=decrypted_key)
-        response = gateway.chat(
-            messages=[{"role": "user", "content": "test"}],
-            model='gpt-3.5-turbo',
-            max_tokens=5,
-        )
-        return bool(getattr(response, 'content', None) or getattr(response, 'provider', None))
+        from .services.connectivity import verify_credential
+        return bool(verify_credential(api_key.owner, api_key))
     except Exception as exc:
         logger.warning("Unified credential verification failed: %s", exc)
         return False

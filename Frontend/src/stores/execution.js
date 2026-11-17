@@ -61,6 +61,10 @@ export const useExecutionStore = defineStore('execution', () => {
   const RUNNING_EXECUTION_STATUSES = new Set(['running', 'pending', 'paused', 'queued'])
   let editorPollTimeout = null
   let editorPollSession = 0
+  let editorResumeVersion = 0
+  let editorSnapshotVersion = 0
+  let executionDetailsVersion = 0
+  let executionLogsVersion = 0
   /** @type {Map<string, (execution: object, nodeStateMap: object) => void>} */
   const editorSnapshotListeners = new Map()
   
@@ -168,6 +172,13 @@ export const useExecutionStore = defineStore('execution', () => {
     
     // 创建新的 WebSocket 连接
     wsConnection.value = new ExecutionWebSocket(executionId)
+
+    wsConnection.value.on('connection_open', () => {
+      isWsConnected.value = true
+      wsConnection.value?.getStatus?.()
+    })
+    wsConnection.value.on('connection_close', () => { isWsConnected.value = false })
+    wsConnection.value.on('connection_error', () => { isWsConnected.value = false })
     
     // 设置事件监听
     wsConnection.value.on('execution_start', (data) => {
@@ -204,7 +215,8 @@ export const useExecutionStore = defineStore('execution', () => {
       })
       
       // 更新输出数据
-      if (data.output) {
+      if (data.output !== undefined) {
+        nodeOutputs.value[data.nodeId] = data.output
         updateOutputData(data.output)
       }
     })
@@ -241,15 +253,23 @@ export const useExecutionStore = defineStore('execution', () => {
     })
     
     wsConnection.value.on('execution_complete', (data) => {
-      executionStatus.value = 'completed'
-      executionProgress.value = 100
-      outputData.value = data.outputData
+      executionStatus.value = data.status || 'completed'
+      executionProgress.value = data.progress ?? (executionStatus.value === 'completed' ? 100 : executionProgress.value)
+      outputData.value = data.outputData ?? data.output ?? outputData.value
       isStreaming.value = false
       
-      appStore.success('工作流执行完成')
+      if (executionStatus.value === 'failed') {
+        errorMessage.value = data.error || data.errorMessage || '工作流执行失败'
+        appStore.error(errorMessage.value)
+      } else if (executionStatus.value === 'cancelled') {
+        appStore.warning('执行已取消')
+      } else {
+        appStore.success('工作流执行完成')
+      }
       
       // 刷新执行详情
-      fetchExecutionDetails(data.executionId)
+      const id = data.executionId || currentExecution.value?.id
+      if (id) fetchExecutionDetails(id).catch(error => console.warn('刷新执行详情失败:', error?.message || error))
     })
     
     wsConnection.value.on('execution_error', (data) => {
@@ -282,11 +302,11 @@ export const useExecutionStore = defineStore('execution', () => {
     
     // LLM Token 更新
     wsConnection.value.on('token_update', (data) => {
-      if (data.prompt_tokens) {
-        tokenStats.value.prompt += data.prompt_tokens
+      if (data.promptTokens ?? data.prompt_tokens) {
+        tokenStats.value.prompt += data.promptTokens ?? data.prompt_tokens
       }
-      if (data.completion_tokens) {
-        tokenStats.value.completion += data.completion_tokens
+      if (data.completionTokens ?? data.completion_tokens) {
+        tokenStats.value.completion += data.completionTokens ?? data.completion_tokens
       }
       tokenStats.value.total = tokenStats.value.prompt + tokenStats.value.completion
     })
@@ -331,7 +351,8 @@ export const useExecutionStore = defineStore('execution', () => {
       })
       
       // 更新输出数据
-      if (data.output && data.status === 'completed') {
+      if (data.output !== undefined && data.status === 'completed') {
+        nodeOutputs.value[data.nodeId] = data.output
         updateOutputData(data.output)
       }
     })
@@ -509,7 +530,9 @@ export const useExecutionStore = defineStore('execution', () => {
    * 刷新执行详情
    */
   async function fetchExecutionDetails(executionId) {
+    const version = ++executionDetailsVersion
     const response = await workflowApi.getExecution(executionId)
+    if (version !== executionDetailsVersion) return response
     currentExecution.value = response
     updateFromExecution(response)
     return response
@@ -529,8 +552,10 @@ export const useExecutionStore = defineStore('execution', () => {
    * @param {number|string} executionId - 执行ID
    */
   async function fetchExecutionLogs(executionId) {
+    const version = ++executionLogsVersion
     try {
       const response = await workflowApi.getExecutionLogs(executionId)
+      if (version !== executionLogsVersion) return []
       // Support both paginated (results) and direct array responses
       const logs = response.results || response || []
       executionLogs.value = logs.map(log => ({
@@ -649,6 +674,8 @@ export const useExecutionStore = defineStore('execution', () => {
     }
     if (options.resetSession) {
       editorPollSession += 1
+      editorResumeVersion += 1
+      editorSnapshotVersion += 1
     }
     if (options.clearActive && activeWorkflowId.value) {
       clearActiveExecutionSession(activeWorkflowId.value)
@@ -669,7 +696,10 @@ export const useExecutionStore = defineStore('execution', () => {
   }
 
   async function applyEditorExecutionSnapshot(workflowId, execId) {
+    const version = ++editorSnapshotVersion
+    const session = editorPollSession
     const exec = await workflowApi.getExecution(execId, { skipErrorToast: true })
+    if (version !== editorSnapshotVersion || session !== editorPollSession) return exec
     const nodeStateMap = buildNodeStateMapFromExecution(exec)
     syncFromEditorSnapshot(exec, nodeStateMap)
     activeWorkflowId.value = String(workflowId)
@@ -762,16 +792,19 @@ export const useExecutionStore = defineStore('execution', () => {
     if (activeWorkflowId.value && activeWorkflowId.value !== wfId) {
       stopEditorPolling({ resetSession: true })
     }
+    const version = ++editorResumeVersion
 
     let execId = activeWorkflowId.value === wfId ? activeExecutionId.value : null
     if (!execId) {
       execId = await findActiveExecutionIdForWorkflow(wfId)
     }
+    if (version !== editorResumeVersion) return null
     if (!execId) return null
 
     writeActiveExecutionSession(wfId, execId)
 
     const exec = await applyEditorExecutionSnapshot(wfId, execId)
+    if (version !== editorResumeVersion) return null
     const status = exec?.status || 'idle'
 
     if (RUNNING_EXECUTION_STATUSES.has(status)) {
@@ -925,12 +958,7 @@ export const useExecutionStore = defineStore('execution', () => {
    * 从状态响应更新
    */
   function updateFromStatus(status) {
-    executionStatus.value = status.status
-    nodeStatusMap.value = status.nodeStatus || {}
-    outputData.value = status.outputData
-    errorMessage.value = status.errorMessage
-    executionProgress.value = status.progress || 0
-    currentNodeId.value = status.currentNodeId
+    updateFromExecution({ ...currentExecution.value, ...status })
   }
   
   /**
@@ -971,6 +999,8 @@ export const useExecutionStore = defineStore('execution', () => {
    * 重置执行状态
    */
   function reset() {
+    executionDetailsVersion++
+    executionLogsVersion++
     stopEditorPolling({ resetSession: true, clearActive: true, clearActiveIds: true })
     disconnectWebSocket()
     

@@ -7,7 +7,10 @@ from django.db.models import Q, Avg, Count, F
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.permissions import IsAuthenticated
+from django.shortcuts import get_object_or_404
+from tenants.access import get_accessible_tenant_ids
+from .permissions import PublicReadAdminWrite, TemplateAccessPermission
 
 from .models import (
     TemplateCategory, WorkflowTemplate, TemplateVersion,
@@ -15,8 +18,8 @@ from .models import (
 )
 from .serializers import (
     TemplateCategorySerializer, WorkflowTemplateListSerializer,
-    WorkflowTemplateDetailSerializer, WorkflowTemplateCreateSerializer,
-    TemplateVersionSerializer, TemplateReviewSerializer, TemplateUsageSerializer
+    WorkflowTemplateDetailSerializer,
+    TemplateVersionSerializer, TemplateReviewSerializer,
 )
 
 
@@ -25,7 +28,7 @@ class TemplateCategoryViewSet(viewsets.ModelViewSet):
 
     queryset = TemplateCategory.objects.filter(is_active=True)
     serializer_class = TemplateCategorySerializer
-    permission_classes = [AllowAny]
+    permission_classes = [PublicReadAdminWrite]
 
     @action(detail=False, methods=['get'])
     def tree(self, request):
@@ -53,15 +56,17 @@ class TemplateCategoryViewSet(viewsets.ModelViewSet):
 class WorkflowTemplateViewSet(viewsets.ModelViewSet):
     """ViewSet for workflow templates."""
 
-    permission_classes = [AllowAny]
+    permission_classes = [TemplateAccessPermission]
 
     def get_queryset(self):
-        queryset = WorkflowTemplate.objects.filter(status='published')
+        visible = Q(status='published', access='public')
 
         if self.request.user.is_authenticated:
-            queryset = WorkflowTemplate.objects.filter(
-                Q(status='published') | Q(created_by=self.request.user)
+            visible |= Q(created_by=self.request.user) | Q(
+                status='published', access='team',
+                tenant_id__in=get_accessible_tenant_ids(self.request.user),
             )
+        queryset = WorkflowTemplate.objects.filter(visible)
 
         category = self.request.query_params.get('category')
         if category:
@@ -101,6 +106,9 @@ class WorkflowTemplateViewSet(viewsets.ModelViewSet):
         if self.action == 'list':
             return WorkflowTemplateListSerializer
         return WorkflowTemplateDetailSerializer
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
 
     def _serialize_templates(self, templates, request):
         serializer = WorkflowTemplateListSerializer(templates, many=True, context={'request': request})
@@ -300,7 +308,7 @@ class TemplateVersionViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         template_id = self.request.data.get('template_id')
-        template = WorkflowTemplate.objects.get(id=template_id)
+        template = get_object_or_404(WorkflowTemplate, id=template_id, created_by=self.request.user)
 
         serializer.save(
             template=template,

@@ -1,0 +1,10 @@
+# Local model generation/training additions; install alongside requirements.txt.
+# Preserve the existing torch constraint so an installed compatible CUDA wheel is retained.
+torch>=2.8,<3.0
+transformers>=4.53,<5.0
+accelerate>=1.10,<2.0
+sentencepiece>=0.2,<1.0
+safetensors>=0.6,<1.0
+
+# Freeze the former floating main branch to its resolved source revision.
+diffusers @ git+https://github.com/huggingface/diffusers.git@d8c1b13c756df0059bcdb6e477a1eafcd502098d

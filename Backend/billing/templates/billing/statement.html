@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Flowly 账单凭证 {{ invoice.invoice_number }}</title>
+  <style>
+    :root { --ink: #253238; --muted: #53636b; --line: #dce3e6; --paper: #fbfcfc; --accent: #17644e; --space: 24px; }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: var(--space); color: var(--ink); background: var(--paper); font: 14px/1.7 "Microsoft YaHei", system-ui, sans-serif; }
+    main { max-width: 800px; margin: auto; }
+    header { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space); padding-block: var(--space); border-bottom: 1px solid var(--line); }
+    h1 { margin: 0; font-size: 24px; } h2 { margin-block: var(--space) 12px; font-size: 18px; }
+    .brand { margin-right: auto; color: var(--accent); font-weight: 600; }
+    dl { display: grid; grid-template-columns: minmax(100px, 1fr) minmax(0, 3fr); gap: 12px var(--space); }
+    dt { color: var(--muted); } dd { margin: 0; overflow-wrap: anywhere; }
+    table { width: 100%; border-collapse: collapse; } th, td { padding: 12px; border-bottom: 1px solid var(--line); text-align: left; } td { text-align: right; font-variant-numeric: tabular-nums; }
+    pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; padding: 16px; background: #f0f4f4; border-radius: 8px; }
+    .total { font-weight: 600; font-size: 18px; } .notes { white-space: pre-wrap; overflow-wrap: anywhere; }
+    footer { margin-top: var(--space); padding-top: 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+    @media print { body { padding: 0; } main { max-width: none; } header, tr { break-inside: avoid; } }
+    @media (max-width: 480px) { dl { grid-template-columns: 1fr; gap: 4px; } dd { margin-bottom: 12px; } }
+  </style>
+</head>
+<body><main>
+  <header><span class="brand">FLOWLY / BILLING</span><h1>账单凭证</h1></header>
+  <h2>{{ invoice.invoice_number }}</h2>
+  <dl>
+    <dt>账户</dt><dd>{{ invoice.user.email|default:invoice.user.username }}</dd>
+    <dt>状态</dt><dd>{{ invoice.get_status_display }}</dd>
+    <dt>计费周期</dt><dd>{{ invoice.period_start|date:"Y-m-d H:i T" }} 至 {{ invoice.period_end|date:"Y-m-d H:i T" }}</dd>
+    <dt>创建时间</dt><dd>{{ invoice.created_at|date:"Y-m-d H:i T" }}</dd>
+    <dt>到期时间</dt><dd>{{ invoice.due_date|date:"Y-m-d H:i T" }}</dd>
+    <dt>支付时间</dt><dd>{% if invoice.paid_at %}{{ invoice.paid_at|date:"Y-m-d H:i T" }}{% else %}未记录{% endif %}</dd>
+    <dt>支付方式</dt><dd>{{ invoice.get_payment_method_display|default:"未记录" }}</dd>
+  </dl>
+  <h2>金额</h2><table aria-label="账单金额"><tbody>
+    <tr><th scope="row">小计</th><td>{{ invoice.currency }} {{ invoice.subtotal|floatformat:2 }}</td></tr>
+    <tr><th scope="row">税费</th><td>{{ invoice.currency }} {{ invoice.tax|floatformat:2 }}</td></tr>
+    <tr><th scope="row">折扣</th><td>{{ invoice.currency }} {{ invoice.discount|floatformat:2 }}</td></tr>
+    <tr class="total"><th scope="row">总计</th><td>{{ invoice.currency }} {{ invoice.total|floatformat:2 }}</td></tr>
+  </tbody></table>
+  <h2>账单明细</h2><pre>{{ line_items_json }}</pre>
+  {% if invoice.notes %}<h2>备注</h2><p class="notes">{{ invoice.notes }}</p>{% endif %}
+  <footer>本文件为 Flowly 系统中的账单记录凭证，非税务发票。支付状态以原始记录为准，下载不会变更支付结果。可使用浏览器打印功能保存为 PDF。</footer>
+</main></body></html>

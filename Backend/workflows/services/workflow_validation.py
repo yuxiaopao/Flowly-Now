@@ -1,5 +1,6 @@
 """Chinese preflight diagnostics shared by API, runtime and batch verification."""
 from collections import Counter, defaultdict, deque
+from .model_deployment import DEPLOYMENT_NOT_CONFIGURED_MESSAGE
 
 
 N8N_PAYLOAD_TRIGGERS = frozenset({
@@ -8,9 +9,8 @@ N8N_PAYLOAD_TRIGGERS = frozenset({
 })
 N8N_HTTP_PARAMETERS = frozenset({'url', 'method', 'requestMethod', 'options'})
 UNIMPLEMENTED_INTEGRATIONS = frozenset({
-    'microsoft_teams', 'google_sheets', 'google_drive', 'gitlab', 'jira',
-    'airtable', 'trello', 'elasticsearch', 'aws_s3', 'ftp', 'stripe',
-    'twilio', 'sendgrid', 'push_notification',
+    'elasticsearch', 'aws_s3', 'ftp', 'stripe',
+    'twilio', 'sendgrid', 'push_notification', 'model_deployment',
 })
 from .data_transform import JSON_OPERATIONS as JSON_OPERATION_TYPES, CSV_OPERATIONS as CSV_OPERATION_TYPES
 
@@ -97,10 +97,23 @@ def validate_workflow(workflow, input_data=None, service=None):
         issue('缺少结束节点', code='missing_end', severity='warning')
     for node in nodes:
         cfg = node.config if isinstance(node.config, dict) else {}
+        if node.node_type == 'delay':
+            from .delay_node import normalize_delay
+            try:
+                normalize_delay(cfg)
+            except ValueError as exc:
+                issue(str(exc), node, 'delay_configuration')
+        if node.node_type == 'subworkflow':
+            from .subworkflow import configuration, SubworkflowError
+            try:
+                configuration(cfg)
+            except SubworkflowError as exc:
+                issue(str(exc), node, 'subworkflow_configuration')
         if node.node_type not in registry:
             issue(f'不支持的节点类型 {node.node_type}，缺少执行器', node, 'unsupported_node')
         elif node.node_type in UNIMPLEMENTED_INTEGRATIONS:
-            issue('此集成尚未实现执行器', node, 'unsupported_integration')
+            message = DEPLOYMENT_NOT_CONFIGURED_MESSAGE if node.node_type == 'model_deployment' else '此集成尚未实现执行器'
+            issue(message, node, 'unsupported_integration')
         for message in validate_imported_node(node.node_type, cfg):
             issue(message, node, 'n8n_compatibility')
         if cfg.get('n8n_type') == 'n8n-nodes-base.noOp':

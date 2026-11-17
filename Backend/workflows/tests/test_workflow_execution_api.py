@@ -86,7 +86,7 @@ class WorkflowExecutionApiTests(TestCase):
         nodes = {item['type']: item for item in data}
         self.assertEqual(nodes['manual']['label'], '手动触发')
         self.assertTrue(nodes['manual']['supported'])
-        self.assertFalse(nodes['google_sheets']['supported'])
+        self.assertTrue(nodes['google_sheets']['supported'])
 
     def test_save_preserves_json_csv_types_and_execution_configuration(self):
         self.graph([

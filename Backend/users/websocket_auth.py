@@ -29,13 +29,18 @@ def _get_user_from_token(token):
 
 
 def _extract_token(scope):
+    for header, value in scope.get('headers', []):
+        if header.lower() == b'authorization':
+            parts = value.split()
+            if len(parts) == 2 and parts[0].lower() == b'bearer':
+                return parts[1].decode('ascii', errors='replace')
     query = parse_qs(scope.get('query_string', b'').decode())
     token = (query.get('token') or [None])[0]
     if token:
         return token
 
     for header, value in scope.get('headers', []):
-        if header.lower() != b'secure-web-socket-protocol':
+        if header.lower() != b'sec-websocket-protocol':
             continue
         protocols = value.decode().split(',')
         for protocol in protocols:

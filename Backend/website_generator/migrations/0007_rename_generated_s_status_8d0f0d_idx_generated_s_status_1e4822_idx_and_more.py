@@ -10,25 +10,31 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RenameIndex(
-            model_name="generatedsite",
-            new_name="generated_s_status_1e4822_idx",
-            old_name="generated_s_status_8d0f0d_idx",
-        ),
-        migrations.RenameIndex(
-            model_name="generatedsite",
-            new_name="generated_s_website_08d556_idx",
-            old_name="generated_s_website_6e8a8a_idx",
-        ),
-        migrations.RenameIndex(
-            model_name="generatedsite",
-            new_name="generated_s_created_c082aa_idx",
-            old_name="generated_s_created_0a8b0a_idx",
-        ),
-        migrations.RenameIndex(
-            model_name="generatedsite",
-            new_name="generated_s_tenant__45520a_idx",
-            old_name="generated_s_tenant__1a2b3c_idx",
+        migrations.SeparateDatabaseAndState(
+            state_operations=[
+                migrations.RenameIndex(
+                    model_name="generatedsite",
+                    new_name="generated_s_status_1e4822_idx",
+                    old_name="generated_s_status_8d0f0d_idx",
+                ),
+                migrations.RenameIndex(
+                    model_name="generatedsite",
+                    new_name="generated_s_website_08d556_idx",
+                    old_name="generated_s_website_6e8a8a_idx",
+                ),
+                migrations.RenameIndex(
+                    model_name="generatedsite",
+                    new_name="generated_s_created_c082aa_idx",
+                    old_name="generated_s_created_0a8b0a_idx",
+                ),
+                migrations.RenameIndex(
+                    model_name="generatedsite",
+                    new_name="generated_s_tenant__45520a_idx",
+                    old_name="generated_s_tenant__1a2b3c_idx",
+                ),
+            ],
+            # 存量库使用自定义索引名（gs_*），仅同步迁移状态，不强制重命名实际索引。
+            database_operations=[],
         ),
         migrations.AlterField(
             model_name="generatedsite",

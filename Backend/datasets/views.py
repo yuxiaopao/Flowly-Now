@@ -40,8 +40,8 @@ class DatasetViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         """Return datasets filtered by tenant and user access."""
         user = self.request.user
-        queryset = Dataset.objects.filter(
-            Q(tenant__isnull=True) | Q(tenant_id__in=get_accessible_tenant_ids(user))
+        queryset = Dataset.objects.all() if user.is_superuser else Dataset.objects.filter(
+            Q(tenant__isnull=True, created_by=user) | Q(tenant_id__in=get_accessible_tenant_ids(user))
         )
 
         source = self.request.query_params.get('source')

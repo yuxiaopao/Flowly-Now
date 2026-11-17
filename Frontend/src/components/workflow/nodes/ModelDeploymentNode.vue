@@ -37,6 +37,12 @@
     </div>
 
     <div class="compact-view">
+      <p
+        class="deployment-notice"
+        role="status"
+      >
+        {{ MODEL_DEPLOYMENT.unavailable }}
+      </p>
       <div
         v-if="localConfig.platform || localConfig.environment"
         class="info-row"
@@ -72,18 +78,13 @@
             v-if="nodeOutput?.url || nodeOutput?.endpoint"
             class="deploy-url"
           >
-            <span class="info-label">部署地址</span>
-            <a
-              :href="nodeOutput.url || nodeOutput.endpoint"
-              target="_blank"
-              class="url-link"
-            >{{ truncateUrl(nodeOutput.url || nodeOutput.endpoint) }}</a>
+            <span class="info-label">历史记录地址</span>
+            <span class="url-link">{{ truncateUrl(nodeOutput.url || nodeOutput.endpoint) }}</span>
           </div>
           <div class="deploy-status">
             <span
               class="status-badge"
-              :class="nodeOutput?.status || 'ready'"
-            >{{ nodeOutput?.status || 'ready' }}</span>
+            >{{ MODEL_DEPLOYMENT.historicalStatus }}</span>
             <span
               v-if="nodeOutput?.latency || nodeOutput?.response_time"
               class="latency-badge"
@@ -92,6 +93,9 @@
             </span>
           </div>
         </div>
+        <p class="deployment-notice">
+          {{ MODEL_DEPLOYMENT.historical }}
+        </p>
       </div>
       <div
         v-else-if="isFailed"
@@ -201,6 +205,7 @@
 
 <script setup>
 import { ref, watch, computed } from 'vue'
+import { MODEL_DEPLOYMENT } from '@/config/modelDeployment'
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
 import { ChevronDown, Loader, AlertCircle } from 'lucide-vue-next'
 import { useExecutionStore } from '@/stores/execution'
@@ -281,6 +286,7 @@ function handleSelect() {
 </script>
 
 <style lang="scss" scoped>
+.deployment-notice { font-size: var(--font-size-xs, 12px); color: var(--text-secondary); line-height: 1.6; margin-block: var(--spacing-2, 8px); }
 .domain-node {
   background: var(--node-bg, rgba(20, 20, 30, 0.95));
   border: 2px solid var(--node-border, v-bind(nodeColor));

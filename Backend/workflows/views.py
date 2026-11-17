@@ -8,7 +8,7 @@ from django.http import StreamingHttpResponse
 from django.utils import timezone
 from django.db import models
 from django.db.models import Q
-from rest_framework import viewsets, status, permissions, serializers
+from rest_framework import viewsets, status, permissions
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
@@ -155,7 +155,7 @@ from .models import (
 )
 from .serializers import (
     WorkflowListSerializer, WorkflowDetailSerializer, WorkflowCreateSerializer,
-    WorkflowExecuteSerializer, WorkflowExecutionSerializer, WorkflowExecuteResponseSerializer,
+    WorkflowExecuteSerializer, WorkflowExecutionSerializer,
     NodeSerializer, NodeCreateSerializer,
     EdgeSerializer, EdgeCreateSerializer,
     NodeExecutionSerializer, VariableSerializer, VariableCreateSerializer,
@@ -164,10 +164,10 @@ from .serializers import (
     AuditLogSerializer,
     TemplateCategorySerializer, WorkflowTemplateListSerializer,
     WorkflowTemplateDetailSerializer, WorkflowTemplateWriteSerializer, WorkflowTemplateCreateFromSerializer,
-    TemplateInstallSerializer, TemplateRatingRecordSerializer,
+    TemplateInstallSerializer,
     TemplateReportSerializer,
     TemplateReportCreateSerializer,
-    ExecutionCacheSerializer, ExecutionCacheConfigSerializer, ExecutionCacheStatsSerializer,
+    ExecutionCacheSerializer, ExecutionCacheConfigSerializer,
     ExecutionLogSerializer,
 )
 from .services.workflow_executor import WorkflowExecutor
@@ -222,7 +222,12 @@ class WorkflowViewSet(viewsets.ModelViewSet):
         if tag:
             queryset = queryset.filter(tags__contains=[tag])
 
-        return queryset.select_related('owner').prefetch_related('nodes', 'edges')
+        queryset = queryset.select_related('owner')
+        if self.action == 'list':
+            from .services.workflow_listing import prepare_workflow_list
+
+            return prepare_workflow_list(queryset, self.request.user)
+        return queryset.prefetch_related('nodes', 'edges')
 
     def get_serializer_class(self):
         """Return appropriate serializer based on action."""
@@ -337,54 +342,111 @@ class WorkflowViewSet(viewsets.ModelViewSet):
             return x_forwarded_for.split(',')[0].strip()
         return request.META.get('REMOTE_ADDR')
 
-    @action(detail=True, methods=['get'])
+    @action(detail=True, methods=['post'])
     def stream_execute(self, request, pk=None):
-        """Execute workflow with streaming output."""
+        """Run an authorized graph and bridge each synchronous engine frame to ASGI."""
+        import threading
+        from asgiref.sync import sync_to_async
+        from django.db import transaction
+        from .execution_control import check_concurrency_allowed, claim_execution_for_run, make_json_safe
+        from .services.workflow_validation import validate_workflow
+
         workflow = self.get_object()
-        input_data = request.query_params.get('input_data', {})
+        serializer = WorkflowExecuteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        input_data = serializer.validated_data['input_data']
+        if not isinstance(input_data, dict):
+            return Response({'input_data': ['实时执行输入必须是 JSON 对象。']}, status=status.HTTP_400_BAD_REQUEST)
+        if serializer.validated_data['is_async']:
+            return Response({'is_async': ['实时执行不接受异步排队，请使用普通执行接口。']}, status=status.HTTP_400_BAD_REQUEST)
+        preflight = validate_workflow(workflow, input_data)
+        if not preflight['valid']:
+            return Response({'error': '工作流执行前检查未通过：' + '；'.join(preflight['errors']),
+                'code': 'workflow_validation', **preflight}, status=status.HTTP_400_BAD_REQUEST)
 
-        if isinstance(input_data, str):
-            try:
-                input_data = json.loads(input_data)
-            except json.JSONDecodeError:
-                input_data = {}
+        # Reserve a slot under the same workflow lock used by Celery claims. Prime
+        # only the initial frame here; no graph node runs before response streaming.
+        with transaction.atomic():
+            workflow = Workflow.all_objects.select_for_update().get(pk=workflow.pk)
+            allowed, message = check_concurrency_allowed(workflow.pk)
+            if not allowed:
+                return Response({'error': message, 'code': 'concurrency_limit'}, status=status.HTTP_429_TOO_MANY_REQUESTS)
+            execution = WorkflowExecution.objects.create(workflow=workflow, tenant=workflow.tenant,
+                version=workflow.version, status='pending', input_data=input_data, triggered_by=request.user,
+                trigger_type='manual', trigger_source={'user_id': request.user.pk,
+                    'username': request.user.username, 'ip_address': self._get_client_ip(request)})
+            claimed, execution, message = claim_execution_for_run(execution.pk,
+                allowed_statuses=('pending',), enforce_concurrency=True)
+            if not claimed:
+                execution.delete()
+                return Response({'error': message, 'code': 'concurrency_limit'}, status=status.HTTP_429_TOO_MANY_REQUESTS)
+            executor = WorkflowExecutor(workflow, execution)
+            iterator = executor.stream_execute()
+            first_frame = next(iterator)
+        self._broadcast_execution_create(execution)
+        exhausted = object()
 
-        # Create execution record
-        execution = WorkflowExecution.objects.create(
-            workflow=workflow,
-            status='pending',
-            input_data=input_data,
-            triggered_by=request.user,
-            trigger_type='manual'
-        )
+        class ExecutionStream:
+            def __init__(self):
+                self.first_frame = first_frame
+                self.closed = False
+                self.lock = threading.RLock()
 
-        def generate():
-            """Generator for streaming execution updates."""
-            try:
-                executor = WorkflowExecutor(workflow, execution)
+            def advance(self):
+                with self.lock:
+                    if self.closed:
+                        return exhausted
+                    try:
+                        if self.first_frame is not None:
+                            frame, self.first_frame = self.first_frame, None
+                        else:
+                            frame = next(iterator, exhausted)
+                        if frame is exhausted:
+                            return exhausted
+                        if frame.get('type') in ('execution_complete', 'execution_error'):
+                            execution.refresh_from_db()
+                            frame = {**frame, 'status': execution.status}
+                            if execution.status == 'completed':
+                                frame['output_data'] = execution.output_data
+                            elif execution.status == 'failed':
+                                frame.update(type='error', error=execution.error_message)
+                            else:
+                                frame['type'] = f'execution_{execution.status}'
+                                frame.pop('output_data', None)
+                        return frame
+                    except Exception as exc:
+                        logger.exception('Streaming execution %s failed', execution.pk)
+                        WorkflowExecution.objects.filter(pk=execution.pk, status='running').update(
+                            status='failed', error_message=str(exc), completed_at=timezone.now())
+                        execution.refresh_from_db()
+                        self.close()
+                        return {'type': 'error', 'execution_id': execution.pk,
+                            'status': execution.status, 'error': execution.error_message or str(exc)}
 
-                # Send initial status
-                yield f"data: {json.dumps({'type': 'execution_start', 'execution_id': execution.id})}\n\n"
+            def close(self):
+                # Serialize closure after any in-flight node. A disconnected client
+                # cannot undo that node's external side effects or completed work.
+                with self.lock:
+                    if self.closed:
+                        return
+                    self.closed = True
+                    try:
+                        iterator.close()
+                    finally:
+                        WorkflowExecution.objects.filter(pk=execution.pk, status__in=('pending', 'running')).update(
+                            status='interrupted', paused_at=timezone.now(), error_message='实时连接已关闭，执行已中断。')
 
-                # Create a callback to send updates
-                def send_update(event_type, data):
-                    yield f"data: {json.dumps({'type': event_type, 'data': data})}\n\n"
+            async def __aiter__(self):
+                try:
+                    while True:
+                        frame = await sync_to_async(self.advance, thread_sensitive=True)()
+                        if frame is exhausted:
+                            break
+                        yield f'data: {json.dumps(make_json_safe(frame), ensure_ascii=False)}\n\n'
+                finally:
+                    await sync_to_async(self.close, thread_sensitive=True)()
 
-                # Modify executor to yield streaming updates
-                for chunk in executor.stream_execute():
-                    yield f"data: {json.dumps(chunk)}\n\n"
-
-                # Send completion
-                execution.refresh_from_db()
-                yield f"data: {json.dumps({'type': 'execution_complete', 'data': {'status': execution.status, 'output_data': execution.output_data}})}\n\n"
-
-            except Exception as e:
-                yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
-
-        response = StreamingHttpResponse(
-            generate(),
-            content_type='text/event-stream'
-        )
+        response = StreamingHttpResponse(ExecutionStream(), content_type='text/event-stream')
         response['Cache-Control'] = 'no-cache'
         response['X-Accel-Buffering'] = 'no'
         return response

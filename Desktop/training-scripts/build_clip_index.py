@@ -1,5 +1,10 @@
 #!/usr/bin/env python
-"""CLIP retrieval index builder for Flowly Desktop Agent."""
+"""
+CLIP retrieval index builder — invoked by Desktop Electron or server subprocess.
+
+Usage:
+  python build_clip_index.py --config job_config.json --job-id JOB_ID --output-dir DIR [--streaming]
+"""
 from __future__ import annotations
 
 import argparse
@@ -8,10 +13,7 @@ import sys
 import time
 from pathlib import Path
 
-# Desktop/training-scripts -> repo/Backend
-BACKEND = Path(__file__).resolve().parents[2] / 'Backend'
-if not BACKEND.is_dir():
-    BACKEND = Path(__file__).resolve().parents[1] / 'Backend'
+BACKEND = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND))
 
 
@@ -21,10 +23,10 @@ def _stream(payload: dict) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description='Build CLIP retrieval index')
-    parser.add_argument('--config', required=True)
-    parser.add_argument('--job-id', default='')
-    parser.add_argument('--output-dir', default='')
-    parser.add_argument('--streaming', action='store_true')
+    parser.add_argument('--config', required=True, help='JSON job config path')
+    parser.add_argument('--job-id', default='', help='Training job id')
+    parser.add_argument('--output-dir', default='', help='Index output directory')
+    parser.add_argument('--streaming', action='store_true', help='Emit JSON progress lines')
     args = parser.parse_args()
 
     config_path = Path(args.config)
@@ -48,17 +50,18 @@ def main() -> int:
 
     _stream({'type': 'clip_index_progress', 'jobId': job_id, 'progress': 0, 'phase': 'starting'})
 
-    from training.clip_service import build_retrieval_index
+    from flowly_runtime.clip_service import build_retrieval_index
 
     started = time.time()
 
     def _progress(payload: dict) -> None:
         if not args.streaming:
             return
+        progress = int(payload.get('progress') or 0)
         _stream({
             'type': 'clip_index_progress',
             'jobId': job_id,
-            'progress': int(payload.get('progress') or 0),
+            'progress': progress,
             'phase': payload.get('phase', 'indexing'),
         })
 
@@ -99,6 +102,7 @@ def main() -> int:
     }
     result_path.parent.mkdir(parents=True, exist_ok=True)
     result_path.write_text(json.dumps(out, ensure_ascii=False, indent=2), encoding='utf-8')
+
     _stream({'type': 'clip_index_progress', 'jobId': job_id, 'progress': 100, 'phase': 'completed'})
     _stream({'type': 'clip_index_complete', 'jobId': job_id, 'result': out})
     return 0

@@ -1,6 +1,6 @@
 // @ts-check
 import { test, expect } from '@playwright/test'
-import { agentMock, agentListMock } from '../mocks/agents.mock'
+import { agentMock, agentListMock } from '../vitest/mocks/agents.mock'
 
 /**
  * Agent List Page E2E Tests
@@ -9,7 +9,24 @@ import { agentMock, agentListMock } from '../mocks/agents.mock'
 test.describe('Agent List Page', () => {
 
   test.beforeEach(async ({ page }) => {
-    await page.route(/\/api\/v1\/agents\/?$/, (route) => {
+    await page.context().addCookies([
+      { name: 'access_token', value: 'e2e-token', domain: 'localhost', path: '/' },
+      { name: 'refresh_token', value: 'e2e-refresh', domain: 'localhost', path: '/' },
+    ])
+    await page.addInitScript(() => {
+      localStorage.setItem('access_token', 'e2e-token')
+      localStorage.setItem('refresh_token', 'e2e-refresh')
+      sessionStorage.setItem('access_token', 'e2e-token')
+      sessionStorage.setItem('refresh_token', 'e2e-refresh')
+    })
+    await page.route('**/api/v1/auth/user/', (route) => {
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ code: 200, data: { id: 1, username: 'e2e', email: 'e2e@example.com', is_staff: false, is_superuser: false } }),
+      })
+    })
+    await page.route(/\/api\/v1\/agents\/?(\?.*)?$/, (route) => {
       route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -17,7 +34,7 @@ test.describe('Agent List Page', () => {
       })
     })
 
-    await page.route(/\/api\/v1\/agents\/\d+/, (route) => {
+    await page.route(/\/api\/v1\/agents\/[^/]+\/?(\?.*)?$/, (route) => {
       route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -34,8 +51,9 @@ test.describe('Agent List Page', () => {
 
   test('should display list of agents', async ({ page }) => {
     await page.goto('/agents');
+    await page.waitForSelector('.agent-card, .page-empty-state, .el-empty', { timeout: 5000 }).catch(() => {});
     const agentCards = page.locator('[data-testid^="agent-card-"], .agent-card, .agent-item');
-    const emptyState = page.locator('[data-testid="agent-list-empty"], .el-empty');
+    const emptyState = page.locator('[data-testid="agent-list-empty"], .el-empty, .page-empty-state');
     const hasAgents = await agentCards.count() > 0;
     const hasEmpty = await emptyState.count() > 0;
     expect(hasAgents || hasEmpty).toBeTruthy();
@@ -68,13 +86,13 @@ test.describe('Agent List Page', () => {
 
   test('should display create agent button', async ({ page }) => {
     await page.goto('/agents');
-    const createBtn = page.locator('button:has-text("创建" i), [data-testid="create-agent-btn"]');
+    const createBtn = page.locator('button:has-text("新建智能体"), [data-testid="create-agent-btn"]');
     await expect(createBtn.first()).toBeVisible();
   });
 
   test('should open agent creation dialog on create button click', async ({ page }) => {
     await page.goto('/agents');
-    const createBtn = page.locator('button:has-text("创建" i), [data-testid="create-agent-btn"]').first();
+    const createBtn = page.locator('button:has-text("创建"), [data-testid="create-agent-btn"]').first();
     if (await createBtn.count() > 0) {
       await createBtn.click();
       await page.waitForTimeout(300);
@@ -85,14 +103,14 @@ test.describe('Agent List Page', () => {
 
   test('should validate agent creation form', async ({ page }) => {
     await page.goto('/agents');
-    const createBtn = page.locator('button:has-text("创建" i), [data-testid="create-agent-btn"]').first();
+    const createBtn = page.locator('button:has-text("创建"), [data-testid="create-agent-btn"]').first();
     if (await createBtn.count() > 0) {
       await createBtn.click();
       await page.waitForTimeout(300);
       const dialog = page.locator('.el-dialog, .dialog').first();
 
       // Try submitting empty form
-      const submitBtn = dialog.locator('button:has-text("创建" i), [type="submit"]').first();
+      const submitBtn = dialog.locator('button:has-text("创建"), [type="submit"]').first();
       if (await submitBtn.count() > 0) {
         await submitBtn.click();
         // Form should show validation errors
@@ -105,7 +123,7 @@ test.describe('Agent List Page', () => {
 
   test('should create agent with valid data', async ({ page }) => {
     await page.goto('/agents');
-    const createBtn = page.locator('button:has-text("创建" i), [data-testid="create-agent-btn"]').first();
+    const createBtn = page.locator('button:has-text("创建"), [data-testid="create-agent-btn"]').first();
 
     if (await createBtn.count() > 0) {
       await createBtn.click();
@@ -121,7 +139,7 @@ test.describe('Agent List Page', () => {
       await typeSelect.click();
       await page.locator('.el-select-dropdown__item').first().click();
 
-      await page.route(/\/api\/v1\/agents\/?$/, (route) => {
+      await page.route(/\/api\/v1\/agents\/?(\?.*)?$/, (route) => {
         route.fulfill({
           status: 201,
           contentType: 'application/json',
@@ -130,14 +148,14 @@ test.describe('Agent List Page', () => {
       })
 
       // Submit
-      const submitBtn = dialog.locator('button:has-text("创建" i), [type="submit"]').first();
+      const submitBtn = dialog.locator('button:has-text("创建"), [type="submit"]').first();
       await submitBtn.click();
       await page.waitForTimeout(500);
     }
   });
 
   test('should handle empty agent list', async ({ page }) => {
-    await page.route('**/api/v1/agents/', (route) => {
+    await page.route(/\/api\/v1\/agents\/?(\?.*)?$/, (route) => {
       route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -146,7 +164,8 @@ test.describe('Agent List Page', () => {
     });
 
     await page.goto('/agents');
-    const emptyState = page.locator('[data-testid="agent-list-empty"], .el-empty');
+    await page.waitForSelector('.page-empty-state, .el-empty', { timeout: 5000 }).catch(() => {});
+    const emptyState = page.locator('[data-testid="agent-list-empty"], .el-empty, .page-empty-state');
     await expect(emptyState.first()).toBeVisible();
   });
 
@@ -168,7 +187,24 @@ test.describe('Agent List Page', () => {
 test.describe('Agent Conversation', () => {
 
   test.beforeEach(async ({ page }) => {
-    await page.route(/\/api\/v1\/agents\/\d+/, (route) => {
+    await page.context().addCookies([
+      { name: 'access_token', value: 'e2e-token', domain: 'localhost', path: '/' },
+      { name: 'refresh_token', value: 'e2e-refresh', domain: 'localhost', path: '/' },
+    ])
+    await page.addInitScript(() => {
+      localStorage.setItem('access_token', 'e2e-token')
+      localStorage.setItem('refresh_token', 'e2e-refresh')
+      sessionStorage.setItem('access_token', 'e2e-token')
+      sessionStorage.setItem('refresh_token', 'e2e-refresh')
+    })
+    await page.route('**/api/v1/auth/user/', (route) => {
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ code: 200, data: { id: 1, username: 'e2e', email: 'e2e@example.com', is_staff: false, is_superuser: false } }),
+      })
+    })
+    await page.route(/\/api\/v1\/agents\/[^/]+\/?(\?.*)?$/, (route) => {
       route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -176,7 +212,15 @@ test.describe('Agent Conversation', () => {
       });
     });
 
-    await page.route(/\/api\/v1\/agents\/conversations\/?$/, (route) => {
+    await page.route(/\/api\/v1\/agents\/conversations\/?(\?.*)?$/, (route) => {
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ count: 0, results: [] }),
+      })
+    })
+
+    await page.route(/\/api\/v1\/agents\/[^/]+\/debug_history\/?(\?.*)?$/, (route) => {
       route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -186,24 +230,24 @@ test.describe('Agent Conversation', () => {
   });
 
   test('should display conversation interface', async ({ page }) => {
-    await page.goto('/agents/1/chat');
-    const chatArea = page.locator('[data-testid="chat-area"], .chat-messages, .message-list');
+    await page.goto('/agents/1/debug');
+    const chatArea = page.locator('[data-testid="chat-area"], .chat-area, .chat-messages, .message-list');
     await expect(chatArea.first()).toBeVisible();
   });
 
   test('should display message input', async ({ page }) => {
-    await page.goto('/agents/1/chat');
+    await page.goto('/agents/1/debug');
     const input = page.locator('textarea, input[type="text"], [data-testid="message-input"]');
     await expect(input.first()).toBeVisible();
   });
 
   test('should send message and display response', async ({ page }) => {
-    await page.goto('/agents/1/chat');
+    await page.goto('/agents/1/debug');
 
     const input = page.locator('textarea, input[type="text"], [data-testid="message-input"]').first();
     await input.fill('Hello agent');
 
-    await page.route(/\/api\/v1\/agents\/chat\/?$/, (route) => {
+    await page.route(/\/api\/v1\/agents\/[^/]+\/chat\/?(\?.*)?$/, (route) => {
       route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -214,7 +258,7 @@ test.describe('Agent Conversation', () => {
       })
     })
 
-    const sendBtn = page.locator('[data-testid="send-btn"], button:has-text("发送" i)').first();
+    const sendBtn = page.locator('[data-testid="send-btn"], button:has-text("发送")').first();
     if (await sendBtn.count() > 0) {
       await sendBtn.click();
       await page.waitForTimeout(500);
@@ -222,8 +266,8 @@ test.describe('Agent Conversation', () => {
   });
 
   test('should not send empty message', async ({ page }) => {
-    await page.goto('/agents/1/chat');
-    const sendBtn = page.locator('[data-testid="send-btn"], button:has-text("发送" i)').first();
+    await page.goto('/agents/1/debug');
+    const sendBtn = page.locator('[data-testid="send-btn"], button:has-text("发送")').first();
     if (await sendBtn.count() > 0) {
       await sendBtn.click();
       await page.waitForTimeout(300);
@@ -231,7 +275,7 @@ test.describe('Agent Conversation', () => {
   });
 
   test('should display loading indicator during send', async ({ page }) => {
-    await page.goto('/agents/1/chat');
+    await page.goto('/agents/1/debug');
 
     await page.route(/\/api\/v1\/agents\/chat\/?$/, async (route) => {
       await new Promise(resolve => setTimeout(resolve, 1500))
@@ -245,7 +289,7 @@ test.describe('Agent Conversation', () => {
     const input = page.locator('textarea, input[type="text"], [data-testid="message-input"]').first();
     await input.fill('Test message');
 
-    const sendBtn = page.locator('[data-testid="send-btn"], button:has-text("发送" i)').first();
+    const sendBtn = page.locator('[data-testid="send-btn"], button:has-text("发送")').first();
     if (await sendBtn.count() > 0) {
       await sendBtn.click();
       // Loading indicator should appear
@@ -258,9 +302,9 @@ test.describe('Agent Conversation', () => {
   });
 
   test('should handle API error during chat', async ({ page }) => {
-    await page.goto('/agents/1/chat');
+    await page.goto('/agents/1/debug');
 
-    await page.route(/\/api\/v1\/agents\/chat\/?$/, (route) => {
+    await page.route(/\/api\/v1\/agents\/[^/]+\/chat\/?(\?.*)?$/, (route) => {
       route.fulfill({
         status: 500,
         contentType: 'application/json',
@@ -271,7 +315,7 @@ test.describe('Agent Conversation', () => {
     const input = page.locator('textarea, input[type="text"], [data-testid="message-input"]').first();
     await input.fill('Test message');
 
-    const sendBtn = page.locator('[data-testid="send-btn"], button:has-text("发送" i)').first();
+    const sendBtn = page.locator('[data-testid="send-btn"], button:has-text("发送")').first();
     if (await sendBtn.count() > 0) {
       await sendBtn.click();
       await page.waitForTimeout(500);

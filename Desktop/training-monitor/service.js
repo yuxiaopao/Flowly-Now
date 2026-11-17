@@ -2,6 +2,7 @@ const { ipcMain, dialog, shell } = require('electron');
 const fs = require('node:fs');
 const { TrainingMonitorReader, SETTINGS } = require('./reader');
 const { createMonitorSession } = require('./auth');
+const { assertTrustedRenderer } = require('../trusted-renderer');
 
 function installTrainingMonitor({ store, getWindow, session = createMonitorSession(() => store.get('cloudUrl')) }) {
   let reader = null;
@@ -29,11 +30,7 @@ function installTrainingMonitor({ store, getWindow, session = createMonitorSessi
   }
 
   function authorize(event) {
-    const window = getWindow();
-    if (!window || event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame) {
-      throw new Error('该操作仅供 Flowly 桌面端主页面使用');
-    }
-    return window;
+    return assertTrustedRenderer(event, getWindow());
   }
 
   function broadcast(payload) {

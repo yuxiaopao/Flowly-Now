@@ -6,3 +6,5 @@ CACHES = {'default': {'BACKEND': 'django.core.cache.backends.locmem.LocMemCache'
 CHANNEL_LAYERS = {'default': {'BACKEND': 'channels.layers.InMemoryChannelLayer'}}
 PASSWORD_HASHERS = ['django.contrib.auth.hashers.MD5PasswordHasher']
 CELERY_TASK_ALWAYS_EAGER = True
+CELERY_BROKER_URL = CELERY_BROKER_READ_URL = CELERY_BROKER_WRITE_URL = 'memory://'
+CELERY_RESULT_BACKEND = 'cache+memory://'

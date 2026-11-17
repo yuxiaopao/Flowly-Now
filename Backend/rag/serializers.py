@@ -5,12 +5,11 @@ Serializers for RAG app.
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from tenants.models import Tenant
-from tenants.access import get_accessible_tenant_ids
-from django.db.models import Q
 from .models import VectorStore, DocumentCollection, Document, Chunk, RAGPipeline
 from .constants import VECTOR_PORT_MIN, VECTOR_PORT_MAX, VECTOR_DIMENSION_MIN, CHUNK_SIZE_MIN, CHUNK_OVERLAP_MIN
 from .constants import MAX_CHUNK_SIZE, MAX_TOP_K, DEFAULT_MAX_QUERY_CHARS, DEFAULT_MAX_TEXT_CHARS
-from .access import accessible_collections
+from .access import accessible_collections, accessible_stores
+from .store_scope import validate_collection_store, writable_space
 from django.conf import settings
 import math
 
@@ -171,18 +170,25 @@ class DocumentCollectionCreateSerializer(serializers.ModelSerializer):
     chunk_size = serializers.IntegerField(min_value=CHUNK_SIZE_MIN, max_value=MAX_CHUNK_SIZE, required=False)
     chunk_overlap = serializers.IntegerField(min_value=CHUNK_OVERLAP_MIN, required=False)
 
+    def validate_tenant(self, value):
+        request = self.context.get('request')
+        return writable_space(request.user, value) if request else value
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         request = self.context.get('request')
         if request and request.user.is_authenticated:
-            self.fields['vector_store'].queryset = VectorStore.objects.filter(
-                Q(owner=request.user) | Q(owner__isnull=True) |
-                Q(tenant_id__in=get_accessible_tenant_ids(request.user))
-            ).distinct()
+            self.fields['vector_store'].queryset = accessible_stores(request.user)
 
     def validate(self, attrs):
         if self.instance and attrs.get('vector_store', self.instance.vector_store) is None:
             attrs.pop('vector_store', None)
+        request = self.context.get('request')
+        if request:
+            tenant = attrs.get('tenant', self.instance.tenant if self.instance else None)
+            store = attrs.get('vector_store', self.instance.vector_store if self.instance else None)
+            validate_collection_store(request.user, tenant, store,
+                self.instance.owner_id if self.instance else request.user.pk)
         size = attrs.get('chunk_size', self.instance.chunk_size if self.instance else DocumentCollection._meta.get_field('chunk_size').get_default())
         overlap = attrs.get('chunk_overlap', self.instance.chunk_overlap if self.instance else DocumentCollection._meta.get_field('chunk_overlap').get_default())
         if overlap >= size:
@@ -206,7 +212,7 @@ class DocumentCollectionCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = DocumentCollection
         fields = [
-            'id', 'name', 'description', 'vector_store', 'tenant',
+            'id', 'name', 'description', 'tenant', 'vector_store',
             'embedding_model', 'chunk_size', 'chunk_overlap', 'chunk_strategy', 'retrieval_mode'
         ]
         read_only_fields = ['id']
@@ -243,6 +249,13 @@ class RAGPipelineCreateSerializer(serializers.ModelSerializer):
         if not math.isfinite(value):
             raise serializers.ValidationError('最低相关度必须是有限数值。')
         return value
+
+    def validate(self, attrs):
+        request = self.context.get('request')
+        collection = attrs.get('collection', self.instance.collection if self.instance else None)
+        if request and collection:
+            writable_space(request.user, collection.tenant)
+        return attrs
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

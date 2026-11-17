@@ -4,11 +4,13 @@
 
 import { defineStore } from 'pinia'
 import { APP_CONFIG } from '@/config'
+import { gatewayErrorMessage } from '@/config/gateway'
 import {
   getProviders,
   getModels,
   getDefaultModels,
   testModel,
+  setModelDefault,
   getAPIKeys,
   createAPIKey,
   updateAPIKey,
@@ -21,24 +23,42 @@ import {
   gatewayEmbeddings
 } from '@/api/gateway'
 
+async function collectPages(load, params = {}) {
+  const items = []
+  let page = Number(params.page) || 1
+  let response
+  do {
+    response = await load({ ...params, page })
+    items.push(...(Array.isArray(response) ? response : response.results || []))
+    page++
+  } while (response.next)
+  return items
+}
+
 export const useGatewayStore = defineStore('gateway', {
   state: () => ({
     // Providers
     providers: [],
     providersLoading: false,
+    providersError: null,
 
     // Models
     models: [],
     modelsLoading: false,
     defaultModels: {},
+    defaultModelsLoading: false,
 
     // API Keys (legacy compatibility data sourced from unified credentials)
     apiKeys: [],
     apiKeysLoading: false,
+    apiKeysError: null,
+    modelsError: null,
+    aggregateError: null,
 
     // API Logs
     apiLogs: [],
     apiLogsLoading: false,
+    apiLogsError: null,
     apiAggregate: null,
 
     // Gateway Chat
@@ -54,17 +74,17 @@ export const useGatewayStore = defineStore('gateway', {
 
   getters: {
     // Filter models by type
-    chatModels: (state) => state.models.filter(m => m.model_type === 'chat'),
-    embeddingModels: (state) => state.models.filter(m => m.model_type === 'embedding'),
-    imageModels: (state) => state.models.filter(m => m.model_type === 'image'),
+    chatModels: (state) => state.models.filter(m => m.modelType === 'chat'),
+    embeddingModels: (state) => state.models.filter(m => m.modelType === 'embedding'),
+    imageModels: (state) => state.models.filter(m => m.modelType === 'image'),
 
     // Filter models by provider
     modelsByProvider: (state) => (providerSlug) => {
-      return state.models.filter(m => m.provider_slug === providerSlug)
+      return state.models.filter(m => m.providerSlug === providerSlug)
     },
 
     // Get active API keys
-    activeAPIKeys: (state) => state.apiKeys.filter(k => k.is_active),
+    activeAPIKeys: (state) => state.apiKeys.filter(k => k.isActive),
 
     // Get recent logs
     recentLogs: (state) => state.apiLogs.slice(0, 20),
@@ -86,12 +106,12 @@ export const useGatewayStore = defineStore('gateway', {
     async fetchProviders() {
       this.providersLoading = true
       this.error = null
+      this.providersError = null
       try {
-        const response = await getProviders()
-        this.providers = response.results || response
-        return response.results || response
+        this.providers = await collectPages(getProviders)
+        return this.providers
       } catch (error) {
-        this.error = error.message
+        this.error = this.providersError = gatewayErrorMessage(error, '提供商列表加载失败')
         throw error
       } finally {
         this.providersLoading = false
@@ -103,12 +123,12 @@ export const useGatewayStore = defineStore('gateway', {
     async fetchModels(params = {}) {
       this.modelsLoading = true
       this.error = null
+      this.modelsError = null
       try {
-        const response = await getModels(params)
-        this.models = response.results || response
-        return response.results || response
+        this.models = await collectPages(getModels, params)
+        return this.models
       } catch (error) {
-        this.error = error.message
+        this.error = this.modelsError = gatewayErrorMessage(error, '模型列表加载失败')
         throw error
       } finally {
         this.modelsLoading = false
@@ -116,7 +136,7 @@ export const useGatewayStore = defineStore('gateway', {
     },
 
     async fetchDefaultModels() {
-      this.modelsLoading = true
+      this.defaultModelsLoading = true
       this.error = null
       try {
         const response = await getDefaultModels()
@@ -126,7 +146,7 @@ export const useGatewayStore = defineStore('gateway', {
         this.error = error.message
         throw error
       } finally {
-        this.modelsLoading = false
+        this.defaultModelsLoading = false
       }
     },
 
@@ -140,18 +160,28 @@ export const useGatewayStore = defineStore('gateway', {
       }
     },
 
+    async setCatalogDefault(model, isDefault) {
+      const result = await setModelDefault(model.id, isDefault)
+      this.models = this.models.map(item => item.id === result.id ? result : result.isDefault && item.modelType === result.modelType ? { ...item, isDefault: false } : item)
+      if (result.isDefault) this.defaultModels[result.modelType] = result
+      else delete this.defaultModels[result.modelType]
+      const refreshed = await Promise.allSettled([this.fetchModels(), this.fetchDefaultModels()])
+      return { model: result, refreshFailed: refreshed.some(item => item.status === 'rejected') }
+    },
+
     // ==================== API Keys ====================
 
     async fetchAPIKeys() {
       this.apiKeysLoading = true
       this.error = null
+      this.apiKeysError = null
       try {
-        const response = await getAPIKeys()
-        this.apiKeys = response.results || response || []
+        this.apiKeys = await collectPages(getAPIKeys)
         return this.apiKeys
       } catch (error) {
-        this.error = error.message
+        this.error = this.apiKeysError = gatewayErrorMessage(error, 'API 密钥加载失败')
         this.apiKeys = []
+        throw error
       } finally {
         this.apiKeysLoading = false
       }
@@ -207,12 +237,13 @@ export const useGatewayStore = defineStore('gateway', {
     async fetchAPILogs(params = {}) {
       this.apiLogsLoading = true
       this.error = null
+      this.apiLogsError = null
       try {
         const response = await getAPILogs(params)
         this.apiLogs = response.results || response
         return response.results || response
       } catch (error) {
-        this.error = error.message
+        this.error = this.apiLogsError = gatewayErrorMessage(error, '调用日志加载失败')
         throw error
       } finally {
         this.apiLogsLoading = false
@@ -220,12 +251,14 @@ export const useGatewayStore = defineStore('gateway', {
     },
 
     async fetchAPIAggregate(params = {}) {
+      this.aggregateError = null
       try {
         const response = await getAPIAggregate(params)
         this.apiAggregate = response.results || response
         return response.results || response
       } catch (error) {
-        this.error = error.message
+        this.error = this.aggregateError = gatewayErrorMessage(error, '用量统计加载失败')
+        this.apiAggregate = null
         throw error
       }
     },

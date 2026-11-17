@@ -14,7 +14,7 @@ import {
   mockNLSession,
   mockNLWorkflow,
   mockNLHistory
-} from '../mocks/nl.mock'
+} from '../vitest/mocks/nl.mock'
 
 test.describe('NL to Workflow E2E', () => {
   

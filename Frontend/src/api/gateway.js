@@ -5,9 +5,12 @@
 
 import { request } from './index'
 
+export const GATEWAY_OPAQUE_KEYS = Object.freeze(['messages', 'tools', 'response_format', 'metadata', 'content', 'tool_calls', 'embeddings', 'vectors'])
+const payloadOptions = { opaqueKeys: GATEWAY_OPAQUE_KEYS }
+
 /** @returns {Promise<import('@/types/gateway').ModelProvider[]>} */
-export function getProviders() {
-  return request.get('/gateway/providers/')
+export function getProviders(params) {
+  return params ? request.get('/gateway/providers/', params) : request.get('/gateway/providers/')
 }
 
 /** @param {string|number} id @returns {Promise<import('@/types/gateway').ModelProvider>} */
@@ -47,12 +50,16 @@ export function getDefaultModels() {
  * @returns {Promise<import('@/types/gateway').GatewayChatResponse>}
  */
 export function testModel(id, data) {
-  return request.post(`/gateway/models/${id}/test/`, data)
+  return request.post(`/gateway/models/${id}/test/`, data, payloadOptions)
+}
+
+export function setModelDefault(id, isDefault) {
+  return request.post(`/gateway/models/${id}/set_default/`, { isDefault })
 }
 
 /** @returns {Promise<{count: number, results: import('@/types/gateway').UserAPIKey[]}>} Legacy compatibility endpoint backed by unified credentials. */
-export function getAPIKeys() {
-  return request.get('/gateway/api-keys/')
+export function getAPIKeys(params) {
+  return params ? request.get('/gateway/api-keys/', params) : request.get('/gateway/api-keys/')
 }
 
 /**
@@ -114,7 +121,7 @@ export function getRecentAPICalls(limit = 20) {
  * @returns {Promise<import('@/types/gateway').GatewayChatResponse>}
  */
 export function gatewayChat(data) {
-  return request.post('/gateway/chat/', data)
+  return request.post('/gateway/chat/', data, payloadOptions)
 }
 
 /**
@@ -122,7 +129,7 @@ export function gatewayChat(data) {
  * @returns {Promise<import('@/types/gateway').GatewayEmbeddingsResponse>}
  */
 export function gatewayEmbeddings(data) {
-  return request.post('/gateway/embeddings/', data)
+  return request.post('/gateway/embeddings/', data, payloadOptions)
 }
 
 // Export all functions as default
@@ -136,6 +143,7 @@ export default {
   getModel,
   getDefaultModels,
   testModel,
+  setModelDefault,
   // API Keys (legacy compatibility endpoints backed by unified credentials)
   getAPIKeys,
   createAPIKey,

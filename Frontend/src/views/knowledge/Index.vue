@@ -14,13 +14,31 @@
         </el-button>
         <el-button
           type="primary"
-          @click="showCollectionDialog = true"
+          :disabled="handoffRequested && !resourceContext"
+          @click="openCollectionDialog"
         >
           <Plus class="btn-icon" />
           新建集合
         </el-button>
       </template>
     </PageHeader>
+    <el-alert
+      v-if="handoffRequested"
+      :closable="false"
+      :type="handoffError ? 'warning' : 'info'"
+      :title="handoffError || HANDOFF.messages.savedNotice"
+    >
+      <p v-if="resourceContext">
+        {{ resourceContext.draft.name || HANDOFF.messages.unnamed }} · {{ resourceTeamName }}
+      </p>
+      <p>{{ handoffRetentionMessage() }}</p>
+      <el-button
+        :disabled="isSaving"
+        @click="returnToApplication"
+      >
+        {{ HANDOFF.messages.returnLabel }}
+      </el-button>
+    </el-alert>
 
     <!-- Tabs -->
     <el-tabs
@@ -66,7 +84,8 @@
           <template #actions>
             <el-button
               type="primary"
-              @click="showCollectionDialog = true"
+              :disabled="handoffRequested && !resourceContext"
+              @click="openCollectionDialog"
             >
               创建集合
             </el-button>
@@ -256,6 +275,7 @@
       title="创建文档集合"
       width="500px"
       destroy-on-close
+      :before-close="beforeCollectionClose"
       @closed="resetCollectionForm"
     >
       <el-form
@@ -263,6 +283,7 @@
         :model="collectionForm"
         :rules="collectionRules"
         label-position="top"
+        :disabled="Boolean(createdResource)"
       >
         <el-form-item
           label="名称"
@@ -292,14 +313,14 @@
             clearable
           >
             <el-option
-              v-for="store in ragStore.vectorStores"
+              v-for="store in collectionVectorStores"
               :key="store.id"
               :label="store.name"
               :value="store.id"
             />
           </el-select>
           <div
-            v-if="!ragStore.vectorStores.length"
+            v-if="!collectionVectorStores.length"
             class="form-item-tip"
           >
             暂无可用向量存储，将使用默认存储
@@ -311,6 +332,7 @@
             placeholder="仅个人可见（不选择团队）"
             style="width: 100%"
             clearable
+            :disabled="handoffRequested"
           >
             <el-option
               v-for="t in tenantStore.tenants"
@@ -392,8 +414,17 @@
           />
         </el-form-item>
       </el-form>
+      <p
+        v-if="collectionError"
+        role="alert"
+      >
+        {{ collectionError }}
+      </p>
       <template #footer>
-        <el-button @click="showCollectionDialog = false">
+        <el-button
+          :disabled="isSaving"
+          @click="cancelCollectionCreation"
+        >
           取消
         </el-button>
         <el-button
@@ -401,7 +432,7 @@
           :loading="isSaving"
           @click="handleCreateCollection"
         >
-          创建
+          {{ createdResource ? HANDOFF.messages.returnLabel : '创建' }}
         </el-button>
       </template>
     </el-dialog>
@@ -652,8 +683,8 @@ import PageEmptyState from '@/components/layout/PageEmptyState.vue'
 import PageToolbar from '@/components/layout/PageToolbar.vue'
 import PageHeader from '@/components/layout/PageHeader.vue'
 import PageShell from '@/components/layout/PageShell.vue'
-import { ref, reactive, computed, onMounted } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
+import { ref, reactive, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { useRouter, useRoute, onBeforeRouteLeave, isNavigationFailure } from 'vue-router'
 import { useRAGStore } from '@/stores/rag'
 import { useAppStore } from '@/stores/app'
 import { useTenantStore } from '@/stores/tenant'
@@ -664,6 +695,8 @@ import {
 import { ElMessageBox } from 'element-plus'
 import { APP_CONFIG } from '@/config'
 import { RAG_CONFIG, RETRIEVAL_MODES, CHUNK_STRATEGIES } from '@/config/rag'
+import { tenantApi } from '@/api/tenant'
+import { APPLICATION_RESOURCE_HANDOFF as HANDOFF, applicationResourceHandoff as handoff, currentHandoffIdentity, handoffRetentionMessage } from '@/utils/applicationResourceHandoff'
 
 const DEFAULT_EMBEDDING_MODEL = APP_CONFIG.embedding.defaultModel
 const ragStore = useRAGStore()
@@ -671,6 +704,16 @@ const appStore = useAppStore()
 const tenantStore = useTenantStore()
 const router = useRouter()
 const route = useRoute()
+const identity = computed(currentHandoffIdentity)
+const handoffRequested = computed(() => route.query[HANDOFF.queryKey] !== undefined)
+const resourceContext = ref(null)
+const handoffError = ref('')
+const collectionError = ref('')
+const createdResource = ref(null)
+const resourceTeamName = ref(HANDOFF.messages.personalSpace)
+let contextRevision = 0
+let returnTarget = null
+let disposed = false
 
 const projectFilter = computed(() => String(route.query.collection || route.query.project || ''))
 const showProjectOnly = ref(false)
@@ -752,12 +795,81 @@ const pipelines = computed(() => ragStore.pipelines)
 const isLoading = computed(() => ragStore.isLoading)
 const isSaving = computed(() => ragStore.isSaving)
 const isQuerying = computed(() => ragStore.isQuerying)
+const collectionVectorStores = computed(() => !resourceContext.value ? ragStore.vectorStores
+  : ragStore.vectorStores.filter(store => String(store.tenant || '') === resourceContext.value.draft.tenantId))
+
+function openCollectionDialog() {
+  if (handoffRequested.value && (!resourceContext.value || resourceContext.value.status !== 'creating')) {
+    handoffError.value = handoffError.value || HANDOFF.messages.invalid
+    return
+  }
+  collectionError.value = ''
+  showCollectionDialog.value = true
+}
+
+async function loadResourceContext() {
+  const revision = ++contextRevision
+  const actor = identity.value
+  const nonce = route.query[HANDOFF.queryKey]
+  resourceContext.value = null
+  handoffError.value = ''
+  if (nonce === undefined) return
+  const context = handoff.read(nonce)
+  if (!['creating', 'completed', 'cancelled'].includes(context.status)) {
+    handoffError.value = context.status === 'handoff_expired' ? HANDOFF.messages.expired : HANDOFF.messages.invalid
+    return
+  }
+  try {
+    let teamName = HANDOFF.messages.personalSpace
+    let teamId = null
+    if (context.draft.tenantId) {
+      const team = await tenantApi.getTenant(context.draft.tenantId)
+      if (String(team.id) !== context.draft.tenantId || team.status && team.status !== 'active') throw new Error(HANDOFF.messages.team)
+      teamName = team.name
+      teamId = team.id
+    }
+    if (disposed || revision !== contextRevision || actor !== identity.value) return
+    resourceContext.value = context
+    resourceTeamName.value = teamName
+    resetCollectionForm()
+    collectionForm.tenant = teamId
+    if (context.status === 'creating') showCollectionDialog.value = true
+  } catch {
+    if (revision === contextRevision && !disposed) handoffError.value = HANDOFF.messages.team
+  }
+}
+
+async function returnToApplication() {
+  if (isSaving.value) return
+  const location = handoff.returnLocation(route.query[HANDOFF.queryKey])
+  returnTarget = router.resolve(location).fullPath
+  try {
+    const failure = await router.push(location)
+    if (isNavigationFailure(failure)) handoffError.value = HANDOFF.messages.navigation
+  } catch { handoffError.value = HANDOFF.messages.navigation }
+  finally { returnTarget = null }
+}
+
+async function cancelCollectionCreation() {
+  if (isSaving.value) return
+  if (!handoffRequested.value) { showCollectionDialog.value = false; return }
+  try {
+    handoff.cancel(route.query[HANDOFF.queryKey])
+    await returnToApplication()
+  } catch (failure) { collectionError.value = failure.message }
+}
+
+function beforeCollectionClose(done) {
+  if (handoffRequested.value) cancelCollectionCreation()
+  else done()
+}
 
 function selectCollection(collection) {
   router.push(`/knowledge/${collection.id}`)
 }
 
 function editCollection(collection) {
+  if (handoffRequested.value) { handoffError.value = HANDOFF.messages.finishBeforeEditing; return }
   selectedCollection.value = collection
   Object.assign(collectionForm, {
     name: collection.name,
@@ -782,22 +894,46 @@ function showAddDocumentDialog(collection) {
 }
 
 async function handleCreateCollection() {
+  if (isSaving.value) return
+  if (createdResource.value) { await returnToApplication(); return }
+  const actor = identity.value
+  const nonce = route.query[HANDOFF.queryKey]
+  const context = handoffRequested.value ? handoff.read(nonce) : null
+  if (context && (context.status !== 'creating' || String(collectionForm.tenant || '') !== context.draft.tenantId)) {
+    collectionError.value = context.status === 'draft_expired' ? HANDOFF.messages.draftExpired
+      : context.status === 'handoff_expired' ? HANDOFF.messages.expired : HANDOFF.messages.invalid
+    return
+  }
   const valid = await collectionFormRef.value?.validate().catch(() => false)
-  if (!valid) return
+  if (!valid || actor !== identity.value || disposed) return
 
+  collectionError.value = ''
   try {
     if (selectedCollection.value) {
       await ragStore.updateCollection(selectedCollection.value.id, collectionForm)
       appStore.success('集合已更新')
     } else {
-      await ragStore.createCollection(collectionForm)
+      const result = await ragStore.createCollection({ ...collectionForm })
+      if (disposed || actor !== identity.value) {
+        if (context) ragStore.collections = ragStore.collections.filter(row => row.id !== result.id)
+        return
+      }
+      if (context) {
+        createdResource.value = result
+        resourceContext.value = handoff.complete(nonce, result)
+        appStore.success(HANDOFF.messages.createdReturn)
+        await returnToApplication()
+        return
+      }
       appStore.success('集合已创建')
     }
     showCollectionDialog.value = false
     resetCollectionForm()
     await ragStore.fetchCollections()
   } catch (err) {
-    appStore.error('操作失败')
+    if (disposed || actor !== identity.value) return
+    collectionError.value = err.response?.data?.message || err.response?.data?.detail || err.message || '操作失败'
+    appStore.error(collectionError.value)
   }
 }
 
@@ -901,14 +1037,17 @@ function testPipeline(pipeline) {
 }
 
 function resetCollectionForm() {
+  createdResource.value = null
+  collectionError.value = ''
   Object.assign(collectionForm, {
     name: '',
     description: '',
     tenant: null,
+    vector_store: null,
     embedding_model: DEFAULT_EMBEDDING_MODEL,
     retrieval_mode: 'keyword',
-  chunk_strategy: 'recursive',
-  chunk_size: RAG_CONFIG.chunkSize,
+    chunk_strategy: 'recursive',
+    chunk_size: RAG_CONFIG.chunkSize,
     chunk_overlap: RAG_CONFIG.chunkOverlap
   })
   selectedCollection.value = null
@@ -935,8 +1074,33 @@ onMounted(async () => {
     ragStore.fetchPipelines(),
     ragStore.fetchVectorStores(),
     tenantStore.fetchTenants()
-  ])
+  ]).catch(() => { handoffError.value = handoffRequested.value ? HANDOFF.messages.resourcesLoadFailed : '' })
+  if (!disposed) window.addEventListener('beforeunload', protectResourceDraft)
 })
+watch(() => [route.query[HANDOFF.queryKey], identity.value], loadResourceContext, { immediate: true })
+watch(identity, (next, previous) => {
+  if (!previous || next === previous) return
+  contextRevision++; resourceContext.value = null; createdResource.value = null
+  showCollectionDialog.value = false
+  resetCollectionForm()
+  handoffError.value = HANDOFF.messages.identity
+}, { flush: 'sync' })
+function protectResourceDraft(event) {
+  if (handoffRequested.value && showCollectionDialog.value && !createdResource.value
+      && (collectionForm.name || collectionForm.description || isSaving.value)) {
+    event.preventDefault(); event.returnValue = ''
+  }
+}
+onBeforeRouteLeave(async to => {
+  if (returnTarget && to.fullPath === returnTarget) { returnTarget = null; return true }
+  if (!handoffRequested.value || !resourceContext.value || !identity.value) return true
+  if (isSaving.value) return false
+  if (!createdResource.value && showCollectionDialog.value && (collectionForm.name || collectionForm.description)) {
+    return appStore.confirm({ title: HANDOFF.messages.leaveTitle, message: HANDOFF.messages.leaveMessage, confirmText: HANDOFF.messages.leaveConfirm, cancelText: HANDOFF.messages.keepCreating })
+  }
+  return true
+})
+onBeforeUnmount(() => { disposed = true; contextRevision++; window.removeEventListener('beforeunload', protectResourceDraft) })
 </script>
 
 <style lang="scss" scoped>

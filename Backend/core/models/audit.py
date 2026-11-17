@@ -4,6 +4,9 @@ Audit logging models for tracking user actions.
 
 from django.db import models
 from django.contrib.auth import get_user_model
+from django.core.validators import MinValueValidator, MaxValueValidator
+import uuid
+from core.data_constants import DEFAULT_BACKUP_RETENTION, MIN_BACKUP_RETENTION, MAX_BACKUP_RETENTION, BACKUP_FREQUENCIES
 
 User = get_user_model()
 
@@ -269,6 +272,7 @@ class DataExport(models.Model):
         choices=[
             ('full', '全量导出'),
             ('workflows', '工作流导出'),
+            ('agents', 'Agent导出'),
             ('executions', '执行记录导出'),
             ('usage', '使用记录导出'),
             ('audit_logs', '审计日志导出'),
@@ -292,6 +296,8 @@ class DataExport(models.Model):
     date_from = models.DateTimeField(null=True, blank=True, verbose_name='开始日期')
     date_to = models.DateTimeField(null=True, blank=True, verbose_name='结束日期')
     filters = models.JSONField(default=dict, blank=True, verbose_name='筛选条件')
+    snapshot = models.JSONField(default=dict, blank=True, editable=False, verbose_name='导出快照')
+    is_backup = models.BooleanField(default=False, db_index=True, editable=False, verbose_name='自动备份')
 
     # Status
     status = models.CharField(
@@ -329,3 +335,29 @@ class DataExport(models.Model):
 
     def __str__(self):
         return f"{self.user.username} - {self.get_export_type_display()} - {self.created_at}"
+
+
+class DataRestoreOperation(models.Model):
+    """An owner-bound, expiring preview; confirmation can create copies once."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='data_restores')
+    export = models.ForeignKey(DataExport, on_delete=models.CASCADE, related_name='restores')
+    snapshot_digest = models.CharField(max_length=64)
+    expires_at = models.DateTimeField()
+    result = models.JSONField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class PersonalBackupPolicy(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='personal_backup_policy')
+    enabled = models.BooleanField(default=False)
+    frequency = models.CharField(max_length=10, default='daily', choices=[(value, value) for value in BACKUP_FREQUENCIES])
+    keep_count = models.PositiveIntegerField(default=DEFAULT_BACKUP_RETENTION, validators=[
+        MinValueValidator(MIN_BACKUP_RETENTION), MaxValueValidator(MAX_BACKUP_RETENTION),
+    ])
+    next_run_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    last_run_at = models.DateTimeField(null=True, blank=True)
+    last_error = models.TextField(blank=True)
+    updated_at = models.DateTimeField(auto_now=True)

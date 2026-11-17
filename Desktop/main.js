@@ -25,14 +25,18 @@ const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
-const { spawn, execSync } = require('child_process');
+const { spawn, execSync, execFileSync } = require('child_process');
 const fs = require('fs');
 const net = require('net');
 const http = require('http');
+const { configureQaProfile, blockQaNetwork } = require('./qa-profile');
+const qaProfile = configureQaProfile(app);
 const log = require('electron-log');
 const Store = require('electron-store');
 const WebSocket = require('ws');
 const { installTrainingMonitor } = require('./training-monitor/service');
+const { assertTrustedRenderer, registerTrustedRenderer, protectRendererNavigation } = require('./trusted-renderer');
+const { stopOwnedProcess, PROCESS_SETTINGS } = require('./training-control');
 
 // ---- Logging ----
 log.transports.file.level = 'info';
@@ -54,15 +58,16 @@ let mainWindow = null;
 let ws = null;
 let wsReconnectTimer = null;
 let wsConnected = false;
+let cloudSessionRevision = 0;
 let heartbeatTimer = null;
 let trainingProcess = null;
+let trainingAttemptRevision = 0;
+const stoppingTrainingProcesses = new WeakSet();
 let trainingResultFile = null;
 let trainingPollTimer = null;
 let clipIndexProcess = null;
 let clipIndexResultFile = null;
 let trainingMonitor = null;
-const openWorkflow = process.argv.find(argument => argument.startsWith('--open-workflow='))?.slice('--open-workflow='.length);
-const initialWorkflowRoute = /^[a-f0-9-]{36}$/i.test(openWorkflow || '') ? `/workflows/${openWorkflow}/edit` : null;
 
 // GPU info cache
 let gpuInfo = null;
@@ -95,6 +100,7 @@ const clipIndexState = {
 
 const DEV_SERVER_URL = process.env.FLOWLY_DEV_SERVER_URL || 'http://127.0.0.1:5200';
 const RENDERER_INDEX = path.join(__dirname, 'renderer', 'index.html');
+const DESKTOP_START_ROUTE = '/home';
 
 function getAppIconPath() {
   const assetsDir = path.join(__dirname, 'assets');
@@ -156,7 +162,10 @@ function createWindow() {
     },
   });
 
+  if (qaProfile) blockQaNetwork(mainWindow.webContents);
   const target = resolveRendererTarget();
+  registerTrustedRenderer(mainWindow, target);
+  protectRendererNavigation(mainWindow, shell);
   log.info('Loading renderer:', target);
 
   if (target.mode === 'file') {
@@ -169,12 +178,13 @@ function createWindow() {
       app.quit();
       return;
     }
-    mainWindow.loadFile(target.filePath, initialWorkflowRoute ? { hash: initialWorkflowRoute } : {});
+    mainWindow.loadFile(target.filePath, { hash: DESKTOP_START_ROUTE });
   } else {
-    mainWindow.loadURL(initialWorkflowRoute ? `${target.url.replace(/\/$/, '')}${initialWorkflowRoute}` : target.url);
+    mainWindow.loadURL(new URL(DESKTOP_START_ROUTE, target.url).href);
   }
 
   mainWindow.once('ready-to-show', () => {
+    if (qaProfile) return;
     mainWindow.show();
     mainWindow.focus();
   });
@@ -229,6 +239,8 @@ function detectGPU() {
     cudnnVersion: null,
     deviceCount: 0,
   };
+
+  if (qaProfile) return info;
 
   try {
     const result = execSync('nvidia-smi --query-gpu=name,memory.total,memory.free,utilization.gpu,driver_version,compute_cap --format=csv,noheader,nounits', {
@@ -299,7 +311,8 @@ function startTraining(jobConfig) {
   }
 
   // Ensure output directory
-  const outputDir = jobConfig.outputDir || path.join(app.getPath('userData'), 'training', jobConfig.jobId);
+  const jobId = jobConfig.jobId || jobConfig.job_id || `job-${Date.now()}`;
+  const outputDir = jobConfig.outputDir || path.join(app.getPath('userData'), 'training', jobId);
   fs.mkdirSync(outputDir, { recursive: true });
 
   trainingResultFile = path.join(outputDir, 'training_result.json');
@@ -314,7 +327,6 @@ function startTraining(jobConfig) {
     FLOWLY_OUTPUT_DIR: outputDir,
   };
 
-  const jobId = jobConfig.jobId || jobConfig.job_id || `job-${Date.now()}`;
   log.info('Starting training:', jobId, 'python:', pythonExecutable, 'script:', scriptPath);
 
   trainingProcess = spawn(
@@ -330,9 +342,13 @@ function startTraining(jobConfig) {
       env,
       cwd: path.dirname(scriptPath),
       stdio: ['ignore', 'pipe', 'pipe'],
-      shell: process.platform === 'win32',
+      shell: false,
+      detached: process.platform !== 'win32',
+      windowsHide: true,
     },
   );
+  const ownedProcess = trainingProcess;
+  const attemptRevision = ++trainingAttemptRevision;
 
   trainingState.running = true;
   trainingState.jobId = jobId;
@@ -344,19 +360,23 @@ function startTraining(jobConfig) {
   trainingState.totalEpochs = jobConfig.epochs || jobConfig.total_epochs || 100;
 
   trainingProcess.stdout.on('data', (data) => {
+    if (trainingProcess !== ownedProcess || stoppingTrainingProcesses.has(ownedProcess)) return;
     ingestTrainingOutput(data);
     broadcastTrainingProgress();
   });
 
   trainingProcess.stderr.on('data', (data) => {
+    if (trainingProcess !== ownedProcess || stoppingTrainingProcesses.has(ownedProcess)) return;
     ingestTrainingOutput(data);
     broadcastTrainingProgress();
   });
 
   trainingProcess.on('exit', (code) => {
+    if (trainingProcess !== ownedProcess || stoppingTrainingProcesses.has(ownedProcess)) return;
     log.info('Training process exited with code:', code);
     trainingProcess = null;
     pollResultFile(() => {
+      if (attemptRevision !== trainingAttemptRevision) return;
       trainingState.running = false;
       if (code === 0) {
         broadcastTrainingComplete();
@@ -368,6 +388,7 @@ function startTraining(jobConfig) {
   });
 
   trainingProcess.on('error', (err) => {
+    if (trainingProcess !== ownedProcess || stoppingTrainingProcesses.has(ownedProcess)) return;
     log.error('Training process error:', err);
     trainingState.running = false;
     broadcastTrainingError(err.message);
@@ -392,14 +413,24 @@ function startTraining(jobConfig) {
   return { success: true, jobId, outputDir };
 }
 
-function stopTraining() {
-  if (!trainingProcess || !trainingState.running) {
+async function stopTraining() {
+  if (!trainingState.running) {
     return { success: false, error: 'No training running' };
   }
 
   log.info('Stopping training:', trainingState.jobId);
 
-  trainingProcess.kill('SIGTERM');
+  const ownedProcess = trainingProcess;
+  if (ownedProcess) {
+    stoppingTrainingProcesses.add(ownedProcess);
+    try {
+      await stopOwnedProcess(ownedProcess);
+    } finally {
+      stoppingTrainingProcesses.delete(ownedProcess);
+    }
+  }
+  if (trainingProcess !== ownedProcess) return { success: false, error: '训练任务已切换' };
+  trainingAttemptRevision++;
   trainingProcess = null;
   trainingState.running = false;
 
@@ -672,7 +703,7 @@ function stopClipIndex() {
 // =============================================================================
 
 function connectToCloud() {
-  if (ws && ws.readyState === WebSocket.OPEN) {
+  if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
     log.info('WS already connected');
     return;
   }
@@ -681,8 +712,8 @@ function connectToCloud() {
   const agentId = ensureAgentId();
   const apiToken = store.get('apiToken');
 
-  if (!cloudUrl) {
-    log.info('Cloud URL not configured, skipping cloud connection');
+  if (!cloudUrl || !apiToken) {
+    log.info('Cloud connection requires a signed-in user');
     return;
   }
 
@@ -698,9 +729,15 @@ function connectToCloud() {
     headers.Authorization = `Bearer ${apiToken}`;
   }
 
-  ws = new WebSocket(wsUrl, { headers });
+  const revision = cloudSessionRevision;
+  const socket = new WebSocket(wsUrl, { headers });
+  ws = socket;
+  const isCurrentSession = () => ws === socket && revision === cloudSessionRevision
+    && apiToken === store.get('apiToken') && agentId === store.get('agentId')
+    && cloudUrl === normalizeCloudUrl(store.get('cloudUrl'));
 
-  ws.on('open', () => {
+  socket.on('open', () => {
+    if (!isCurrentSession()) return;
     log.info('WS connected to cloud');
     wsConnected = true;
     startHeartbeat();
@@ -716,7 +753,8 @@ function connectToCloud() {
     });
   });
 
-  ws.on('message', (data) => {
+  socket.on('message', (data) => {
+    if (!isCurrentSession()) return;
     try {
       const msg = JSON.parse(data.toString());
       handleCloudMessage(msg);
@@ -725,14 +763,16 @@ function connectToCloud() {
     }
   });
 
-  ws.on('close', () => {
+  socket.on('close', () => {
+    if (!isCurrentSession()) return;
     log.info('WS disconnected from cloud');
     wsConnected = false;
     if (mainWindow) mainWindow.webContents.send('agent:status', buildStatusPayload());
     scheduleWSReconnect();
   });
 
-  ws.on('error', (err) => {
+  socket.on('error', (err) => {
+    if (!isCurrentSession()) return;
     log.error('WS error:', err.message);
     wsConnected = false;
   });
@@ -751,7 +791,9 @@ async function parseApiResponse(response) {
   const payload = await response.json();
   if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'data')) {
     if (!response.ok || (payload.code && payload.code >= 400)) {
-      throw new Error(payload.message || `API error ${payload.code || response.status}`);
+      const error = new Error(payload.message || `API error ${payload.code || response.status}`);
+      error.code = payload.errors?.code || payload.data?.code || payload.code;
+      throw error;
     }
     return payload.data;
   }
@@ -784,7 +826,7 @@ function resolvePythonExecutable() {
 
   for (const cmd of candidates) {
     try {
-      execSync(`"${cmd}" --version`, { encoding: 'utf-8', timeout: 5000, stdio: 'pipe', shell: true });
+      execFileSync(cmd, ['--version'], { encoding: 'utf-8', timeout: 5000, stdio: 'pipe', windowsHide: true });
       return cmd;
     } catch {
       // try next candidate
@@ -794,6 +836,7 @@ function resolvePythonExecutable() {
 }
 
 async function registerAgentViaRest(cloudUrl, agentId) {
+  const headers = cloudRequestHeaders();
   const gpu = detectGPU();
   const payload = {
     agent_id: agentId,
@@ -810,7 +853,7 @@ async function registerAgentViaRest(cloudUrl, agentId) {
 
   const response = await fetch(`${buildApiBase(cloudUrl)}/register/`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify(payload),
   });
 
@@ -820,20 +863,27 @@ async function registerAgentViaRest(cloudUrl, agentId) {
 async function sendHeartbeat() {
   const cloudUrl = store.get('cloudUrl');
   const agentId = store.get('agentId');
-  if (!cloudUrl || !agentId) return;
+  if (!cloudUrl || !agentId || !store.get('apiToken')) return;
 
   try {
-    await fetch(`${buildApiBase(cloudUrl)}/heartbeat/`, {
+    const response = await fetch(`${buildApiBase(cloudUrl)}/heartbeat/`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: cloudRequestHeaders(),
       body: JSON.stringify({
         agent_id: agentId,
         status: trainingState.running ? 'training' : 'online',
       }),
     });
+    await parseApiResponse(response);
   } catch (err) {
     log.warn('Heartbeat failed:', err.message);
   }
+}
+
+function cloudRequestHeaders() {
+  const token = store.get('apiToken');
+  if (!token) throw new Error('请先登录后连接云端设备');
+  return { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
 }
 
 function startHeartbeat() {
@@ -887,9 +937,10 @@ function ingestTrainingOutput(raw) {
 
 function scheduleWSReconnect() {
   if (wsReconnectTimer) return;
+  const revision = cloudSessionRevision;
   wsReconnectTimer = setTimeout(() => {
     wsReconnectTimer = null;
-    if (store.get('agentId')) {
+    if (revision === cloudSessionRevision && store.get('agentId') && store.get('apiToken')) {
       connectToCloud();
     }
   }, 5000);
@@ -902,8 +953,12 @@ function disconnectWS() {
   }
   stopHeartbeat();
   if (ws) {
-    ws.close();
+    const socket = ws;
     ws = null;
+    socket.removeAllListeners();
+    // ws can emit an asynchronous error when terminating a pending handshake.
+    socket.on('error', () => {});
+    socket.terminate();
   }
   wsConnected = false;
 }
@@ -926,7 +981,15 @@ function handleCloudMessage(msg) {
         }
         startTraining(config);
       } else if (payload.command === 'stop') {
-        stopTraining();
+        const targetJobId = payload.jobId || payload.job_id;
+        if (targetJobId && (!trainingState.running || String(targetJobId) !== String(trainingState.jobId))) {
+          sendToCloud({ type: 'training_cancelled', jobId: targetJobId, timestamp: Date.now() });
+        } else {
+          stopTraining().catch(error => {
+            log.error('Training cancellation failed:', error.message);
+            if (mainWindow) mainWindow.webContents.send('training:error', { error: error.message });
+          });
+        }
       }
       break;
 
@@ -1102,12 +1165,25 @@ async function ensureSiteEnv(backendDir, { siteId = '', skip = false } = {}) {
   const requirementsPath = path.join(backendDir, 'requirements.txt');
   const markerPath = path.join(venvDir, '.flowly-installed');
 
-  if (fs.existsSync(venvPython) && fs.existsSync(markerPath)) {
-    emitEnvProgress(siteId, 'ready', '已检测到本地虚拟环境，跳过重复安装');
-    return { pythonExecutable: venvPython, venvUsed: true };
-  }
-
   try {
+    const versionOptions = { encoding: 'utf8', windowsHide: true, timeout: PROCESS_SETTINGS.versionTimeoutMs };
+    const pythonVersion = execFileSync(systemPython, ['--version'], versionOptions).trim();
+    if (fs.existsSync(venvPython)) {
+      const installedPythonVersion = execFileSync(venvPython, ['--version'], versionOptions).trim();
+      if (installedPythonVersion !== pythonVersion) {
+        throw new Error(`现有虚拟环境为 ${installedPythonVersion}，当前解释器为 ${pythonVersion}；请选择匹配的 Python 或重新创建该站点环境`);
+      }
+    }
+    const requirements = fs.existsSync(requirementsPath) ? fs.readFileSync(requirementsPath, 'utf8') : '';
+    const signature = crypto.createHash('sha256').update(`${systemPython}\n${pythonVersion}\n${requirements}`).digest('hex');
+    let installed = {};
+    if (fs.existsSync(markerPath)) {
+      try { installed = JSON.parse(fs.readFileSync(markerPath, 'utf8')); } catch { /* Reinstall an incomplete environment. */ }
+    }
+    if (fs.existsSync(venvPython) && installed.signature === signature) {
+      emitEnvProgress(siteId, 'ready', '已检测到匹配的本地虚拟环境，跳过重复安装');
+      return { pythonExecutable: venvPython, venvUsed: true };
+    }
     if (!fs.existsSync(venvPython)) {
       emitEnvProgress(siteId, 'venv', '正在创建独立虚拟环境（backend/.venv）…');
       await runCommand(systemPython, ['-m', 'venv', venvDir]);
@@ -1125,13 +1201,13 @@ async function ensureSiteEnv(backendDir, { siteId = '', skip = false } = {}) {
       emitEnvProgress(siteId, 'install', '未找到 requirements.txt，跳过依赖安装');
     }
 
-    fs.writeFileSync(markerPath, JSON.stringify({ installedAt: new Date().toISOString() }), 'utf8');
+    fs.writeFileSync(markerPath, JSON.stringify({ installedAt: new Date().toISOString(), signature, pythonVersion }), 'utf8');
     emitEnvProgress(siteId, 'ready', '本地环境已就绪');
     return { pythonExecutable: venvPython, venvUsed: true };
   } catch (err) {
-    log.error('ensureSiteEnv failed, falling back to system Python:', err.message);
-    emitEnvProgress(siteId, 'error', `虚拟环境准备失败，回退到系统 Python：${err.message.slice(0, 200)}`);
-    return { pythonExecutable: systemPython, venvUsed: false, error: err.message };
+    log.error('ensureSiteEnv failed:', err.message);
+    emitEnvProgress(siteId, 'error', `虚拟环境准备失败，请修复后重试：${err.message.slice(0, 200)}`);
+    return { venvUsed: false, error: err.message };
   }
 }
 
@@ -1268,7 +1344,9 @@ async function startSite({ outputDir, port, env = {}, siteId, autoSetupEnv = tru
     return { success: false, error: `端口 ${assignedPort} 已被占用，请更换端口或停止其他预览站点` };
   }
 
-  const { pythonExecutable, venvUsed } = await ensureSiteEnv(backendDir, { siteId: id, skip: !autoSetupEnv });
+  const environment = await ensureSiteEnv(backendDir, { siteId: id, skip: !autoSetupEnv });
+  if (environment.error) return { success: false, error: environment.error };
+  const { pythonExecutable, venvUsed } = environment;
   const procEnv = { ...process.env, FLASK_RUN_PORT: String(assignedPort), ...env };
 
   emitEnvProgress(id, 'starting', `正在启动本地服务（端口 ${assignedPort}）…`);
@@ -1349,10 +1427,16 @@ function listSites() {
 // =============================================================================
 
 function setupIPC() {
+  const handle = (channel, callback) => ipcMain.handle(channel, async (event, ...args) => {
+    assertTrustedRenderer(event, mainWindow);
+    return callback(event, ...args);
+  });
   // Agent connection
-  ipcMain.handle('agent:connect', async (event, { cloudUrl, agentId, apiToken }) => {
+  handle('agent:connect', async (event, { cloudUrl, agentId, apiToken }) => {
     const normalizedUrl = normalizeCloudUrl(cloudUrl || store.get('cloudUrl') || 'http://127.0.0.1:8000');
-    const resolvedAgentId = agentId || ensureAgentId();
+    let resolvedAgentId = agentId || ensureAgentId();
+    const connectionRevision = ++cloudSessionRevision;
+    disconnectWS();
 
     store.set('cloudUrl', normalizedUrl);
     store.set('agentId', resolvedAgentId);
@@ -1360,56 +1444,67 @@ function setupIPC() {
       store.set('apiToken', apiToken);
     }
 
-    await registerAgentViaRest(normalizedUrl, resolvedAgentId);
+    try {
+      await registerAgentViaRest(normalizedUrl, resolvedAgentId);
+    } catch (error) {
+      if (connectionRevision !== cloudSessionRevision) return buildStatusPayload();
+      if (error.code !== 'agent_identity_conflict') throw error;
+      store.delete('agentId');
+      resolvedAgentId = ensureAgentId();
+      await registerAgentViaRest(normalizedUrl, resolvedAgentId);
+    }
+    if (connectionRevision !== cloudSessionRevision) return buildStatusPayload();
     connectToCloud();
     return buildStatusPayload();
   });
 
-  ipcMain.handle('agent:getConfig', async () => ({
+  handle('agent:getConfig', async () => ({
     cloudUrl: store.get('cloudUrl') || 'http://127.0.0.1:8000',
     agentId: ensureAgentId(),
     hasApiToken: Boolean(store.get('apiToken')),
   }));
 
-  ipcMain.handle('agent:disconnect', async () => {
+  handle('agent:disconnect', async () => {
+    cloudSessionRevision++;
     disconnectWS();
+    store.set('apiToken', null);
     return buildStatusPayload();
   });
 
-  ipcMain.handle('agent:status', async () => {
+  handle('agent:status', async () => {
     return buildStatusPayload();
   });
 
   // GPU
-  ipcMain.handle('gpu:info', async () => {
+  handle('gpu:info', async () => {
     return detectGPU();
   });
 
   // Training
-  ipcMain.handle('training:start', async (event, jobConfig) => {
+  handle('training:start', async (event, jobConfig) => {
     return startTraining(jobConfig);
   });
 
-  ipcMain.handle('training:stop', async () => {
+  handle('training:stop', async () => {
     return stopTraining();
   });
 
-  ipcMain.handle('training:status', async () => {
+  handle('training:status', async () => {
     return buildTrainingPayload();
   });
 
-  ipcMain.handle('training:logs', async () => {
+  handle('training:logs', async () => {
     return trainingState.logs;
   });
 
   // CLIP index (M4.14)
-  ipcMain.handle('clipIndex:start', async (_event, jobConfig) => startClipIndex(jobConfig || {}));
-  ipcMain.handle('clipIndex:stop', async () => stopClipIndex());
-  ipcMain.handle('clipIndex:status', async () => buildClipIndexPayload());
-  ipcMain.handle('clipIndex:logs', async () => clipIndexState.logs);
+  handle('clipIndex:start', async (_event, jobConfig) => startClipIndex(jobConfig || {}));
+  handle('clipIndex:stop', async () => stopClipIndex());
+  handle('clipIndex:status', async () => buildClipIndexPayload());
+  handle('clipIndex:logs', async () => clipIndexState.logs);
 
   // App info
-  ipcMain.handle('app:info', async () => ({
+  handle('app:info', async () => ({
     version: app.getVersion(),
     userData: app.getPath('userData'),
     platform: process.platform,
@@ -1417,7 +1512,7 @@ function setupIPC() {
   }));
 
   // Dialog
-  ipcMain.handle('dialog:selectDirectory', async (_event, options = {}) => {
+  handle('dialog:selectDirectory', async (_event, options = {}) => {
     const result = await dialog.showOpenDialog(mainWindow, {
       title: options.title || '选择本地文件夹',
       defaultPath: options.defaultPath || undefined,
@@ -1427,7 +1522,7 @@ function setupIPC() {
   });
 
   // Shell (open local folder in system file explorer)
-  ipcMain.handle('shell:openFolder', async (_event, targetPath) => {
+  handle('shell:openFolder', async (_event, targetPath) => {
     if (!targetPath) return { success: false, error: '路径未指定' };
     try {
       const resolved = path.resolve(targetPath);
@@ -1439,11 +1534,11 @@ function setupIPC() {
   });
 
   // Site runtime
-  ipcMain.handle('runtime:startSite', async (_event, options) => startSite(options || {}));
-  ipcMain.handle('runtime:stopSite', async (_event, siteId) => stopSite(siteId));
-  ipcMain.handle('runtime:listSites', async () => listSites());
-  ipcMain.handle('runtime:getManifest', async () => loadRuntimeManifest());
-  ipcMain.handle('runtime:grantPermission', async (_event, { outputDir }) => {
+  handle('runtime:startSite', async (_event, options) => startSite(options || {}));
+  handle('runtime:stopSite', async (_event, siteId) => stopSite(siteId));
+  handle('runtime:listSites', async () => listSites());
+  handle('runtime:getManifest', async () => loadRuntimeManifest());
+  handle('runtime:grantPermission', async (_event, { outputDir }) => {
     if (!outputDir) return { success: false, error: 'outputDir 未指定' };
     try {
       const manifest = await ensureRuntimePermission(outputDir);
@@ -1452,7 +1547,7 @@ function setupIPC() {
       return { success: false, error: err.message };
     }
   });
-  ipcMain.handle('runtime:prepareEnv', async (_event, { outputDir, autoSetupEnv = true } = {}) => {
+  handle('runtime:prepareEnv', async (_event, { outputDir, autoSetupEnv = true } = {}) => {
     if (!outputDir) return { success: false, error: 'outputDir 未指定' };
     const backendDir = path.join(path.resolve(outputDir), 'backend');
     if (!fs.existsSync(backendDir)) {
@@ -1460,6 +1555,7 @@ function setupIPC() {
     }
     const siteId = crypto.randomUUID();
     try {
+      await ensureRuntimePermission(outputDir);
       const result = await ensureSiteEnv(backendDir, { siteId, skip: !autoSetupEnv });
       return { success: !result.error, siteId, ...result };
     } catch (err) {
@@ -1483,10 +1579,10 @@ app.whenReady().then(async () => {
   setupIPC();
   trainingMonitor = installTrainingMonitor({ store, getWindow: () => mainWindow });
   createWindow();
-  detectGPU();
+  if (!qaProfile) detectGPU();
 
   const cloudUrl = store.get('cloudUrl');
-  if (cloudUrl) {
+  if (cloudUrl && !qaProfile) {
     try {
       await registerAgentViaRest(normalizeCloudUrl(cloudUrl), store.get('agentId'));
       connectToCloud();

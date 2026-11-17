@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
+r"""
 API 完整性检测脚本
 使用 Django REST Framework 的 Router 提取端点进行检测
 

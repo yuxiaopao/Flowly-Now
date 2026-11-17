@@ -182,7 +182,7 @@
         </el-tag>
       </el-divider>
       <p class="section-hint">
-        将子工作流的输出传递到父工作流的变量
+        {{ localData.config.executionMode === 'async' ? '异步执行立即返回执行标识；映射结果完成后保存在子执行记录，不改写已结束的父执行。' : '将子工作流的输出传递到父工作流的变量' }}
       </p>
       
       <div class="mapping-list">
@@ -265,7 +265,7 @@
           :step="10"
           @change="markDirty"
         />
-        <span class="input-hint">超时后将终止子工作流执行</span>
+        <span class="input-hint">超时后不再接收执行结果；已经发生的外部操作无法撤回</span>
       </el-form-item>
 
       <!-- 错误处理 -->
@@ -360,8 +360,9 @@ function onWorkflowSelect(id) {
     selectedSubworkflow.value = wf
     localData.value.config.subworkflowName = wf.name
     localData.value.config.version = 'latest'
-    // 模拟版本数据
-    availableVersions.value = Array.from({ length: wf.version || 1 }, (_, i) => i + 1)
+    // 当前工作流仅提供实际版本号；历史发布图由应用 release 保存。
+    const currentVersion = Number(wf.version)
+    availableVersions.value = Number.isSafeInteger(currentVersion) && currentVersion > 0 ? [currentVersion] : []
     markDirty()
   }
 }

@@ -282,15 +282,10 @@
         </div>
 
         <div class="context-section">
-          <h4>Token 使用</h4>
-          <el-progress
-            :percentage="tokenUsagePercent"
-            :color="tokenUsageColor"
-            :stroke-width="8"
-          />
+          <h4>模型用量</h4>
           <div class="token-stats">
-            <span>已使用: {{ tokenUsage }}</span>
-            <span>限制: {{ maxTokens }}</span>
+            <span>本轮 Token: {{ tokenUsage ?? '未提供' }}</span>
+            <span>单次输出上限: {{ maxTokens }}</span>
           </div>
         </div>
 
@@ -398,11 +393,12 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, nextTick, onMounted } from 'vue'
+import { ref, computed, watch, nextTick, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAgentStore } from '@/stores/agent'
 import { useAppStore } from '@/stores/app'
 import { getToolLabel } from '@/config/toolConfig'
+import { AGENT_DEBUG, reportedTokenUsage } from '@/config/agentDebug'
 import {
   Bot, User, X, Edit, RefreshCw, Send, History,
   ArrowRight, Hammer, Trash2, BookOpen
@@ -416,7 +412,11 @@ const appStore = useAppStore()
 
 const agentId = computed(() => route.params.id)
 
-const agent = computed(() => agentStore.currentAgent)
+const agent = computed(() => {
+  const value = agentStore.currentAgent
+  return value ? { ...value, context_window: value.contextWindow ?? value.context_window,
+    max_tokens: value.maxTokens ?? value.max_tokens, system_prompt: value.systemPrompt ?? value.system_prompt } : null
+})
 const messages = computed(() => agentStore.debugMessages)
 const isLoading = computed(() => agentStore.isLoading)
 const isStreaming = computed(() => agentStore.isStreaming)
@@ -429,20 +429,14 @@ const showFullPrompt = ref(false)
 const useStreaming = ref(true)
 const messagesContainer = ref(null)
 
-const tokenUsage = ref(0)
-const maxTokens = computed(() => agent.value?.max_tokens || 2000)
-const tokenUsagePercent = computed(() => Math.min(100, (tokenUsage.value / maxTokens.value) * 100))
-const tokenUsageColor = computed(() => {
-  if (tokenUsagePercent.value > 90) return '#F56C6C'
-  if (tokenUsagePercent.value > 70) return '#E6A23C'
-  return '#67C23A'
-})
+const tokenUsage = computed(() => reportedTokenUsage(currentDebugSession.value))
+const maxTokens = computed(() => agent.value?.maxTokens ?? agent.value?.max_tokens ?? AGENT_DEBUG.fallbackMaxOutputTokens)
 
-const currentSessionId = computed(() => currentDebugSession.value?.conversation_id)
+const currentSessionId = computed(() => currentDebugSession.value?.conversation_id ?? currentDebugSession.value?.session_id)
 
 const truncatedPrompt = computed(() => {
   const prompt = agent.value?.system_prompt || ''
-  return prompt.length > 200 ? prompt.slice(0, 200) + '...' : prompt
+  return prompt.length > AGENT_DEBUG.promptPreviewChars ? prompt.slice(0, AGENT_DEBUG.promptPreviewChars) + '...' : prompt
 })
 
 const inputPlaceholder = computed(() => {
@@ -451,16 +445,18 @@ const inputPlaceholder = computed(() => {
     : '输入消息...'
 })
 
-onMounted(async () => {
-  if (agentId.value) {
+watch(agentId, async (id) => {
+  agentStore.clearDebugSession()
+  if (id) {
     try {
-      await agentStore.fetchAgent(agentId.value)
-      await agentStore.fetchDebugHistory(agentId.value)
+      await agentStore.fetchAgent(id)
+      if (agentId.value === id) await agentStore.fetchDebugHistory(id)
     } catch (err) {
-      appStore.error('加载 Agent 失败')
+      if (agentId.value === id) appStore.error('加载 Agent 失败')
     }
   }
-})
+}, { immediate: true })
+onBeforeUnmount(() => agentStore.clearDebugSession())
 
 watch(messages, () => {
   nextTick(() => {
@@ -554,10 +550,12 @@ function insertTemplate(type) {
   inputMessage.value = templates[type] || ''
 }
 
-function copyPrompt() {
+async function copyPrompt() {
   if (agent.value?.system_prompt) {
-    navigator.clipboard.writeText(agent.value.system_prompt)
-    appStore.success('已复制')
+    try {
+      await navigator.clipboard.writeText(agent.value.system_prompt)
+      appStore.success('已复制')
+    } catch { appStore.error('复制失败，请展开完整提示词后手动复制') }
   }
 }
 

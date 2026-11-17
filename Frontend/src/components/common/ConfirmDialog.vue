@@ -181,12 +181,14 @@ const handleCancel = () => {
   border-top: 1px solid var(--border-primary);
 }
 
-.modal-fade-enter-active {
-  animation: modal-in 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
+@media (prefers-reduced-motion: no-preference) {
+  .modal-fade-enter-active {
+    animation: modal-in var(--flowly-duration-out) var(--flowly-ease-out);
+  }
 
-.modal-fade-leave-active {
-  animation: modal-out 0.2s ease-in forwards;
+  .modal-fade-leave-active {
+    animation: modal-out var(--flowly-duration-in) var(--flowly-ease-in) forwards;
+  }
 }
 
 @keyframes modal-in {

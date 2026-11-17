@@ -364,3 +364,15 @@ VECTOR_STORE_DEFAULT_COLLECTION = 'default'
 CACHE_DEFAULT_TIMEOUT = 300  # Default cache timeout in seconds
 CACHE_VIEW_TIMEOUT = 60  # View cache timeout in seconds
 CACHE_QUERY_TIMEOUT = 300  # Query cache timeout in seconds
+
+# Workflow list card payload and fallback canvas limits.
+WORKFLOW_CARD_PREVIEW = {
+    'max_data_url_length': 300_000,
+    'max_nodes': 30,
+    'max_edges': 50,
+    'padding': 40,
+    'minimum_width': 200,
+    'minimum_height': 120,
+    'width': 220,
+    'height': 100,
+}

@@ -1,5 +1,18 @@
 <template>
-  <div class="workflow-editor">
+  <div
+    v-loading="isLoadingWorkflow"
+    class="workflow-editor"
+  >
+    <el-alert
+      v-if="workflowLoadError"
+      type="error"
+      :closable="false"
+      :title="workflowLoadError"
+    >
+      <el-button @click="loadWorkflowDocument()">
+        重试加载
+      </el-button>
+    </el-alert>
     <el-alert
       v-if="!canEditWorkflow && !isNewWorkflow"
       class="editor-readonly-alert"
@@ -195,7 +208,7 @@
             :icon="Save"
             aria-label="保存工作流"
             :loading="isSaving"
-            :disabled="!canEditWorkflow"
+            :disabled="!canEditWorkflow || isLoadingWorkflow || Boolean(workflowLoadError)"
             class="toolbar-core-btn"
             @click="handleSave"
           >
@@ -211,7 +224,7 @@
             :icon="Play"
             aria-label="运行工作流"
             :loading="isExecuting"
-            :disabled="isExecuting"
+            :disabled="isExecuting || isLoadingWorkflow || Boolean(workflowLoadError)"
             class="toolbar-core-btn toolbar-core-btn--primary"
             @click="handleExecute"
           >
@@ -414,7 +427,7 @@
 
         <!-- 空状态提示 -->
         <div
-          v-if="nodes.length === 0"
+          v-if="nodes.length === 0 && !isLoadingWorkflow && !workflowLoadError"
           class="empty-canvas"
         >
           <div class="empty-content">
@@ -869,15 +882,16 @@
 <script setup>
 defineOptions({ name: 'WorkflowEditor' })
 
-import { ref, computed, onMounted, onUnmounted, onActivated, watch, shallowRef, nextTick, provide } from 'vue'
+import { ref, computed, onMounted, onUnmounted, onActivated, onDeactivated, watch, shallowRef, nextTick, provide } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useWorkflowStore } from '@/stores/workflow'
 import { useExecutionStore } from '@/stores/execution'
 import { autoLayoutWorkflow, applyWorkflowLayout, needsAutoLayout, resolveNodeCollision } from '@/utils/workflowLayout'
 import { captureWorkflowCanvas, buildVueFlowCaptureApi } from '@/utils/workflowCanvasCapture'
 import { resolveWorkflowCanvasPreview } from '@/utils/workflowPreview'
-import { nlWorkflowToVueFlow, normalizeNodeConfig, syncCanvasAfterSave, ensureMultimodalWorkflowGraph, getBackendNodeType } from '@/utils/workflowTransform'
+import { nlWorkflowToVueFlow, backendWorkflowToFrontend, normalizeNodeConfig, syncCanvasAfterSave, ensureMultimodalWorkflowGraph, getBackendNodeType } from '@/utils/workflowTransform'
 import { mergeWorkflowValidation } from '@/utils/workflowValidation'
+import { createWorkflowHistory, recordWorkflowHistory, restoreWorkflowHistory } from '@/utils/workflowHistory'
 import { wireNodesOnConnect } from '@/utils/nodeVariableWiring'
 import {
   migrateNodeRuntimeCache,
@@ -885,7 +899,7 @@ import {
   remapRecordByIdMap,
 } from '@/utils/nodeRuntimePersistence'
 import { useAppStore } from '@/stores/app'
-import { useAuthStore } from '@/stores/auth'
+import { useWorkflowDocument } from '@/composables/useWorkflowDocument'
 import {
   ArrowLeft, Save, Play, ZoomIn, ZoomOut,
   Maximize2, Undo, Redo, CheckCircle,
@@ -941,29 +955,23 @@ const route = useRoute()
 const router = useRouter()
 const workflowStore = useWorkflowStore()
 const appStore = useAppStore()
-const authStore = useAuthStore()
 const executionStore = useExecutionStore()
 const preferencesStore = usePreferencesStore()
 
-const workflowId = computed(() => route.params.id)
-const isNewWorkflow = computed(() => workflowId.value === 'new' || !workflowId.value)
-
-const canEditWorkflow = computed(() => {
-  if (isNewWorkflow.value) return true
-  const wf = workflowStore.currentWorkflow
-  if (!wf) return true
-  if (typeof wf.canEdit === 'boolean') return wf.canEdit
-  const ownerId = wf.owner?.id ?? wf.ownerId
-  const userId = authStore.user?.id
-  if (authStore.user?.isSuperuser) return true
-  if (ownerId != null && userId != null) return Number(ownerId) === Number(userId)
-  return true
-})
-
-const workflowName = ref('未命名工作流')
-const isDirty = ref(false)
 const saveInFlight = ref(false)
 const isSaving = computed(() => saveInFlight.value || workflowStore.isSaving)
+const editorActive = ref(false)
+const {
+  workflowId, workflowName, isDirty, isNewWorkflow, canEditWorkflow,
+  isLoadingWorkflow, workflowLoadError, hasUnsavedChanges, documentVersion,
+  loadWorkflowDocument, markSaved, adoptCreatedWorkflow,
+} = useWorkflowDocument({
+  isSaving,
+  resetDocument: resetEditorDocument,
+  loadNewDocument: loadNewWorkflow,
+  applyDocument: applyLoadedWorkflow,
+  onDocumentReady: onLoadedWorkflowReady,
+})
 const showValidateDialog = ref(false)
 const validationResult = ref({ valid: true, errors: [], warnings: [] })
 const isValidating = ref(false)
@@ -1242,7 +1250,8 @@ async function resumeWorkflowExecution() {
   try {
     const resumed = await executionStore.resumeEditorExecution(workflowId.value)
     if (!resumed) {
-      if (Object.keys(executionStore.nodeStatusMap || {}).length > 0) {
+      if (String(executionStore.activeWorkflowId) === String(workflowId.value)
+        && Object.keys(executionStore.nodeStatusMap || {}).length > 0) {
         executionNodeStateMap.value = { ...executionStore.canvasNodeRuntime }
         executionStatus.value = executionStore.executionStatus
         showExecutionPanel.value = executionStatus.value !== 'idle'
@@ -1474,8 +1483,7 @@ const availableModels = ref([])
 const availableTools = ref([])
 
 // 历史记录（用于撤销/重做）
-const history = ref([])
-const historyIndex = ref(-1)
+const historyState = shallowRef(createWorkflowHistory())
 
 // ============================================================
 // 核心新增功能：点击添加节点 + 自动连线
@@ -1884,24 +1892,41 @@ function onPaneDoubleClick(event) {
   addNodeAtPosition('llm', pos)
 }
 
-onMounted(() => {
+function activateEditor() {
+  if (editorActive.value) return
+  editorActive.value = true
   document.addEventListener('keydown', handleGlobalKeyDown)
   autoSaveTimer = setInterval(() => {
     if (preferencesStore.editor.autoSave && !isNewWorkflow.value && isDirty.value
-      && canEditWorkflow.value && !isSaving.value && !executionStore.isRunning) {
+      && canEditWorkflow.value && !isLoadingWorkflow.value && !workflowLoadError.value
+      && !isSaving.value && !executionStore.isRunning) {
       handleSave({ automatic: true })
     }
   }, PREFERENCE_CONFIG.autoSaveIntervalMs)
-})
+}
+
+function deactivateEditor() {
+  editorActive.value = false
+  clearInterval(autoSaveTimer)
+  document.removeEventListener('keydown', handleGlobalKeyDown)
+  stopExecutionElapsedTimer()
+  if (workflowId.value) executionStore.unregisterEditorSnapshotListener(workflowId.value)
+}
+
+onMounted(activateEditor)
 
 onActivated(async () => {
-  if (!isNewWorkflow.value && workflowId.value) {
+  const wasActive = editorActive.value
+  activateEditor()
+  if (!wasActive && !isLoadingWorkflow.value && !workflowLoadError.value && !isNewWorkflow.value && workflowId.value) {
     await resumeWorkflowExecution()
   }
 })
 
+onDeactivated(deactivateEditor)
+
 onUnmounted(() => {
-  clearInterval(autoSaveTimer)
+  deactivateEditor()
   clearTimeout(minimapHideTimer)
   document.removeEventListener('keydown', handleGlobalKeyDown)
   document.body.style.cursor = 'default'
@@ -2002,38 +2027,34 @@ provide(WORKFLOW_SELECT_NODE_KEY, (nodeId) => {
 provide(WORKFLOW_FOCUS_EXECUTION_NODE_KEY, focusExecutionNode)
 
 // 撤销/重做
-const canUndo = computed(() => historyIndex.value > 0)
-const canRedo = computed(() => historyIndex.value < history.value.length - 1)
+const canUndo = computed(() => historyState.value.index > 0)
+const canRedo = computed(() => historyState.value.index < historyState.value.entries.length - 1)
 
 // 选中节点数据
 
 // 保存历史状态
-function saveHistory() {
-  const state = JSON.stringify({ nodes: nodes.value, edges: edges.value })
-  history.value = history.value.slice(0, historyIndex.value + 1)
-  history.value.push(state)
-  historyIndex.value = history.value.length - 1
+function saveHistory(options = {}) {
+  historyState.value = recordWorkflowHistory(historyState.value, nodes.value, edges.value, options)
+  isDirty.value = true
+}
+
+function restoreHistoryAt(index) {
+  const state = restoreWorkflowHistory(historyState.value, index, nodes.value)
+  if (!state) return
+  historyState.value = { ...historyState.value, index }
+  nodes.value = state.nodes
+  edges.value = state.edges
+  if (selectedNode.value) selectedNode.value = nodes.value.find(node => node.id === selectedNode.value.id) || null
+  markAllNodePositionsEdited()
   isDirty.value = true
 }
 
 function handleUndo() {
-  if (canUndo.value) {
-    historyIndex.value--
-    const state = JSON.parse(history.value[historyIndex.value])
-    nodes.value = state.nodes
-    edges.value = state.edges
-    isDirty.value = true
-  }
+  if (canUndo.value) restoreHistoryAt(historyState.value.index - 1)
 }
 
 function handleRedo() {
-  if (canRedo.value) {
-    historyIndex.value++
-    const state = JSON.parse(history.value[historyIndex.value])
-    nodes.value = state.nodes
-    edges.value = state.edges
-    isDirty.value = true
-  }
+  if (canRedo.value) restoreHistoryAt(historyState.value.index + 1)
 }
 
 // 拖拽开始
@@ -2173,6 +2194,8 @@ function applyCanvasPreviewLocally(canvasPreview, targetWorkflowId = workflowId.
 async function syncCanvasPreviewIfMissing() {
   if (
     previewSyncInFlight.value
+    || isLoadingWorkflow.value
+    || !editorActive.value
     || isNewWorkflow.value
     || !canEditWorkflow.value
     || nodes.value.length === 0
@@ -2184,15 +2207,17 @@ async function syncCanvasPreviewIfMissing() {
   if (existingPreview) return
 
   previewSyncInFlight.value = true
+  const previewWorkflowId = workflowId.value
+  const version = documentVersion.value
   try {
     const canvasPreview = await captureWorkflowCanvas(getVueFlowCaptureApi())
-    if (!canvasPreview) return
+    if (!canvasPreview || version !== documentVersion.value || !editorActive.value) return
 
     const existingConfig = workflowStore.currentWorkflow?.config || {}
-    await workflowApi.update(workflowId.value, {
+    await workflowApi.update(previewWorkflowId, {
       config: { ...existingConfig, canvas_preview: canvasPreview },
     })
-    applyCanvasPreviewLocally(canvasPreview)
+    if (version === documentVersion.value) applyCanvasPreviewLocally(canvasPreview)
   } catch (captureErr) {
     console.warn('[syncCanvasPreviewIfMissing] failed:', captureErr)
   } finally {
@@ -2236,6 +2261,7 @@ function onNodeDragStop({ node }) {
   nodes.value = updated
   markNodePositionEdited(node.id)
   markDirty()
+  saveHistory({ mergeKey: `position:${node.id}` })
 }
 
 // 节点拖拽中 - 实时同步位置到响应式数组
@@ -2273,12 +2299,14 @@ function handleNodePropertyChange({ id, data }) {
   }
   nodes.value = updated
   markDirty()
+  saveHistory({ mergeKey: `property:${id}` })
 }
 
 // 删除节点
 function handleDeleteNodeById(nodeId) {
   const targetId = nodeId || selectedNode.value?.id
   if (!targetId) return
+  saveHistory()
   nodes.value = nodes.value.filter(n => n.id !== targetId)
   edges.value = edges.value.filter(
     e => e.source !== targetId && e.target !== targetId
@@ -2417,7 +2445,7 @@ function handleOptimizerApplyFix(suggestion) {
 
 // 名称修改
 function handleNameBlur() {
-  if (workflowName.value.trim()) {
+  if (workflowName.value.trim() && hasUnsavedChanges.value) {
     markDirty()
   }
 }
@@ -2494,6 +2522,7 @@ function getEditorSaveSignature() {
 }
 
 async function handleSave(options = {}) {
+  if (isLoadingWorkflow.value || workflowLoadError.value) return false
   if (isSaving.value) return false
   if (!canEditWorkflow.value) {
     appStore.warning('您没有此工作流的编辑权限，请先复制工作流后再编辑')
@@ -2555,11 +2584,23 @@ async function handleSave(options = {}) {
 
     if (isNewWorkflow.value) {
       const result = await workflowStore.createWorkflow(savePayload)
+      editedDuringSave = getEditorSaveSignature() !== sentSignature
+      const synced = syncCanvasAfterSave(editedDuringSave ? sentNodes : nodes.value, editedDuringSave ? sentEdges : edges.value, result)
+      nodes.value = editedDuringSave
+        ? nodes.value.map(node => ({ ...node, id: String(synced.idMap[node.id] || node.id) }))
+        : synced.nodes
+      edges.value = (editedDuringSave ? edges.value.map(edge => ({
+        ...edge, source: String(synced.idMap[edge.source] || edge.source), target: String(synced.idMap[edge.target] || edge.target),
+      })) : synced.edges).map(edge => ({ ...edge, markerEnd: MarkerType.ArrowClosed }))
+      workflowStore.currentWorkflow = backendWorkflowToFrontend(result)
+      rememberSavedNodePositionsFromPayload(saveNodes, synced.idMap || {})
+      saveHistory()
+      isDirty.value = editedDuringSave
       if (canvasPreview && result?.id) {
         applyCanvasPreviewLocally(canvasPreview, result.id)
       }
       appStore.success('工作流创建成功')
-      router.replace(`/workflows/${result.id}/edit`)
+      await adoptCreatedWorkflow(result.id, savePayload.name, editedDuringSave)
     } else {
       const response = await workflowStore.updateWorkflow(workflowId.value, savePayload)
       editedDuringSave = getEditorSaveSignature() !== sentSignature
@@ -2593,7 +2634,7 @@ async function handleSave(options = {}) {
       if (!automatic) appStore.success('工作流已保存')
     }
 
-    isDirty.value = editedDuringSave
+    markSaved(savePayload.name, editedDuringSave)
     return true
   } catch (err) {
     const resp = err?.response?.data
@@ -2625,12 +2666,13 @@ async function handleSave(options = {}) {
 
 // 执行
 async function handleExecute() {
+  if (isLoadingWorkflow.value || workflowLoadError.value) return
   if (isNewWorkflow.value) {
     appStore.warning('请先保存工作流后再执行')
     return
   }
 
-  if (isDirty.value) {
+  if (hasUnsavedChanges.value) {
     const confirmed = await appStore.confirm({
       title: '有未保存的更改',
       message: '执行前需要先保存工作流，是否保存并继续执行？',
@@ -2755,17 +2797,7 @@ async function cancelExecution() {
 
 // 返回
 async function handleBack() {
-  if (isDirty.value) {
-    const confirmed = await appStore.confirm({
-      title: '未保存的更改',
-      message: '您有未保存的更改，确定要离开吗？未保存的内容将丢失。',
-      confirmText: '离开',
-      cancelText: '取消',
-      confirmType: 'danger',
-    })
-    if (!confirmed) return
-  }
-  window.history.back()
+  router.back()
 }
 
 // 加载模型和工具列表
@@ -2820,89 +2852,103 @@ function applyWorkflowTemplate(template) {
   })
 }
 
-onMounted(async () => {
-  // 初始化历史
+function resetEditorDocument(previousId) {
+  if (previousId) executionStore.unregisterEditorSnapshotListener(previousId)
+  showValidateDialog.value = false
+  triggerConfigVisible.value = false
+  variablePanelVisible.value = false
+  showAssistant.value = false
+  closeQuickAddMenu()
+  if (autoConnectMode.value) cancelAutoConnect()
+  executionSessionId.value++
+  stopExecutionElapsedTimer()
+  clearTimeout(previewSyncTimer)
+  nodes.value = []
+  edges.value = []
+  historyState.value = createWorkflowHistory()
+  selectedNode.value = null
+  selectedEdge.value = null
+  selectedExecNode.value = null
+  executionId.value = null
+  executionStatus.value = 'idle'
+  executionLogs.value = []
+  executionNodeStateMap.value = {}
+  showExecutionPanel.value = false
+  seenExecutionLogKeys.value = new Set()
+  savedNodePositions.value = {}
+  userPositionEditedNodeIds.value = new Set()
+}
+
+function loadNewWorkflow() {
   saveHistory()
-
-  // 加载模型和工具列表
-  loadModelsAndTools()
-
-  if (isNewWorkflow.value) {
-    const pendingRaw = sessionStorage.getItem('flowly_pending_workflow_template')
-    if (pendingRaw) {
-      try {
-        applyWorkflowTemplate(JSON.parse(pendingRaw))
-        sessionStorage.removeItem('flowly_pending_workflow_template')
-      } catch {
-        sessionStorage.removeItem('flowly_pending_workflow_template')
-      }
-    } else if (route.query.template === 'yolo-detection' || route.query.template === 'yolo') {
-      applyWorkflowTemplate(YOLO_WORKFLOW_TEMPLATE)
-    } else if (route.query.template === 'clip-retrieval') {
-      applyWorkflowTemplate(CLIP_RETRIEVAL_WORKFLOW_TEMPLATE)
-    }
-  } else if (!isNewWorkflow.value) {
+  isDirty.value = false
+  const pendingRaw = sessionStorage.getItem('flowly_pending_workflow_template')
+  if (pendingRaw) {
     try {
-      await workflowStore.fetchWorkflow(workflowId.value)
-      workflowName.value = workflowStore.currentWorkflow?.name || '未命名工作流'
-
-      // Store already has Vue Flow format data from backendWorkflowToFrontend
-      nodes.value = [...(workflowStore.nodes || [])]
-      rememberSavedNodePositions(nodes.value)
-
-      // 仅对未定位节点做布局，已保存坐标原样保留
-      const layoutEdges = workflowStore.edges || []
-      const positionsBefore = JSON.stringify(nodes.value.map(n => n.position))
-      if (needsAutoLayout(nodes.value) && nodes.value.length > 0) {
-        nodes.value = applyWorkflowLayout(nodes.value, layoutEdges, nodes.value)
-      }
-      const autoLayoutApplied = positionsBefore !== JSON.stringify(nodes.value.map(n => n.position))
-      if (autoLayoutApplied) {
-        markAllNodePositionsEdited()
-      }
-
-      edges.value = (workflowStore.edges || [])
-        .map(e => ({
-          ...e,
-          // source_node_id is the integer ID from backend; source is the string ID
-          source: String(e.source || e.source_node_id || ''),
-          target: String(e.target || e.target_node_id || ''),
-          markerEnd: MarkerType.ArrowClosed
-        }))
-        .filter(e => e.source && e.source !== 'undefined' && e.target && e.target !== 'undefined')
-
-      const graphPatch = ensureMultimodalWorkflowGraph(nodes.value, edges.value)
-      if (graphPatch.patched) {
-        nodes.value = graphPatch.nodes
-        edges.value = graphPatch.edges.map((e) => ({
-          ...e,
-          markerEnd: MarkerType.ArrowClosed,
-        }))
-        isDirty.value = true
-        appStore.info('已自动修复输入→文生图→图生视频链路连线与配置，请保存')
-      }
-
-      // 更新历史
-      saveHistory()
-      isDirty.value = autoLayoutApplied
-      if (autoLayoutApplied) {
-        appStore.info('节点已自动排列，请保存以固定布局')
-      } else {
-        isDirty.value = false
-      }
-
-      // 自动适应画布，让所有节点可见
-      // 使用 vueFlowRef.value.fitView() 调用实例方法
-      // nodes-initialized 事件会再次触发 fitView，双重保障
-      await nextTick()
-      scheduleCanvasPreviewSync()
-
-      await resumeWorkflowExecution()
-    } catch (err) {
-      appStore.error('加载工作流失败')
+      applyWorkflowTemplate(JSON.parse(pendingRaw))
+      sessionStorage.removeItem('flowly_pending_workflow_template')
+    } catch {
+      sessionStorage.removeItem('flowly_pending_workflow_template')
     }
+  } else if (route.query.template === 'yolo-detection' || route.query.template === 'yolo') {
+    applyWorkflowTemplate(YOLO_WORKFLOW_TEMPLATE)
+  } else if (route.query.template === 'clip-retrieval') {
+    applyWorkflowTemplate(CLIP_RETRIEVAL_WORKFLOW_TEMPLATE)
   }
-})
+}
+
+function applyLoadedWorkflow() {
+  // Store already has Vue Flow format data from backendWorkflowToFrontend
+  nodes.value = [...(workflowStore.nodes || [])]
+  rememberSavedNodePositions(nodes.value)
+
+  // 仅对未定位节点做布局，已保存坐标原样保留
+  const layoutEdges = workflowStore.edges || []
+  const positionsBefore = JSON.stringify(nodes.value.map(n => n.position))
+  if (needsAutoLayout(nodes.value) && nodes.value.length > 0) {
+    nodes.value = applyWorkflowLayout(nodes.value, layoutEdges, nodes.value)
+  }
+  const autoLayoutApplied = positionsBefore !== JSON.stringify(nodes.value.map(n => n.position))
+  if (autoLayoutApplied) {
+    markAllNodePositionsEdited()
+  }
+
+  edges.value = (workflowStore.edges || [])
+    .map(e => ({
+      ...e,
+      // source_node_id is the integer ID from backend; source is the string ID
+      source: String(e.source || e.source_node_id || ''),
+      target: String(e.target || e.target_node_id || ''),
+      markerEnd: MarkerType.ArrowClosed
+    }))
+    .filter(e => e.source && e.source !== 'undefined' && e.target && e.target !== 'undefined')
+
+  const graphPatch = ensureMultimodalWorkflowGraph(nodes.value, edges.value)
+  if (graphPatch.patched) {
+    nodes.value = graphPatch.nodes
+    edges.value = graphPatch.edges.map((e) => ({
+      ...e,
+      markerEnd: MarkerType.ArrowClosed,
+    }))
+    isDirty.value = true
+    appStore.info('已自动修复输入→文生图→图生视频链路连线与配置，请保存')
+  }
+
+  // 更新历史
+  saveHistory()
+  isDirty.value = autoLayoutApplied || graphPatch.patched
+  if (autoLayoutApplied) {
+    appStore.info('节点已自动排列，请保存以固定布局')
+  }
+
+}
+
+async function onLoadedWorkflowReady() {
+  scheduleCanvasPreviewSync()
+  if (editorActive.value) await resumeWorkflowExecution()
+}
+
+onMounted(loadModelsAndTools)
 
 // 执行日志自动滚动到底部
 watch(executionLogs, async () => {

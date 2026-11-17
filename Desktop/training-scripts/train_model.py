@@ -14,12 +14,16 @@ from pathlib import Path
 from datetime import datetime
 
 # 添加项目根目录到 Python 路径
+backend_root = Path(__file__).parent.parent
 project_root = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(backend_root))
 sys.path.insert(0, str(project_root))
 
 import torch
 from torch.utils.data import DataLoader, TensorDataset
 import numpy as np
+
+from flowly_runtime.yolo_weights import resolve_yolo_model_source, yolo_model_label
 
 
 # Global flag for graceful termination
@@ -144,6 +148,8 @@ def train_with_pytorch(config: dict, job_id: str = None, streaming: bool = True)
     
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
     criterion = torch.nn.CrossEntropyLoss()
+    from flowly_runtime.tabular_artifacts import standardize_tabular_features, raw_tabular_metadata
+    preprocessing = raw_tabular_metadata()
     
     # 加载数据
     if dataset_path and Path(dataset_path).exists():
@@ -155,16 +161,18 @@ def train_with_pytorch(config: dict, job_id: str = None, streaming: bool = True)
             # 假设最后一列是标签，其余是特征
             X = df.iloc[:, :-1].values.astype(np.float32)
             y = df.iloc[:, -1].values.astype(np.int64)
+            feature_names, label_column = list(df.columns[:-1]), str(df.columns[-1])
         elif ext == '.json':
             with open(dataset_path, 'r') as f:
                 data = json.load(f)
             X = np.array(data.get('features', [])).astype(np.float32)
             y = np.array(data.get('labels', [])).astype(np.int64)
+            feature_names, label_column = data.get('feature_names') or [], None
         else:
             raise ValueError(f"Unsupported dataset format: {ext}")
         
         # 归一化
-        X = (X - X.mean(axis=0)) / (X.std(axis=0) + 1e-8)
+        X, preprocessing = standardize_tabular_features(X, feature_names, label_column)
         
         dataset = TensorDataset(
             torch.tensor(X, dtype=torch.float32),
@@ -205,6 +213,8 @@ def train_with_pytorch(config: dict, job_id: str = None, streaming: bool = True)
                 'epoch': epoch + 1,
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
+                'config': config,
+                'preprocessing': preprocessing,
                 'interrupted': True,
             }, checkpoint_path)
             
@@ -309,6 +319,8 @@ def train_with_pytorch(config: dict, job_id: str = None, streaming: bool = True)
                 'epoch': epoch + 1,
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
+                'config': config,
+                'preprocessing': preprocessing,
                 'loss': avg_loss,
                 'metrics': metrics,
             }, checkpoint_path)
@@ -326,6 +338,7 @@ def train_with_pytorch(config: dict, job_id: str = None, streaming: bool = True)
     torch.save({
         'model_state_dict': model.state_dict(),
         'config': config,
+        'preprocessing': preprocessing,
         'final_metrics': all_metrics[-1] if all_metrics else {},
     }, final_model_path)
     
@@ -625,26 +638,34 @@ def train_with_yolo(config: dict, job_id: str = None, streaming: bool = True):
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
 
-    # GPU detection
+    # Device selection (always resolve, not only when streaming)
     gpu_info = {}
-    device = '0'
-    if streaming:
-        if torch.cuda.is_available():
-            gpu_name = torch.cuda.get_device_name(0)
-            gpu_mem_total = torch.cuda.get_device_properties(0).total_memory
-            gpu_mem_free = torch.cuda.get_device_properties(0).total_memory - torch.cuda.memory_allocated(0)
-            gpu_info = {
-                'available': True,
-                'name': gpu_name,
-                'memory_total_mb': round(gpu_mem_total / 1024 / 1024, 1),
-                'memory_free_mb': round(gpu_mem_free / 1024 / 1024, 1),
-                'utilization_percent': 0,
-            }
+    requested_device = config.get('device') or (config.get('config') or {}).get('device')
+    if requested_device:
+        device = str(requested_device)
+    elif torch.cuda.is_available():
+        device = '0'
+    else:
+        device = 'cpu'
+
+    if device != 'cpu' and torch.cuda.is_available():
+        gpu_name = torch.cuda.get_device_name(0)
+        gpu_mem_total = torch.cuda.get_device_properties(0).total_memory
+        gpu_mem_free = gpu_mem_total - torch.cuda.memory_allocated(0)
+        gpu_info = {
+            'available': True,
+            'name': gpu_name,
+            'memory_total_mb': round(gpu_mem_total / 1024 / 1024, 1),
+            'memory_free_mb': round(gpu_mem_free / 1024 / 1024, 1),
+            'utilization_percent': 0,
+        }
+        if streaming:
             _stream_print({'type': 'info', 'message': f'Using GPU: {gpu_name}'})
-        else:
-            device = 'cpu'
-            gpu_info = {'available': False}
-            _stream_print({'type': 'info', 'message': 'No GPU detected, using CPU'})
+    else:
+        device = 'cpu'
+        gpu_info = {'available': False}
+        if streaming:
+            _stream_print({'type': 'info', 'message': 'Using CPU for YOLO training'})
 
     # Broadcast provisioning done
     if streaming:
@@ -665,12 +686,11 @@ def train_with_yolo(config: dict, job_id: str = None, streaming: bool = True):
             _stream_print({'type': 'error', 'message': error_msg})
         return {'success': False, 'error': error_msg}
 
-    yolo_version = config.get('yolo_version', 'v8')
-    model_variant = config.get('model_variant', 'n')
-    model_name = f'{yolo_version}{model_variant}'
+    model_source = resolve_yolo_model_source(config)
+    model_name = yolo_model_label(model_source)
 
     try:
-        model = YOLO(f'{model_name}.pt')
+        model = YOLO(model_source)
     except Exception as e:
         error_msg = f'Failed to load YOLO model {model_name}: {str(e)}'
         if streaming:
@@ -704,6 +724,8 @@ def train_with_yolo(config: dict, job_id: str = None, streaming: bool = True):
             _stream_print({'type': 'error', 'message': error_msg})
         return {'success': False, 'error': error_msg}
 
+    dataset_yaml_path = _normalize_yolo_dataset_yaml(dataset_yaml_path, dataset_path)
+
     # Broadcast data ready
     if streaming:
         _stream_print({
@@ -736,24 +758,25 @@ def train_with_yolo(config: dict, job_id: str = None, streaming: bool = True):
             self.best_epoch = 0
 
         def train(self):
+            on_train_epoch_start, on_train_epoch_end = self._build_callback_fns()
+            self.model.add_callback('on_train_epoch_start', on_train_epoch_start)
+            self.model.add_callback('on_train_epoch_end', on_train_epoch_end)
             results = self.model.train(
                 data=self.data_yaml,
                 epochs=self.epochs,
                 batch=self.bs,
                 imgsz=self.imgsz,
                 device=self.device_str,
-                project=str(self.out_dir),
+                project=str(Path(self.out_dir).resolve()),
                 name=project_name,
                 exist_ok=True,
                 verbose=False,
-                callbacks=self._make_callbacks(),
+                workers=0,
+                plots=False,
             )
             return results
 
-        def _make_callbacks(self):
-            cb = type('YoloCallback', (), {})()
-            cb.on_train_epoch_end_counter = 0
-
+        def _build_callback_fns(self):
             def on_train_epoch_start(trainer):
                 epoch = trainer.epoch + 1
                 total = trainer.epochs
@@ -844,13 +867,7 @@ def train_with_yolo(config: dict, job_id: str = None, streaming: bool = True):
                     },
                 })
 
-            # Attach to model.train callbacks
-            if hasattr(self.model, 'trainer') and self.model.trainer:
-                t = self.model.trainer
-                t.callbacks['on_train_epoch_start'].append(on_train_epoch_start)
-                t.callbacks['on_train_epoch_end'].append(on_train_epoch_end)
-
-            return cb
+            return on_train_epoch_start, on_train_epoch_end
 
     trainer = StreamingTrainer(
         model=model,
@@ -866,15 +883,73 @@ def train_with_yolo(config: dict, job_id: str = None, streaming: bool = True):
     try:
         results = trainer.train()
     except Exception as e:
-        error_msg = f'YOLO training failed: {str(e)}'
+        cuda_failed = device != 'cpu' and (
+            'cuda' in str(e).lower()
+            or 'allocation' in str(e).lower()
+            or 'memory' in str(e).lower()
+        )
+        if cuda_failed:
+            if streaming:
+                _stream_print({
+                    'type': 'info',
+                    'message': 'GPU training failed, retrying on CPU',
+                })
+            device = 'cpu'
+            gpu_info = {'available': False}
+            try:
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+            except Exception:
+                pass
+            model = YOLO(model_source)
+            trainer = StreamingTrainer(
+                model=model,
+                data_yaml=dataset_yaml_path,
+                out_dir=output_path,
+                epochs=epochs,
+                bs=batch_size,
+                imgsz=image_size,
+                device_str='cpu',
+                stream_fn=_stream_print,
+            )
+            try:
+                results = trainer.train()
+            except Exception as retry_err:
+                error_msg = f'YOLO training failed: {retry_err}'
+                if streaming:
+                    _stream_print({'type': 'error', 'message': error_msg})
+                return {'success': False, 'error': error_msg}
+        else:
+            error_msg = f'YOLO training failed: {str(e)}'
+            if streaming:
+                _stream_print({'type': 'error', 'message': error_msg})
+            return {'success': False, 'error': error_msg}
+
+    # Gather results — resolve actual weight paths (Ultralytics may use runs/detect for relative project)
+    backend_root = Path(__file__).resolve().parent.parent
+    candidate_dirs = [
+        output_path / project_name / 'weights',
+        backend_root / 'runs' / 'detect' / output_path.name / project_name / 'weights',
+        backend_root / 'runs' / 'detect' / output_path / project_name / 'weights',
+    ]
+    if not output_path.is_absolute():
+        candidate_dirs.insert(0, (backend_root / output_path / project_name / 'weights').resolve())
+
+    best_weights_dir = candidate_dirs[0]
+    for candidate in candidate_dirs:
+        if (candidate / 'best.pt').exists():
+            best_weights_dir = candidate
+            break
+
+    best_weight_path = str((best_weights_dir / 'best.pt').resolve())
+    last_weight_path = str((best_weights_dir / 'last.pt').resolve())
+    if not Path(best_weight_path).exists():
+        error_msg = f'YOLO weights not found after training (expected under {best_weights_dir})'
+        result = {'success': False, 'error': error_msg}
+        _write_training_result(output_path, result)
         if streaming:
             _stream_print({'type': 'error', 'message': error_msg})
-        return {'success': False, 'error': error_msg}
-
-    # Gather results
-    best_weights_dir = output_path / project_name / 'weights'
-    best_weight_path = str(best_weights_dir / 'best.pt')
-    last_weight_path = str(best_weights_dir / 'last.pt')
+        return result
 
     # Export onnx
     exported_artifacts = {}
@@ -924,6 +999,52 @@ def train_with_yolo(config: dict, job_id: str = None, streaming: bool = True):
         'best_epoch': trainer.best_epoch,
         'best_fitness': trainer.best_fitness,
     }
+
+
+def _normalize_yolo_dataset_yaml(dataset_yaml_path: str, dataset_path: str = '') -> str:
+    """Rewrite dataset.yaml when root path is stale (e.g. Windows host path in Docker)."""
+    yaml_file = Path(dataset_yaml_path)
+    if not yaml_file.is_file():
+        return dataset_yaml_path
+
+    try:
+        import yaml
+    except ImportError:
+        return dataset_yaml_path
+
+    with open(yaml_file, 'r', encoding='utf-8') as handle:
+        data = yaml.safe_load(handle) or {}
+
+    root = Path(dataset_path).resolve() if dataset_path else yaml_file.parent.resolve()
+    path_value = str(data.get('path', '.')).strip()
+    path_obj = Path(path_value)
+    if not path_obj.is_absolute():
+        path_obj = (yaml_file.parent / path_obj).resolve()
+
+    needs_rewrite = (
+        ':' in path_value
+        or path_value in ('.', './')
+        or not path_obj.exists()
+        or path_obj.resolve() != root
+    )
+    if not needs_rewrite:
+        return str(yaml_file)
+
+    data['path'] = str(root)
+    normalized = yaml_file.parent / '.dataset.normalized.yaml'
+    with open(normalized, 'w', encoding='utf-8') as handle:
+        yaml.dump(data, handle, allow_unicode=True, sort_keys=False)
+    return str(normalized)
+
+
+def _write_training_result(output_path: Path, result: dict) -> None:
+    """Persist training result for subprocess polling."""
+    try:
+        output_path.mkdir(parents=True, exist_ok=True)
+        with open(output_path / 'training_result.json', 'w', encoding='utf-8') as f:
+            json.dump(result, f, indent=2, ensure_ascii=False)
+    except Exception:
+        pass
 
 
 def _prepare_annotation_dataset(annotation_project_id: str, output_path: Path) -> str:
@@ -1000,6 +1121,8 @@ def main():
         training_kind = config.get('training_kind', 'generic')
         if training_kind == 'yolo' or framework == 'ultralytics':
             result = train_with_yolo(config, job_id=job_id, streaming=streaming)
+            yolo_out = Path(config.get('output_dir', f'./outputs/yolo_{job_id}'))
+            _write_training_result(yolo_out, result)
         elif framework == 'transformers':
             result = train_with_transformers(config, job_id=job_id, streaming=streaming)
         else:

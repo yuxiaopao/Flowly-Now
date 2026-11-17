@@ -14,6 +14,7 @@ import './assets/styles/page-layout.scss'
 import './assets/styles/motion.scss'
 import './assets/styles/surface-system.scss'
 import './assets/styles/nav-accents.scss'
+import './assets/styles/delivery-system.scss'
 import './styles/workflow-domain-node.scss'
 import './styles/vue-flow-custom-node-overrides.scss'
 

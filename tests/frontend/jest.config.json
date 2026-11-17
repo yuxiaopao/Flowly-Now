@@ -1,8 +1,8 @@
 {
   "testEnvironment": "jest-environment-jsdom",
   "testMatch": [
-    "**/tests/frontend/**/*.test.{js,ts}",
-    "**/tests/frontend/**/*.spec.{js,ts}"
+    "<rootDir>/unit/**/*.test.js",
+    "<rootDir>/unit/**/*.spec.js"
   ],
   "testPathIgnorePatterns": [
     "/node_modules/",

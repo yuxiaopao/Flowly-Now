@@ -122,21 +122,19 @@
     </div>
 
     <div
-      v-if="hasLocalMonitor"
+      v-if="hasLocalMonitor || trainingRunId"
       class="panel-actions nodrag"
     >
       <el-button
-        :disabled="!isDesktop"
         :data-testid="`yolo-training-details-${id}`"
         @click.stop="detailsVisible = true"
       >
         查看训练详情
       </el-button>
-      <span v-if="!isDesktop">请在桌面端查看本地记录</span>
     </div>
 
     <el-dialog
-      v-if="hasLocalMonitor"
+      v-if="hasLocalMonitor || trainingRunId"
       v-model="detailsVisible"
       :title="`${localName} · 训练详情`"
       width="min(1320px, 96vw)"
@@ -146,9 +144,13 @@
       @keydown.stop
     >
       <LocalYoloRunMonitor
-        v-if="detailsVisible"
+        v-if="detailsVisible && hasLocalMonitor"
         :binding="runBinding"
         @snapshot="localSnapshot = $event"
+      />
+      <YoloRunAnalytics
+        v-else-if="detailsVisible"
+        :job-id="trainingRunId"
       />
     </el-dialog>
 
@@ -293,6 +295,7 @@ import YoloLogPanel from '@/components/workflow/yolo/YoloLogPanel.vue'
 import NodeTypeBadge from '@/components/workflow/nodes/NodeTypeBadge.vue'
 import { useNodePresentation } from '@/composables/useNodePresentation'
 import LocalYoloRunMonitor from '@/components/workflow/yolo/LocalYoloRunMonitor.vue'
+import YoloRunAnalytics from '@/components/workflow/yolo/YoloRunAnalytics.vue'
 import trainingApi from '@/api/training'
 
 
@@ -309,7 +312,6 @@ const { nodeColor, nodeLabel } = useNodePresentation(NODE_TYPE)
 const emit = defineEmits(['select', 'change'])
 const appStore = useAppStore()
 const route = useRoute()
-const isDesktop = Boolean(window.flowlyDesktop?.training?.monitor)
 const detailsVisible = ref(false)
 const localSnapshot = ref(null)
 const linkedRun = ref(null)

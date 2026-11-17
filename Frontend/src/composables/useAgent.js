@@ -7,7 +7,7 @@ import { ref, computed } from 'vue'
 import { agentApi } from '@/api/agent'
 import { useAgentStore } from '@/stores/agent'
 import { useAppStore } from '@/stores/app'
-import { APP_CONFIG } from '@/config'
+import { getApiBaseUrl } from '@/config'
 
 const DEFAULT_MESSAGE_TIMESTAMP = () => new Date().toISOString()
 
@@ -230,12 +230,11 @@ export function useAgent(_options = {}) {
 
     try {
       // Use config-based URL for stream request
-      const baseUrl = APP_CONFIG.apiBaseUrl
-      const apiPrefix = APP_CONFIG.apiPrefix
+      const baseUrl = getApiBaseUrl()
       const token = localStorage.getItem('access_token')
 
       const response = await fetch(
-        `${baseUrl}${apiPrefix}/agents/${currentAgent.value?.id}/stream_chat/`,
+        `${baseUrl}/agents/${currentAgent.value?.id}/stream_chat/`,
         {
           method: 'POST',
           headers: {

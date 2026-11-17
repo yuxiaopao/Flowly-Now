@@ -85,7 +85,7 @@ export const billingApi = {
 
   /** @param {string|number} id @returns {Promise<Blob>} */
   downloadInvoice(id) {
-    return request.get(`/billing/invoices/${id}/download/`)
+    return request.get(`/billing/invoices/${id}/download/`, {}, { responseType: 'blob' })
   },
 
   // Payments

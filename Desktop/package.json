@@ -13,16 +13,18 @@
     "dev:full": "node scripts/dev-full.mjs",
     "monitor": "electron .",
     "test:monitor": "node --test scripts/training-monitor.test.cjs",
+    "test:unit": "node --test scripts/training-monitor.test.cjs scripts/desktop-security.test.cjs scripts/desktop-trust.test.cjs scripts/training-control.test.cjs scripts/qa-profile.test.cjs",
     "build:renderer": "node scripts/build-renderer.js",
-    "build:app": "npm run build:renderer && npm run sync-training && npm run sync-icons && electron-builder",
+    "build:app": "npm run build:renderer && npm run sync-training && npm run sync-clip && npm run sync-icons && electron-builder",
     "sync-training": "node scripts/sync-training-script.js",
+    "sync-clip": "node scripts/sync-clip-index-script.js",
     "sync-icons": "node scripts/sync-icons.js",
     "test:integration": "node scripts/integration-test.mjs",
     "test:smoke": "node scripts/smoke-test.mjs",
     "build": "npm run build:app",
-    "build:win": "npm run build:renderer && npm run sync-training && npm run sync-icons && electron-builder --win",
-    "build:mac": "npm run build:renderer && npm run sync-training && npm run sync-icons && electron-builder --mac",
-    "build:linux": "npm run build:renderer && npm run sync-training && npm run sync-icons && electron-builder --linux"
+    "build:win": "npm run build:renderer && npm run sync-training && npm run sync-clip && npm run sync-icons && electron-builder --win",
+    "build:mac": "npm run build:renderer && npm run sync-training && npm run sync-clip && npm run sync-icons && electron-builder --mac",
+    "build:linux": "npm run build:renderer && npm run sync-training && npm run sync-clip && npm run sync-icons && electron-builder --linux"
   },
   "dependencies": {
     "electron-log": "^5.1.0",
@@ -30,8 +32,8 @@
     "ws": "^8.16.0"
   },
   "devDependencies": {
-    "electron": "^28.0.0",
-    "electron-builder": "^24.9.1"
+    "electron": "45.2.1",
+    "electron-builder": "26.18.0"
   },
   "build": {
     "appId": "com.flowly.desktop",
@@ -41,21 +43,33 @@
     },
     "win": {
       "target": [
-        { "target": "nsis", "arch": ["x64"] }
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
       ],
       "icon": "assets/icon.ico"
     },
     "mac": {
-      "target": ["dmg"],
+      "target": [
+        "dmg"
+      ],
       "icon": "assets/icon.icns"
     },
     "linux": {
-      "target": ["AppImage"],
+      "target": [
+        "AppImage"
+      ],
       "icon": "assets/icon.png"
     },
     "files": [
       "main.js",
       "preload.js",
+      "trusted-renderer.js",
+      "training-control.js",
+      "qa-profile.js",
       "training-monitor/**",
       "renderer/**",
       "assets/**",
@@ -72,5 +86,8 @@
     "asarUnpack": [
       "training-scripts/**"
     ]
+  },
+  "engines": {
+    "node": ">=22.12.0"
   }
 }

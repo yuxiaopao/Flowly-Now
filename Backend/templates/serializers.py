@@ -35,6 +35,7 @@ class TemplateVersionSerializer(serializers.ModelSerializer):
             'id', 'version', 'name', 'nodes', 'edges', 'variables',
             'changelog', 'created_by', 'created_at'
         ]
+        read_only_fields = ['created_by', 'created_at']
 
 
 class TemplateReviewSerializer(serializers.ModelSerializer):
@@ -50,6 +51,7 @@ class TemplateReviewSerializer(serializers.ModelSerializer):
             'title', 'content', 'is_verified', 'helpful_count',
             'created_at', 'updated_at'
         ]
+        read_only_fields = ['user', 'is_verified', 'helpful_count', 'created_at', 'updated_at']
 
     def get_user_avatar(self, obj):
         if hasattr(obj.user, 'profile') and obj.user.profile.avatar:
@@ -111,6 +113,10 @@ class WorkflowTemplateDetailSerializer(serializers.ModelSerializer):
             'created_by', 'creator_name', 'creator_avatar',
             'is_favorited', 'is_used', 'versions', 'reviews', 'review_count',
             'published_at', 'created_at', 'updated_at'
+        ]
+        read_only_fields = [
+            'created_by', 'view_count', 'use_count', 'like_count', 'rating', 'rating_count',
+            'is_verified', 'verified_at', 'created_at', 'updated_at',
         ]
 
     def get_creator_avatar(self, obj):

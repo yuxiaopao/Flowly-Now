@@ -19,14 +19,25 @@
     <el-tabs
       v-model="activeTab"
       class="model-tabs"
+      @tab-change="loadTab"
     >
       <!-- API Keys Tab -->
       <el-tab-pane
         label="API 密钥"
         name="api-keys"
       >
+        <div
+          v-if="gatewayStore.apiKeysError"
+          role="alert"
+          class="gateway-load-error"
+        >
+          {{ gatewayStore.apiKeysError }}
+          <el-button @click="retryKeys">
+            重新加载密钥
+          </el-button>
+        </div>
         <PageEmptyState
-          v-if="apiKeys.length === 0 && !apiKeysLoading"
+          v-else-if="apiKeys.length === 0 && !apiKeysLoading"
           :icon="Key"
           title="暂无 API 密钥"
           description="添加您的 API 密钥以使用 AI 模型"
@@ -62,7 +73,7 @@
               </div>
               <div class="key-status">
                 <el-tag
-                  v-if="key.is_active"
+                  v-if="key.isActive"
                   type="success"
                   size="small"
                 >
@@ -79,26 +90,28 @@
             </div>
 
             <div class="key-value">
-              <code>{{ key.get_masked_key ? key.get_masked_key : maskKey(key.api_key) }}</code>
+              <code>{{ key.maskedKey || '未提供掩码' }}</code>
             </div>
 
             <div class="key-meta">
               <span class="meta-item">
                 <Clock class="meta-icon" />
-                创建于 {{ formatDate(key.created_at) }}
+                创建于 {{ formatDate(key.createdAt) }}
               </span>
               <span
-                v-if="key.last_used_at"
+                v-if="key.lastUsedAt"
                 class="meta-item"
               >
                 <Activity class="meta-icon" />
-                最后使用 {{ formatDate(key.last_used_at) }}
+                最后使用 {{ formatDate(key.lastUsedAt) }}
               </span>
             </div>
 
             <div class="key-actions">
               <el-button
                 size="small"
+                :loading="verifyingKeyId === key.id"
+                :disabled="!key.isActive || Boolean(verifyingKeyId)"
                 @click="handleVerifyKey(key)"
               >
                 <CheckCircle class="btn-icon" />
@@ -180,8 +193,30 @@
           </div>
         </div>
 
+        <p class="gateway-hint">
+          目录默认项只影响模型目录与网关默认查询，不会修改知识助手的全局模型设置或替换调用凭证。{{ canManageCatalog ? '' : '仅管理员可调整目录默认项。' }}
+        </p>
+        <div
+          v-if="gatewayStore.providersError"
+          role="alert"
+          class="gateway-load-error"
+        >
+          {{ gatewayStore.providersError }}<el-button @click="retryProviders">
+            重新加载提供商
+          </el-button>
+        </div>
+        <div
+          v-if="gatewayStore.modelsError"
+          role="alert"
+          class="gateway-load-error"
+        >
+          {{ gatewayStore.modelsError }}<el-button @click="retryModels">
+            重新加载模型
+          </el-button>
+        </div>
+
         <PageEmptyState
-          v-if="filteredModels.length === 0 && !modelsLoading"
+          v-else-if="filteredModels.length === 0 && !modelsLoading"
           :icon="Bot"
           title="暂无模型配置"
           description="系统中还没有配置 AI 模型"
@@ -199,18 +234,18 @@
             <div class="model-header">
               <div
                 class="model-icon"
-                :class="model.model_type"
+                :class="model.modelType"
               >
                 <Bot
-                  v-if="model.model_type === 'chat'"
+                  v-if="model.modelType === 'chat'"
                   class="icon"
                 />
                 <Layers
-                  v-else-if="model.model_type === 'embedding'"
+                  v-else-if="model.modelType === 'embedding'"
                   class="icon"
                 />
                 <Image
-                  v-else-if="model.model_type === 'image'"
+                  v-else-if="model.modelType === 'image'"
                   class="icon"
                 />
                 <Mic
@@ -234,9 +269,12 @@
                       <Play class="menu-icon" />
                       测试连接
                     </el-dropdown-item>
-                    <el-dropdown-item @click="handleToggleDefault">
+                    <el-dropdown-item
+                      :disabled="!canManageCatalog || defaultSaving === model.id"
+                      @click="handleToggleDefault(model)"
+                    >
                       <Star class="menu-icon" />
-                      {{ model.is_default ? '取消默认' : '设为默认' }}
+                      {{ model.isDefault ? '取消目录默认' : '设为目录默认' }}
                     </el-dropdown-item>
                   </el-dropdown-menu>
                 </template>
@@ -247,7 +285,7 @@
               {{ model.name }}
             </h3>
             <p class="model-id">
-              ID: {{ model.model_id }}
+              ID: {{ model.modelId }}
             </p>
 
             <div class="model-meta">
@@ -255,10 +293,10 @@
                 size="small"
                 type="info"
               >
-                {{ getProviderLabel(model.provider_slug) }}
+                {{ getProviderLabel(model.providerSlug) }}
               </el-tag>
               <el-tag
-                v-if="model.is_default"
+                v-if="model.isDefault"
                 size="small"
                 type="warning"
               >
@@ -268,19 +306,19 @@
 
             <div class="model-caps">
               <span
-                v-if="model.supports_streaming"
+                v-if="model.supportsStreaming"
                 class="cap"
               >
                 <Zap class="cap-icon" /> 流式
               </span>
               <span
-                v-if="model.supports_function_calling"
+                v-if="model.supportsFunctionCalling"
                 class="cap"
               >
                 <Code class="cap-icon" /> 函数
               </span>
               <span
-                v-if="model.supports_vision"
+                v-if="model.supportsVision"
                 class="cap"
               >
                 <Eye class="cap-icon" /> 视觉
@@ -290,11 +328,11 @@
             <div class="model-pricing">
               <span class="price">
                 <span class="price-label">输入</span>
-                <span class="price-value">${{ model.input_price }}/1M</span>
+                <span class="price-value">{{ modelPrice(model.inputPrice) }}</span>
               </span>
               <span class="price">
                 <span class="price-label">输出</span>
-                <span class="price-value">${{ model.output_price }}/1M</span>
+                <span class="price-value">{{ modelPrice(model.outputPrice) }}</span>
               </span>
             </div>
           </div>
@@ -307,6 +345,15 @@
         name="stats"
       >
         <div
+          v-if="gatewayStore.aggregateError"
+          role="alert"
+          class="gateway-load-error"
+        >
+          {{ gatewayStore.aggregateError }}<el-button @click="retryAggregate">
+            重新加载统计
+          </el-button>
+        </div>
+        <div
           v-if="apiAggregate"
           class="stats-container"
         >
@@ -317,7 +364,7 @@
               </div>
               <div class="stat-content">
                 <div class="stat-value">
-                  {{ (apiAggregate.overall?.total_calls ?? 0).toLocaleString() }}
+                  {{ (apiAggregate.overall?.totalCalls ?? 0).toLocaleString() }}
                 </div>
                 <div class="stat-label">
                   API 调用次数
@@ -330,7 +377,7 @@
               </div>
               <div class="stat-content">
                 <div class="stat-value">
-                  {{ formatNumber(apiAggregate.overall?.total_tokens) }}
+                  {{ formatNumber(apiAggregate.overall?.totalTokens) }}
                 </div>
                 <div class="stat-label">
                   Token 使用量
@@ -343,7 +390,7 @@
               </div>
               <div class="stat-content">
                 <div class="stat-value">
-                  ${{ (apiAggregate.overall?.total_cost ?? 0).toFixed(4) }}
+                  {{ modelCost(apiAggregate.overall?.totalCost, GATEWAY_MODEL_UI.aggregateCostPrecision) }}
                 </div>
                 <div class="stat-label">
                   费用
@@ -356,7 +403,7 @@
               </div>
               <div class="stat-content">
                 <div class="stat-value">
-                  {{ apiAggregate.overall?.avg_latency ?? 0 }}ms
+                  {{ apiAggregate.overall?.avgLatency ?? 0 }}ms
                 </div>
                 <div class="stat-label">
                   平均延迟
@@ -369,7 +416,7 @@
             <div class="stats-section">
               <h3>按提供商</h3>
               <el-table
-                :data="apiAggregate.by_provider"
+                :data="apiAggregate.byProvider"
                 stripe
               >
                 <el-table-column
@@ -401,7 +448,7 @@
                   label="费用"
                 >
                   <template #default="{ row }">
-                    ${{ (row.cost || 0).toFixed(4) }}
+                    {{ modelCost(row.cost, GATEWAY_MODEL_UI.aggregateCostPrecision) }}
                   </template>
                 </el-table-column>
               </el-table>
@@ -410,7 +457,7 @@
             <div class="stats-section">
               <h3>按模型</h3>
               <el-table
-                :data="apiAggregate.by_model"
+                :data="apiAggregate.byModel"
                 stripe
               >
                 <el-table-column
@@ -438,7 +485,7 @@
                   label="费用"
                 >
                   <template #default="{ row }">
-                    ${{ (row.cost || 0).toFixed(4) }}
+                    {{ modelCost(row.cost, GATEWAY_MODEL_UI.aggregateCostPrecision) }}
                   </template>
                 </el-table-column>
               </el-table>
@@ -467,6 +514,13 @@
           </el-button>
         </div>
 
+        <div
+          v-if="gatewayStore.apiLogsError"
+          role="alert"
+          class="gateway-load-error"
+        >
+          {{ gatewayStore.apiLogsError }}
+        </div>
         <el-table
           v-loading="apiLogsLoading"
           :data="apiLogs"
@@ -495,30 +549,30 @@
             label="模型"
           />
           <el-table-column
-            prop="input_tokens"
+            prop="inputTokens"
             label="输入 Token"
             width="120"
           >
             <template #default="{ row }">
-              {{ (row.input_tokens ?? 0).toLocaleString() }}
+              {{ (row.inputTokens ?? 0).toLocaleString() }}
             </template>
           </el-table-column>
           <el-table-column
-            prop="output_tokens"
+            prop="outputTokens"
             label="输出 Token"
             width="120"
           >
             <template #default="{ row }">
-              {{ (row.output_tokens ?? 0).toLocaleString() }}
+              {{ (row.outputTokens ?? 0).toLocaleString() }}
             </template>
           </el-table-column>
           <el-table-column
-            prop="latency_ms"
+            prop="latencyMs"
             label="延迟"
             width="100"
           >
             <template #default="{ row }">
-              {{ row.latency_ms }}ms
+              {{ row.latencyMs }}ms
             </template>
           </el-table-column>
           <el-table-column
@@ -527,20 +581,20 @@
             width="100"
           >
             <template #default="{ row }">
-              ${{ row.cost.toFixed(6) }}
+              {{ modelCost(row.cost) }}
             </template>
           </el-table-column>
           <el-table-column
-            prop="status_code"
+            prop="statusCode"
             label="状态"
             width="80"
           >
             <template #default="{ row }">
               <el-tag
-                :type="row.status_code === 200 ? 'success' : 'danger'"
+                :type="row.statusCode === 200 ? 'success' : 'danger'"
                 size="small"
               >
-                {{ row.status_code }}
+                {{ row.statusCode }}
               </el-tag>
             </template>
           </el-table-column>
@@ -553,6 +607,7 @@
       v-model="showAPIKeyDialog"
       :title="editingKey ? '编辑 API Key' : '添加 API Key'"
       width="500px"
+      @closed="resetForm"
     >
       <el-form
         ref="apiKeyFormRef"
@@ -578,49 +633,49 @@
             style="width: 100%"
           >
             <el-option
-              label="OpenAI"
-              value="openai"
-            />
-            <el-option
-              label="Anthropic"
-              value="anthropic"
-            />
-            <el-option
-              label="Azure OpenAI"
-              value="azure"
-            />
-            <el-option
-              label="Google AI"
-              value="google"
-            />
-            <el-option
-              label="自定义"
-              value="custom"
+              v-for="provider in GATEWAY_MODEL_UI.providers"
+              :key="provider.value"
+              :label="provider.label"
+              :value="provider.value"
             />
           </el-select>
         </el-form-item>
         <el-form-item
           label="API Key"
-          prop="api_key"
+          prop="apiKey"
         >
           <el-input
-            v-model="apiKeyForm.api_key"
+            v-model="apiKeyForm.apiKey"
             type="password"
             show-password
-            placeholder="sk-..."
+            :placeholder="editingKey ? '留空保留原密钥；输入新值替换' : '输入提供商密钥（Ollama 可留空）'"
           />
         </el-form-item>
         <el-form-item
-          v-if="apiKeyForm.provider === 'azure'"
           label="API Endpoint"
         >
           <el-input
             v-model="apiKeyForm.endpoint"
-            placeholder="https://xxx.openai.azure.com"
+            placeholder="可选；自定义或代理服务请填写实际 API 基址"
+          />
+        </el-form-item>
+        <el-form-item label="验证模型（选填）">
+          <el-input
+            v-model="apiKeyForm.model"
+            placeholder="留空使用此提供商的启用目录模型"
+          />
+        </el-form-item>
+        <el-form-item
+          v-if="apiKeyForm.provider === 'azure'"
+          label="API 版本（选填）"
+        >
+          <el-input
+            v-model="apiKeyForm.apiVersion"
+            placeholder="使用 Azure 配置的 API 版本"
           />
         </el-form-item>
         <el-form-item label="是否启用">
-          <el-switch v-model="apiKeyForm.is_active" />
+          <el-switch v-model="apiKeyForm.isActive" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -642,6 +697,7 @@
       v-model="showTestDialog"
       title="测试模型"
       width="500px"
+      @closed="clearModelTest"
     >
       <el-form label-position="top">
         <el-form-item label="测试提示">
@@ -663,7 +719,7 @@
         v-if="testResult"
         class="test-result"
       >
-        <h4>响应</h4>
+        <h4>验证结果</h4>
         <div class="result-content">
           {{ testResult }}
         </div>
@@ -689,9 +745,11 @@ import PageEmptyState from '@/components/layout/PageEmptyState.vue'
 import PageHeader from '@/components/layout/PageHeader.vue'
 import PageShell from '@/components/layout/PageShell.vue'
 import { ElMessageBox } from 'element-plus'
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useGatewayStore } from '@/stores/gateway'
 import { useAppStore } from '@/stores/app'
+import { useAuthStore } from '@/stores/auth'
+import { GATEWAY_MODEL_UI, gatewayErrorMessage } from '@/config/gateway'
 import {
   Key, Bot, Layers, Image, Mic, Search, MoreVertical,
   Edit, Trash2, CheckCircle, Play, Star, Zap, Code, Eye,
@@ -701,6 +759,8 @@ import { formatNumber as formatCompactNumber } from '@/utils/formatters'
 
 const gatewayStore = useGatewayStore()
 const appStore = useAppStore()
+const authStore = useAuthStore()
+const canManageCatalog = computed(() => authStore.isAdmin)
 
 const activeTab = ref('api-keys')
 const showAPIKeyDialog = ref(false)
@@ -711,6 +771,9 @@ const testPrompt = ref('Hello, how are you?')
 const testResult = ref('')
 const testing = ref(false)
 const saving = ref(false)
+const defaultSaving = ref('')
+const verifyingKeyId = ref('')
+let modelTestRevision = 0
 
 const filterProvider = ref('')
 const filterType = ref('')
@@ -722,16 +785,18 @@ const apiKeyFormRef = ref(null)
 const apiKeyForm = reactive({
   name: '',
   provider: 'openai',
-  api_key: '',
+  apiKey: '',
   endpoint: '',
-  is_active: true
+  model: '',
+  apiVersion: '',
+  isActive: true
 })
 
-const apiKeyRules = {
+const apiKeyRules = computed(() => ({
   name: [{ required: true, message: '请输入名称', trigger: 'blur' }],
   provider: [{ required: true, message: '请选择服务商', trigger: 'change' }],
-  api_key: [{ required: true, message: '请输入 API Key', trigger: 'blur' }]
-}
+  apiKey: [{ required: apiKeyForm.provider !== 'ollama' && (!editingKey.value || editingKey.value.provider !== apiKeyForm.provider), message: '请输入 API Key', trigger: 'blur' }]
+}))
 
 const apiKeys = computed(() => gatewayStore.apiKeys)
 const apiKeysLoading = computed(() => gatewayStore.apiKeysLoading)
@@ -746,18 +811,18 @@ const filteredModels = computed(() => {
   let result = models.value
 
   if (filterProvider.value) {
-    result = result.filter(m => m.provider_slug === filterProvider.value)
+    result = result.filter(m => m.providerSlug === filterProvider.value)
   }
 
   if (filterType.value) {
-    result = result.filter(m => m.model_type === filterType.value)
+    result = result.filter(m => m.modelType === filterType.value)
   }
 
   if (searchQuery.value) {
     const query = searchQuery.value.toLowerCase()
     result = result.filter(m =>
       m.name.toLowerCase().includes(query) ||
-      m.model_id.toLowerCase().includes(query)
+      m.modelId.toLowerCase().includes(query)
     )
   }
 
@@ -765,31 +830,15 @@ const filteredModels = computed(() => {
 })
 
 function getProviderType(provider) {
-  const types = {
-    openai: 'primary',
-    anthropic: 'warning',
-    azure: 'success',
-    google: 'info',
-    custom: 'info',
-  }
-  return types[provider] || undefined
+  return GATEWAY_MODEL_UI.providers.find(item => item.value === provider)?.type
 }
 
 function getProviderLabel(provider) {
-  const labels = {
-    openai: 'OpenAI',
-    anthropic: 'Anthropic',
-    azure: 'Azure',
-    google: 'Google',
-    custom: '自定义'
-  }
-  return labels[provider] || provider
+  return GATEWAY_MODEL_UI.providers.find(item => item.value === provider)?.label || provider
 }
 
-function maskKey(key) {
-  if (!key || key.length < 8) return '***'
-  return `${key.slice(0, 4)}...${key.slice(-4)}`
-}
+function modelPrice(value) { return value == null ? '未提供报价' : `$${value}/1M` }
+function modelCost(value, precision = GATEWAY_MODEL_UI.costPrecision) { return value == null || !Number.isFinite(Number(value)) ? '未提供' : `$${Number(value).toFixed(precision)}` }
 
 function formatDate(date) {
   if (!date) return '-'
@@ -810,31 +859,37 @@ function editAPIKey(key) {
   Object.assign(apiKeyForm, {
     name: key.name,
     provider: key.provider,
-    api_key: key.api_key,
+    apiKey: '',
     endpoint: key.endpoint || '',
-    is_active: key.is_active
+    model: key.model || '',
+    apiVersion: key.apiVersion || '',
+    isActive: key.isActive
   })
   showAPIKeyDialog.value = true
 }
 
 async function handleSaveAPIKey() {
+  if (saving.value) return
   const valid = await apiKeyFormRef.value?.validate().catch(() => false)
   if (!valid) return
 
   saving.value = true
   try {
+    const payload = { ...apiKeyForm }
+    if (editingKey.value && !payload.apiKey) delete payload.apiKey
     if (editingKey.value) {
-      await gatewayStore.editAPIKey(editingKey.value.id, apiKeyForm)
+      await gatewayStore.editAPIKey(editingKey.value.id, payload)
       appStore.success('API Key 已更新')
     } else {
-      await gatewayStore.addAPIKey(apiKeyForm)
+      await gatewayStore.addAPIKey(payload)
       appStore.success('API Key 已添加')
     }
     showAPIKeyDialog.value = false
     resetForm()
-    await gatewayStore.fetchAPIKeys()
+    try { await gatewayStore.fetchAPIKeys() }
+    catch { appStore.warning('密钥已保存，列表刷新失败；请重新加载密钥。') }
   } catch (err) {
-    appStore.error('保存失败')
+    appStore.error(gatewayErrorMessage(err, '保存失败'))
   } finally {
     saving.value = false
   }
@@ -851,19 +906,23 @@ async function handleDeleteKey(key) {
 }
 
 async function handleVerifyKey(key) {
+  if (!key.isActive || verifyingKeyId.value) return
+  verifyingKeyId.value = key.id
   try {
     const result = await gatewayStore.verifyAPIKeyConnection(key.id)
     if (result.valid) {
       appStore.success('密钥验证成功')
+      try { await gatewayStore.fetchAPIKeys() } catch { /* The successful probe remains confirmed. */ }
     } else {
       appStore.error(`验证失败: ${result.error}`)
     }
   } catch (err) {
-    appStore.error('验证失败')
-  }
+    appStore.error(gatewayErrorMessage(err, '验证失败'))
+  } finally { verifyingKeyId.value = '' }
 }
 
 function testModel(model) {
+  modelTestRevision++
   testingModel.value = model
   testPrompt.value = '请介绍一下你自己'
   testResult.value = ''
@@ -871,32 +930,39 @@ function testModel(model) {
 }
 
 async function handleTest() {
-  if (!testPrompt.value.trim()) return
-
+  if (!testPrompt.value.trim() || testing.value) return
+  const current = ++modelTestRevision
   testing.value = true
   try {
     const result = await gatewayStore.testModelConnection(testingModel.value.id, {
       prompt: testPrompt.value
     })
-
-    if (result.success) {
+    if (current !== modelTestRevision) return
+    if (result.success && typeof result.response === 'string' && result.response.trim()) {
       testResult.value = result.response
     } else {
-      testResult.value = `错误: ${result.error}`
+      testResult.value = `错误: ${result.error || '模型服务没有返回可用结果'}`
     }
   } catch (err) {
-    testResult.value = `错误: ${err.message}`
+    if (current === modelTestRevision) testResult.value = `错误: ${gatewayErrorMessage(err, '模型测试失败')}`
   } finally {
-    testing.value = false
+    if (current === modelTestRevision) testing.value = false
   }
 }
+function clearModelTest() { modelTestRevision++; testResult.value = ''; testing.value = false }
+onBeforeUnmount(clearModelTest)
 
-async function handleToggleDefault() {
+async function handleToggleDefault(model) {
+  if (!canManageCatalog.value || defaultSaving.value) return
+  defaultSaving.value = model.id
   try {
-    appStore.info('该功能需要管理员权限')
+    const result = await gatewayStore.setCatalogDefault(model, !model.isDefault)
+    const message = model.isDefault ? '已取消目录默认项' : '已设置目录默认项'
+    if (result.refreshFailed) appStore.warning(`${message}，列表刷新失败，请重新加载。`)
+    else appStore.success(message)
   } catch (err) {
-    appStore.error('操作失败')
-  }
+    appStore.error(gatewayErrorMessage(err, '目录默认项更新失败'))
+  } finally { defaultSaving.value = '' }
 }
 
 async function fetchLogs() {
@@ -905,32 +971,41 @@ async function fetchLogs() {
     params.start_date = logDateRange.value[0].toISOString()
     params.end_date = logDateRange.value[1].toISOString()
   }
-  await gatewayStore.fetchAPILogs(params)
+  try { await gatewayStore.fetchAPILogs(params) } catch { /* The log section displays the failure. */ }
 }
 
 function resetForm() {
   Object.assign(apiKeyForm, {
     name: '',
     provider: 'openai',
-    api_key: '',
+    apiKey: '',
     endpoint: '',
-    is_active: true
+    model: '',
+    apiVersion: '',
+    isActive: true
   })
   editingKey.value = null
 }
 
 onMounted(async () => {
-  await Promise.all([
+  await Promise.allSettled([
     gatewayStore.fetchProviders(),
     gatewayStore.fetchModels(),
     gatewayStore.fetchAPIKeys(),
     gatewayStore.fetchAPIAggregate()
   ])
 })
+async function retryKeys() { try { await gatewayStore.fetchAPIKeys() } catch { /* The inline error remains actionable. */ } }
+async function retryModels() { try { await gatewayStore.fetchModels() } catch { /* The inline error remains actionable. */ } }
+async function retryProviders() { try { await gatewayStore.fetchProviders() } catch { /* The inline error remains actionable. */ } }
+async function retryAggregate() { try { await gatewayStore.fetchAPIAggregate() } catch { /* The inline error remains actionable. */ } }
+function loadTab(tab) { if (tab === 'logs') return fetchLogs() }
 </script>
 
 <style lang="scss" scoped>
 @use '@/assets/styles/variables.scss' as *;
+.gateway-load-error { display: flex; align-items: center; flex-wrap: wrap; gap: $spacing-3; color: var(--error); margin-bottom: $spacing-4; }
+.gateway-hint { color: var(--text-secondary); font-size: $font-size-sm; margin-block: $spacing-3; }
 
 .btn-icon {
   width: 16px;

@@ -42,7 +42,7 @@
         class="info-row"
       >
         <span class="info-label">指标</span>
-        <span class="info-value">{{ localConfig.metrics || localConfig.metricType || '-' }}</span>
+        <span class="info-value">{{ localConfig.metrics.join(', ') || '-' }}</span>
       </div>
       <div
         v-if="localConfig.description"
@@ -69,33 +69,14 @@
       >
         <div class="metrics-table">
           <div
-            v-if="nodeOutput?.accuracy !== undefined"
+            v-for="metric in metricRows"
+            :key="metric.value"
             class="metric-row"
           >
-            <span class="metric-label">准确率</span>
-            <span class="metric-value">{{ formatMetric(nodeOutput.accuracy) }}</span>
+            <span class="metric-label">{{ metric.label }}</span>
+            <span class="metric-value">{{ metric.display }}</span>
           </div>
-          <div
-            v-if="nodeOutput?.precision !== undefined"
-            class="metric-row"
-          >
-            <span class="metric-label">精确率</span>
-            <span class="metric-value">{{ formatMetric(nodeOutput.precision) }}</span>
-          </div>
-          <div
-            v-if="nodeOutput?.recall !== undefined"
-            class="metric-row"
-          >
-            <span class="metric-label">召回率</span>
-            <span class="metric-value">{{ formatMetric(nodeOutput.recall) }}</span>
-          </div>
-          <div
-            v-if="nodeOutput?.f1 !== undefined || nodeOutput?.f1_score !== undefined"
-            class="metric-row"
-          >
-            <span class="metric-label">F1 分数</span>
-            <span class="metric-value">{{ formatMetric(nodeOutput.f1 || nodeOutput.f1_score) }}</span>
-          </div>
+          <span v-if="!metricRows.length">没有可展示的真实指标</span>
         </div>
       </div>
       <div
@@ -113,93 +94,11 @@
         class="expanded-config"
         @click.stop
       >
-        <div class="config-section">
-          <label class="config-label">评估指标</label>
-          <el-select
-            v-model="localConfig.metrics"
-            size="small"
-            @change="handleChange"
-          >
-            <el-option
-              value="accuracy"
-              label="准确率 (Accuracy)"
-            />
-            <el-option
-              value="precision"
-              label="精确率 (Precision)"
-            />
-            <el-option
-              value="recall"
-              label="召回率 (Recall)"
-            />
-            <el-option
-              value="f1"
-              label="F1 分数"
-            />
-            <el-option
-              value="auc"
-              label="AUC-ROC"
-            />
-            <el-option
-              value="loss"
-              label="损失值 (Loss)"
-            />
-            <el-option
-              value="bleu"
-              label="BLEU"
-            />
-            <el-option
-              value="rouge"
-              label="ROUGE"
-            />
-          </el-select>
-        </div>
-
-        <div class="config-section">
-          <label class="config-label">指标类型</label>
-          <el-input
-            v-model="localConfig.metricType"
-            size="small"
-            placeholder="自定义指标类型"
-            @change="handleChange"
-          />
-        </div>
-
-        <div class="config-section">
-          <label class="config-label">阈值</label>
-          <el-input-number
-            v-model="localConfig.threshold"
-            :min="0"
-            :max="1"
-            :step="0.01"
-            :precision="2"
-            size="small"
-            controls-position="right"
-            @change="handleChange"
-          />
-        </div>
-
-        <div class="config-section">
-          <label class="config-label">测试数据集</label>
-          <el-input
-            v-model="localConfig.testDataset"
-            size="small"
-            placeholder="测试数据集路径或名称"
-            @change="handleChange"
-          />
-        </div>
-
-        <div class="config-section">
-          <label class="config-label">描述</label>
-          <el-input
-            v-model="localConfig.description"
-            type="textarea"
-            :rows="2"
-            size="small"
-            placeholder="评估任务描述..."
-            @change="handleChange"
-          />
-        </div>
+        <ModelEvaluationConfig
+          :model-value="localConfig"
+          :show-identity="false"
+          @update:model-value="updateConfiguration"
+        />
       </div>
     </Transition>
 
@@ -216,6 +115,8 @@ import { Handle, Position, useVueFlow } from '@vue-flow/core'
 import { ChevronDown, Loader, AlertCircle } from 'lucide-vue-next'
 import { useExecutionStore } from '@/stores/execution'
 import NodeTypeBadge from '@/components/workflow/nodes/NodeTypeBadge.vue'
+import ModelEvaluationConfig from '@/components/workflow/configs/ModelEvaluationConfig.vue'
+import { evaluationConfig, evaluationMetricRows } from '@/config/modelEvaluation'
 import { useNodePresentation } from '@/composables/useNodePresentation'
 
 
@@ -234,13 +135,7 @@ const { updateNodeData } = useVueFlow()
 const isExpanded = ref(false)
 
 const localName = ref(props.data.label || '模型评估')
-const localConfig = ref({
-  metrics: props.data.config?.metrics || 'accuracy',
-  metricType: props.data.config?.metricType || '',
-  threshold: props.data.config?.threshold || 0.8,
-  testDataset: props.data.config?.testDataset || '',
-  description: props.data.config?.description || ''
-})
+const localConfig = ref(evaluationConfig(props.data.config))
 
 const executionStore = useExecutionStore()
 const nodeStatus = computed(() => executionStore.nodeStatusMap[props.id])
@@ -249,13 +144,8 @@ const isRunning = computed(() => nodeStatus.value === 'running')
 const isCompleted = computed(() => nodeStatus.value === 'completed')
 const isFailed = computed(() => nodeStatus.value === 'failed')
 
-function formatMetric(value) {
-  if (value === undefined || value === null) return '-'
-  if (typeof value === 'number') {
-    return value > 1 ? value.toFixed(2) : (value * 100).toFixed(1) + '%'
-  }
-  return String(value)
-}
+const metricRows = computed(() => evaluationMetricRows(nodeOutput.value))
+function updateConfiguration(value) { localConfig.value = value; handleChange() }
 
 function truncate(str, len) {
   if (!str) return ''
@@ -265,14 +155,7 @@ function truncate(str, len) {
 watch(() => props.data, (d) => {
   if (d) {
     localName.value = d.label || '模型评估'
-    localConfig.value = {
-      metrics: d.config?.metrics || 'accuracy',
-      metricType: d.config?.metricType || '',
-      threshold: d.config?.threshold || 0.8,
-      testDataset: d.config?.testDataset || '',
-      description: d.config?.description || '',
-      ...d.config
-    }
+    localConfig.value = evaluationConfig(d.config)
   }
 }, { deep: true })
 

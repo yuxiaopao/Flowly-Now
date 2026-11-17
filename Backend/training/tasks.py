@@ -4,16 +4,21 @@ Provides async training execution with progress streaming via WebSocket.
 """
 import json
 import subprocess
-import signal
 import os
 import sys
-import time
 from datetime import timedelta
 from pathlib import Path
 from celery import shared_task, Task
 from celery.exceptions import SoftTimeLimitExceeded
+from django.conf import settings
 from django.utils import timezone
 import logging
+
+from .execution_control import (
+    TrainingCancellationMonitor, TrainingStopped, cancellation_requested,
+    claim_training_run, finish_training_cancel, request_training_cancel,
+    save_training_update, terminate_training_process,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -76,39 +81,52 @@ class TrainingTask(Task):
     
     def on_failure(self, exc, task_id, args, kwargs, einfo):
         try:
-            job_id = kwargs.get('job_id') or (args[0] if args else None)
+            job_id = kwargs.get('training_job_id') or kwargs.get('job_id') or (args[0] if args else None)
             if job_id:
                 try:
                     from training.models import TrainingJob
-                    job = TrainingJob.objects.get(job_id=job_id)
-                    job.mark_failed(str(exc))
+                    job = TrainingJob.objects.get(pk=job_id)
+                    if job.job_id and job.job_id != task_id:
+                        return
+                    job.status = 'failed'
+                    job.error_message = str(exc)
+                    job.completed_at = timezone.now()
+                    save_training_update(job, update_fields=['status', 'error_message', 'completed_at', 'updated_at'])
                     _broadcast_training_event(job_id, 'training_error', {
                         'job_id': str(job_id),
                         'error': str(exc),
                         'traceback': str(einfo)
                     })
+                except TrainingStopped:
+                    finish_training_cancel(job_id, owner=job)
                 except Exception as model_error:
                     logger.error(f"Failed to update TrainingJob on failure: {model_error}")
         except Exception as e:
             logger.error(f"Failed to handle training failure: {e}")
 
-    def on_terminal(self, task_id, args, kwargs, retval):
-        """Called when task succeeds or fails after all retries."""
+    def after_return(self, status, retval, task_id, args, kwargs, einfo):
+        """Do not leave a successful task invocation with a running database record."""
+        if status != 'SUCCESS' or isinstance(retval, dict) and retval.get('status'):
+            return
         try:
-            job_id = kwargs.get('job_id') or (args[0] if args else None)
+            job_id = kwargs.get('training_job_id') or kwargs.get('job_id') or (args[0] if args else None)
             if job_id:
                 try:
                     from training.models import TrainingJob
-                    job = TrainingJob.objects.get(job_id=job_id)
+                    job = TrainingJob.objects.get(pk=job_id)
+                    if job.job_id and job.job_id != task_id:
+                        return
                     if job.status == 'running':
                         job.status = 'failed'
                         job.error_message = 'Training terminated unexpectedly'
                         job.completed_at = timezone.now()
-                        job.save(update_fields=['status', 'error_message', 'completed_at', 'updated_at'])
+                        save_training_update(job, update_fields=['status', 'error_message', 'completed_at', 'updated_at'])
+                except TrainingStopped:
+                    finish_training_cancel(job_id, owner=job)
                 except Exception:
                     pass
         except Exception as e:
-            logger.error(f"Failed in on_terminal: {e}")
+            logger.error(f"Failed in training after_return: {e}")
 
 
 @shared_task(
@@ -129,24 +147,16 @@ def run_training_task(self, training_job_id: str, config_path: str = None, outpu
         output_dir: Directory to save model files (optional override)
     """
     from training.models import TrainingJob
-    job_id = training_job_id  # Local alias for compatibility
+    job_id = str(training_job_id)
 
     try:
-        job = TrainingJob.objects.get(id=training_job_id)
+        job, claimed = claim_training_run(training_job_id, self.request.id)
     except (TrainingJob.DoesNotExist, ValueError):
         logger.error(f"TrainingJob {training_job_id} not found")
         return {'error': f'TrainingJob {training_job_id} not found'}
 
-    # Mark as running
-    job.status = 'running'
-    job.started_at = timezone.now()
-    job.save(update_fields=['status', 'started_at', 'updated_at'])
-    
-    # Mark as running
-    job.status = 'running'
-    job.job_id = self.request.id
-    job.started_at = timezone.now()
-    job.save(update_fields=['status', 'job_id', 'started_at', 'updated_at'])
+    if not claimed:
+        return {'job_id': str(job.id), 'status': job.status, 'message': 'Training already claimed or stopped'}
     
     _broadcast_training_event(job_id, 'training_started', _build_ws_event('training_started', {
         'training_run_id': str(job_id),
@@ -163,7 +173,7 @@ def run_training_task(self, training_job_id: str, config_path: str = None, outpu
     }))
     
     # Build command
-    script_path = Path(__file__).parent.parent.parent / 'scripts' / 'train_model.py'
+    script_path = Path(settings.BASE_DIR) / 'scripts' / 'train_model.py'
     cmd = [
         sys.executable,
         str(script_path),
@@ -175,7 +185,7 @@ def run_training_task(self, training_job_id: str, config_path: str = None, outpu
         cmd.extend(['--output-dir', output_dir])
     
     process = None
-    all_metrics = []
+    cancellation_monitor = None
     
     try:
         # Set up environment for unbuffered output
@@ -189,16 +199,20 @@ def run_training_task(self, training_job_id: str, config_path: str = None, outpu
             text=True,
             bufsize=1,
             env=env,
-            cwd=str(script_path.parent.parent.parent)
+            cwd=str(settings.BASE_DIR)
         )
         
         # Track the process so we can terminate it
         TrainingTask._running_jobs[job_id] = process
+        cancellation_monitor = TrainingCancellationMonitor(job, process)
+        cancellation_monitor.start()
         
         logger.info(f"Started training process for job {job_id}, PID: {process.pid}")
         
         # Read stdout line by line
         for line in iter(process.stdout.readline, ''):
+            if cancellation_requested(job_id, owner=job):
+                raise TrainingStopped('Cancellation requested')
             if not line:
                 break
             
@@ -232,7 +246,7 @@ def run_training_task(self, training_job_id: str, config_path: str = None, outpu
                     estimated_total = int(elapsed_seconds / epoch * total)
                     job.estimated_duration_seconds = estimated_total
                     job.eta_seconds = max(estimated_total - elapsed_seconds, 0)
-                job.save(update_fields=['current_epoch', 'total_epochs', 'progress', 'estimated_duration_seconds', 'eta_seconds', 'updated_at'])
+                save_training_update(job, update_fields=['current_epoch', 'total_epochs', 'progress', 'estimated_duration_seconds', 'eta_seconds', 'updated_at'])
 
                 _broadcast_training_event(job_id, 'epoch_start', _build_ws_event('epoch_start', {
                     'training_run_id': str(job_id),
@@ -303,7 +317,7 @@ def run_training_task(self, training_job_id: str, config_path: str = None, outpu
                         'preview_samples': yolo_metrics['preview_samples'],
                         'timestamp': _utc_timestamp(),
                     })
-                    job.save(update_fields=[
+                    save_training_update(job, update_fields=[
                         'current_epoch', 'total_epochs', 'progress', 'current_loss', 'current_metric',
                         'learning_rate', 'metrics', 'estimated_duration_seconds', 'eta_seconds',
                         'preview_samples', 'best_epoch', 'best_fitness', 'gpu_info', 'metrics_history',
@@ -357,7 +371,6 @@ def run_training_task(self, training_job_id: str, config_path: str = None, outpu
                         'val_loss': val_loss,
                         'val_acc': val_acc,
                     }
-                    all_metrics.append(metrics)
 
                     job.current_epoch = epoch
                     job.total_epochs = total
@@ -365,12 +378,16 @@ def run_training_task(self, training_job_id: str, config_path: str = None, outpu
                     job.current_loss = train_loss
                     job.current_metric = val_acc
                     job.metrics = metrics
-                    job.save(update_fields=[
+                    save_training_update(job, update_fields=[
                         'current_epoch', 'total_epochs', 'progress',
                         'current_loss', 'current_metric', 'metrics', 'updated_at'
                     ])
 
-                    job.add_metrics_entry(epoch, loss=train_loss, metric=val_acc)
+                    job.metrics_history.append({
+                        'epoch': epoch, 'loss': train_loss, 'metric': val_acc,
+                        'timestamp': _utc_timestamp(),
+                    })
+                    save_training_update(job, update_fields=['metrics_history'])
 
                     _broadcast_training_event(job_id, 'epoch_complete', {
                         'job_id': str(job_id),
@@ -399,7 +416,7 @@ def run_training_task(self, training_job_id: str, config_path: str = None, outpu
                     job.current_metric = final_metrics.get('mAP50', job.current_metric)
                     job.best_fitness = final_metrics.get('fitness', job.best_fitness)
                     job.metrics = final_metrics
-                    job.save(update_fields=[
+                    save_training_update(job, update_fields=[
                         'model_path', 'best_weight_path', 'last_weight_path', 'exported_artifacts',
                         'status', 'completed_at', 'duration_seconds', 'progress',
                         'current_metric', 'best_fitness', 'metrics', 'updated_at'
@@ -444,7 +461,7 @@ def run_training_task(self, training_job_id: str, config_path: str = None, outpu
                 job.progress = 100
                 job.current_metric = best_val_acc
                 job.metrics_history = training_history
-                job.save(update_fields=[
+                save_training_update(job, update_fields=[
                     'model_path', 'status', 'completed_at', 'duration_seconds',
                     'progress', 'current_metric', 'metrics_history', 'updated_at'
                 ])
@@ -471,7 +488,7 @@ def run_training_task(self, training_job_id: str, config_path: str = None, outpu
                 job.status = 'failed'
                 job.error_message = error_msg
                 job.completed_at = timezone.now()
-                job.save(update_fields=['status', 'error_message', 'completed_at', 'updated_at'])
+                save_training_update(job, update_fields=['status', 'error_message', 'completed_at', 'updated_at'])
                 
                 _broadcast_training_event(job_id, 'training_error', {
                     'job_id': str(job_id),
@@ -485,7 +502,7 @@ def run_training_task(self, training_job_id: str, config_path: str = None, outpu
                 job.status = 'cancelled'
                 job.completed_at = timezone.now()
                 job.error_message = data.get('message', 'Cancelled by signal')
-                job.save(update_fields=['status', 'completed_at', 'error_message', 'updated_at'])
+                save_training_update(job, update_fields=['status', 'completed_at', 'error_message', 'updated_at'])
                 
                 _broadcast_training_event(job_id, 'training_cancelled', {
                     'job_id': str(job_id),
@@ -498,12 +515,14 @@ def run_training_task(self, training_job_id: str, config_path: str = None, outpu
         process.stderr.close()
         return_code = process.wait()
         
-        if return_code != 0 and job.status == 'running':
-            error_msg = stderr.strip() or f'Process exited with code {return_code}'
+        if cancellation_requested(job_id, owner=job):
+            raise TrainingStopped('Training stopped')
+        if job.status == 'running':
+            error_msg = stderr.strip() or f'Process exited with code {return_code} without a completion event'
             job.status = 'failed'
             job.error_message = error_msg
             job.completed_at = timezone.now()
-            job.save(update_fields=['status', 'error_message', 'completed_at', 'updated_at'])
+            save_training_update(job, update_fields=['status', 'error_message', 'completed_at', 'updated_at'])
             
             _broadcast_training_event(job_id, 'training_error', {
                 'job_id': str(job_id),
@@ -511,17 +530,25 @@ def run_training_task(self, training_job_id: str, config_path: str = None, outpu
                 'return_code': return_code,
             })
     
+    except TrainingStopped:
+        terminate_training_process(process)
+        job = finish_training_cancel(job_id, owner=job)
+        if job.status == 'cancelled':
+            _broadcast_training_event(job_id, 'training_cancelled', {
+                'job_id': str(job_id), 'message': job.error_message,
+            })
+        return {'job_id': str(job_id), 'status': job.status}
+
     except SoftTimeLimitExceeded:
-        if process:
-            process.terminate()
-            try:
-                process.wait(timeout=10)
-            except subprocess.TimeoutExpired:
-                process.kill()
+        terminate_training_process(process)
         job.status = 'failed'
         job.error_message = 'Training exceeded time limit (2 hours)'
         job.completed_at = timezone.now()
-        job.save(update_fields=['status', 'error_message', 'completed_at', 'updated_at'])
+        try:
+            save_training_update(job, update_fields=['status', 'error_message', 'completed_at', 'updated_at'])
+        except TrainingStopped:
+            job = finish_training_cancel(job_id, owner=job)
+            return {'job_id': str(job_id), 'status': job.status}
         
         _broadcast_training_event(job_id, 'training_error', {
             'job_id': str(job_id),
@@ -531,35 +558,42 @@ def run_training_task(self, training_job_id: str, config_path: str = None, outpu
     
     except Exception as e:
         logger.exception(f"Training task {job_id} failed: {e}")
-        if process:
-            process.terminate()
-        job.status = 'failed'
+        terminate_training_process(process)
+        if cancellation_requested(job_id, owner=job):
+            job = finish_training_cancel(job_id, owner=job)
+            return {'job_id': str(job_id), 'status': job.status}
+        should_retry = self.request.retries < self.max_retries
+        job.status = 'queued' if should_retry else 'failed'
         job.error_message = str(e)
-        job.completed_at = timezone.now()
-        job.save(update_fields=['status', 'error_message', 'completed_at', 'updated_at'])
+        job.completed_at = None if should_retry else timezone.now()
+        try:
+            save_training_update(job, update_fields=['status', 'error_message', 'completed_at', 'updated_at'])
+        except TrainingStopped:
+            job = finish_training_cancel(job_id, owner=job)
+            return {'job_id': str(job_id), 'status': job.status}
         
         _broadcast_training_event(job_id, 'training_error', {
             'job_id': str(job_id),
             'error': str(e),
         })
         
-        if self.request.retries < self.max_retries:
+        if should_retry:
             logger.info(f"Retrying training task {job_id}, attempt {self.request.retries + 1}/{self.max_retries}")
             raise self.retry(exc=e, countdown=300)
         return {'error': str(e)}
     
     finally:
+        if cancellation_monitor:
+            cancellation_monitor.stop()
         if process:
             TrainingTask._running_jobs.pop(job_id, None)
-            if process.poll() is None:
-                process.terminate()
-                process.wait(timeout=5)
+            terminate_training_process(process)
 
 
 @shared_task
 def cancel_training_task(training_job_id: str):
     """
-    Cancel a running training job by sending SIGTERM to the subprocess.
+    Persist a cancellation request for the worker that owns the training process.
 
     Args:
         training_job_id: UUID primary key of the TrainingJob record
@@ -571,67 +605,21 @@ def cancel_training_task(training_job_id: str):
     job_id = training_job_id
 
     try:
-        job = TrainingJob.objects.get(id=training_job_id)
-        
-        if job.status not in ['queued', 'running', 'preparing']:
-            return {
-                'job_id': str(job_id),
-                'status': job.status,
-                'message': 'Job is not in a cancellable state'
-            }
-        
-        # If queued or preparing, just mark as cancelled directly
-        if job.status in ['queued', 'preparing']:
-            job.status = 'cancelled'
-            job.completed_at = timezone.now()
-            job.error_message = 'Cancelled before execution'
-            job.save(update_fields=['status', 'completed_at', 'error_message', 'updated_at'])
-            
+        job, result_status = request_training_cancel(training_job_id)
+        process = TrainingTask._running_jobs.get(str(job_id))
+        if result_status == 'cancelling' and process is not None:
+            terminate_training_process(process)
+            job = finish_training_cancel(job_id, owner=job)
+            result_status = job.status
+        if result_status == 'cancelled':
             _broadcast_training_event(job_id, 'training_cancelled', {
                 'job_id': str(job_id),
-                'message': 'Cancelled before execution'
+                'message': job.error_message,
             })
-            return {'job_id': str(job_id), 'status': 'cancelled'}
-        
-        # If running, terminate the subprocess
-        if job_id in TrainingTask._running_jobs:
-            process = TrainingTask._running_jobs[job_id]
-            logger.info(f"Terminating training process for job {job_id}, PID: {process.pid}")
-            
-            # Send SIGTERM for graceful shutdown
-            process.terminate()
-            
-            try:
-                # Wait for graceful termination (10 seconds)
-                process.wait(timeout=10)
-            except subprocess.TimeoutExpired:
-                # Force kill if graceful termination fails
-                logger.warning(f"Graceful termination failed for job {job_id}, killing process")
-                process.kill()
-                process.wait()
-            
-            job.status = 'cancelled'
-            job.completed_at = timezone.now()
-            job.error_message = 'Cancelled by user'
-            job.save(update_fields=['status', 'completed_at', 'error_message', 'updated_at'])
-            
-            _broadcast_training_event(job_id, 'training_cancelled', {
-                'job_id': str(job_id),
-                'message': 'Cancelled by user'
-            })
-            
-            return {'job_id': str(job_id), 'status': 'cancelled'}
-        
-        # If process not found in registry but still running
-        if job.status == 'running':
-            job.status = 'cancelled'
-            job.completed_at = timezone.now()
-            job.error_message = 'Process not found (may have already completed)'
-            job.save(update_fields=['status', 'completed_at', 'error_message', 'updated_at'])
-            
-            return {'job_id': str(job_id), 'status': 'cancelled', 'message': 'Job marked as cancelled'}
-        
-        return {'job_id': str(job_id), 'status': job.status, 'message': 'No action taken'}
+        return {
+            'job_id': str(job_id), 'status': result_status,
+            'message': 'Cancellation requested; waiting for process owner' if result_status == 'cancelling' else job.error_message,
+        }
     
     except (TrainingJob.DoesNotExist, ValueError):
         return {'error': f'TrainingJob {training_job_id} not found'}

@@ -18,7 +18,7 @@ on:
 
 env:
   PYTHON_VERSION: '3.12'
-  NODE_VERSION: '20'
+  NODE_VERSION: '24'
   DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
   BACKEND_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/flowly-backend
   FRONTEND_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/flowly-frontend
@@ -30,6 +30,8 @@ jobs:
   backend-test:
     runs-on: ubuntu-latest
     if: github.event.inputs.skip_tests != 'true'
+    env:
+      DEBUG: "True"
 
     services:
       mysql:
@@ -62,12 +64,17 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt', 'requirements.in') }}
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements*.txt', 'requirements.in', 'Backend/requirements*.txt', 'docker/Dockerfile.backend') }}
           restore-keys: |
             ${{ runner.os }}-pip-
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y default-libmysqlclient-dev pkg-config ffmpeg
+          pip install "torch==2.13.0+cpu" "torchvision==0.28.0+cpu" --index-url https://download.pytorch.org/whl/cpu
+          pip install -r requirements.txt
+          pip check
 
       - name: Run migrations
         env:
@@ -87,9 +94,17 @@ jobs:
           DB_HOST: 127.0.0.1
           REDIS_HOST: 127.0.0.1
         run: |
-          pytest Backend --cov=Backend --cov-report=xml --cov-report=term
+          pytest --cov=Backend --cov-report=xml --cov-report=term
           cd Backend
           python manage.py cleanup_stale_executions --force-active --user-email=nlwftest@flowly.test || true
+
+      - name: Run isolated MySQL authorization, listing and task regressions
+        env:
+          FLOWLY_TEST_MYSQL_PORT: "3306"
+          FLOWLY_TEST_MYSQL_USER: root
+          FLOWLY_TEST_MYSQL_PASSWORD: root
+        run: |
+          pytest --ds=config.mysql_test_settings tests/backend/test_resource_security.py tests/backend/test_websocket_access.py tests/backend/test_workflow_list_performance.py tests/backend/training tests/backend/workflows/test_task_reliability.py tests/backend/test_applications.py tests/backend/workflows/test_subworkflow_runtime.py tests/mysql
 
       - name: Run NL2WF dialogue matrix (offline)
         env:
@@ -128,18 +143,14 @@ jobs:
           cd Backend
           daphne -b 127.0.0.1 -p 8000 config.asgi:application &
           SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
           sleep 8
-          python scripts/frontend_user_api_smoke_test.py
-          SMOKE_EXIT=$?
-          python scripts/frontend_user_action_integration_test.py
-          ACTION_EXIT=$?
-          python scripts/llm_probe_test.py
-          LLM_EXIT=$?
+          STATUS=0
+          python scripts/frontend_user_api_smoke_test.py || STATUS=1
+          python scripts/frontend_user_action_integration_test.py || STATUS=1
+          python scripts/llm_probe_test.py || STATUS=1
           python manage.py cleanup_stale_executions --force-active --user-email=nlwftest@flowly.test || true
-          kill $SERVER_PID || true
-          if [ $SMOKE_EXIT -ne 0 ] || [ $ACTION_EXIT -ne 0 ] || [ $LLM_EXIT -ne 0 ]; then
-            exit 1
-          fi
+          exit "$STATUS"
 
       - name: Upload coverage
         uses: codecov/codecov-action@v4
@@ -168,16 +179,68 @@ jobs:
         run: cd Frontend && npm ci
 
       - name: Run linter
-        run: cd Frontend && npm run lint
+        run: cd Frontend && npx eslint . --ext .vue,.js,.jsx,.cjs,.mjs --ignore-path .gitignore
 
       - name: Run tests
-        run: cd Frontend && npm run test:unit -- --coverage
+        run: |
+          cd Frontend
+          npm run test:coverage -- --coverage.reporter=lcov
+          npm run test:avatar
+
+      - name: Run API contract tests
+        run: |
+          cd tests/frontend
+          npm ci
+          npm test -- --runInBand
+
+      - name: Build frontend
+        run: cd Frontend && npm run build
 
       - name: Upload coverage
         uses: codecov/codecov-action@v4
         with:
           files: ./Frontend/coverage/lcov.info
           flags: frontend
+
+  desktop-test:
+    runs-on: windows-latest
+    if: github.event.inputs.skip_tests != 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: Desktop/package-lock.json
+      - name: Install dependencies for pure Node tests
+        working-directory: Desktop
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+        run: npm ci
+      - name: Run desktop unit tests
+        working-directory: Desktop
+        run: npm run test:unit
+
+  docker-frontend-check:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Validate production Compose without starting services
+        env:
+          BACKEND_IMAGE_REF: validation.invalid/backend@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          FRONTEND_IMAGE_REF: validation.invalid/frontend@sha256:1111111111111111111111111111111111111111111111111111111111111111
+        run: |
+          FLOWLY_RUNTIME_ENV_FILE="$PWD/.env.example" docker compose --project-name flowly-now --env-file .env.example -f docker-compose.prod.yml config --quiet
+      - name: Build frontend image without publishing
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: docker/Dockerfile.frontend
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
   # ==========================================================================
   # Dependency Audit
@@ -200,20 +263,58 @@ jobs:
 
       - name: Python dependency audit
         run: |
-          pip install pip-audit || true
-          pip-audit -r requirements.txt || true
+          pip install pip-audit
+          pip-audit -r Backend/requirements.txt
 
-      - name: Node dependency audit
+      - name: Audit the pinned CPU PyTorch public versions
+        if: always()
         run: |
-          cd Frontend && npm audit --audit-level=high || true
+          python - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+          dockerfile = Path('docker/Dockerfile.backend').read_text(encoding='utf-8')
+          pins = []
+          for package, argument in [('torch', 'TORCH_VERSION'), ('torchvision', 'TORCHVISION_VERSION')]:
+              matches = re.findall(rf'^ARG {argument}=([0-9]+\.[0-9]+\.[0-9]+)\+cpu$', dockerfile, re.MULTILINE)
+              if len(matches) != 1:
+                  raise SystemExit(f'Expected one exact CPU version for {argument}')
+              pins.append(f'{package}=={matches[0]}')
+          (Path(os.environ['RUNNER_TEMP']) / 'flowly-cpu-audit.txt').write_text('\n'.join(pins) + '\n', encoding='utf-8')
+          PY
+          # Local +cpu wheels are absent on PyPI; audit their exact public releases.
+          # The complete common dependency audit above still resolves all transitives.
+          pip-audit --no-deps --disable-pip -r "$RUNNER_TEMP/flowly-cpu-audit.txt"
+
+      - name: Frontend dependency audit
+        if: always()
+        run: |
+          cd Frontend && npm audit --audit-level=high
+
+      - name: API test dependency audit
+        if: always()
+        working-directory: tests/frontend
+        run: npm audit --audit-level=high
+
+      - name: Desktop dependency audit
+        if: always()
+        working-directory: Desktop
+        run: npm audit --audit-level=high
 
   # ==========================================================================
   # Build Docker Images
   # ==========================================================================
   docker-build:
     runs-on: ubuntu-latest
-    needs: [backend-test, frontend-test]
+    needs: [backend-test, frontend-test, desktop-test, dependency-audit]
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+    outputs:
+      backend_digest: ${{ steps.build-backend.outputs.digest }}
+      frontend_digest: ${{ steps.build-frontend.outputs.digest }}
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
 
     steps:
       - uses: actions/checkout@v4
@@ -233,12 +334,13 @@ jobs:
         with:
           images: ${{ env.BACKEND_IMAGE }}
           tags: |
-            type=raw,value=latest
-            type=raw,value=staging
-            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=staging,enable=${{ github.ref == 'refs/heads/develop' }}
+            type=sha,format=long,prefix=sha-
             type=semver,pattern={{version}}
 
       - name: Build and push backend
+        id: build-backend
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -255,12 +357,13 @@ jobs:
         with:
           images: ${{ env.FRONTEND_IMAGE }}
           tags: |
-            type=raw,value=latest
-            type=raw,value=staging
-            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=staging,enable=${{ github.ref == 'refs/heads/develop' }}
+            type=sha,format=long,prefix=sha-
             type=semver,pattern={{version}}
 
       - name: Build and push frontend
+        id: build-frontend
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -274,7 +377,7 @@ jobs:
       - name: Run Trivy vulnerability scanner on backend
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: '${{ env.BACKEND_IMAGE }}:staging'
+          image-ref: '${{ env.BACKEND_IMAGE }}@${{ steps.build-backend.outputs.digest }}'
           format: 'sarif'
           output: 'trivy-backend-results.sarif'
           severity: 'CRITICAL,HIGH'
@@ -286,105 +389,126 @@ jobs:
         with:
           sarif_file: 'trivy-backend-results.sarif'
 
-  # ==========================================================================
-  # Deploy to Staging
-  # ==========================================================================
   deploy-staging:
     runs-on: ubuntu-latest
     needs: [docker-build]
     if: github.ref == 'refs/heads/develop'
+    concurrency:
+      group: flowly-deploy-staging
+      cancel-in-progress: false
     environment:
       name: staging
       url: https://staging.flowly.example.com
-
     steps:
       - uses: actions/checkout@v4
-
-      - name: Deploy to staging server
-        uses: appleboy/ssh-action@v1.0.3
+      - name: Prepare private deployment package
+        env:
+          FLOWLY_DEPLOY_ENV: ${{ secrets.ENV_STAGING }}
+        run: |
+          set -eu
+          test -n "$FLOWLY_DEPLOY_ENV"
+          umask 077
+          mkdir -p .deploy-package
+          cp docker/deploy_release.py docker-compose.prod.yml .deploy-package/
+          printf '%s\n' "$FLOWLY_DEPLOY_ENV" > .deploy-package/runtime.env
+      - name: Transfer the reviewed release configuration
+        uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.STAGING_HOST }}
           username: ${{ secrets.STAGING_USER }}
           key: ${{ secrets.STAGING_SSH_KEY }}
+          source: .deploy-package/deploy_release.py,.deploy-package/docker-compose.prod.yml,.deploy-package/runtime.env
+          target: ${{ secrets.STAGING_DEPLOY_PATH }}
+          overwrite: true
+      - name: Deploy this build by digest with application rollback
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          DEPLOY_PATH: ${{ secrets.STAGING_DEPLOY_PATH }}
+          DEPLOY_BASE_URL: ${{ secrets.STAGING_URL }}
+          DEPLOY_BACKEND_REF: ${{ env.BACKEND_IMAGE }}@${{ needs.docker-build.outputs.backend_digest }}
+          DEPLOY_FRONTEND_REF: ${{ env.FRONTEND_IMAGE }}@${{ needs.docker-build.outputs.frontend_digest }}
+          DEPLOY_RELEASE_ID: ${{ github.sha }}
+          DEPLOY_PROJECT: ${{ vars.STAGING_COMPOSE_PROJECT || 'flowly-now' }}
+          DEPLOY_ADOPT_ENV_FILE: ${{ vars.STAGING_ADOPT_ENV_FILE }}
+          DEPLOY_ADOPT_COMPOSE_FILE: ${{ vars.STAGING_ADOPT_COMPOSE_FILE }}
+        with:
+          host: ${{ secrets.STAGING_HOST }}
+          username: ${{ secrets.STAGING_USER }}
+          key: ${{ secrets.STAGING_SSH_KEY }}
+          envs: DEPLOY_PATH,DEPLOY_BASE_URL,DEPLOY_BACKEND_REF,DEPLOY_FRONTEND_REF,DEPLOY_RELEASE_ID,DEPLOY_PROJECT,DEPLOY_ADOPT_ENV_FILE,DEPLOY_ADOPT_COMPOSE_FILE
+          command_timeout: 15m
           script: |
-            cd ${{ secrets.STAGING_DEPLOY_PATH }}
-            echo "${{ secrets.ENV_STAGING }}" > .env
-            docker compose pull
-            docker compose up -d --build
-            docker image prune -f
-            echo "Staging deployment completed at $(date)"
+            set -eu
+            cd "$DEPLOY_PATH"
+            python3 .deploy-package/deploy_release.py \
+              --compose-file .deploy-package/docker-compose.prod.yml \
+              --env-file .deploy-package/runtime.env \
+              --backend-image "$DEPLOY_BACKEND_REF" \
+              --frontend-image "$DEPLOY_FRONTEND_REF" \
+              --release-id "$DEPLOY_RELEASE_ID" \
+              --project-name "$DEPLOY_PROJECT" \
+              --adopt-env-file "${DEPLOY_ADOPT_ENV_FILE:-}" \
+              --adopt-compose-file "${DEPLOY_ADOPT_COMPOSE_FILE:-}" \
+              --health-url "${DEPLOY_BASE_URL%/}/api/health/"
 
-      - name: Health check
-        run: |
-          sleep 10
-          curl -f ${{ secrets.STAGING_URL }}/api/health/ || exit 1
-
-      - name: Notify deployment (optional)
-        if: always()
-        run: |
-          echo "Staging deployment ${{ github.sha }} completed"
-          # Slack/Discord webhook could be added here:
-          # curl -X POST ${{ secrets.SLACK_WEBHOOK }} -d "text=Staging deployed: ${{ github.sha }}"
-
-  # ==========================================================================
-  # Deploy to Production
-  # ==========================================================================
   deploy-production:
     runs-on: ubuntu-latest
     needs: [docker-build]
-    if: github.event_name == 'release' || github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main'
+    concurrency:
+      group: flowly-deploy-production
+      cancel-in-progress: false
     environment:
       name: production
       url: https://flowly.example.com
-
     steps:
       - uses: actions/checkout@v4
-
-      - name: Create production tag
+      - name: Prepare private deployment package
+        env:
+          FLOWLY_DEPLOY_ENV: ${{ secrets.ENV_PRODUCTION }}
         run: |
-          TAG_NAME=${{ github.ref_name }}
-          echo "RELEASE_TAG=$TAG_NAME" >> $GITHUB_ENV
-
-      - name: Tag Docker images with release version
-        uses: docker/metadata-action@v5
-        id: meta
-        with:
-          images: ${{ env.BACKEND_IMAGE }}
-          tags: type=semver,pattern={{version}}
-
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Pull and tag release images
-        run: |
-          docker pull ${{ env.BACKEND_IMAGE }}:staging
-          docker pull ${{ env.FRONTEND_IMAGE }}:staging
-          docker tag ${{ env.BACKEND_IMAGE }}:staging ${{ env.BACKEND_IMAGE }}:${{ env.RELEASE_TAG }}
-          docker tag ${{ env.FRONTEND_IMAGE }}:staging ${{ env.FRONTEND_IMAGE }}:${{ env.RELEASE_TAG }}
-          docker tag ${{ env.BACKEND_IMAGE }}:staging ${{ env.BACKEND_IMAGE }}:latest
-          docker tag ${{ env.FRONTEND_IMAGE }}:staging ${{ env.FRONTEND_IMAGE }}:latest
-          docker push ${{ env.BACKEND_IMAGE }}:${{ env.RELEASE_TAG }}
-          docker push ${{ env.FRONTEND_IMAGE }}:${{ env.RELEASE_TAG }}
-          docker push ${{ env.BACKEND_IMAGE }}:latest
-          docker push ${{ env.FRONTEND_IMAGE }}:latest
-
-      - name: Deploy to production server
-        uses: appleboy/ssh-action@v1.0.3
+          set -eu
+          test -n "$FLOWLY_DEPLOY_ENV"
+          umask 077
+          mkdir -p .deploy-package
+          cp docker/deploy_release.py docker-compose.prod.yml .deploy-package/
+          printf '%s\n' "$FLOWLY_DEPLOY_ENV" > .deploy-package/runtime.env
+      - name: Transfer the reviewed release configuration
+        uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.PRODUCTION_HOST }}
           username: ${{ secrets.PRODUCTION_USER }}
           key: ${{ secrets.PRODUCTION_SSH_KEY }}
+          source: .deploy-package/deploy_release.py,.deploy-package/docker-compose.prod.yml,.deploy-package/runtime.env
+          target: ${{ secrets.PRODUCTION_DEPLOY_PATH }}
+          overwrite: true
+      - name: Deploy this build by digest with application rollback
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          DEPLOY_PATH: ${{ secrets.PRODUCTION_DEPLOY_PATH }}
+          DEPLOY_BASE_URL: ${{ secrets.PRODUCTION_URL }}
+          DEPLOY_BACKEND_REF: ${{ env.BACKEND_IMAGE }}@${{ needs.docker-build.outputs.backend_digest }}
+          DEPLOY_FRONTEND_REF: ${{ env.FRONTEND_IMAGE }}@${{ needs.docker-build.outputs.frontend_digest }}
+          DEPLOY_RELEASE_ID: ${{ github.sha }}
+          DEPLOY_PROJECT: ${{ vars.PRODUCTION_COMPOSE_PROJECT || 'flowly-now' }}
+          DEPLOY_ADOPT_ENV_FILE: ${{ vars.PRODUCTION_ADOPT_ENV_FILE }}
+          DEPLOY_ADOPT_COMPOSE_FILE: ${{ vars.PRODUCTION_ADOPT_COMPOSE_FILE }}
+        with:
+          host: ${{ secrets.PRODUCTION_HOST }}
+          username: ${{ secrets.PRODUCTION_USER }}
+          key: ${{ secrets.PRODUCTION_SSH_KEY }}
+          envs: DEPLOY_PATH,DEPLOY_BASE_URL,DEPLOY_BACKEND_REF,DEPLOY_FRONTEND_REF,DEPLOY_RELEASE_ID,DEPLOY_PROJECT,DEPLOY_ADOPT_ENV_FILE,DEPLOY_ADOPT_COMPOSE_FILE
+          command_timeout: 15m
           script: |
-            cd ${{ secrets.PRODUCTION_DEPLOY_PATH }}
-            echo "${{ secrets.ENV_PRODUCTION }}" > .env
-            # Save current version for rollback
-            docker tag ${{ env.BACKEND_IMAGE }}:latest backend-rollback-${{ env.RELEASE_TAG }}
-            docker compose pull
-            docker compose up -d --build
-            # Run health check
-            sleep 15
-            curl -f ${{ secrets.PRODUCTION_URL }}/api/health/ || { docker-compose rollback; exit 1; }
-            echo "Production deployment ${{ env.RELEASE_TAG }} completed at $(date)"
+            set -eu
+            cd "$DEPLOY_PATH"
+            python3 .deploy-package/deploy_release.py \
+              --compose-file .deploy-package/docker-compose.prod.yml \
+              --env-file .deploy-package/runtime.env \
+              --backend-image "$DEPLOY_BACKEND_REF" \
+              --frontend-image "$DEPLOY_FRONTEND_REF" \
+              --release-id "$DEPLOY_RELEASE_ID" \
+              --project-name "$DEPLOY_PROJECT" \
+              --adopt-env-file "${DEPLOY_ADOPT_ENV_FILE:-}" \
+              --adopt-compose-file "${DEPLOY_ADOPT_COMPOSE_FILE:-}" \
+              --health-url "${DEPLOY_BASE_URL%/}/api/health/"

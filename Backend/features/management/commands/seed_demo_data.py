@@ -33,6 +33,7 @@ from datasets.models import Dataset as ManagedDataset
 from augmentation.models import AugmentationJob
 from workflows.models import TemplateCategory, WorkflowTemplate
 from rag.models import VectorStore
+from rag.store_scope import clear_other_defaults, lock_store_owner
 from gateway.models import ModelProvider, AIModel
 
 User = get_user_model()
@@ -738,21 +739,24 @@ class Command(BaseCommand):
 
     def _seed_vector_store(self, owner):
         """Ensure test user has a default vector store for RAG collections."""
-        store, _ = VectorStore.objects.update_or_create(
-            owner=owner,
-            name="演示向量存储",
-            defaults={
-                "store_type": "chroma",
-                "host": "127.0.0.1",
-                "port": 8000,
-                "collection": "flowly_demo",
-                "dimension": 1536,
-                "metric": "cosine",
-                "is_default": True,
-                "path": str(Path(settings.BASE_DIR) / "data" / "demo" / "vector_store"),
-            },
-        )
-        VectorStore.objects.filter(owner=owner).exclude(id=store.id).update(is_default=False)
+        with transaction.atomic():
+            lock_store_owner(owner.pk)
+            store, _ = VectorStore.objects.update_or_create(
+                owner=owner,
+                tenant=None,
+                name="演示向量存储",
+                defaults={
+                    "store_type": "chroma",
+                    "host": "127.0.0.1",
+                    "port": 8000,
+                    "collection": "flowly_demo",
+                    "dimension": 1536,
+                    "metric": "cosine",
+                    "is_default": True,
+                    "path": str(Path(settings.BASE_DIR) / "data" / "demo" / "vector_store"),
+                },
+            )
+            clear_other_defaults(owner.pk, None, except_id=store.pk)
         return VectorStore.objects.filter(owner=owner).count()
 
     def _seed_gateway_models(self):

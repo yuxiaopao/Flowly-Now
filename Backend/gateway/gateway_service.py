@@ -163,6 +163,10 @@ class LLMService:
 
     def _handle_ollama_response(self, response, model, start_time):
         """Handle non-streaming Ollama response."""
+        if getattr(response, 'error', None):
+            raise RuntimeError(response.error)
+        if not isinstance(response.content, str) or not response.content.strip():
+            raise RuntimeError('Ollama did not return usable text.')
         latency_ms = int((time.time() - start_time) * 1000)
         return LLMResponse(
             content=response.content,

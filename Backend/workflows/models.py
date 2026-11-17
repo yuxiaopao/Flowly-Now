@@ -13,6 +13,11 @@ from django.utils import timezone
 User = get_user_model()
 
 
+class VisibleWorkflowManager(models.Manager):
+    def get_queryset(self):
+        return super().get_queryset().filter(is_release_snapshot=False)
+
+
 class Workflow(models.Model):
     """Workflow model."""
 
@@ -23,6 +28,9 @@ class Workflow(models.Model):
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    is_release_snapshot = models.BooleanField(default=False, db_index=True, editable=False)
+    objects = VisibleWorkflowManager()
+    all_objects = models.Manager()
 
     tenant = models.ForeignKey(
         'tenants.Tenant',
@@ -112,10 +120,14 @@ class Workflow(models.Model):
 
     @property
     def node_count(self):
+        if '_list_node_count' in self.__dict__:
+            return self.__dict__['_list_node_count']
         return self.nodes.count()
 
     @property
     def execution_count(self):
+        if '_list_execution_count' in self.__dict__:
+            return self.__dict__['_list_execution_count']
         return self.executions.count()
 
 

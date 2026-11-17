@@ -2,6 +2,8 @@
 Serializers for Desktop Agent models.
 """
 
+import re
+
 from rest_framework import serializers
 from .models_desktop import DesktopAgent
 
@@ -23,7 +25,7 @@ class DesktopAgentSerializer(serializers.ModelSerializer):
             'last_seen', 'cloud_url', 'connected_at',
             'owner', 'created_at',
         ]
-        read_only_fields = ['id', 'last_seen', 'created_at']
+        read_only_fields = ['id', 'agent_id', 'owner', 'last_seen', 'connected_at', 'created_at']
 
 
 class DesktopAgentRegisterSerializer(serializers.ModelSerializer):
@@ -38,6 +40,12 @@ class DesktopAgentRegisterSerializer(serializers.ModelSerializer):
             'capabilities', 'supports_yolo_training',
             'cloud_url',
         ]
+        extra_kwargs = {'agent_id': {'validators': [], 'trim_whitespace': True}}
+
+    def validate_agent_id(self, value):
+        if not re.fullmatch(r'[A-Za-z0-9_-]+', value):
+            raise serializers.ValidationError('Agent ID 只能包含字母、数字、下划线和连字符')
+        return value
 
     def create(self, validated_data):
         validated_data['status'] = 'online'

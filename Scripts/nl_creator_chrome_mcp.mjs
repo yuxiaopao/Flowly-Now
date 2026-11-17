@@ -29,7 +29,7 @@ async function api(path) {
 }
 async function go() {
   await client.tool('navigate_page', { url: 'http://localhost:5200/nl-create' })
-  await client.tool('wait_for', { text: ['语创工作台'], timeout: 20000 })
+  await client.tool('wait_for', { text: ['语创'], timeout: 20000 })
   await wait(`document.querySelector('[role="tab"]')`)
 }
 try {

@@ -1,0 +1,5 @@
+{
+  "src/**/*.{js,vue,scss,css}": "prettier --write",
+  "tests/frontend/e2e/**/*.js": "prettier --write",
+  "*.{json,md}": "prettier --write"
+}

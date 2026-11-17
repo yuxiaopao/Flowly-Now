@@ -4,9 +4,25 @@
  * @description 提供工作流、节点、连线、执行等所有 CRUD 操作
  */
 
-import { request } from './index'
-import Cookies from 'js-cookie'
-import { getPublicApiUrl } from '@/config'
+import { request as apiRequest } from './index'
+
+// Metadata follows the API naming convention. JSON artifacts and node payloads do not.
+export const WORKFLOW_OPAQUE_KEYS = Object.freeze([
+  'config', 'configuration', 'node_config', 'input_data', 'output_data', 'input', 'output', 'inputs', 'outputs',
+  'input_schema', 'output_schema', 'schema', 'variables_schema', 'parameters_schema', 'fallback_value',
+  'variables', 'default_value', 'style', 'data', 'settings', 'context_snapshot', 'node_outputs',
+  'workflow_data', 'workflow_json', 'parameters', 'connections', 'trigger_config',
+])
+const workflowOptions = ({ opaqueKeys = [], ...options }) => ({
+  ...options, opaqueKeys: [...WORKFLOW_OPAQUE_KEYS, ...(Array.isArray(opaqueKeys) ? opaqueKeys : [])],
+})
+const request = {
+  get: (url, params = {}, options = {}) => apiRequest.get(url, params, workflowOptions(options)),
+  post: (url, data = {}, options = {}) => apiRequest.post(url, data, workflowOptions(options)),
+  patch: (url, data = {}, options = {}) => apiRequest.patch(url, data, workflowOptions(options)),
+  delete: (url, options = {}) => apiRequest.delete(url, workflowOptions(options)),
+  stream: (url, data = {}, options = {}) => apiRequest.stream(url, data, workflowOptions(options)),
+}
 
 // =============================================================================
 // 类型定义 (引用自 @/types/)
@@ -170,7 +186,8 @@ export async function duplicateWorkflow(id) {
  * const exported = await exportWorkflow(123)
  */
 export async function exportWorkflow(id) {
-  return request.get(`/workflows/${id}/export/`)
+  // A downloadable artifact uses the server's canonical field names for reimport.
+  return request.get(`/workflows/${id}/export/`, {}, { preserveResponseKeys: true })
 }
 
 /**
@@ -182,9 +199,10 @@ export async function exportWorkflow(id) {
  * const wf = await importWorkflow(workflowJson)
  */
 export async function importWorkflow(data) {
-  return request.post('/workflows/import/', data, {
-    headers: { 'Content-Type': 'multipart/form-data' }
-  })
+  // n8n node names, parameters and structural fields belong to its external schema.
+  const externalArtifact = data && !(data instanceof FormData) && data.type !== 'flowly_workflow' && Array.isArray(data.nodes) &&
+    (Boolean(data.connections) || data.nodes.some(node => /^(n8n-nodes-base\.|@n8n\/)/.test(node?.type || '')))
+  return request.post('/workflows/import/', data, externalArtifact ? { preserveRequestKeys: true } : {})
 }
 
 // =============================================================================
@@ -422,10 +440,10 @@ export const executeAsync = executeWorkflowAsync
  * const response = await streamExecuteWorkflow(123, { name: 'test' })
  * const reader = response.body.getReader()
  */
-export async function streamExecuteWorkflow(workflowId, inputData = {}) {
+export async function streamExecuteWorkflow(workflowId, inputData = {}, options = {}) {
   return request.stream(`/workflows/${workflowId}/stream_execute/`, {
     input_data: inputData
-  })
+  }, options)
 }
 
 // =============================================================================
@@ -635,22 +653,16 @@ export async function getExecutionNodeDetail(executionId, nodeId) {
 }
 
 /**
- * SSE 流式执行（返回 EventSource 用于实时接收执行事件）
+ * SSE 流式执行（返回 Fetch Response，使用 body.getReader() 读取事件帧）
  * @param {number|string} workflowId - 工作流ID
  * @param {Object} [inputData] - 输入数据
- * @returns {EventSource} EventSource 实例
+ * @returns {Promise<Response>} 支持真实 Bearer 与 AbortSignal 的 POST 流
  * @example
- * const eventSource = await streamExecuteSSE(123, { name: 'test' })
- * eventSource.onmessage = (event) => {
- *   const data = JSON.parse(event.data)
- *   console.log(data)
- * }
+ * const response = await streamExecuteSSE(123, { name: 'test' }, { signal })
+ * const reader = response.body.getReader()
  */
-export async function streamExecuteSSE(workflowId, inputData = {}) {
-  const token = Cookies.get('access_token') || localStorage.getItem('access_token')
-  const url = getPublicApiUrl(`/workflows/${workflowId}/stream_execute/`)
-  
-  return new EventSource(`${url}?${new URLSearchParams({ input_data: JSON.stringify(inputData), token })}`)
+export async function streamExecuteSSE(workflowId, inputData = {}, options = {}) {
+  return streamExecuteWorkflow(workflowId, inputData, options)
 }
 
 /**
@@ -766,7 +778,7 @@ function unwrapPaginatedResponse(response) {
  * const categories = await getTemplateCategories({ search: 'ai' })
  */
 export async function getTemplateCategories(params = {}) {
-  return request.get('/template-categories/', { params }).then(unwrapListResponse)
+  return request.get('/template-categories/', params).then(unwrapListResponse)
 }
 
 /**
@@ -790,7 +802,7 @@ export async function getTemplateCategory(id) {
  * const result = await getWorkflowTemplates({ category: 'ai', page: 1, page_size: 20 })
  */
 export async function getWorkflowTemplates(params = {}) {
-  return request.get('/templates/', { params }).then(unwrapPaginatedResponse)
+  return request.get('/templates/', params).then(unwrapPaginatedResponse)
 }
 
 /**
@@ -827,7 +839,7 @@ export async function createFromTemplate(id, data = {}) {
  * const featured = await getFeaturedTemplates()
  */
 export async function getFeaturedTemplates(params = {}) {
-  return request.get('/templates/featured/', { params }).then(unwrapListResponse)
+  return request.get('/templates/featured/', params).then(unwrapListResponse)
 }
 
 /**
@@ -837,8 +849,8 @@ export async function getFeaturedTemplates(params = {}) {
  * @example
  * const grouped = await getTemplatesByCategory()
  */
-export async function getTemplatesByCategory() {
-  return request.get('/templates/by_category/').then(unwrapListResponse)
+export async function getTemplatesByCategory(params = {}) {
+  return request.get('/templates/by_category/', params).then(unwrapListResponse)
 }
 
 /**
@@ -911,7 +923,7 @@ export async function rateTemplate(id, rating) {
  * @returns {Promise<Object>} 分页结果 { count, results }
  */
 export async function getMyTemplates(params = {}) {
-  return request.get('/templates/mine/', { params }).then(unwrapPaginatedResponse)
+  return request.get('/templates/mine/', params).then(unwrapPaginatedResponse)
 }
 
 /**
@@ -920,7 +932,7 @@ export async function getMyTemplates(params = {}) {
  * @returns {Promise<Object>} 分页结果 { count, results }
  */
 export async function getInstalledTemplates(params = {}) {
-  return request.get('/templates/installed/', { params }).then(unwrapPaginatedResponse)
+  return request.get('/templates/installed/', params).then(unwrapPaginatedResponse)
 }
 
 /**

@@ -1,4 +1,4 @@
-FROM python:3.12-slim
+FROM python:3.12-slim AS dependencies
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
@@ -14,6 +14,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     default-libmysqlclient-dev \
     pkg-config \
     curl \
+    ffmpeg \
     libxcb1 \
     libgl1 \
     libglib2.0-0 \
@@ -26,17 +27,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && cp /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf /opt/ultralytics/Arial.ttf
 
 # PyTorch CPU wheels (pinned pair verified for ultralytics 8.4 + Site Factory E2E)
-ARG TORCH_VERSION=2.8.0+cpu
-ARG TORCHVISION_VERSION=0.23.0+cpu
+ARG TORCH_VERSION=2.13.0+cpu
+ARG TORCHVISION_VERSION=0.28.0+cpu
 RUN pip install --no-cache-dir \
     "torch==${TORCH_VERSION}" "torchvision==${TORCHVISION_VERSION}" \
     --index-url https://download.pytorch.org/whl/cpu
 
-COPY Backend/requirements.txt /app/
-RUN pip install --no-cache-dir -r requirements.txt \
-    && python -m pip install --no-cache-dir daphne
+COPY Backend/requirements.txt Backend/constraints-security.txt /app/
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked pip install -r requirements.txt \
+    && python -m pip check
+
+FROM dependencies AS runtime
 
 COPY Backend/ /app/
+COPY docker/healthcheck.py /opt/flowly-healthcheck.py
+RUN mkdir -p /app/data
 
 EXPOSE 8000
 

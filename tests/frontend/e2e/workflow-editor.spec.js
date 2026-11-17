@@ -7,7 +7,7 @@ import { test, expect } from '@playwright/test'
 import {
   mockWorkflow,
   mockWorkflowList
-} from '../mocks/workflows.mock'
+} from '../vitest/mocks/workflows.mock'
 
 
 

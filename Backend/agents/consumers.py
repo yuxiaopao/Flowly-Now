@@ -11,7 +11,15 @@ Protocol:
 
 import logging
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
-from asgiref.sync import sync_to_async
+from channels.db import database_sync_to_async
+from django.db import transaction
+from django.db.models import Q
+from django.utils import timezone
+from users.websocket_permissions import UNAUTHENTICATED_CLOSE_CODE, FORBIDDEN_CLOSE_CODE
+from .desktop_jobs import (
+    ACTIVE_DESKTOP_STATUSES, DESKTOP_AGENT_CONFIG_KEY, DESKTOP_AGENT_RECORD_CONFIG_KEY,
+    TRAINING_EVENTS, apply_training_event, desktop_agent_group,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +34,15 @@ class DesktopAgentConsumer(AsyncJsonWebsocketConsumer):
 
     async def connect(self):
         self.agent_id = self.scope['url_route']['kwargs']['agent_id']
-        self.group_name = f'agent_{self.agent_id}'
+        self.user = self.scope.get('user')
+        if not self.user or not self.user.is_authenticated:
+            await self.close(code=UNAUTHENTICATED_CLOSE_CODE)
+            return
+        self.agent_pk = await self._owned_agent_pk()
+        if not self.agent_pk:
+            await self.close(code=FORBIDDEN_CLOSE_CODE)
+            return
+        self.group_name = desktop_agent_group(self.agent_pk)
 
         await self.channel_layer.group_add(
             self.group_name,
@@ -51,21 +67,23 @@ class DesktopAgentConsumer(AsyncJsonWebsocketConsumer):
 
     async def receive_json(self, content):
         """Handle messages from the desktop agent."""
+        if not isinstance(content, dict):
+            return
+        if not await self._check_owner():
+            return
         msg_type = content.get('type', 'unknown')
         logger.debug(f"Agent message [{self.agent_id}]: {msg_type}")
 
         if msg_type == 'agent_registered':
             await self._handle_agent_registered(content)
-        elif msg_type == 'training_progress':
-            await self._handle_training_progress(content)
-        elif msg_type == 'training_started':
-            await self._handle_training_started(content)
-        elif msg_type == 'training_complete':
-            await self._handle_training_complete(content)
-        elif msg_type == 'training_error':
-            await self._handle_training_error(content)
-        elif msg_type == 'training_cancelled':
-            await self._handle_training_cancelled(content)
+        elif msg_type in TRAINING_EVENTS:
+            groups = await database_sync_to_async(apply_training_event)(
+                self.user, self.agent_id, content, agent_record_id=self.agent_pk,
+            )
+            for job_id in groups or ():
+                await self.channel_layer.group_send(f'training_{job_id}', {
+                    'type': f'training_{msg_type}', 'data': content,
+                })
         elif msg_type == 'pong':
             pass  # Heartbeat response, no action needed
         elif msg_type == 'status_report':
@@ -77,8 +95,11 @@ class DesktopAgentConsumer(AsyncJsonWebsocketConsumer):
 
     async def _handle_agent_registered(self, content):
         """Agent announced itself. Update DesktopAgent record."""
-        await sync_to_async(self._update_agent_record)(
-            content.get('agentId'),
+        if content.get('agentId') != self.agent_id:
+            await self.close(code=FORBIDDEN_CLOSE_CODE)
+            return
+        await database_sync_to_async(self._update_agent_record)(
+            self.agent_id,
             content.get('hostname'),
             content.get('platform'),
             content.get('gpu'),
@@ -90,141 +111,69 @@ class DesktopAgentConsumer(AsyncJsonWebsocketConsumer):
             'status': 'registered',
         })
 
-    async def _handle_training_started(self, content):
-        """Forward training_started to any frontend subscribed sessions."""
-        await self.channel_layer.group_send(
-            f'training_{content.get("jobId", "")}',
-            {
-                'type': 'training_event',
-                'event': 'training_started',
-                **content,
-            }
-        )
-        logger.info(f"Agent training started: {content.get('jobId')}")
-
-    async def _handle_training_progress(self, content):
-        """Forward training progress to training group."""
-        job_id = content.get('jobId', '')
-        await self.channel_layer.group_send(
-            f'training_{job_id}',
-            {
-                'type': 'training_event',
-                'event': 'training_progress',
-                **content,
-            }
-        )
-
-    async def _handle_training_complete(self, content):
-        """Agent training finished. Update TrainingJob, forward to training group."""
-        job_id = content.get('jobId', '')
-
-        # Update TrainingJob in DB
-        if content.get('result'):
-            await sync_to_async(self._update_training_result)(job_id, content['result'])
-
-        await self.channel_layer.group_send(
-            f'training_{job_id}',
-            {
-                'type': 'training_event',
-                'event': 'training_complete',
-                **content,
-            }
-        )
-        logger.info(f"Agent training complete: {job_id}")
-
-    async def _handle_training_error(self, content):
-        """Training failed on agent side."""
-        job_id = content.get('jobId', '')
-        await self.channel_layer.group_send(
-            f'training_{job_id}',
-            {
-                'type': 'training_event',
-                'event': 'training_error',
-                **content,
-            }
-        )
-
-    async def _handle_training_cancelled(self, content):
-        """Training cancelled by agent."""
-        job_id = content.get('jobId', '')
-        await self.channel_layer.group_send(
-            f'training_{job_id}',
-            {
-                'type': 'training_event',
-                'event': 'training_cancelled',
-                **content,
-            }
-        )
-
     async def _handle_status_report(self, content):
         """Agent status report (response to get_status from cloud)."""
         logger.debug(f"Agent status report: {content.get('agentId')}")
 
     # ---- DB Updates ----
 
+    @database_sync_to_async
+    def _owned_agent_pk(self):
+        from .models_desktop import DesktopAgent
+        queryset = DesktopAgent.objects.filter(agent_id=self.agent_id, owner=self.user)
+        if getattr(self, 'agent_pk', None):
+            queryset = queryset.filter(pk=self.agent_pk)
+        return queryset.values_list('pk', flat=True).first()
+
+    async def _check_owner(self):
+        if await self._owned_agent_pk():
+            return True
+        await self.close(code=FORBIDDEN_CLOSE_CODE)
+        return False
+
     def _update_agent_record(self, agent_id, hostname, platform, gpu, capabilities):
         """Update or create DesktopAgent record."""
         try:
             from agents.models_desktop import DesktopAgent
-            DesktopAgent.objects.update_or_create(
-                agent_id=agent_id,
-                defaults={
-                    'hostname': hostname or '',
-                    'platform': platform or '',
-                    'gpu_info': gpu or {},
-                    'capabilities': capabilities,
-                    'status': 'online',
-                }
-            )
+            from training.models import TrainingJob
+            with transaction.atomic():
+                agents = DesktopAgent.objects.select_for_update().filter(
+                    pk=self.agent_pk, agent_id=agent_id, owner=self.user,
+                )
+                agent = agents.first()
+                if agent is None:
+                    return
+                assignment = Q(**{f'config__{DESKTOP_AGENT_RECORD_CONFIG_KEY}': str(agent.pk)}) | Q(**{
+                    f'config__{DESKTOP_AGENT_CONFIG_KEY}': agent_id,
+                    f'config__{DESKTOP_AGENT_RECORD_CONFIG_KEY}__isnull': True,
+                })
+                busy = TrainingJob.objects.filter(
+                    assignment, created_by=self.user, status__in=ACTIVE_DESKTOP_STATUSES,
+                ).exists()
+                agents.update(
+                    hostname=hostname or '', platform=platform or '', gpu_info=gpu or {},
+                    capabilities=capabilities, status='training' if busy else 'online',
+                    last_seen=timezone.now(),
+                )
             logger.info(f"DesktopAgent record updated: {agent_id}")
         except Exception as e:
             logger.error(f"Failed to update DesktopAgent record: {e}")
-
-    def _update_training_result(self, job_id, result):
-        """Update TrainingJob with result from desktop agent."""
-        try:
-            from training.models import TrainingJob
-            tj = TrainingJob.objects.filter(id=job_id).first()
-            if not tj:
-                logger.warning(f"TrainingJob not found: {job_id}")
-                return
-
-            if result.get('success'):
-                tj.status = 'completed'
-                if result.get('final_metrics'):
-                    tj.current_metric = result['final_metrics'].get('mAP50', 0)
-                    tj.best_fitness = result['final_metrics'].get('fitness', 0)
-                tj.best_weight_path = result.get('best_weight_path', '')
-                tj.last_weight_path = result.get('last_weight_path', '')
-                tj.duration_seconds = result.get('duration_seconds', 0)
-            else:
-                tj.status = 'failed'
-                tj.error_message = result.get('error', 'Training failed on agent')
-
-            tj.save()
-            logger.info(f"TrainingJob {job_id} updated from agent result")
-        except Exception as e:
-            logger.error(f"Failed to update TrainingJob {job_id}: {e}")
 
     # ---- Group Broadcast (receive from channel layer) ----
 
     async def get_status(self, event):
         """Cloud requests current agent status."""
+        if not await self._check_owner():
+            return
         await self.send_json({'type': 'get_status'})
 
     async def training_command(self, event):
         """Handle training_command broadcast from channel layer → forward to agent WebSocket."""
+        if not await self._check_owner():
+            return
         # Extract job_config and command, remove internal fields
-        cmd = {k: v for k, v in event.items() if k not in ('type')}
+        cmd = {k: v for k, v in event.items() if k != 'type'}
         await self.send_json({
             'type': 'training_command',
             'payload': cmd,
-        })
-
-    async def training_event(self, event):
-        """Handle broadcast from channel layer → send to agent."""
-        event_type = event.pop('type', 'training_event')
-        await self.send_json({
-            'type': event_type,
-            **event,
         })

@@ -1,5 +1,11 @@
 <template>
   <div class="config-form model-deployment-config-form">
+    <p
+      class="field-hint"
+      role="status"
+    >
+      {{ MODEL_DEPLOYMENT.unavailable }}
+    </p>
     <el-form
       :model="localData"
       label-position="top"
@@ -168,6 +174,7 @@
 
 <script setup>
 import { reactive, watch } from 'vue'
+import { MODEL_DEPLOYMENT } from '@/config/modelDeployment'
 
 const props = defineProps({
   modelValue: {
@@ -205,8 +212,9 @@ watch(() => props.modelValue, (newVal) => {
 }, { immediate: true, deep: true })
 
 const handleChange = () => {
-  emit('update:modelValue', { ...localData })
-  emit('change', { ...localData })
+  const value = { ...props.modelValue, ...localData }
+  emit('update:modelValue', value)
+  emit('change', value)
 }
 </script>
 

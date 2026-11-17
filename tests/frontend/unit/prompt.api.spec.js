@@ -91,9 +91,9 @@ describe('promptApi.getFeatured', () => {
 })
 
 describe('promptApi.getCategories', () => {
-  it('GET /prompts/templates/categories/', async () => {
+  it('GET /prompts/categories/', async () => {
     await promptApi.getCategories()
-    expect(mockRequest.get).toHaveBeenCalledWith('/prompts/templates/categories/')
+    expect(mockRequest.get).toHaveBeenCalledWith('/prompts/categories/')
   })
 })
 

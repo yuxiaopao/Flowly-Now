@@ -13,12 +13,32 @@ export const dataExportApi = {
     })
   },
 
-  getDownloadUrl(id) {
-    return request.get(`/data-export/${id}/download/`)
-  },
-
   download(id) {
     return request.get(`/data-export/${id}/download/`, {}, { responseType: 'blob' })
+  },
+
+  getBackupSettings() {
+    return request.get('/data-export/backup_settings/')
+  },
+
+  saveBackupSettings(data) {
+    return request.patch('/data-export/backup_settings/', data)
+  },
+
+  previewRestore(id) {
+    return request.post(`/data-export/${id}/restore_preview/`)
+  },
+
+  restore(id, confirmationToken) {
+    return request.post(`/data-export/${id}/restore/`, { confirm: true, confirmation_token: confirmationToken })
+  },
+
+  previewDelete() {
+    return request.get('/data-export/delete_preview/')
+  },
+
+  deletePersonalData(data) {
+    return request.post('/data-export/delete_personal_data/', data)
   },
 }
 

@@ -125,7 +125,7 @@ export async function exportVariables(workflowId) {
 }
 
 /**
- * 轮换密钥（后端暂未实现，占位）
+ * 轮换密钥：客户端生成新随机值并提交后端保存。
  * @param {string} id
  */
 export async function rotateSecret(id) {

@@ -115,6 +115,7 @@ INSTALLED_APPS = [
     'users',
     'core',
     'workflows',
+    'applications',
     'agents',
     'nl_to_workflow',
     'prompts',
@@ -542,7 +543,13 @@ WORKFLOW_STALE_RUNNING_MINUTES = int(os.getenv('WORKFLOW_STALE_RUNNING_MINUTES',
 WORKFLOW_HEARTBEAT_INTERVAL_SEC = float(os.getenv('WORKFLOW_HEARTBEAT_INTERVAL_SEC', '15'))
 
 # Optional Celery Beat schedule (enable beat process to activate)
+from core.data_constants import BACKUP_SCAN_INTERVAL_SECONDS, BACKUP_TASK_NAME
+
 CELERY_BEAT_SCHEDULE = {
+    'create-personal-data-backups': {
+        'task': BACKUP_TASK_NAME,
+        'schedule': BACKUP_SCAN_INTERVAL_SECONDS,
+    },
     'recover-stale-workflow-executions': {
         'task': 'workflows.tasks.recover_stale_executions_task',
         'schedule': 300.0,  # every 5 minutes

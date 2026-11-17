@@ -464,37 +464,71 @@ def process_agent_message(
     return result
 
 
-def ensure_project_rag_collection(site_id: str, user, existing_id=None):
-    """Get or create RAG collection `project-{site_id}` when vector store exists."""
-    if not user or not getattr(user, 'is_authenticated', False) or not user.is_authenticated:
-        return None
+PROJECT_MEMORY_REPAIR_MESSAGE = '项目旧记忆关联与当前空间不一致，已拒绝写入且保留原数据。请通过项目的回到工作流入口显式重建项目副本，再建立同空间记忆；不会自动迁移、复制或改绑旧记忆。'
+
+
+def _project_memory_site(site_id, user, tenant=None):
+    from django.core.exceptions import ValidationError as ModelValidationError
+    from rest_framework.exceptions import PermissionDenied, ValidationError
+    from rag.store_scope import writable_space
+    from website_generator.models import GeneratedSite
+    from website_generator.provenance import can_manage_site
     try:
-        from rag.models import DocumentCollection, VectorStore
-    except ImportError:
-        return None
+        site = GeneratedSite.objects.select_related('tenant').filter(pk=site_id).first()
+    except (ValueError, ModelValidationError):
+        site = None
+    if site is None or not can_manage_site(user, site):
+        raise PermissionDenied('项目记忆需要真实项目的当前编辑权限。')
+    if tenant is not None and tenant.pk != site.tenant_id:
+        raise ValidationError('项目记忆空间只能来自真实站点记录，不能由调用参数覆盖。')
+    return site, writable_space(user, site.tenant)
 
-    if existing_id:
-        coll = DocumentCollection.objects.filter(id=existing_id, owner=user).first()
-        if coll:
-            return coll
 
-    name = f'project-{site_id}'
-    coll = DocumentCollection.objects.filter(owner=user, name=name).first()
-    if coll:
-        return coll
+def _existing_project_memory(site, user, tenant, existing_id=None):
+    from rest_framework.exceptions import ValidationError
+    from rag.access import can_manage_collection
+    from rag.models import DocumentCollection
+    from rag.store_scope import validate_collection_store
+    if existing_id is not None and str(existing_id) != str(site.rag_collection_id):
+        raise ValidationError(PROJECT_MEMORY_REPAIR_MESSAGE)
+    identity = site.rag_collection_id
+    if identity:
+        collection = DocumentCollection.objects.filter(pk=identity).first()
+        if collection is None:
+            raise ValidationError(PROJECT_MEMORY_REPAIR_MESSAGE)
+    else:
+        collection = DocumentCollection.objects.filter(owner=user, name=f'project-{site.pk}').first()
+    if collection is not None:
+        if collection.tenant_id != site.tenant_id or not can_manage_collection(user, collection):
+            raise ValidationError(PROJECT_MEMORY_REPAIR_MESSAGE)
+        try:
+            validate_collection_store(user, tenant, collection.vector_store, collection.owner_id)
+        except ValidationError:
+            raise ValidationError(PROJECT_MEMORY_REPAIR_MESSAGE) from None
+    return collection
 
-    vector_store = VectorStore.objects.filter(owner=user, is_default=True).first()
-    if not vector_store:
-        vector_store = VectorStore.objects.filter(owner=user).first()
-    if not vector_store:
-        return None
 
-    return DocumentCollection.objects.create(
-        name=name,
-        description=f'Project Agent 对话记忆 — 站点 {site_id}',
-        vector_store=vector_store,
-        owner=user,
-    )
+def ensure_project_rag_collection(site_id: str, user, existing_id=None, *, tenant=None):
+    """Keep memory in the fresh authorized site's space; never repair old bindings silently."""
+    from django.db import transaction
+    from rag.models import DocumentCollection, VectorStore
+    from rag.store_scope import default_stores, choose_default_store, lock_store_owner, validate_collection_store
+    site, tenant = _project_memory_site(site_id, user, tenant)
+    with transaction.atomic():
+        lock_store_owner(user.pk)
+        collection = _existing_project_memory(site, user, tenant, existing_id)
+        if collection is not None:
+            return collection
+        stores = default_stores(user.pk, tenant)
+        vector_store = stores.filter(is_default=True).first() or stores.first()
+        if vector_store is None:
+            if tenant is None:
+                return None
+            vector_store = choose_default_store(user, tenant)
+        vector_store = VectorStore.objects.select_for_update().get(pk=vector_store.pk)
+        validate_collection_store(user, tenant, vector_store, user.pk)
+        return DocumentCollection.objects.create(name=f'project-{site.pk}',
+            description=f'Project Agent 对话记忆 — 站点 {site.pk}', vector_store=vector_store, owner=user, tenant=tenant)
 
 
 def append_rag_memory(collection, user_message: str, assistant_reply: str) -> bool:
@@ -519,15 +553,18 @@ def resolve_rag_status(site, user) -> str:
     """Return rag_status: missing | ready | synced."""
     if not user or not getattr(user, 'is_authenticated', False) or not user.is_authenticated:
         return 'missing'
+    from rest_framework.exceptions import APIException
+    from rag.store_scope import default_stores
     try:
-        from rag.models import VectorStore
-    except ImportError:
+        current, tenant = _project_memory_site(site.pk, user)
+        collection = _existing_project_memory(current, user, tenant)
+    except APIException:
         return 'missing'
-    has_store = VectorStore.objects.filter(owner=user).exists()
+    if collection is not None:
+        return 'synced'
+    has_store = default_stores(user.pk, tenant).exists()
     if not has_store:
         return 'missing'
-    if site.rag_collection_id:
-        return 'synced'
     return 'ready'
 
 
@@ -637,6 +674,12 @@ def run_agent_for_site(
     sync_system_agent: bool = True,
 ) -> Dict[str, Any]:
     """Shared entry for API and workflow node."""
+    from rest_framework.exceptions import APIException
+    try:
+        memory_site, memory_tenant = _project_memory_site(site.pk, user)
+        _existing_project_memory(memory_site, user, memory_tenant)
+    except APIException as exc:
+        return {'success': False, 'error_type': 'project_memory_scope', 'error': str(exc.detail)}
     site.mark_iterating()
     metrics = {}
     if isinstance(site.last_qa_report, dict):
@@ -684,7 +727,10 @@ def run_agent_for_site(
                 update_fields.append('last_preview_url')
         update_fields.append('preview_status')
 
-    collection = ensure_project_rag_collection(str(site.id), user, site.rag_collection_id)
+    try:
+        collection = ensure_project_rag_collection(str(site.id), user, site.rag_collection_id, tenant=memory_tenant)
+    except APIException as exc:
+        return {**result, 'success': False, 'error_type': 'project_memory_scope', 'error': str(exc.detail)}
     rag_synced = False
     if collection:
         site.rag_collection_id = collection.id

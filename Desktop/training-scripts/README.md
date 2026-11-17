@@ -4,7 +4,9 @@ This directory contains the training scripts that are bundled with the Flowly Ag
 
 ## Contents
 
-- `train_model.py` — Main training script (symlinked from `../Backend/scripts/train_model.py`)
+- `train_model.py` — Generated from the canonical `Backend/scripts/train_model.py`.
+- `build_clip_index.py` — Generated from the canonical CLIP index builder.
+- `flowly_runtime/` — Generated pure helpers copied from `Backend/training` and `Backend/datasets`, with private imports. This avoids requiring Django in a standalone install or shadowing Hugging Face's `datasets` package.
 
 The Electron builder copies this directory to:
 - `%APPDATA%/Flowly Agent/resources/training-scripts/` (Windows)

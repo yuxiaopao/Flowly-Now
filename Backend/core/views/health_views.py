@@ -31,6 +31,7 @@ class HealthCheckView(APIView):
     """Health check endpoint."""
     
     permission_classes = [AllowAny]
+    throttle_classes = []  # 探活端点不参与限流，避免就绪检查被 429 误判
     
     def get(self, request):
         """Check system health."""
@@ -67,6 +68,7 @@ class PingView(APIView):
     """Simple ping endpoint."""
     
     permission_classes = [AllowAny]
+    throttle_classes = []
     
     def get(self, request):
         """Return pong."""

@@ -165,6 +165,10 @@ class GeneratedSite(models.Model):
         related_name='generated_sites',
         verbose_name='创建者'
     )
+    source_workflow = models.ForeignKey('workflows.Workflow', null=True, blank=True, on_delete=models.SET_NULL, related_name='generated_sites', editable=False)
+    source_node = models.ForeignKey('workflows.Node', null=True, blank=True, on_delete=models.SET_NULL, related_name='generated_sites', editable=False)
+    source_execution = models.ForeignKey('workflows.WorkflowExecution', null=True, blank=True, on_delete=models.SET_NULL, related_name='generated_sites', editable=False)
+    source_recorded = models.BooleanField(default=False, editable=False)
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='创建时间')
     completed_at = models.DateTimeField(null=True, blank=True, verbose_name='完成时间')
 
@@ -231,3 +235,15 @@ class GeneratedSite(models.Model):
     def update_progress(self, progress):
         self.progress = min(progress, 99)
         self.save(update_fields=['progress'])
+
+
+class SiteWorkflowRebuild(models.Model):
+    """An authorized copy operation can be recovered without duplicating its graph."""
+    site = models.ForeignKey(GeneratedSite, on_delete=models.CASCADE, related_name='workflow_rebuilds')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='+')
+    key_hash = models.CharField(max_length=64)
+    workflow = models.ForeignKey('workflows.Workflow', null=True, on_delete=models.SET_NULL, related_name='+')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['site', 'user', 'key_hash'], name='site_workflow_rebuild_unique')]

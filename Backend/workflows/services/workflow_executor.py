@@ -1,6 +1,7 @@
 """
 Workflow executor for running workflows.
 """
+from config.application_messages import MESSAGES
 
 import json
 import asyncio
@@ -12,12 +13,14 @@ from collections import defaultdict, deque
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, Any, Optional, List, Set, Generator, Callable, Tuple
 from django.utils import timezone
+from django.db import transaction
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 
 from ..models import Workflow, Node, Edge, WorkflowExecution, NodeExecution
 from .langchain_service import LangChainService
 from .context import ExecutionContext
+from .delay_node import DelayWaitStopped
 from .error_handler import ErrorHandlerRegistry, NodeErrorHandler, ErrorStrategy
 from ..execution_control import (
     make_json_safe,
@@ -69,13 +72,31 @@ class WorkflowExecutor:
     - Execution context for variable management
     """
 
-    def __init__(self, workflow: Workflow, execution: WorkflowExecution, parallel_enabled: bool = True):
+    def __init__(self, workflow: Workflow, execution: WorkflowExecution, parallel_enabled: bool = True, deadline_at=None):
         """Initialize executor.
 
         Each execution gets an isolated LangChainService so concurrent workflows
         do not share mutable client/session state.
         """
         self.workflow = workflow
+        from datetime import datetime
+        self._trigger_source = execution.trigger_source if isinstance(execution.trigger_source, dict) else {}
+        raw_aliases = self._trigger_source.get('node_aliases', {})
+        self._node_aliases = dict(raw_aliases) if isinstance(raw_aliases, dict) else {}
+        workflow_config = workflow.config if isinstance(workflow.config, dict) else {}
+        restored_aliases = workflow_config.get('_restored_node_aliases', {})
+        if isinstance(restored_aliases, dict):
+            for original_id, current_id in restored_aliases.items():
+                if isinstance(original_id, str) and isinstance(current_id, str):
+                    self._node_aliases[original_id] = self._node_aliases.get(current_id, current_id)
+        inherited_deadline = self._trigger_source.get('deadline_at')
+        if inherited_deadline is not None and not isinstance(inherited_deadline, str):
+            raise ValueError(MESSAGES['deadline_string'])
+        if deadline_at is not None and not isinstance(deadline_at, datetime):
+            raise ValueError(MESSAGES['deadline_datetime'])
+        self.deadline_at = deadline_at or (datetime.fromisoformat(inherited_deadline) if inherited_deadline else None)
+        if self.deadline_at and timezone.is_naive(self.deadline_at):
+            self.deadline_at = timezone.make_aware(self.deadline_at)
         self.execution = execution
         self.langchain_service = LangChainService(
             user_id=getattr(execution, 'triggered_by_id', None)
@@ -207,10 +228,65 @@ class WorkflowExecutor:
         ctx['variables'] = variables
         if branch:
             ctx['_branch_upstream'] = branch
+        ctx['metadata'] = {**(ctx.get('metadata') or {}), 'node_id': str(node.pk)}
         return ctx
+
+    def _ensure_execution_budget(self):
+        if self._trigger_source.get('application_request_id') and not self._trigger_source.get('parent_execution_id'):
+            from .subworkflow import validate_application_execution, SubworkflowError
+            try:
+                validate_application_execution(self.execution)
+            except SubworkflowError as exc:
+                WorkflowExecution.objects.filter(pk=self.execution.pk, status__in=WorkflowExecution.ACTIVE_STATUSES).update(
+                    status='cancelled', completed_at=timezone.now(), error_message=str(exc))
+                self.execution.status = 'cancelled'
+                from .execution_budget import ExecutionDeadlineExceeded
+                raise ExecutionDeadlineExceeded(str(exc)) from exc
+        parent_id = self._trigger_source.get('parent_execution_id')
+        if parent_id:
+            from .subworkflow import validate_child_execution, SubworkflowError
+            try:
+                validate_child_execution(self.execution)
+            except SubworkflowError as exc:
+                WorkflowExecution.objects.filter(pk=self.execution.pk, status__in=WorkflowExecution.ACTIVE_STATUSES).update(
+                    status='cancelled', completed_at=timezone.now(), error_message=str(exc))
+                self.execution.status = 'cancelled'
+                from .execution_budget import ExecutionDeadlineExceeded
+                raise ExecutionDeadlineExceeded(str(exc)) from exc
+            parent_status = WorkflowExecution.objects.filter(pk=parent_id).values_list('status', flat=True).first()
+            if parent_status in ('cancelled', 'timeout', 'failed') or parent_status is None:
+                WorkflowExecution.objects.filter(pk=self.execution.pk, status__in=WorkflowExecution.ACTIVE_STATUSES).update(
+                    status='cancelled', completed_at=timezone.now(), error_message=MESSAGES['parent_results'])
+                self.execution.status = 'cancelled'
+                from .execution_budget import ExecutionDeadlineExceeded
+                raise ExecutionDeadlineExceeded(MESSAGES['parent_results'])
+        if not self.deadline_at:
+            return
+        from .execution_budget import ExecutionDeadlineExceeded, remaining_seconds
+        try:
+            remaining_seconds(self.deadline_at)
+        except ExecutionDeadlineExceeded:
+            WorkflowExecution.objects.filter(pk=self.execution.pk, status__in=WorkflowExecution.ACTIVE_STATUSES).update(
+                status='timeout', completed_at=timezone.now(),
+                error_message=MESSAGES['deadline_external'])
+            self.execution.status = 'timeout'
+            raise
+        current = WorkflowExecution.objects.filter(pk=self.execution.pk).values_list('status', flat=True).first()
+        if current in ('cancelled', 'timeout', 'completed', 'failed'):
+            self.execution.status = current
+            raise ExecutionDeadlineExceeded(MESSAGES['terminal_results'])
+
+    def _sleep_with_budget(self, seconds):
+        if self.deadline_at:
+            from .execution_budget import remaining_seconds
+            time.sleep(min(max(0, seconds), remaining_seconds(self.deadline_at)))
+            self._ensure_execution_budget()
+        else:
+            time.sleep(seconds)
 
     def execute_node(self, node: Node) -> Dict[str, Any]:
         """Execute a single node with error handling and timeout control."""
+        self._ensure_execution_budget()
         self._update_node_status(node.id, 'running')
 
         node_exec = self._create_or_update_node_execution(node, status='running', started_at=timezone.now())
@@ -232,9 +308,24 @@ class WorkflowExecutor:
             }
             timeout_seconds = defaults.get(node.node_type, 300)
         error_handler = ErrorHandlerRegistry.create_from_node(node)
+        if self.deadline_at:
+            from .execution_budget import remaining_seconds
+            timeout_seconds = min(timeout_seconds, remaining_seconds(self.deadline_at))
 
         def _do_execute() -> Dict[str, Any]:
-            node_config = node.config or {}
+            node_config = dict(node.config or {})
+            if node.node_type == 'delay':
+                # Client JSON can never supply either of these execution controls.
+                node_config['_delay_control'] = self._should_stop_cooperatively
+                previous_output = node_exec.output_data if node_exec and isinstance(node_exec.output_data, dict) else {}
+                node_config['_delay_resume'] = previous_output.get('_delay_state')
+            if self.deadline_at:
+                from .execution_budget import remaining_seconds
+                remaining = remaining_seconds(self.deadline_at)
+                node_config['_execution_deadline_at'] = self.deadline_at.isoformat()
+                node_config['timeout'] = min(float(node_config.get('timeout') or timeout_seconds), remaining)
+                node_config['retry_count'] = 0
+                node_config['max_retries'] = 0
             if node.node_type == 'email':
                 node_config = self.langchain_service._normalize_email_node_config(node_config)
             return self.langchain_service.execute_node(
@@ -245,6 +336,7 @@ class WorkflowExecutor:
             )
 
         def _progress_reporter(payload: Dict[str, Any]) -> None:
+            self._ensure_execution_budget()
             if not node_exec:
                 return
             merged = {**(node_exec.output_data or {}), **(payload or {})}
@@ -255,6 +347,19 @@ class WorkflowExecutor:
         self.langchain_service.set_progress_reporter(_progress_reporter)
         try:
             result = _do_execute()
+            self._ensure_execution_budget()
+        except DelayWaitStopped as exc:
+            exc.resume_node_ids.add(node.id)
+            self._visited.discard(node.id)
+            self.node_results.pop(node.id, None)
+            output = {'_delay_state': exc.state}
+            if node_exec:
+                node_exec.status = 'pending'
+                node_exec.output_data = output
+                node_exec.completed_at = None
+                node_exec.save(update_fields=['status', 'output_data', 'completed_at', 'updated_at'])
+            self._update_node_status(node.id, 'pending', output)
+            raise
         except ExecutionTimeoutError as e:
             logger.warning(f"Node '{node.name}' timed out after {timeout_seconds}s")
             result = {
@@ -314,6 +419,7 @@ class WorkflowExecutor:
         return result
 
     def _store_node_output(self, node: Node, output: Any) -> None:
+        self._ensure_execution_budget()
         with self._context_lock:
             if isinstance(output, dict):
                 for key, value in output.items():
@@ -323,8 +429,12 @@ class WorkflowExecutor:
                 self.context.set_var('last_output', output)
             self.context.set_var(f'{node.name}_output', output)
             self.context.set_node_output(str(node.id), output)
+            for original_id, snapshot_id in self._node_aliases.items():
+                if snapshot_id == str(node.id) and original_id != snapshot_id:
+                    self.context.set_node_output(original_id, output)
 
     def _complete_boundary_node(self, node: Node) -> Dict[str, Any]:
+        self._ensure_execution_budget()
         result = {'success': True, 'output': {}}
         node_exec = self._create_or_update_node_execution(node, status='running')
         if node_exec:
@@ -351,7 +461,7 @@ class WorkflowExecutor:
             if node_exec and node_exec.retry_count < node.max_retries:
                 logger.info(f"Retrying node '{node.name}' (attempt {node_exec.retry_count + 1}/{node.max_retries})")
                 import time
-                time.sleep(node.retry_delay_seconds)
+                self._sleep_with_budget(node.retry_delay_seconds)
                 try:
                     self.execute_node(node)
                     return
@@ -425,6 +535,8 @@ class WorkflowExecutor:
                 try:
                     result = self.execute_node(node)
                     return node.id, result
+                except DelayWaitStopped:
+                    raise
                 except Exception as e:
                     return node.id, {'success': False, 'error': str(e)}
 
@@ -435,21 +547,28 @@ class WorkflowExecutor:
             # Serial with spacing to avoid provider 503 / connection resets
             for idx, node in enumerate(nodes):
                 if idx:
-                    time.sleep(5.0)
+                    self._sleep_with_budget(5.0)
                 results.append(execute_one(node))
             return results
 
+        stopped_waits = []
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = {executor.submit(execute_one, node): node for node in nodes}
             for future in as_completed(futures):
                 try:
                     node_id, result = future.result()
                     results.append((node_id, result))
+                except DelayWaitStopped as exc:
+                    stopped_waits.append(exc)
                 except Exception as e:
                     node = futures[future]
                     logger.error(f"Parallel execution failed for node {node.id}: {e}")
                     results.append((node.id, {'success': False, 'error': str(e)}))
 
+        if stopped_waits:
+            stopped_waits[0].resume_node_ids.update(
+                node_id for exc in stopped_waits for node_id in exc.resume_node_ids)
+            raise stopped_waits[0]
         return results
 
     def _is_join_node(self, node: Node) -> bool:
@@ -710,16 +829,28 @@ class WorkflowExecutor:
 
         self._update_node_status(loop_node.id, 'running')
         loop_exec = self._create_or_update_node_execution(loop_node, status='running', started_at=timezone.now())
+        previous = loop_exec.output_data if loop_exec and isinstance(loop_exec.output_data, dict) else {}
+        resume_state = previous.get('_loop_delay_resume') or {}
+        if resume_state:
+            loop_results = resume_state['loop_results']
+            video_urls = resume_state['video_urls']
+            image_urls = resume_state['image_urls']
+            errors = resume_state['errors']
 
         for i, item in enumerate(items):
+            self._ensure_execution_budget()
             if i >= max_iterations:
                 break
+            if resume_state and i < resume_state['item_index']:
+                continue
+            resuming_item = bool(resume_state and i == resume_state['item_index'])
             with self._context_lock:
-                self.context.set_var(item_variable, item)
-                self.context.set_var(index_variable, i)
-                self.context.set_var('chapter', item)
-                self.context.set_var('shot', item)
-                if isinstance(item, dict):
+                if not resuming_item:
+                    self.context.set_var(item_variable, item)
+                    self.context.set_var(index_variable, i)
+                    self.context.set_var('chapter', item)
+                    self.context.set_var('shot', item)
+                if not resuming_item and isinstance(item, dict):
                     for key, value in item.items():
                         if not str(key).startswith('_'):
                             self.context.set_var(key, value)
@@ -729,13 +860,15 @@ class WorkflowExecutor:
                             self.context.set_var('input', item.get(key))
                             self.context.set_var('text', item.get(key))
                             break
-                else:
+                elif not resuming_item:
                     self.context.set_var('input', item)
                     self.context.set_var('text', item)
 
-            iteration_output = {}
+            iteration_output = resume_state['iteration_output'] if resuming_item else {}
             try:
-                for body_node in body_nodes:
+                for body_index, body_node in enumerate(body_nodes):
+                    if resuming_item and body_index < resume_state['body_index']:
+                        continue
                     # Allow body nodes to re-run each iteration
                     self._visited.discard(body_node.id)
                     body_result = self.execute_node(body_node)
@@ -753,7 +886,7 @@ class WorkflowExecutor:
                                     'Loop body %s failed (%s), retry %s/3',
                                     body_node.name, err[:120], attempt,
                                 )
-                                _time.sleep(min(30, 5 * attempt))
+                                self._sleep_with_budget(min(30, 5 * attempt))
                                 self._visited.discard(body_node.id)
                                 body_result = self.execute_node(body_node)
                                 if body_result.get('success') or body_result.get('skipped'):
@@ -811,6 +944,19 @@ class WorkflowExecutor:
                         None,
                     ),
                 })
+            except DelayWaitStopped as stopped:
+                state = {'item_index': i, 'body_index': body_index, 'iteration_output': iteration_output,
+                    'loop_results': loop_results, 'video_urls': video_urls, 'image_urls': image_urls, 'errors': errors}
+                if loop_exec:
+                    loop_exec.status = 'pending'
+                    loop_exec.output_data = make_json_safe({'_loop_delay_resume': state})
+                    loop_exec.completed_at = None
+                    loop_exec.save(update_fields=['status', 'output_data', 'completed_at', 'updated_at'])
+                self._visited.discard(loop_node.id)
+                self.node_results.pop(loop_node.id, None)
+                self._update_node_status(loop_node.id, 'pending')
+                stopped.resume_node_ids = {loop_node.id}
+                raise
             except Exception as exc:
                 errors.append({'index': i, 'error': str(exc)})
                 loop_results.append({'item': item, 'index': i, 'success': False, 'error': str(exc)})
@@ -1094,6 +1240,7 @@ class WorkflowExecutor:
         Returns current status. Does not block the Celery worker on pause —
         caller should checkpoint and exit so other workflows can run.
         """
+        self._ensure_execution_budget()
         try:
             self.execution.refresh_from_db(fields=['status'])
         except Exception as e:
@@ -1167,6 +1314,30 @@ class WorkflowExecutor:
         self._stop_reason = status
         return self.execution
 
+    def _stop_for_delay(self, stopped: DelayWaitStopped, queue: deque, queued_ids: Set[Any]):
+        """Checkpoint unfinished waits at their enclosing graph/loop boundary."""
+        for node_id in stopped.resume_node_ids:
+            self._visited.discard(node_id)
+            node = self.node_map.get(node_id)
+            if node and node_id not in queued_ids:
+                queue.appendleft(node)
+                queued_ids.add(node_id)
+        with transaction.atomic():
+            WorkflowExecution.objects.select_for_update().get(pk=self.execution.pk)
+            self.execution.refresh_from_db()
+            if self.execution.status in ('cancelled', 'timeout', 'completed', 'failed'):
+                # Cancellation still needs its unfinished-node checkpoint.
+                if self.execution.status != 'cancelled':
+                    return self.execution
+            from .execution_budget import ExecutionDeadlineExceeded
+            try:
+                self._ensure_execution_budget()
+            except ExecutionDeadlineExceeded:
+                self.execution.refresh_from_db()
+                return self.execution
+            return self._stop_for_control(queue, queued_ids,
+                'cancelled' if self.execution.status == 'cancelled' else 'paused')
+
     def interrupt(self, message: str = 'Soft time limit / worker interrupt') -> WorkflowExecution:
         """Save checkpoint and mark interrupted (resumable)."""
         return self._stop_for_control(
@@ -1180,15 +1351,24 @@ class WorkflowExecutor:
         Cooperative pause/cancel polls DB between waves and exits the worker
         so other workflow tasks are not blocked.
         """
-        if not resume:
+        from django.db import transaction
+        with transaction.atomic():
+            # A cancellation committed before engine startup must not be resurrected.
+            type(self.execution).objects.select_for_update().get(pk=self.execution.pk)
+            self.execution.refresh_from_db()
+            allowed = {'queued', 'pending', 'running'}
+            if resume:
+                allowed.update(type(self.execution).RESUMABLE_STATUSES)
+            if self.execution.status not in allowed:
+                return self.execution
             self.execution.status = 'running'
-            if not self.execution.started_at:
-                self.execution.started_at = timezone.now()
-            self.execution.save(update_fields=['status', 'started_at'])
-        else:
-            self.execution.status = 'running'
-            self.execution.paused_at = None
-            self.execution.save(update_fields=['status', 'paused_at'])
+            if not resume:
+                if not self.execution.started_at:
+                    self.execution.started_at = timezone.now()
+                self.execution.save(update_fields=['status', 'started_at'])
+            else:
+                self.execution.paused_at = None
+                self.execution.save(update_fields=['status', 'paused_at'])
 
         self._broadcast_execution_start()
         self._cancelled = False
@@ -1412,6 +1592,8 @@ class WorkflowExecutor:
             self._finalize_execution('completed')
             return self.execution
 
+        except DelayWaitStopped as stopped:
+            return self._stop_for_delay(stopped, queue, queued_ids)
         except Exception as e:
             # SoftTimeLimitExceeded may be raised from Celery inside node calls
             from celery.exceptions import SoftTimeLimitExceeded
@@ -1461,19 +1643,28 @@ class WorkflowExecutor:
 
     def _finalize_execution(self, status: str, error_message: str = None) -> None:
         """Finalize workflow execution."""
+        if status == 'completed':
+            self._ensure_execution_budget()
         # Never clobber cooperative control states
         try:
             self.execution.refresh_from_db(fields=['status'])
+            if self.execution.status in ('cancelled', 'timeout', 'completed', 'failed'):
+                return
             if self.execution.status in ('paused', 'interrupted', 'cancelled') and status == 'completed':
                 return
         except Exception:
             pass
 
+        expected_status = self.execution.status
         self.execution.status = status
         self.execution.executed_nodes = len(self._visited)
         if status == 'completed':
             self.execution.progress = 100
         self.execution.output_data = self.context.to_dict()
+        output_mapping = self._trigger_source.get('subworkflow_output_mapping')
+        if status == 'completed' and output_mapping:
+            from .subworkflow import mapped_output
+            self.execution.output_data['mapped_output'] = mapped_output(self.execution.output_data, output_mapping)
         self.execution.completed_at = timezone.now()
         if error_message:
             self.execution.error_message = error_message
@@ -1486,7 +1677,13 @@ class WorkflowExecutor:
             self.execution.context_snapshot = self._build_context_snapshot(reason=status)
         except Exception as snap_err:
             logger.debug('Final snapshot skipped: %s', snap_err)
-        self.execution.save()
+        final_fields = ('status', 'executed_nodes', 'progress', 'output_data', 'completed_at',
+                        'error_message', 'duration_ms', 'context_snapshot')
+        updated = WorkflowExecution.objects.filter(pk=self.execution.pk, status=expected_status).update(
+            **{name: getattr(self.execution, name) for name in final_fields})
+        if not updated:
+            self.execution.refresh_from_db()
+            return
 
         if status == 'completed':
             self._broadcast_execution_complete()
@@ -1575,6 +1772,8 @@ class WorkflowExecutor:
                     }
                     try:
                         result = self._execute_loop_subgraph(current_node)
+                    except DelayWaitStopped:
+                        raise
                     except Exception as e:
                         result = {'success': False, 'error': str(e)}
                     yield {
@@ -1597,6 +1796,8 @@ class WorkflowExecutor:
 
                     try:
                         result = self.execute_node(current_node)
+                    except DelayWaitStopped:
+                        raise
                     except Exception as e:
                         result = {'success': False, 'error': str(e)}
 
@@ -1650,6 +1851,12 @@ class WorkflowExecutor:
                 'output_data': self.context.to_dict()
             }
 
+        except DelayWaitStopped as stopped:
+            self._stop_for_delay(stopped, queue, queued_ids)
+            kind = {'completed': 'execution_complete', 'failed': 'execution_error'}.get(
+                self.execution.status, f'execution_{self.execution.status}')
+            yield {'type': kind, 'execution_id': self.execution.pk,
+                'status': self.execution.status, 'context_snapshot': self.execution.context_snapshot}
         except Exception as e:
             logger.exception(f"Workflow execution failed: {e}")
             self._finalize_execution('failed', error_message=str(e))

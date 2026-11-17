@@ -5,13 +5,11 @@ REST API for training jobs and datasets.
 import os
 import re
 import logging
-from django.http import FileResponse, Http404
-from django.db.models import Avg, Count, Q
-from django.utils import timezone
+from django.http import FileResponse
+from django.db.models import Count, Q
 from rest_framework import viewsets, status, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.views import APIView
 
 from .models import TrainingJob, Dataset
 from .serializers import (
@@ -21,7 +19,10 @@ from .serializers import (
     YoloTrainingRunCreateSerializer, YoloTrainingRunDetailSerializer,
     YoloTrainingRunListSerializer, YoloTrainingRetrySerializer,
 )
-from .tasks import run_training_task, cancel_training_task
+from .tasks import run_training_task
+from .execution_control import (
+    DESKTOP_CANCEL_UNAVAILABLE_MESSAGE, dispatch_desktop_training_cancel, request_training_cancel,
+)
 from tenants.access import get_accessible_tenant_ids
 
 logger = logging.getLogger(__name__)
@@ -101,6 +102,14 @@ def _resolve_yolo_run_dir(job: TrainingJob):
     """Resolve Ultralytics run directory from job weight paths or config."""
     from pathlib import Path
 
+    def has_artifacts(directory):
+        return directory.is_dir() and any(
+            entry.is_file() and (
+                entry.name in {'results.csv', 'results.png', 'args.yaml'}
+                or (entry.name.startswith(('train_batch', 'val_batch')) and SAFE_PLOT_FILENAME_RE.match(entry.name))
+            ) for entry in directory.iterdir()
+        )
+
     weight_path = job.best_weight_path or job.model_path or ''
     if weight_path:
         wp = Path(weight_path)
@@ -113,12 +122,12 @@ def _resolve_yolo_run_dir(job: TrainingJob):
         if base.is_dir():
             for name in ('train', 'yolo_train', job.name or ''):
                 candidate = base / name if name else base
-                if candidate.is_dir() and (candidate / 'results.png').exists():
+                if has_artifacts(candidate):
                     return candidate
-            if (base / 'results.png').exists():
+            if has_artifacts(base):
                 return base
             for child in base.iterdir():
-                if child.is_dir() and (child / 'results.png').exists():
+                if has_artifacts(child):
                     return child
     return None
 
@@ -255,10 +264,17 @@ class TrainingJobViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        job.mark_cancelled()
+        job, cancel_status = request_training_cancel(job.pk)
+        if cancel_status == 'cancelling':
+            try:
+                dispatch_desktop_training_cancel(job)
+            except Exception:
+                logger.exception('Failed to dispatch desktop cancellation for %s', job.pk)
+                return Response({'status': cancel_status, 'error': DESKTOP_CANCEL_UNAVAILABLE_MESSAGE},
+                                status=status.HTTP_503_SERVICE_UNAVAILABLE)
         return Response({
-            'status': job.status,
-            'message': '训练任务已取消'
+            'status': cancel_status,
+            'message': '训练任务取消中' if cancel_status == 'cancelling' else '训练任务已取消',
         })
 
     @action(detail=True, methods=['post'])
@@ -493,8 +509,9 @@ class YoloTrainingRunViewSet(viewsets.ModelViewSet):
         try:
             import json
             from pathlib import Path
+            from django.conf import settings
 
-            config_dir = Path('e:/Flowly-now/Backend/data/training_configs')
+            config_dir = Path(settings.BASE_DIR) / 'data' / 'training_configs'
             config_dir.mkdir(parents=True, exist_ok=True)
             config_path = config_dir / f'{job.id}.json'
 
@@ -516,7 +533,8 @@ class YoloTrainingRunViewSet(viewsets.ModelViewSet):
             with open(config_path, 'w', encoding='utf-8') as f:
                 json.dump(config_data, f, ensure_ascii=False, indent=2)
 
-            output_dir = job.config.get('output_dir', f'e:/Flowly-now/Backend/data/training_outputs/{job.id}')
+            default_out = Path(settings.BASE_DIR) / 'data' / 'training_outputs' / str(job.id)
+            output_dir = job.config.get('output_dir', str(default_out))
             run_training_task.delay(str(job.id), str(config_path), output_dir)
             logger.info(f"YOLO training task dispatched for job {job.id}")
         except Exception as e:
@@ -547,6 +565,14 @@ class YoloTrainingRunViewSet(viewsets.ModelViewSet):
         from .artifacts import build_model_artifact_manifest
 
         return Response(build_model_artifact_manifest(self.get_object()))
+
+    @action(detail=True, methods=['get'])
+    def analytics(self, request, pk=None):
+        """Owner/tenant-authorized curves and evaluation reports for all YOLO tasks."""
+        from .analytics import build_run_analytics
+
+        job = self.get_object()
+        return Response(build_run_analytics(job, _resolve_yolo_run_dir(job)))
 
     @action(detail=True, methods=['get'])
     def plots(self, request, pk=None):
@@ -605,8 +631,19 @@ class YoloTrainingRunViewSet(viewsets.ModelViewSet):
         if job.status not in ['queued', 'running']:
             return Response({'error': '只能取消排队中或训练中的任务'}, status=status.HTTP_400_BAD_REQUEST)
 
-        cancel_training_task.delay(str(job.id))
-        return Response({'training_run_id': str(job.id), 'status': 'cancelling', 'message': 'YOLO训练任务取消中'})
+        job, cancel_status = request_training_cancel(job.pk)
+        if cancel_status == 'cancelling':
+            try:
+                dispatch_desktop_training_cancel(job)
+            except Exception:
+                logger.exception('Failed to dispatch desktop cancellation for %s', job.pk)
+                return Response({'training_run_id': str(job.id), 'status': cancel_status,
+                                 'error': DESKTOP_CANCEL_UNAVAILABLE_MESSAGE},
+                                status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        return Response({
+            'training_run_id': str(job.id), 'status': cancel_status,
+            'message': 'YOLO训练任务取消中' if cancel_status == 'cancelling' else 'YOLO训练任务已取消',
+        })
 
     @action(detail=True, methods=['post'])
     def retry(self, request, pk=None):

@@ -34,26 +34,19 @@ const toCamelCase = (str) => str.replace(/_([a-z])/g, (_, letter) => letter.toUp
 
 const toSnakeCase = (str) => str.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`)
 
-const convertKeys = (obj, converter) => {
+const convertKeys = (obj, converter, opaqueKeys) => {
   if (obj === null || obj === undefined) return obj
-  if (Array.isArray(obj)) return obj.map(item => convertKeys(item, converter))
+  if (Array.isArray(obj)) return obj.map(item => convertKeys(item, converter, opaqueKeys))
   if (typeof obj !== 'object') return obj
 
-  return Object.keys(obj).reduce((acc, key) => {
-    const convertedKey = converter(key)
-    let value = obj[key]
-
-    if (value && typeof value === 'object') {
-      value = convertKeys(value, converter)
-    }
-
-    acc[convertedKey] = value
-    return acc
-  }, {})
+  return Object.fromEntries(Object.entries(obj).map(([key, value]) => [
+    converter(key), opaqueKeys.has(toSnakeCase(key)) ? value : convertKeys(value, converter, opaqueKeys),
+  ]))
 }
 
-const toCamelCaseKeys = (obj) => convertKeys(obj, toCamelCase)
-const toSnakeCaseKeys = (obj) => convertKeys(obj, toSnakeCase)
+const opaqueKeySet = keys => new Set(Array.isArray(keys) ? keys.map(toSnakeCase) : [])
+const toCamelCaseKeys = (obj, opaqueKeys) => convertKeys(obj, toCamelCase, opaqueKeySet(opaqueKeys))
+const toSnakeCaseKeys = (obj, opaqueKeys) => convertKeys(obj, toSnakeCase, opaqueKeySet(opaqueKeys))
 
 // =============================================================================
 // 请求拦截器
@@ -79,7 +72,7 @@ api.interceptors.request.use(
       }
     } else if (config.data && typeof config.data === 'object' && !config.preserveRequestKeys) {
       // 自动转换请求数据: camelCase -> snake_case
-      config.data = toSnakeCaseKeys(config.data)
+      config.data = toSnakeCaseKeys(config.data, config.opaqueKeys)
     }
 
     return config
@@ -214,7 +207,7 @@ api.interceptors.response.use(
     // 自动转换响应数据: snake_case -> camelCase
     if (responseData && typeof responseData === 'object' && !response.config?.preserveResponseKeys) {
       const original = responseData
-      responseData = toCamelCaseKeys(responseData)
+      responseData = toCamelCaseKeys(responseData, response.config?.opaqueKeys)
       // Workflow configuration is user data: changing its keys changes executable semantics.
       if (response.config?.preserveWorkflowKeys) {
         for (const key of ['workflow', 'workflow_json', 'messages']) {
@@ -370,7 +363,7 @@ export const request = {
     const token = authSession.access
 
     // 转换 camelCase -> snake_case
-    const snakeData = toSnakeCaseKeys(data)
+    const snakeData = config.preserveRequestKeys ? data : toSnakeCaseKeys(data, config.opaqueKeys)
 
     const headers = {
       'Authorization': `Bearer ${token}`,
@@ -381,7 +374,8 @@ export const request = {
     return fetch(`${api.defaults.baseURL}${url}`, {
       method: 'POST',
       headers: headers,
-      body: JSON.stringify(snakeData)
+      body: JSON.stringify(snakeData),
+      signal: config.signal,
     })
   }
 }

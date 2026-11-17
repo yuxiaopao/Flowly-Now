@@ -423,6 +423,7 @@ import { pauseExecution as pauseWorkflowExecution } from '@/api/workflow'
 import { useWebSocket } from '@/composables/useWebSocket'
 import { getWebSocketUrl } from '@/config'
 import * as echarts from 'echarts'
+import 'echarts/theme/v5.js'
 import {
   Plus, Activity, CheckCircle, Clock, Zap, TrendingUp
 } from 'lucide-vue-next'
@@ -719,7 +720,7 @@ function initTrendChart() {
   if (!trendChartRef.value) return
 
   if (!trendChart) {
-    trendChart = echarts.init(trendChartRef.value)
+    trendChart = echarts.init(trendChartRef.value, 'v5')
   }
 
   trendChart.setOption(buildTrendChartOption(), true)

@@ -23,6 +23,8 @@ jest.mock('@/api/index', () => ({
 }))
 
 const gatewayApi = require('@/api/gateway').default
+const { GATEWAY_OPAQUE_KEYS } = require('@/api/gateway')
+const payloadOptions = { opaqueKeys: GATEWAY_OPAQUE_KEYS }
 
 beforeEach(() => jest.clearAllMocks())
 
@@ -70,7 +72,7 @@ describe('gatewayApi.getDefaultModels', () => {
 describe('gatewayApi.testModel', () => {
   it('POST /gateway/models/:id/test/', async () => {
     await gatewayApi.testModel(1, { message: '你好' })
-    expect(mockRequest.post).toHaveBeenCalledWith('/gateway/models/1/test/', { message: '你好' })
+    expect(mockRequest.post).toHaveBeenCalledWith('/gateway/models/1/test/', { message: '你好' }, payloadOptions)
   })
 })
 
@@ -138,7 +140,7 @@ describe('gatewayApi.gatewayChat', () => {
   it('POST /gateway/chat/', async () => {
     const data = { model: 'gpt-4', messages: [{ role: 'user', content: '你好' }] }
     await gatewayApi.gatewayChat(data)
-    expect(mockRequest.post).toHaveBeenCalledWith('/gateway/chat/', data)
+    expect(mockRequest.post).toHaveBeenCalledWith('/gateway/chat/', data, payloadOptions)
   })
 })
 
@@ -146,6 +148,6 @@ describe('gatewayApi.gatewayEmbeddings', () => {
   it('POST /gateway/embeddings/', async () => {
     const data = { model: 'text-embedding-3-small', input: '文本' }
     await gatewayApi.gatewayEmbeddings(data)
-    expect(mockRequest.post).toHaveBeenCalledWith('/gateway/embeddings/', data)
+    expect(mockRequest.post).toHaveBeenCalledWith('/gateway/embeddings/', data, payloadOptions)
   })
 })

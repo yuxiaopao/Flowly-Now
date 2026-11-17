@@ -265,13 +265,10 @@ class InvoiceViewSet(viewsets.ReadOnlyModelViewSet):
 
     @action(detail=True, methods=['get'])
     def download(self, request, pk=None):
-        """Download invoice PDF."""
+        """Download a printable statement, without changing payment state."""
         invoice = self.get_object()
-        # In production, this would generate and return a PDF
-        return Response({
-            'message': 'Invoice download not implemented',
-            'invoice_number': invoice.invoice_number
-        })
+        from .documents import invoice_statement_response
+        return invoice_statement_response(invoice)
 
 
 class PaymentViewSet(viewsets.ReadOnlyModelViewSet):

@@ -1,6 +1,7 @@
 # Generated migration for Workflow Template System
 
 from django.db import migrations, models
+from django.conf import settings
 import django.db.models.deletion
 import uuid
 
@@ -8,7 +9,7 @@ import uuid
 class Migration(migrations.Migration):
 
     dependencies = [
-        migrations.swappable_dependency('auth.User'),
+        migrations.swappable_dependency(settings.AUTH_USER_MODEL),
         ('users', '0001_initial'),
         ('workflows', '0007_auto_20260513_1416'),
     ]
@@ -33,12 +34,6 @@ class Migration(migrations.Migration):
                 'ordering': ['sort_order', 'name'],
             },
         ),
-# Disable FK checks for this migration (auth_user doesn't exist, using users.User)
-migrations.RunSQL(
-    sql="SET FOREIGN_KEY_CHECKS=0",
-    reverse_sql="SET FOREIGN_KEY_CHECKS=1",
-),
-
 migrations.CreateModel(
     name='WorkflowTemplate',
             fields=[

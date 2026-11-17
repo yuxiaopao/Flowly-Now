@@ -227,4 +227,31 @@ function handleClick(e) {
   position: relative;
   z-index: 1;
 }
+
+// ============================================
+// 可选骨架屏外观：<AppCard class="app-card--skeleton" />
+// 内容隐藏为占位，数据到达后去掉该类即可原位替换、不跳动。
+// ============================================
+.app-card--skeleton {
+  min-height: 160px;
+
+  > * {
+    visibility: hidden;
+  }
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    border-radius: inherit;
+    background: linear-gradient(90deg, transparent, var(--surface-strong), transparent);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    &::before {
+      animation: shimmer-sweep 1.6s ease-in-out infinite;
+    }
+  }
+}
 </style>

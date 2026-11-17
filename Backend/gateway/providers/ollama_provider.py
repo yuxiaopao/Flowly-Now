@@ -206,7 +206,7 @@ class OllamaProvider(BaseProvider):
             resp = requests.post(
                 f'{self.base_url}/api/chat',
                 json=payload,
-                timeout=OLLAMA_CHAT_TIMEOUT
+                timeout=kwargs.get('timeout', OLLAMA_CHAT_TIMEOUT)
             )
             resp.raise_for_status()
             data = resp.json()

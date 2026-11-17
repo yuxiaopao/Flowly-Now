@@ -409,190 +409,87 @@ class NotificationChannelViewSet(viewsets.ModelViewSet):
 
 
 class AnalyticsViewSet(viewsets.ViewSet):
-    """ViewSet for Analytics API."""
-
+    """All related analytics share an owner boundary and validated time window."""
     permission_classes = [IsAuthenticated]
+
+    def executions(self, request):
+        from .analytics_queries import analytics_window
+        start, end = analytics_window(request.query_params)
+        return WorkflowExecution.objects.filter(workflow__owner=request.user, started_at__gte=start, started_at__lte=end), start, end
 
     @action(detail=False, methods=['get'])
     def overview(self, request):
-        """Get overview analytics."""
-        now = timezone.now()
-        days = int(request.query_params.get('days', 30))
-        start_date = now - timedelta(days=days)
-
-        from workflows.models import Workflow, WorkflowExecution
-        from gateway.models import APICallLog
-
-        # Workflow stats
-        total_workflows = Workflow.objects.filter(owner=request.user).count()
-
-        # Execution stats
-        total_executions = WorkflowExecution.objects.filter(
-            workflow__owner=request.user
-        ).count()
-
-        executions_in_period = WorkflowExecution.objects.filter(
-            workflow__owner=request.user,
-            started_at__gte=start_date
-        ).count()
-
-        # Success rate
-        successful = WorkflowExecution.objects.filter(
-            workflow__owner=request.user,
-            status='completed'
-        ).count()
-        failed = WorkflowExecution.objects.filter(
-            workflow__owner=request.user,
-            status='failed'
-        ).count()
-        success_rate = (successful / total_executions * 100) if total_executions > 0 else 0
-
-        # API usage stats
-        api_stats = APICallLog.objects.filter(
-            user=request.user,
-            timestamp__gte=start_date
-        ).aggregate(
-            total_tokens=Sum('total_tokens'),
-            total_cost=Sum('cost'),
-            avg_latency=Avg('latency_ms')
-        )
-
-        # Calculate trends (compare with previous period)
-        prev_start = start_date - timedelta(days=days)
-        prev_executions = WorkflowExecution.objects.filter(
-            workflow__owner=request.user,
-            started_at__gte=prev_start,
-            started_at__lt=start_date
-        ).count()
-
-        executions_trend = 0
-        if prev_executions > 0:
-            executions_trend = ((executions_in_period - prev_executions) / prev_executions) * 100
-
+        executions, start, end = self.executions(request)
+        total = executions.count()
+        successful = executions.filter(status='completed').count()
+        logs = APICallLog.objects.filter(user=request.user, timestamp__gte=start, timestamp__lte=end)
+        usage = logs.aggregate(total_tokens=Sum('total_tokens'), total_cost=Sum('cost'), avg_latency=Avg('latency_ms'))
+        workflows = Workflow.objects.filter(owner=request.user, is_deleted=False, created_at__lte=end)
+        previous_workflows = workflows.filter(created_at__lt=start).count()
+        previous_executions = WorkflowExecution.objects.filter(workflow__owner=request.user,
+            started_at__gte=start - (end - start), started_at__lt=start).count()
         return Response({
-            'total_workflows': total_workflows,
-            'workflows_trend': 0,
-            'total_executions': executions_in_period,
-            'executions_trend': round(executions_trend, 1),
-            'total_tokens': api_stats['total_tokens'] or 0,
-            'total_cost': float(api_stats['total_cost'] or 0),
-            'avg_latency': api_stats['avg_latency'] or 0,
-            'success_rate': round(success_rate, 1),
-            'days': days
+            'total_workflows': workflows.count(),
+            'workflows_trend': round((workflows.count() - previous_workflows) / previous_workflows * 100, 1) if previous_workflows else None,
+            'total_executions': total,
+            'executions_trend': round((total - previous_executions) / previous_executions * 100, 1) if previous_executions else None,
+            'total_tokens': usage['total_tokens'],
+            'total_cost': float(usage['total_cost']) if usage['total_cost'] is not None else None,
+            'avg_latency': usage['avg_latency'],
+            'success_rate': round(successful / total * 100, 1) if total else None,
+            'cost_provenance': 'gateway_log', 'cost_currency': None,
+            'start_date': start, 'end_date': end,
         })
 
     @action(detail=False, methods=['get'])
     def top_workflows(self, request):
-        """Get top workflows by execution count."""
-        from workflows.models import WorkflowExecution
-
-        limit = int(request.query_params.get('limit', 10))
-        days = int(request.query_params.get('days', 30))
-        start_date = timezone.now() - timedelta(days=days)
-
-        top_workflows = []
-
-        for workflow in Workflow.objects.filter(owner=request.user):
-            executions = WorkflowExecution.objects.filter(
-                workflow=workflow,
-                started_at__gte=start_date
-            )
-
-            total = executions.count()
-            successful = executions.filter(status='completed').count()
-
-            avg_duration_seconds = 0.0
-            completed_executions = executions.filter(status='completed', duration_ms__isnull=False)
-            if completed_executions.count() > 0:
-                avg_ms = completed_executions.aggregate(
-                    avg=Avg('duration_ms')
-                )['avg'] or 0
-                avg_duration_seconds = avg_ms / 1000.0
-
-            if total > 0:
-                top_workflows.append({
-                    'id': workflow.id,
-                    'name': workflow.name,
-                    'execution_count': total,
-                    'success_rate': round((successful / total) * 100, 2),
-                    'avg_duration': round(avg_duration_seconds, 2)
-                })
-
-        top_workflows.sort(key=lambda x: x['execution_count'], reverse=True)
-        return Response(top_workflows[:limit])
+        from .analytics_queries import analytics_limit, analytics_window
+        start, end = analytics_window(request.query_params)
+        limit = analytics_limit(request.query_params, 10)
+        selected = Q(executions__started_at__gte=start, executions__started_at__lte=end)
+        workflows = Workflow.objects.filter(owner=request.user, is_deleted=False).annotate(
+            analytics_execution_count=Count('executions', filter=selected),
+            successful_count=Count('executions', filter=selected & Q(executions__status='completed')),
+            mean_duration=Avg('executions__duration_ms', filter=selected & Q(executions__status='completed')),
+        ).filter(analytics_execution_count__gt=0).order_by('-analytics_execution_count', 'id')[:limit]
+        return Response([{'id': workflow.id, 'name': workflow.name,
+            'execution_count': workflow.analytics_execution_count, 'success_rate': round(workflow.successful_count / workflow.analytics_execution_count * 100, 2),
+            'avg_duration': round(workflow.mean_duration / 1000, 2) if workflow.mean_duration is not None else None,
+        } for workflow in workflows])
 
     @action(detail=False, methods=['get'])
     def recent_executions(self, request):
-        """Get recent executions."""
-        limit = int(request.query_params.get('limit', 20))
-
-        executions = WorkflowExecution.objects.filter(
-            workflow__owner=request.user
-        ).select_related('workflow').order_by('-started_at')[:limit]
-
-        return Response([{
-            'id': e.id,
-            'workflow_id': e.workflow_id,
-            'workflow_name': e.workflow.name,
-            'status': e.status,
-            'duration': e.duration,
-            'trigger_type': e.trigger_type,
-            'started_at': e.started_at,
-            'completed_at': e.completed_at
-        } for e in executions])
+        from .analytics_queries import analytics_limit
+        executions, _, _ = self.executions(request)
+        executions = executions.select_related('workflow').order_by('-started_at')[:analytics_limit(request.query_params, 20)]
+        return Response([{'id': execution.id, 'workflow_id': execution.workflow_id, 'workflow_name': execution.workflow.name,
+            'status': execution.status, 'duration': execution.duration, 'trigger_type': execution.trigger_type,
+            'started_at': execution.started_at, 'completed_at': execution.completed_at,
+        } for execution in executions])
 
     @action(detail=False, methods=['get'])
     def api_usage(self, request):
-        """Get API usage details."""
-        days = int(request.query_params.get('days', 30))
-        start_date = timezone.now() - timedelta(days=days)
-
-        usage = APICallLog.objects.filter(
-            user=request.user,
-            timestamp__gte=start_date
-        ).values('model', 'provider').annotate(
-            call_count=Count('id'),
-            input_tokens=Sum('input_tokens'),
-            output_tokens=Sum('output_tokens'),
-            total_tokens=Sum('total_tokens'),
-            cost=Sum('cost')
-        ).order_by('-call_count')
-
+        from .analytics_queries import analytics_window
+        start, end = analytics_window(request.query_params)
+        usage = APICallLog.objects.filter(user=request.user, timestamp__gte=start, timestamp__lte=end).values('model', 'provider').annotate(
+            call_count=Count('id'), input_tokens=Sum('input_tokens'), output_tokens=Sum('output_tokens'), total_tokens=Sum('total_tokens'), cost=Sum('cost'),
+        ).order_by('-call_count', 'provider', 'model')
         return Response(list(usage))
 
     @action(detail=False, methods=['get'])
     def execution_trend(self, request):
-        """Get execution trend over time."""
-        period = request.query_params.get('period', '7d')
-        days = int(period.rstrip('d')) if period.endswith('d') else 7
-
         from django.db.models.functions import TruncDate
-
-        start_date = timezone.now() - timedelta(days=days)
-
-        executions_by_date = WorkflowExecution.objects.filter(
-            workflow__owner=request.user,
-            started_at__gte=start_date
-        ).annotate(
-            date=TruncDate('started_at')
-        ).values('date').annotate(
-            executions=Count('id'),
-            successful=Count('id', filter=Q(status='completed')),
-            failed=Count('id', filter=Q(status='failed'))
-        ).order_by('date')
-
-        trend_data = []
-        for item in executions_by_date:
-            executions = item['executions']
-            successful = item['successful']
-            trend_data.append({
-                'date': item['date'].isoformat() if item['date'] else None,
-                'executions': executions,
-                'success_rate': (successful / executions * 100) if executions > 0 else 0,
-                'cost': 0
-            })
-
-        return Response(trend_data)
+        executions, start, end = self.executions(request)
+        by_date = executions.annotate(date=TruncDate('started_at')).values('date').annotate(
+            executions=Count('id'), successful=Count('id', filter=Q(status='completed')),
+        )
+        logs = APICallLog.objects.filter(user=request.user, timestamp__gte=start, timestamp__lte=end).annotate(date=TruncDate('timestamp')).values('date').annotate(cost=Sum('cost'))
+        counts = {row['date']: row for row in by_date}
+        costs = {row['date']: row['cost'] for row in logs}
+        return Response([{'date': date.isoformat(), 'executions': counts.get(date, {}).get('executions', 0),
+            'success_rate': counts[date]['successful'] / counts[date]['executions'] * 100 if date in counts else None,
+            'cost': float(costs[date]) if date in costs and costs[date] is not None else None,
+        } for date in sorted(set(counts) | set(costs)) if date is not None])
 
 
 class ExecutionStatsViewSet(viewsets.ViewSet):

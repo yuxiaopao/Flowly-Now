@@ -5,26 +5,28 @@ Celery tasks for workflow execution and other background jobs.
 import json
 import traceback as tb_module
 import logging
-import signal
-import asyncio
 from celery import shared_task, Task
-from celery.exceptions import MaxRetriesExceededError, SoftTimeLimitExceeded
+from celery.exceptions import Retry, SoftTimeLimitExceeded
+from django.db import transaction
 from django.utils import timezone
 from django.conf import settings
 from datetime import timedelta
 
 from .models import WorkflowExecution, Workflow
 from .services.workflow_executor import WorkflowExecutor
-from .services.context import ExecutionContext
 from .execution_control import (
     claim_execution_for_run,
     recover_stale_running_executions,
-    check_concurrency_allowed,
     has_resumable_snapshot,
 )
 from django.db.models import Q
 
 logger = logging.getLogger(__name__)
+
+CAPACITY_RETRY_SECONDS = 30
+CAPACITY_MAX_RETRIES = 20
+EXECUTION_RETRY_SECONDS = 60
+PROTECTED_EXECUTION_STATUSES = ('paused', 'interrupted', 'cancelled', 'completed', 'timeout')
 
 
 class WorkflowTask(Task):
@@ -164,23 +166,22 @@ def execute_workflow_task(self, execution_id: int, parallel_enabled: bool = True
                 'message': 'Execution is not in queued/pending status'
             }
 
-        ok_limit, limit_msg = check_concurrency_allowed(
-            execution.workflow_id, exclude_execution_id=execution.id
-        )
-        if not ok_limit:
-            # Stay queued — beat/recover or next schedule can pick up; avoid failing hard
-            logger.warning('Concurrency limit for %s: %s', execution_id, limit_msg)
-            execution.status = 'queued'
-            execution.error_message = limit_msg
-            execution.save(update_fields=['status', 'error_message'])
-            raise self.retry(countdown=30, max_retries=20)
-
         ok, execution, claim_msg = claim_execution_for_run(
             execution_id,
             allowed_statuses=('queued', 'pending'),
             task_id=self.request.id,
+            enforce_concurrency=True,
         )
         if not ok:
+            if execution is not None and execution.status in ('queued', 'pending'):
+                logger.warning('Concurrency limit for %s: %s', execution_id, claim_msg)
+                WorkflowExecution.objects.filter(pk=execution.pk, status__in=('queued', 'pending')).update(
+                    status='queued', error_message=claim_msg,
+                )
+                raise self.retry(
+                    countdown=getattr(settings, 'WORKFLOW_CAPACITY_RETRY_SECONDS', CAPACITY_RETRY_SECONDS),
+                    max_retries=getattr(settings, 'WORKFLOW_CAPACITY_MAX_RETRIES', CAPACITY_MAX_RETRIES),
+                )
             return {
                 'execution_id': execution_id,
                 'status': getattr(execution, 'status', None),
@@ -236,28 +237,46 @@ def execute_workflow_task(self, execution_id: int, parallel_enabled: bool = True
             pass
         return {'execution_id': execution_id, 'status': 'interrupted', 'resumable': True}
 
+    except Retry:
+        # Celery uses this exception to schedule redelivery; it is not a failure.
+        raise
+
     except Exception as e:
         logger.exception(f"Execution {execution_id} failed: {e}")
+        should_retry = False
         try:
-            execution = WorkflowExecution.objects.get(id=execution_id)
-            if execution.status in ('paused', 'interrupted', 'cancelled', 'completed'):
-                return _finalize_task_result(execution_id, execution)
+            with transaction.atomic():
+                execution = WorkflowExecution.objects.select_for_update().get(id=execution_id)
+                if execution.status in PROTECTED_EXECUTION_STATUSES:
+                    return _finalize_task_result(execution_id, execution)
 
-            execution.mark_failed(
-                error_message=str(e),
-                error_stack=tb_module.format_exc()
-            )
+                has_snapshot = has_resumable_snapshot(execution)
+                can_restart = has_snapshot or not execution.node_executions.filter(status='completed').exists()
+                should_retry = self.request.retries < self.max_retries and can_restart
+                if should_retry:
+                    execution.status = 'interrupted' if has_snapshot else 'queued'
+                    execution.paused_at = timezone.now() if has_snapshot else None
+                    execution.completed_at = None
+                    execution.error_message = str(e)
+                    execution.error_stack = tb_module.format_exc()
+                    execution.save(update_fields=[
+                        'status', 'paused_at', 'completed_at', 'error_message', 'error_stack',
+                    ])
+                else:
+                    execution.mark_failed(error_message=str(e), error_stack=tb_module.format_exc())
 
-            _broadcast_execution_event(execution_id, 'execution_error', {
-                'execution_id': execution_id,
-                'error': str(e)
-            })
+            if not should_retry:
+                _broadcast_execution_event(execution_id, 'execution_error', {
+                    'execution_id': execution_id,
+                    'error': str(e),
+                })
 
         except Exception as inner:
             logger.error(f"Failed to handle execution error for {execution_id}: {inner}")
 
-        if self.request.retries < self.max_retries:
-            raise self.retry(exc=e, countdown=60 * (self.request.retries + 1))
+        if should_retry:
+            retry_seconds = getattr(settings, 'WORKFLOW_RETRY_SECONDS', EXECUTION_RETRY_SECONDS)
+            raise self.retry(exc=e, countdown=retry_seconds * (self.request.retries + 1))
 
         return {
             'error': f'Execution {execution_id} failed after max retries',

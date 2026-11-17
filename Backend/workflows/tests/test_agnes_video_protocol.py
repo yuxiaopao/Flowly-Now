@@ -19,9 +19,9 @@ class AgnesVideoProtocolTests(SimpleTestCase):
             "status": "completed", "seconds": "5", "metadata": {"url": "https://media.test/final.mp4"},
         })]
         service = LangChainService()
-        with patch.object(service, "_agnes_credential", return_value=("test-secret", "https://provider.test/v1")), \
-             patch.object(service, "_agnes_httpx_client", return_value=client), \
-             patch("workflows.services.langchain_service.time.sleep"):
+        with patch.object(service.media, "_agnes_credential", return_value=("test-secret", "https://provider.test/v1")), \
+             patch.object(service.media, "_agnes_httpx_client", return_value=client), \
+             patch("workflows.services.media_nodes.time.sleep"):
             result = service.run_video_generation_node({"provider": "agnes", "prompt": "animate", "duration": 5, **config}, {})
         return result, client
 

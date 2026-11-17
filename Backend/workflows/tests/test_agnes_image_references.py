@@ -15,7 +15,7 @@ class AgnesImageReferenceTests(SimpleTestCase):
             Image.new('RGB',(300,300)).save(Path(directory)/'board.png')
             service=LangChainService();client=Mock()
             client.images.generate.return_value=SimpleNamespace(data=[SimpleNamespace(url='https://media.test/output.png',b64_json=None,revised_prompt=None)])
-            with patch.object(service,'_agnes_credential',return_value=('test-only-key','https://provider.test/v1')),patch('openai.OpenAI',return_value=client):
+            with patch.object(service.media,'_agnes_credential',return_value=('test-only-key','https://provider.test/v1')),patch('openai.OpenAI',return_value=client):
                 result=service.run_image_generation_node({'provider':'agnes','model':'agnes-image-2.5-flash','size':'2K','ratio':'16:9','prompt':'use the original','referenceImages':['http://localhost/media/board.png','https://media.test/motif.png']},{})
             self.assertTrue(result['success'],result)
             payload=client.images.generate.call_args.kwargs

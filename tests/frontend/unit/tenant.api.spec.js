@@ -91,9 +91,9 @@ describe('tenantApi.removeMember', () => {
 })
 
 describe('tenantApi.getMyMemberships', () => {
-  it('GET /tenants/memberships/my_memberships/', async () => {
+  it('GET /tenants/memberships/', async () => {
     await tenantApi.getMyMemberships()
-    expect(mockRequest.get).toHaveBeenCalledWith('/tenants/memberships/my_memberships/')
+    expect(mockRequest.get).toHaveBeenCalledWith('/tenants/memberships/')
   })
 })
 

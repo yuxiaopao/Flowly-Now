@@ -38,7 +38,8 @@ async function click(role, label) {
 async function fill(label, value) {
   await uid('textbox', label)
   // Set and dispatch in one browser task so Element Plus observes the edit.
-  await evalPage(client, `()=>{const input=[...document.querySelectorAll('input')].find(e=>e.getAttribute('aria-label')===${JSON.stringify(label)});input.focus();Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,${JSON.stringify(value)});input.dispatchEvent(new Event('input',{bubbles:true}));input.dispatchEvent(new Event('change',{bubbles:true}));input.blur();return true}`)
+  // Restrict to visible inputs: login/register share some aria-labels ("密码").
+  await evalPage(client, `()=>{const input=[...document.querySelectorAll('input')].find(e=>e.getAttribute('aria-label')===${JSON.stringify(label)}&&e.getClientRects().length);if(!input)throw Error('Visible input missing: '+${JSON.stringify(label)});input.focus();Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,${JSON.stringify(value)});input.dispatchEvent(new Event('input',{bubbles:true}));input.dispatchEvent(new Event('change',{bubbles:true}));input.blur();return true}`)
 }
 async function wait(text) {
   await client.tool('wait_for', { text: [text], timeout: 10000 })
@@ -65,13 +66,13 @@ try {
   client.pageTools = new Set(tools.filter(tool => tool.inputSchema?.properties?.pageId).map(tool => tool.name))
   await client.tool('new_page', { url: origin + '/login' })
   if (!resume) {
-  await evalPage(client, `async()=>{ const {clearAuthSession}=await import('/src/utils/authSession.js');clearAuthSession();return true }`)
+  await evalPage(client, `async()=>{ const {clearAuthSession}=await import('/src/utils/authSession.js');clearAuthSession();localStorage.setItem('auth_remember','false');return true }`)
   await navigate('/login?redirect=%2Fworkflows%3Fauthqa%3D1')
   await wait('欢迎回来')
 
   await check('空登录表单显示字段校验', async () => {
     await fill('用户名或邮箱', '')
-    await fill('登录密码', '')
+    await fill('密码', '')
     await click('button', '登录')
     await wait('请输入用户名或邮箱')
     await wait('请输入密码')
@@ -79,16 +80,16 @@ try {
   await click('tab', '注册')
   await wait('创建账号')
   await check('注册邮箱和确认密码校验', async () => {
-    await fill('注册用户名', username)
-    await fill('注册邮箱', 'invalid-email')
-    await fill('注册密码', password)
-    await fill('确认注册密码', 'different')
+    await fill('用户名', username)
+    await fill('邮箱', 'invalid-email')
+    await fill('密码', password)
+    await fill('确认密码', 'different')
     await click('button', '创建账号')
     await wait('请输入有效的邮箱地址')
     await wait('两次输入的密码不一致')
   })
-  await fill('注册邮箱', `${username}@example.invalid`)
-  await fill('确认注册密码', password)
+  await fill('邮箱', `${username}@example.invalid`)
+  await fill('确认密码', password)
   await check('未同意条款时给出明确提示', async () => {
     await click('button', '创建账号')
     await wait('请先阅读并同意服务条款与隐私政策')
@@ -103,26 +104,36 @@ try {
   await check('真实注册成功后带回用户名并清空密码', async () => {
     await click('button', '创建账号')
     await wait('欢迎回来')
-    const values = await evalPage(client, `()=>({username:document.querySelector('[aria-label="用户名或邮箱"]').value,emptyPassword:document.querySelector('[aria-label="登录密码"]').value===''})`)
+    const values = await evalPage(client, `()=>({username:document.querySelector('[aria-label="用户名或邮箱"]').value,emptyPassword:document.querySelector('[aria-label="密码"]').value===''})`)
     assert.equal(values.username, username)
     assert.equal(values.emptyPassword, true)
   })
   await check('错误密码显示接口具体错误', async () => {
     await fill('用户名或邮箱', username)
-    await fill('登录密码', 'wrong-password')
+    await fill('密码', 'wrong-password')
     await click('button', '登录')
     await wait('用户名或密码错误')
   })
   await check('登录返回受保护目标并遵守未记住登录选择', async () => {
-    await fill('登录密码', password)
+    await fill('密码', password)
     await click('button', '登录')
     await waitPath('/workflows')
     await wait('工作流')
-    const state = await evalPage(client, `()=>({path:location.pathname,query:location.search,local:!!localStorage.getItem('access_token'),session:!!sessionStorage.getItem('access_token'),sid:!!JSON.parse(atob(sessionStorage.getItem('access_token').split('.')[1])).sid})`)
+    const state = await evalPage(client, `()=>{
+      const sessionToken = sessionStorage.getItem('access_token')
+      const localToken = localStorage.getItem('access_token')
+      const cookieToken = (document.cookie.match(/(?:^|;\\s*)access_token=([^;]+)/) || [])[1]
+      const token = sessionToken || localToken || cookieToken || ''
+      let sid = false
+      if (token) {
+        try { sid = !!JSON.parse(atob(token.split('.')[1])).sid } catch { sid = false }
+      }
+      return { path: location.pathname, query: location.search, local: !!localToken, session: !!sessionToken, cookie: !!cookieToken, sid }
+    }`)
     assert.equal(state.path, '/workflows')
     assert(state.query.includes('authqa=1'))
     assert.equal(state.local, false)
-    assert.equal(state.session, true)
+    assert.equal(state.session || state.cookie, true)
     assert.equal(state.sid, true)
   })
   await check('刷新页面保留有效登录态', async () => {
@@ -135,7 +146,7 @@ try {
     if (await evalPage(client, `()=>location.pathname==='/login'`)) {
       await wait('欢迎回来')
       await fill('用户名或邮箱', username)
-      await fill('登录密码', password)
+      await fill('密码', password)
       await click('button', '登录')
       await waitPath('/workflows')
     }
@@ -183,7 +194,7 @@ try {
     await click('button', '更新密码')
     await wait('欢迎回来')
     await fill('用户名或邮箱', `${username}@example.invalid`.toUpperCase())
-    await fill('登录密码', nextPassword)
+    await fill('密码', nextPassword)
     await evalPage(client, `()=>{document.querySelector('.form-options .el-checkbox').click();return true}`)
     await click('button', '登录')
     await waitPath('/home')

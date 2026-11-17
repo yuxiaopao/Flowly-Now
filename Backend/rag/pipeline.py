@@ -33,8 +33,9 @@ class RAGUnavailable(RuntimeError):
 
 
 class EmbeddingService:
-    def __init__(self, model=None):
+    def __init__(self, model=None, timeout=None):
         self.model = model or resolve_default_embedding_model()
+        self.timeout = timeout
 
     def embed_text(self, text):
         return self.embed_texts([text])[0]
@@ -47,7 +48,7 @@ class EmbeddingService:
         ollama = explicit_ollama or (not self.model.startswith('openai:') and any(
             prefix in model.lower() for prefix in OLLAMA_MODEL_PREFIXES
         ))
-        timeout = getattr(settings, 'RAG_REQUEST_TIMEOUT', DEFAULT_REQUEST_TIMEOUT)
+        timeout = min(self.timeout, getattr(settings, 'RAG_REQUEST_TIMEOUT', DEFAULT_REQUEST_TIMEOUT)) if self.timeout else getattr(settings, 'RAG_REQUEST_TIMEOUT', DEFAULT_REQUEST_TIMEOUT)
         batch_size = getattr(settings, 'RAG_EMBEDDING_BATCH_SIZE', DEFAULT_EMBEDDING_BATCH_SIZE)
         vectors = []
         try:
@@ -238,7 +239,7 @@ class RAGService:
             'chunk_index': c.chunk_index, 'collection_id': str(self.collection.id),
         }} for c in ranked]
 
-    def generate_response(self, query, context=None, system_prompt=None):
+    def generate_response(self, query, context=None, system_prompt=None, timeout=None):
         if not context:
             return {'response': NO_EVIDENCE_MESSAGE, 'sources': [], 'grounded': False, 'answer_status': 'no_evidence'}
         budget = getattr(settings, 'RAG_CONTEXT_CHARS', DEFAULT_CONTEXT_CHARS)
@@ -260,7 +261,8 @@ class RAGService:
             response = invoke_chat_messages(messages, model=getattr(settings, 'RAG_CHAT_MODEL', '') or None,
                 api_key=getattr(settings, 'RAG_CHAT_API_KEY', '') or None,
                 base_url=getattr(settings, 'RAG_CHAT_BASE_URL', '') or None,
-                timeout=getattr(settings, 'RAG_REQUEST_TIMEOUT', DEFAULT_REQUEST_TIMEOUT))
+                timeout=min(timeout, getattr(settings, 'RAG_REQUEST_TIMEOUT', DEFAULT_REQUEST_TIMEOUT)) if timeout else getattr(settings, 'RAG_REQUEST_TIMEOUT', DEFAULT_REQUEST_TIMEOUT),
+                **({'max_retries': 0} if timeout is not None else {}))
             if not isinstance(response, str) or not response.strip():
                 raise RAGUnavailable('模型返回空回答。')
         except Exception as exc:
@@ -277,13 +279,16 @@ class DocumentProcessor:
         from .models import Document
         metadata = metadata or {}
         content = validate_content(content)
-        if metadata.get('doc_id'):
-            document = Document.objects.get(id=metadata['doc_id'], collection=self.collection)
-        else:
-            document = Document.objects.create(
-                collection=self.collection, title=metadata.get('title') or '未命名文档', content=content,
-                source_type=metadata.get('source_type', 'text'), source_url=metadata.get('source_url', ''), metadata=metadata,
-            )
+        from .models import DocumentCollection
+        with transaction.atomic():
+            DocumentCollection.objects.select_for_update().get(id=self.collection.id)
+            if metadata.get('doc_id'):
+                document = Document.objects.get(id=metadata['doc_id'], collection=self.collection)
+            else:
+                document = Document.objects.create(
+                    collection=self.collection, title=metadata.get('title') or '未命名文档', content=content,
+                    source_type=metadata.get('source_type', 'text'), source_url=metadata.get('source_url', ''), metadata=metadata,
+                )
         return self.process_document(document)
 
     def process_document(self, document):
@@ -333,9 +338,11 @@ class DocumentProcessor:
         except Exception as exc:
             logger.warning('Document %s indexing failed (%s)', document.id, type(exc).__name__)
             message = str(exc) if isinstance(exc, (ValueError, RAGUnavailable)) else '文档处理失败，请检查模型和向量存储配置后重试。'
-            Document.objects.filter(id=document.id, status='processing', updated_at=claimed_at).update(
-                status='failed', error_message=message, updated_at=timezone.now())
-            refresh_collection_stats(self.collection.id)
+            with transaction.atomic():
+                DocumentCollection.objects.select_for_update().get(id=self.collection.id)
+                Document.objects.filter(id=document.id, status='processing', updated_at=claimed_at).update(
+                    status='failed', error_message=message, updated_at=timezone.now())
+                refresh_collection_stats(self.collection.id)
             return {'success': False, 'document_id': str(document.id), 'error': message, 'status': 'failed'}
         finally:
             if self.rag_service.vector_client:

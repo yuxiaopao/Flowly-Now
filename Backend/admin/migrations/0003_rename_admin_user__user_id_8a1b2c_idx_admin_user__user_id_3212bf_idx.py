@@ -10,9 +10,15 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RenameIndex(
-            model_name="usertermsacceptance",
-            new_name="admin_user__user_id_3212bf_idx",
-            old_name="admin_user__user_id_8a1b2c_idx",
+        migrations.SeparateDatabaseAndState(
+            state_operations=[
+                migrations.RenameIndex(
+                    model_name="usertermsacceptance",
+                    new_name="admin_user__user_id_3212bf_idx",
+                    old_name="admin_user__user_id_8a1b2c_idx",
+                ),
+            ],
+            # 存量库已直接使用新索引名，仅同步迁移状态。
+            database_operations=[],
         ),
     ]

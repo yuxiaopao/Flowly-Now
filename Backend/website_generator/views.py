@@ -6,7 +6,6 @@ import os
 import logging
 import zipfile
 import io
-from pathlib import Path
 from django.db.models import Q
 from django.http import FileResponse, HttpResponse
 from django.utils import timezone
@@ -14,6 +13,7 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.exceptions import PermissionDenied, ValidationError
 
 from .models import GeneratedSite
 from .serializers import (
@@ -23,7 +23,6 @@ from .generators.classification import ClassificationGenerator
 from .generators.regression import RegressionGenerator
 from .generators.detection import DetectionGenerator
 from .generators.nlp import NLPGGenerator
-from tenants.access import get_accessible_tenant_ids
 
 logger = logging.getLogger(__name__)
 
@@ -53,13 +52,15 @@ class GeneratedSiteViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        qs = GeneratedSite.objects.all()
-        if user and user.is_authenticated:
-            tenant_ids = get_accessible_tenant_ids(user)
-            if tenant_ids:
-                qs = qs.filter(Q(created_by=user) | Q(tenant_id__in=tenant_ids))
-            else:
-                qs = qs.filter(created_by=user)
+        qs = GeneratedSite.objects.select_related('tenant', 'source_workflow')
+        if not user or not user.is_authenticated or not user.is_active:
+            return qs.none()
+        if not user.is_superuser:
+            from tenants.models import TenantMembership
+            from .provenance import ACTIVE_TEAM_STATUSES
+            tenant_ids = TenantMembership.objects.filter(user=user, is_active=True, tenant__status__in=ACTIVE_TEAM_STATUSES).values('tenant_id')
+            qs = qs.filter(Q(created_by=user, tenant__isnull=True) | Q(tenant_id__in=tenant_ids) |
+                Q(tenant__owner=user, tenant__status__in=ACTIVE_TEAM_STATUSES))
 
         show_in_nav = self.request.query_params.get('show_in_nav')
         if show_in_nav in ('true', '1'):
@@ -78,12 +79,32 @@ class GeneratedSiteViewSet(viewsets.ModelViewSet):
             return GeneratedSiteUpdateSerializer
         return GeneratedSiteSerializer
 
-    def _get_tenant(self, request):
-        ids = get_accessible_tenant_ids(request.user)
-        if not ids:
-            return None
-        from tenants.models import Tenant
-        return Tenant.objects.filter(id=ids[0]).first()
+    def require_manage(self, site):
+        from .provenance import can_manage_site
+        if not can_manage_site(self.request.user, site):
+            raise PermissionDenied('仅项目所有者或团队管理员可以修改此项目。')
+
+    def perform_update(self, serializer):
+        self.require_manage(serializer.instance)
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        self.require_manage(instance)
+        instance.delete()
+
+    @action(detail=True, methods=['post'], url_path='rebuild-workflow')
+    def rebuild_workflow(self, request, pk=None):
+        from .provenance import rebuild_site_workflow, COPY_NOTICE
+        site = self.get_object()
+        self.require_manage(site)
+        if request.data:
+            raise ValidationError('此接口仅从已授权的站点记录读取配置，不接受客户端配置覆盖。')
+        token = request.headers.get('Idempotency-Key', '').strip()
+        if not token or len(token) > 128:
+            raise ValidationError('请提供非空且不超过128字符的 Idempotency-Key，以便安全重试。')
+        workflow, created = rebuild_site_workflow(site, request.user, token)
+        return Response({'workflow_id': str(workflow.pk), 'source_site_id': str(site.pk), 'created': created,
+                         'notice': COPY_NOTICE}, status=201 if created else 200)
 
     @action(detail=False, methods=['post'])
     def generate(self, request):
@@ -97,15 +118,14 @@ class GeneratedSiteViewSet(viewsets.ModelViewSet):
         site = serializer.save(
             status='profiling',
             created_by=request.user,
-            tenant=self._get_tenant(request)
         )
 
         def run_generation():
             try:
                 from website_generator.generators import get_generator
                 if not site.output_dir:
-                    default_dir = Path('Backend') / 'data' / 'generated_sites' / str(site.id)
-                    site.output_dir = str(default_dir.resolve())
+                    from .provenance import fresh_output_directory
+                    site.output_dir = fresh_output_directory(site)
                     site.save(update_fields=['output_dir'])
 
                 site.status = 'environment_ready'
@@ -182,7 +202,7 @@ class GeneratedSiteViewSet(viewsets.ModelViewSet):
         t = threading.Thread(target=run_generation)
         t.start()
 
-        return Response(GeneratedSiteSerializer(site).data, status=status.HTTP_201_CREATED)
+        return Response(GeneratedSiteSerializer(site, context={'request': request}).data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=['get'])
     def download(self, request, pk=None):
@@ -217,6 +237,7 @@ class GeneratedSiteViewSet(viewsets.ModelViewSet):
     def deploy(self, request, pk=None):
         """Deploy the generated website locally."""
         site = self.get_object()
+        self.require_manage(site)
 
         if site.status != 'completed':
             return Response({'error': 'Site not yet generated'}, status=status.HTTP_400_BAD_REQUEST)
@@ -248,6 +269,7 @@ class GeneratedSiteViewSet(viewsets.ModelViewSet):
     def agent_message(self, request, pk=None):
         """Project Agent: apply user edit request + mandatory QA."""
         site = self.get_object()
+        self.require_manage(site)
         content = (request.data.get('content') or request.data.get('message') or '').strip()
         if not content:
             return Response({'error': 'content 不能为空'}, status=status.HTTP_400_BAD_REQUEST)

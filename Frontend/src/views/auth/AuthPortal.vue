@@ -116,43 +116,35 @@
               show-icon
               role="alert"
             />
-            <el-form-item
+            <AuthFormField
+              v-model="loginForm.username"
               prop="username"
               label="用户名或邮箱"
-              label-position="top"
+              placeholder="用户名或邮箱"
+              autocomplete="username"
+              trim
+              required
             >
-              <el-input
-                v-model.trim="loginForm.username"
-                placeholder="用户名或邮箱"
-                aria-label="用户名或邮箱"
-                autocomplete="username"
-                size="large"
-              >
-                <template #prefix>
-                  <User class="input-icon" />
-                </template>
-              </el-input>
-            </el-form-item>
+              <template #prefix>
+                <User class="input-icon" />
+              </template>
+            </AuthFormField>
 
-            <el-form-item
+            <AuthFormField
+              v-model="loginForm.password"
               prop="password"
               label="密码"
-              label-position="top"
+              placeholder="密码"
+              autocomplete="current-password"
+              password
+              strength
+              :min-password-length="minPasswordLength"
+              required
             >
-              <el-input
-                v-model="loginForm.password"
-                type="password"
-                placeholder="密码"
-                aria-label="登录密码"
-                autocomplete="current-password"
-                size="large"
-                show-password
-              >
-                <template #prefix>
-                  <Lock class="input-icon" />
-                </template>
-              </el-input>
-            </el-form-item>
+              <template #prefix>
+                <Lock class="input-icon" />
+              </template>
+            </AuthFormField>
 
             <div class="form-options">
               <el-checkbox v-model="loginForm.remember">
@@ -213,86 +205,68 @@
               show-icon
               role="alert"
             />
-            <el-form-item
+            <AuthFormField
+              v-model="registerForm.username"
               prop="username"
               label="用户名"
-              label-position="top"
-              :error="fieldErrors.username"
+              placeholder="用户名"
+              autocomplete="username"
+              trim
+              :help="`用户名支持文字、数字及 @ . + - _，最多 ${AUTH.usernameMaxLength} 个字符`"
+              :external-error="fieldErrors.username"
             >
-              <el-input
-                v-model.trim="registerForm.username"
-                aria-label="注册用户名"
-                autocomplete="username"
-                placeholder="用户名"
-                size="large"
-              >
-                <template #prefix>
-                  <User class="input-icon" />
-                </template>
-              </el-input>
-            </el-form-item>
+              <template #prefix>
+                <User class="input-icon" />
+              </template>
+            </AuthFormField>
 
-            <el-form-item
+            <AuthFormField
+              v-model="registerForm.email"
               prop="email"
               label="邮箱"
-              label-position="top"
-              :error="fieldErrors.email"
+              placeholder="邮箱地址"
+              type="email"
+              autocomplete="email"
+              trim
+              help="请输入有效的邮箱地址，例如 name@example.com"
+              :external-error="fieldErrors.email"
             >
-              <el-input
-                v-model.trim="registerForm.email"
-                aria-label="注册邮箱"
-                autocomplete="email"
-                type="email"
-                placeholder="邮箱地址"
-                size="large"
-              >
-                <template #prefix>
-                  <Mail class="input-icon" />
-                </template>
-              </el-input>
-            </el-form-item>
+              <template #prefix>
+                <Mail class="input-icon" />
+              </template>
+            </AuthFormField>
 
-            <el-form-item
+            <AuthFormField
+              v-model="registerForm.password"
               prop="password"
               label="密码"
-              label-position="top"
-              :error="fieldErrors.password"
+              placeholder="密码"
+              autocomplete="new-password"
+              password
+              strength
+              :min-password-length="minPasswordLength"
+              :help="`至少 ${minPasswordLength} 个字符，建议包含大小写字母、数字和符号`"
+              :external-error="fieldErrors.password"
             >
-              <el-input
-                v-model="registerForm.password"
-                aria-label="注册密码"
-                autocomplete="new-password"
-                type="password"
-                :placeholder="`密码 (至少 ${minPasswordLength} 位)`"
-                size="large"
-                show-password
-              >
-                <template #prefix>
-                  <Lock class="input-icon" />
-                </template>
-              </el-input>
-            </el-form-item>
+              <template #prefix>
+                <Lock class="input-icon" />
+              </template>
+            </AuthFormField>
 
-            <el-form-item
+            <AuthFormField
+              v-model="registerForm.password_confirm"
               prop="password_confirm"
               label="确认密码"
-              label-position="top"
-              :error="fieldErrors.passwordConfirm"
+              placeholder="确认密码"
+              autocomplete="new-password"
+              password
+              help="请再次输入相同的密码"
+              :external-error="fieldErrors.passwordConfirm"
             >
-              <el-input
-                v-model="registerForm.password_confirm"
-                aria-label="确认注册密码"
-                autocomplete="new-password"
-                type="password"
-                placeholder="确认密码"
-                size="large"
-                show-password
-              >
-                <template #prefix>
-                  <Key class="input-icon" />
-                </template>
-              </el-input>
-            </el-form-item>
+              <template #prefix>
+                <Key class="input-icon" />
+              </template>
+            </AuthFormField>
 
             <div
               v-if="requireTerms"
@@ -391,6 +365,7 @@ import AuthSplineRobot from '@/components/auth/AuthSplineRobot.vue'
 import AuthRobotSpeechBubble from '@/components/auth/AuthRobotSpeechBubble.vue'
 import AuthRobotChatBox from '@/components/auth/AuthRobotChatBox.vue'
 import AuthLegalDialog from '@/components/auth/AuthLegalDialog.vue'
+import AuthFormField from '@/components/auth/AuthFormField.vue'
 import { AUTH } from '@/config/auth'
 import { rememberSession, safeAuthRedirect } from '@/utils/authSession'
 import { getSettingsError, getSettingsFieldErrors } from '@/utils/personalCenter'
@@ -472,7 +447,7 @@ const registerRules = computed(() => ({
   ],
   email: [
     { required: true, message: '请输入邮箱', trigger: 'blur' },
-    { type: 'email', message: '请输入有效的邮箱地址', trigger: 'blur' },
+    { type: 'email', message: '请输入有效的邮箱地址，例如 name@example.com', trigger: 'blur' },
   ],
   password: [
     { required: true, message: '请输入密码', trigger: 'blur' },
@@ -833,7 +808,7 @@ watch(activeTab, async () => {
 
 .auth-tab {
   flex: 1;
-  height: 40px;
+  height: 44px;
   border: none;
   border-radius: $radius-lg;
   background: transparent;
@@ -875,35 +850,6 @@ watch(activeTab, async () => {
   :deep(.el-alert) { margin-bottom: $spacing-4; }
   :deep(.el-form-item) {
     margin-bottom: $spacing-4;
-  }
-
-  :deep(.el-input) {
-    --el-input-height: 46px;
-
-    .el-input__wrapper {
-      padding: 0 $spacing-4;
-      background-color: var(--bg-tertiary);
-      border: 1px solid var(--border-primary);
-      border-radius: $radius-lg;
-      transition: background-color $transition-fast, color $transition-fast, border-color $transition-fast;
-
-      &:hover {
-        border-color: var(--text-secondary);
-      }
-
-      &.is-focus {
-        border-color: var(--accent-primary);
-      }
-    }
-
-    .el-input__inner {
-      height: 44px;
-      color: var(--text-primary);
-
-      &::placeholder {
-        color: var(--text-secondary);
-      }
-    }
   }
 }
 
@@ -950,8 +896,10 @@ watch(activeTab, async () => {
   }
 
   .terms-link {
+    display: inline-block;
+    padding: 12px 2px;
+    margin: -12px -2px;
     border: 0;
-    padding: 0;
     background: none;
     font: inherit;
     cursor: pointer;

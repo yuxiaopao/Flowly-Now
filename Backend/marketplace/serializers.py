@@ -42,6 +42,10 @@ class WorkflowTemplateSerializer(serializers.ModelSerializer):
             'created_by', 'author_name', 'author_avatar', 'is_installed',
             'created_at', 'updated_at'
         ]
+        read_only_fields = [
+            'created_by', 'install_count', 'view_count', 'avg_rating', 'report_count',
+            'is_featured', 'is_verified', 'created_at', 'updated_at',
+        ]
 
     def get_author_avatar(self, obj):
         if hasattr(obj.created_by, 'profile') and obj.created_by.profile.avatar:

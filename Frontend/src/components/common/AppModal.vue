@@ -208,7 +208,6 @@ $accent-colors: (
     border: 1px solid var(--border-primary);
     border-radius: $radius-xl;
     box-shadow: var(--shadow-xl);
-    transition: box-shadow $transition-normal, transform $transition-normal;
   }
 
   :deep(.el-dialog__header) {
@@ -268,6 +267,13 @@ $accent-colors: (
       max-width: 1400px;
       height: 90vh;
     }
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .app-modal :deep(.el-dialog) {
+    transition: box-shadow var(--flowly-duration-in-out) var(--flowly-ease-in-out),
+                transform var(--flowly-duration-out) var(--flowly-ease-out);
   }
 }
 
@@ -344,7 +350,7 @@ $accent-colors: (
   right: 0;
   height: 3px;
   border-radius: 0 0 $radius-xl $radius-xl;
-  animation: modal-progress linear forwards;
+  animation: modal-progress var(--flowly-ease-linear) forwards;
   animation-play-state: running;
   transform-origin: left center;
 

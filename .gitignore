@@ -101,12 +101,15 @@ Docs/cumcm-full/templates/
 
 # Local desktop builds & large artifacts
 Desktop/renderer/
+Desktop/training-scripts/flowly_runtime/
 Frontend/dist/
 Frontend/dist-electron/
 test-reports/
 tests/artifacts/
 .uploads/
 .cache/
+.flowly-deploy/
+.deploy-package/
 .playwright-mcp/
 _external/
 output/

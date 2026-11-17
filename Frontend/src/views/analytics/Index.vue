@@ -23,6 +23,23 @@
       />
     </PageToolbar>
 
+    <div
+      v-if="analyticsStore.error"
+      class="analytics-feedback"
+      role="alert"
+    >
+      <span>部分统计加载失败：{{ analyticsStore.error }}</span>
+      <el-button
+        :loading="isLoading"
+        @click="fetchData"
+      >
+        重新加载
+      </el-button>
+    </div>
+    <p class="analytics-scope">
+      统计范围与明细使用相同筛选条件。费用为网关日志中的记录值，原日志未记录币种，不等同于完整账单。
+    </p>
+
     <StatGrid
       :columns="6"
       class="overview-stat-grid"
@@ -31,6 +48,7 @@
         label="工作流总数"
         :value="formatNumber(stats.total_workflows)"
         :icon="GitBranch"
+        :loading="analyticsStore.moduleLoading.overview"
         tone="primary"
       >
         <template
@@ -57,6 +75,7 @@
         label="执行次数"
         :value="formatNumber(stats.total_executions)"
         :icon="Play"
+        :loading="analyticsStore.moduleLoading.overview"
         tone="success"
       >
         <template
@@ -83,24 +102,28 @@
         label="Token 使用量"
         :value="formatNumber(stats.total_tokens)"
         :icon="Cpu"
+        :loading="analyticsStore.moduleLoading.overview"
         tone="info"
       />
       <StatCard
-        label="总费用"
-        :value="`¥${stats.total_cost?.toFixed(4) || '0.00'}`"
+        label="网关记录费用"
+        :value="stats.total_cost == null ? '—' : Number(stats.total_cost).toFixed(4)"
         :icon="DollarSign"
+        :loading="analyticsStore.moduleLoading.overview"
         tone="warning"
       />
       <StatCard
         label="平均延迟"
-        :value="`${stats.avg_latency?.toFixed(0) || 0}ms`"
+        :value="stats.avg_latency == null ? '—' : `${Number(stats.avg_latency).toFixed(0)}ms`"
         :icon="Clock"
+        :loading="analyticsStore.moduleLoading.overview"
         tone="neutral"
       />
       <StatCard
         label="成功率"
-        :value="`${stats.success_rate?.toFixed(1) || 0}%`"
+        :value="stats.success_rate == null ? '—' : `${Number(stats.success_rate).toFixed(1)}%`"
         :icon="CheckCircle"
+        :loading="analyticsStore.moduleLoading.overview"
         tone="success"
       />
     </StatGrid>
@@ -312,7 +335,7 @@
           width="100"
         >
           <template #default="{ row }">
-            ¥{{ row.cost?.toFixed(4) }}
+            {{ row.cost == null ? '—' : Number(row.cost).toFixed(4) }}
           </template>
         </el-table-column>
       </el-table>
@@ -355,14 +378,14 @@ const chartPeriod = ref('7d')
 const stats = computed(() => {
   const overview = analyticsStore.overview || {}
   return {
-    total_workflows: overview.totalWorkflows || 0,
-    workflows_trend: overview.workflowsTrend || 0,
-    total_executions: overview.totalExecutions || 0,
-    executions_trend: overview.executionsTrend || 0,
-    total_tokens: overview.totalTokens || 0,
-    total_cost: overview.totalCost || 0,
-    avg_latency: overview.avgLatency || 0,
-    success_rate: overview.successRate || 0
+    total_workflows: overview.totalWorkflows ?? null,
+    workflows_trend: overview.workflowsTrend ?? null,
+    total_executions: overview.totalExecutions ?? null,
+    executions_trend: overview.executionsTrend ?? null,
+    total_tokens: overview.totalTokens ?? null,
+    total_cost: overview.totalCost ?? null,
+    avg_latency: overview.avgLatency ?? null,
+    success_rate: overview.successRate ?? null
   }
 })
 
@@ -376,10 +399,10 @@ const modelUsageChart = ref(null)
 const providerChart = ref(null)
 const costChart = ref(null)
 
-let charts = {}
+const charts = {}
 
 function formatNumber(num) {
-  if (!num) return '0'
+  if (num == null) return '—'
   if (num >= 1000000) return `${(num / 1000000).toFixed(2)}M`
   if (num >= 1000) return `${(num / 1000).toFixed(2)}K`
   return num.toString()
@@ -430,44 +453,33 @@ function getProviderLabel(provider) {
   return labels[provider] || provider
 }
 
-async function fetchData() {
-  isLoading.value = true
-  const params = {}
+let dataRevision = 0
+let disposed = false
+function queryParams() {
+  const params = { period: chartPeriod.value }
   if (dateRange.value?.length === 2) {
-    params.start_date = dateRange.value[0].toISOString()
-    params.end_date = dateRange.value[1].toISOString()
+    params.start_date = new Date(dateRange.value[0]).toISOString()
+    const end = new Date(dateRange.value[1])
+    end.setHours(23, 59, 59, 999)
+    params.end_date = end.toISOString()
   }
-
+  return params
+}
+async function fetchData() {
+  const revision = ++dataRevision
+  isLoading.value = true
   try {
-    await analyticsStore.fetchAll(params)
-    apiUsageDetails.value = await fetchApiUsageDetails()
-  } catch {
-    // Error shown via appStore
+    await analyticsStore.fetchAll(queryParams())
+    if (disposed || revision !== dataRevision) return
+    const usage = analyticsStore.apiUsage
+    apiUsageDetails.value = Array.isArray(usage) ? usage : (usage?.details || [])
+    await nextTick()
+    if (!disposed && revision === dataRevision) refreshAllCharts()
   } finally {
-    isLoading.value = false
+    if (!disposed && revision === dataRevision) isLoading.value = false
   }
 }
-
-async function fetchApiUsageDetails() {
-  try {
-    const res = await analyticsStore.fetchApiUsage()
-    return res?.details || res || []
-  } catch {
-    return []
-  }
-}
-
-async function fetchExecutionTrend() {
-  try {
-    await analyticsStore.fetchExecutionTrend({
-      period: chartPeriod.value
-    })
-    updateExecutionTrendChart()
-  } catch {
-    // Error shown via appStore
-  }
-}
-
+async function fetchExecutionTrend() { await fetchData() }
 
 function updateExecutionTrendChart() {
   if (charts.executionTrend) {
@@ -618,14 +630,14 @@ function updateCostChart() {
   if (!ctx) return
 
   const trendData = executionTrendData.value
-  if (trendData.length === 0) return
+  if (!trendData.some(item => item.cost != null)) return
 
   charts.cost = new Chart(ctx, {
     type: 'bar',
     data: {
       labels: trendData.map(d => d.date.slice(5)),
       datasets: [{
-        label: '费用 (¥)',
+        label: '网关记录费用',
         data: trendData.map(d => d.cost),
         backgroundColor: getCssColor('--color-primary-50', 'rgba(6, 182, 212, 0.5)'),
         borderColor: getChartPrimaryColor(),
@@ -638,7 +650,7 @@ function updateCostChart() {
       scales: {
         y: {
           beginAtZero: true,
-          title: { display: true, text: '费用 (¥)' }
+          title: { display: true, text: '网关记录费用' }
         }
       }
     }
@@ -654,15 +666,14 @@ function refreshAllCharts() {
 
 onMounted(async () => {
   await fetchData()
-  await fetchExecutionTrend()
-  await nextTick()
 
-  refreshAllCharts()
 })
 
 useThemeChartRefresh(refreshAllCharts)
 
 onUnmounted(() => {
+  disposed = true
+  dataRevision++
   Object.values(charts).forEach(chart => {
     if (chart) chart.destroy()
   })
@@ -671,6 +682,9 @@ onUnmounted(() => {
 
 <style lang="scss" scoped>
 @use '@/assets/styles/variables.scss' as *;
+.analytics-feedback { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: $spacing-3; margin-bottom: $spacing-4; padding: $spacing-3 $spacing-4; background: var(--error-bg); border: 1px solid var(--border-primary); border-radius: var(--radius-lg); font-size: $font-size-sm; }
+.analytics-scope { margin-bottom: $spacing-4; color: var(--text-tertiary); font-size: $font-size-xs; line-height: $line-height-normal; }
+
 
 .overview-stat-grid {
   margin-bottom: $spacing-6;

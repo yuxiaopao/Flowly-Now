@@ -46,58 +46,37 @@
         novalidate
         @submit.prevent="handleSubmit"
       >
-        <el-form-item
+        <AuthFormField
+          v-model="formData.password"
           prop="password"
           label="新密码"
-          label-position="top"
+          placeholder="输入新密码"
+          autocomplete="new-password"
+          password
+          strength
+          :min-password-length="minimumLength"
+          :help="`至少 ${minimumLength} 个字符，建议包含大小写字母、数字和符号`"
+          required
         >
-          <el-input
-            v-model="formData.password"
-            type="password"
-            aria-label="新密码"
-            autocomplete="new-password"
-            placeholder="输入新密码"
-            size="large"
-            show-password
-            :prefix-icon="Lock"
-          />
-        </el-form-item>
+          <template #prefix>
+            <Lock class="input-icon" />
+          </template>
+        </AuthFormField>
 
-        <el-form-item
+        <AuthFormField
+          v-model="formData.confirmPassword"
           prop="confirmPassword"
           label="确认新密码"
-          label-position="top"
+          placeholder="再次确认新密码"
+          autocomplete="new-password"
+          password
+          help="请再次输入相同的新密码"
+          required
         >
-          <el-input
-            v-model="formData.confirmPassword"
-            type="password"
-            aria-label="确认新密码"
-            autocomplete="new-password"
-            placeholder="再次确认新密码"
-            size="large"
-            show-password
-            :prefix-icon="Lock"
-          />
-        </el-form-item>
-
-        <div
-          v-if="formData.password"
-          class="password-strength"
-        >
-          <div class="strength-bar">
-            <div
-              class="strength-fill"
-              :style="{ width: passwordStrength.score * 25 + '%' }"
-              :class="passwordStrength.level"
-            />
-          </div>
-          <span
-            class="strength-text"
-            :class="passwordStrength.level"
-          >
-            {{ passwordStrength.text }}
-          </span>
-        </div>
+          <template #prefix>
+            <Lock class="input-icon" />
+          </template>
+        </AuthFormField>
 
         <el-form-item>
           <el-button
@@ -132,6 +111,7 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Lock } from 'lucide-vue-next'
 import ThemeLogo from '@/components/common/ThemeLogo.vue'
+import AuthFormField from '@/components/auth/AuthFormField.vue'
 import { resetPassword } from '@/api/auth'
 import { useAppStore } from '@/stores/app'
 import { useSiteConfigStore } from '@/stores/siteConfig'
@@ -165,42 +145,13 @@ const validateConfirmPassword = (rule, value, callback) => {
   }
 }
 
-const passwordStrength = computed(() => {
-  const password = formData.password
-  if (!password) return { score: 0, level: '', text: '' }
-
-  let score = 0
-  let level = ''
-  let text = ''
-
-  if (password.length >= 8) score++
-  if (password.length >= 12) score++
-  if (/[a-z]/.test(password)) score++
-  if (/[A-Z]/.test(password)) score++
-  if (/[0-9]/.test(password)) score++
-  if (/[^a-zA-Z0-9]/.test(password)) score++
-
-  if (score <= 2) {
-    level = 'weak'
-    text = '较弱'
-  } else if (score <= 4) {
-    level = 'medium'
-    text = '中等'
-  } else {
-    level = 'strong'
-    text = '较强'
-  }
-
-  return { score: Math.min(score, 4), level, text }
-})
-
 const formRules = computed(() => ({
   password: [
-    { required: true, message: '请输入新密码' },
-    { min: minimumLength.value, message: `密码至少需要 ${minimumLength.value} 个字符` }
+    { required: true, message: '请输入新密码', trigger: 'blur' },
+    { min: minimumLength.value, message: `新密码至少需要 ${minimumLength.value} 个字符`, trigger: 'blur' }
   ],
   confirmPassword: [
-    { required: true, message: '请再次确认密码' },
+    { required: true, message: '请再次输入新密码', trigger: 'blur' },
     { validator: validateConfirmPassword, trigger: 'blur' }
   ]
 }))
@@ -333,55 +284,10 @@ async function handleSubmit() {
   border-radius: 12px;
 }
 
-.password-strength {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 20px;
-  padding: 0 4px;
-}
-
-.strength-bar {
-  flex: 1;
-  height: 4px;
-  background: var(--toast-progress-track);
-  border-radius: 999px;
-  overflow: hidden;
-}
-
-.strength-fill {
-  height: 100%;
-  transition: width 0.3s, background-color 0.3s;
-}
-
-.strength-fill.weak {
-  background: var(--error);
-}
-
-.strength-fill.medium {
-  background: var(--warning);
-}
-
-.strength-fill.strong {
-  background: var(--success);
-}
-
-.strength-text {
-  font-size: 12px;
-  font-weight: 600;
-  min-width: 48px;
-}
-
-.strength-text.weak {
-  color: var(--error);
-}
-
-.strength-text.medium {
-  color: var(--warning);
-}
-
-.strength-text.strong {
-  color: var(--success);
+.input-icon {
+  width: 18px;
+  height: 18px;
+  color: var(--text-secondary);
 }
 
 .submit-btn {
@@ -400,6 +306,9 @@ async function handleSubmit() {
 }
 
 .card-footer .link {
+  display: inline-block;
+  padding: 12px 2px;
+  margin: -12px -2px;
   color: var(--text-primary);
   font-weight: 600;
   text-decoration: none;
@@ -407,5 +316,29 @@ async function handleSubmit() {
 
 .card-footer .link:hover {
   text-decoration: underline;
+}
+
+.link {
+  display: inline-block;
+  padding: 12px 0;
+  color: var(--text-secondary);
+  text-decoration: none;
+}
+
+.link:hover {
+  color: var(--text-primary);
+}
+
+@media (max-width: 480px) {
+  .reset-password-card {
+    padding: 24px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .submit-btn,
+  .link {
+    transition: none !important;
+  }
 }
 </style>

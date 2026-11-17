@@ -23,6 +23,8 @@ jest.mock('@/api/index', () => ({
 }))
 
 const nlWorkflowApi = require('@/api/nl-workflow').default
+const { APP_CONFIG, getApiBaseUrl } = require('@/config')
+const mutationOptions = { timeout: APP_CONFIG.nlWorkflowRequestTimeout, preserveWorkflowKeys: true, signal: undefined }
 
 beforeEach(() => jest.clearAllMocks())
 
@@ -41,7 +43,7 @@ describe('nlWorkflowApi - API Endpoint Tests', () => {
 
       const response = await nlWorkflowApi.getModels()
 
-      expect(mockRequest.get).toHaveBeenCalledWith('/nl-workflow/models/')
+      expect(mockRequest.get).toHaveBeenCalledWith('/nl-workflow/models/', {})
       expect(response.models).toHaveLength(2)
       expect(response.default).toBe('llama3')
     })
@@ -59,13 +61,13 @@ describe('nlWorkflowApi - API Endpoint Tests', () => {
     it('POST /nl-workflow/sessions/ creates new session', async () => {
       const data = { description: '创建报告工作流', name: '每日报告' }
       await nlWorkflowApi.createSession(data)
-      expect(mockRequest.post).toHaveBeenCalledWith('/nl-workflow/sessions/', data)
+      expect(mockRequest.post).toHaveBeenCalledWith('/nl-workflow/sessions/', data, mutationOptions)
     })
 
     it('POST with model and temperature options', async () => {
       const data = { description: 'Test', model: 'llama3', temperature: 0.5 }
       await nlWorkflowApi.createSession(data)
-      expect(mockRequest.post).toHaveBeenCalledWith('/nl-workflow/sessions/', data)
+      expect(mockRequest.post).toHaveBeenCalledWith('/nl-workflow/sessions/', data, mutationOptions)
     })
 
     it('handles session_id response field', async () => {
@@ -94,7 +96,7 @@ describe('nlWorkflowApi - API Endpoint Tests', () => {
   describe('getSessions', () => {
     it('GET /nl-workflow/sessions/ returns list', async () => {
       await nlWorkflowApi.getSessions()
-      expect(mockRequest.get).toHaveBeenCalledWith('/nl-workflow/sessions/')
+      expect(mockRequest.get).toHaveBeenCalledWith('/nl-workflow/sessions/', {})
     })
 
     it('returns array of sessions', async () => {
@@ -113,7 +115,7 @@ describe('nlWorkflowApi - API Endpoint Tests', () => {
   describe('getSession', () => {
     it('GET /nl-workflow/sessions/:id/ returns session details', async () => {
       await nlWorkflowApi.getSession(1)
-      expect(mockRequest.get).toHaveBeenCalledWith('/nl-workflow/sessions/1/')
+      expect(mockRequest.get).toHaveBeenCalledWith('/nl-workflow/sessions/1/', {}, { preserveWorkflowKeys: true })
     })
 
     it('returns full session data including workflow_json', async () => {
@@ -153,7 +155,7 @@ describe('nlWorkflowApi - API Endpoint Tests', () => {
       await nlWorkflowApi.sendMessage(1, '添加邮件步骤')
       expect(mockRequest.post).toHaveBeenCalledWith('/nl-workflow/sessions/1/message/', {
         message: '添加邮件步骤'
-      })
+      }, mutationOptions)
     })
 
     it('includes model option', async () => {
@@ -161,7 +163,7 @@ describe('nlWorkflowApi - API Endpoint Tests', () => {
       expect(mockRequest.post).toHaveBeenCalledWith('/nl-workflow/sessions/1/message/', {
         message: 'Test',
         model: 'llama3'
-      })
+      }, mutationOptions)
     })
 
     it('handles workflow_json response', async () => {
@@ -182,7 +184,7 @@ describe('nlWorkflowApi - API Endpoint Tests', () => {
   describe('confirmWorkflow', () => {
     it('POST /nl-workflow/sessions/:id/confirm/ confirms workflow', async () => {
       await nlWorkflowApi.confirmWorkflow(1)
-      expect(mockRequest.post).toHaveBeenCalledWith('/nl-workflow/sessions/1/confirm/')
+      expect(mockRequest.post).toHaveBeenCalledWith('/nl-workflow/sessions/1/confirm/', {})
     })
 
     it('returns workflow_id on success', async () => {
@@ -199,13 +201,22 @@ describe('nlWorkflowApi - API Endpoint Tests', () => {
     })
   })
 
-  describe('streamGenerate', () => {
-    it('POST /nl-workflow/sessions/ with responseType=stream', async () => {
+  describe('streamWorkflow', () => {
+    it('POST /nl-workflow/stream/ preserves credentials, payload and abort signal', async () => {
       const data = { description: '流式测试', name: '流式' }
-      await nlWorkflowApi.streamGenerate(data)
-      expect(mockRequest.post).toHaveBeenCalledWith('/nl-workflow/sessions/', data, {
-        responseType: 'stream'
-      })
+      const controller = new AbortController()
+      const streamResponse = { ok: true, body: {} }
+      const originalFetch = global.fetch
+      global.fetch = jest.fn().mockResolvedValue(streamResponse)
+      try {
+        const response = await nlWorkflowApi.streamWorkflow(data, { signal: controller.signal })
+        expect(global.fetch).toHaveBeenCalledWith(`${getApiBaseUrl()}/nl-workflow/stream/`, expect.objectContaining({
+          method: 'POST', credentials: 'include', signal: controller.signal, body: JSON.stringify(data)
+        }))
+        expect(response).toBe(streamResponse)
+      } finally {
+        global.fetch = originalFetch
+      }
     })
   })
 

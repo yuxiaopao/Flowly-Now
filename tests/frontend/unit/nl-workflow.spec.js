@@ -25,6 +25,7 @@ jest.mock('@/api/index', () => ({
 }));
 
 const nlWorkflowApi = require('@/api/nl-workflow').default;
+const { APP_CONFIG } = require('@/config');
 
 beforeEach(() => jest.clearAllMocks());
 
@@ -157,7 +158,7 @@ describe('NL Workflow API - Backend Compatibility', () => {
 
       const response = await nlWorkflowApi.getSession(sessionId);
 
-      expect(mockRequest.get).toHaveBeenCalledWith(`/nl-workflow/sessions/${sessionId}/`);
+      expect(mockRequest.get).toHaveBeenCalledWith(`/nl-workflow/sessions/${sessionId}/`, {}, { preserveWorkflowKeys: true });
       expect(response.session_id).toBe(sessionId);
     });
 
@@ -199,7 +200,8 @@ describe('NL Workflow API - Backend Compatibility', () => {
 
       expect(mockRequest.post).toHaveBeenCalledWith(
         `/nl-workflow/sessions/${sessionId}/message/`,
-        { message: 'Add email step' }
+        { message: 'Add email step' },
+        { timeout: APP_CONFIG.nlWorkflowRequestTimeout, preserveWorkflowKeys: true, signal: undefined }
       );
       expect(response.message).toBe('Response message');
     });
@@ -230,145 +232,35 @@ describe('NL Workflow API - Backend Compatibility', () => {
 
       const response = await nlWorkflowApi.confirmWorkflow(sessionId);
 
-      expect(mockRequest.post).toHaveBeenCalledWith(`/nl-workflow/sessions/${sessionId}/confirm/`);
+      expect(mockRequest.post).toHaveBeenCalledWith(`/nl-workflow/sessions/${sessionId}/confirm/`, {});
       expect(response.workflow_id).toBe(456);
     });
   });
 });
 
-describe('NL Intent Detection (Frontend)', () => {
-  describe('Intent type detection', () => {
-    it('detects create intent', () => {
-      // Test the intent detection logic (mirrors backend)
-      const detectIntent = (message) => {
-        const lower = message.toLowerCase();
-        if (['创建', '生成', '做一个', '帮我', 'build', 'create', 'generate', 'make'].some(k => lower.includes(k))) {
-          return 'create';
-        }
-        return 'chat';
-      };
-
-      expect(detectIntent('创建一个问答机器人')).toBe('create');
-      expect(detectIntent('create a workflow')).toBe('create');
-    });
-
-    it('detects modify intent', () => {
-      const detectIntent = (message) => {
-        const lower = message.toLowerCase();
-        if (['修改', '改一下', '添加', '改变', 'modify', 'change', 'add', 'update'].some(k => lower.includes(k))) {
-          return 'modify';
-        }
-        return 'chat';
-      };
-
-      expect(detectIntent('把LLM节点改成gpt-4')).toBe('modify');
-      expect(detectIntent('添加邮件节点')).toBe('modify');
-    });
-
-    it('detects delete intent', () => {
-      const detectIntent = (message) => {
-        const lower = message.toLowerCase();
-        if (['删除', '移除', '不要', 'delete', 'remove'].some(k => lower.includes(k))) {
-          return 'delete';
-        }
-        return 'chat';
-      };
-
-      expect(detectIntent('删除第二个节点')).toBe('delete');
-      expect(detectIntent('remove this node')).toBe('delete');
-    });
-
-    it('detects chat intent for greetings', () => {
-      const detectIntent = (message) => {
-        const lower = message.toLowerCase();
-        const keywords = ['创建', '生成', '做一个', '修改', '删除', 'build', 'create', 'modify', 'delete'];
-        if (keywords.some(k => lower.includes(k))) {
-          // Check for intent keywords first
-          return 'intent_detected';
-        }
-        return 'chat';
-      };
-
-      expect(detectIntent('你好，这个工具怎么用')).toBe('chat');
-      expect(detectIntent('Hi there')).toBe('chat');
-    });
-  });
-
-  describe('Subtype detection', () => {
-    it('detects qa_bot subtype', () => {
-      const detectSubtype = (message) => {
-        const lower = message.toLowerCase();
-        if (['问答', '客服', 'faq', 'q&a', 'question', 'answer', '机器人'].some(k => lower.includes(k))) {
-          return 'qa_bot';
-        }
-        return 'generic';
-      };
-
-      expect(detectSubtype('创建一个问答机器人')).toBe('qa_bot');
-      expect(detectSubtype('Q&A bot')).toBe('qa_bot');
-    });
-
-    it('detects data_processing subtype', () => {
-      const detectSubtype = (message) => {
-        const lower = message.toLowerCase();
-        if (['数据', 'csv', 'excel', '处理', '清洗', 'etl', 'data'].some(k => lower.includes(k))) {
-          return 'data_processing';
-        }
-        return 'generic';
-      };
-
-      expect(detectSubtype('创建一个数据处理工作流')).toBe('data_processing');
-      expect(detectSubtype('Process CSV data')).toBe('data_processing');
-    });
-
-    it('detects translation subtype', () => {
-      const detectSubtype = (message) => {
-        const lower = message.toLowerCase();
-        if (['翻译', 'translation', '多语言', 'language'].some(k => lower.includes(k))) {
-          return 'translation';
-        }
-        return 'generic';
-      };
-
-      expect(detectSubtype('创建一个翻译工作流')).toBe('translation');
-    });
-
-    it('detects generic for unknown types', () => {
-      const detectSubtype = (message) => {
-        const lower = message.toLowerCase();
-        const keywords = ['问答', '客服', 'faq', '数据', 'csv', '翻译', '审核', '文章', 'customer'];
-        if (keywords.some(k => lower.includes(k))) {
-          return 'specific_type';
-        }
-        return 'generic';
-      };
-
-      expect(detectSubtype('创建一个简单的工作流')).toBe('generic');
-      expect(detectSubtype('do something cool')).toBe('generic');
-    });
-  });
-
-  describe('Retry detection', () => {
-    it('detects retry intent', () => {
-      const isRetry = (message) => {
-        const lower = message.toLowerCase();
-        return ['重试', 'retry', '重新', 'regenerate', '再试', 'try again'].some(k => lower.includes(k));
-      };
-
-      expect(isRetry('重新生成工作流')).toBe(true);
-      expect(isRetry('retry the workflow')).toBe(true);
-      expect(isRetry('再试一次')).toBe(true);
-    });
-
-    it('returns false for non-retry messages', () => {
-      const isRetry = (message) => {
-        const lower = message.toLowerCase();
-        return ['重试', 'retry', '重新', 'regenerate', '再试', 'try again'].some(k => lower.includes(k));
-      };
-
-      expect(isRetry('创建一个问答机器人')).toBe(false);
-      expect(isRetry('修改这个节点')).toBe(false);
-    });
+// Keyword classification belongs to the backend and is exercised by test_nl_intent.py.
+// Here the frontend contract must forward the original message and preserve the result.
+describe('NL intent API contract', () => {
+  it.each([
+    ['创建一个问答机器人', 'create', 'qa_bot'],
+    ['create a workflow', 'create', 'generic'],
+    ['把LLM节点改成gpt-4', 'modify', 'generic'],
+    ['添加邮件节点', 'modify', 'generic'],
+    ['删除第二个节点', 'delete', 'generic'],
+    ['remove this node', 'delete', 'generic'],
+    ['你好，这个工具怎么用', 'chat', 'generic'],
+    ['Hi there', 'chat', 'generic'],
+    ['创建一个数据处理工作流', 'create', 'data_processing'],
+    ['创建一个翻译工作流', 'create', 'translation'],
+    ['重新生成工作流', 'retry', 'generic'],
+    ['retry the workflow', 'retry', 'generic'],
+    ['再试一次', 'retry', 'generic'],
+  ])('forwards %s and preserves the server classification', async (message, intent, subtype) => {
+    const result = { intent, subtype, message };
+    mockRequest.post.mockResolvedValueOnce(result);
+    const response = await nlWorkflowApi.analyzeIntent(message);
+    expect(mockRequest.post).toHaveBeenCalledWith('/nl-workflow/analyze-intent/', { message });
+    expect(response).toEqual(result);
   });
 });
 

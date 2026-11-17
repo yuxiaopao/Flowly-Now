@@ -45,12 +45,16 @@ class AIModelListSerializer(serializers.ModelSerializer):
     """Simplified serializer for AIModel list."""
 
     provider_name = serializers.CharField(source='provider.name', read_only=True)
+    provider_slug = serializers.CharField(source='provider.slug', read_only=True)
+    provider = serializers.UUIDField(source='provider_id', read_only=True)
 
     class Meta:
         model = AIModel
         fields = [
             'id', 'name', 'model_id', 'model_type',
-            'provider_name', 'is_active', 'is_default'
+            'provider', 'provider_name', 'provider_slug', 'is_active', 'is_default',
+            'supports_streaming', 'supports_function_calling', 'supports_vision',
+            'max_tokens', 'context_window', 'input_price', 'output_price', 'description'
         ]
 
 
@@ -62,12 +66,13 @@ class UserAPIKeySerializer(serializers.ModelSerializer):
     endpoint = serializers.SerializerMethodField()
     api_version = serializers.SerializerMethodField()
     total_usage = serializers.SerializerMethodField()
+    model = serializers.SerializerMethodField()
 
     class Meta:
         model = APICredential
         fields = [
             'id', 'service_type', 'provider_display', 'name',
-            'masked_key', 'endpoint', 'api_version',
+            'masked_key', 'endpoint', 'api_version', 'model',
             'is_active', 'last_used_at', 'total_usage',
             'created_at', 'updated_at'
         ]
@@ -88,6 +93,9 @@ class UserAPIKeySerializer(serializers.ModelSerializer):
     def get_total_usage(self, obj):
         return obj.usage_count
 
+    def get_model(self, obj):
+        return (obj.service_config or {}).get('model', '')
+
     def to_representation(self, instance):
         data = super().to_representation(instance)
         data['provider'] = data.pop('service_type', '')
@@ -98,28 +106,40 @@ class UserAPIKeyCreateSerializer(serializers.ModelSerializer):
     """Serializer for legacy API key endpoints backed by APICredential."""
 
     provider = serializers.CharField(write_only=True)
-    api_key = serializers.CharField(write_only=True)
+    api_key = serializers.CharField(write_only=True, required=False, allow_blank=True)
     endpoint = serializers.CharField(required=False, allow_blank=True, allow_null=True, write_only=True)
     api_version = serializers.CharField(required=False, allow_blank=True, allow_null=True, write_only=True)
+    model = serializers.CharField(required=False, allow_blank=True, max_length=200, write_only=True)
 
     class Meta:
         model = APICredential
         fields = [
             'provider', 'name', 'api_key',
-            'endpoint', 'api_version', 'description', 'is_active'
+            'endpoint', 'api_version', 'model', 'description', 'is_active'
         ]
+
+    def validate(self, attrs):
+        if not self.instance and not attrs.get('api_key') and attrs.get('provider') != 'ollama':
+            raise serializers.ValidationError({'api_key': '请输入 API Key。'})
+        return attrs
+
+    def to_representation(self, instance):
+        return UserAPIKeySerializer(instance, context=self.context).data
 
     def create(self, validated_data):
         request = getattr(self, 'context', {}).get('request')
         provider = validated_data.pop('provider')
-        api_key = validated_data.pop('api_key')
+        api_key = validated_data.pop('api_key', '')
         endpoint = validated_data.pop('endpoint', None)
         api_version = validated_data.pop('api_version', None)
+        model = validated_data.pop('model', '')
         service_config = {}
         if endpoint:
             service_config['endpoint'] = endpoint
         if api_version:
             service_config['api_version'] = api_version
+        if model:
+            service_config['model'] = model
 
         credential = APICredential.objects.create(
             owner=request.user,
@@ -137,6 +157,7 @@ class UserAPIKeyCreateSerializer(serializers.ModelSerializer):
         api_key = validated_data.pop('api_key', None)
         endpoint = validated_data.pop('endpoint', None)
         api_version = validated_data.pop('api_version', None)
+        model = validated_data.pop('model', None)
 
         instance.service_type = provider
         for attr, value in validated_data.items():
@@ -154,6 +175,11 @@ class UserAPIKeyCreateSerializer(serializers.ModelSerializer):
             else:
                 service_config.pop('api_version', None)
         instance.service_config = service_config
+        if model is not None:
+            if model:
+                instance.service_config['model'] = model
+            else:
+                instance.service_config.pop('model', None)
 
         if api_key:
             instance.set_encrypted_data(api_key)

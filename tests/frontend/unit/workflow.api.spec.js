@@ -22,7 +22,8 @@ jest.mock('@/api/index', () => ({
   toSnakeCaseKeys: (obj) => obj
 }))
 
-const { workflowApi } = require('@/api/workflow')
+const { workflowApi, WORKFLOW_OPAQUE_KEYS } = require('@/api/workflow')
+const opaqueOptions = { opaqueKeys: WORKFLOW_OPAQUE_KEYS }
 
 beforeEach(() => jest.clearAllMocks())
 
@@ -30,19 +31,19 @@ beforeEach(() => jest.clearAllMocks())
 describe('workflowApi.getList', () => {
   it('GET /workflows/ 默认无参数', async () => {
     await workflowApi.getList()
-    expect(mockRequest.get).toHaveBeenCalledWith('/workflows/', {})
+    expect(mockRequest.get).toHaveBeenCalledWith('/workflows/', {}, opaqueOptions)
   })
 
   it('GET /workflows/ 携带过滤参数', async () => {
     await workflowApi.getList({ page: 2, status: 'active', search: 'test' })
-    expect(mockRequest.get).toHaveBeenCalledWith('/workflows/', { page: 2, status: 'active', search: 'test' })
+    expect(mockRequest.get).toHaveBeenCalledWith('/workflows/', { page: 2, status: 'active', search: 'test' }, opaqueOptions)
   })
 })
 
 describe('workflowApi.getById', () => {
   it('GET /workflows/:id/', async () => {
     await workflowApi.getById(42)
-    expect(mockRequest.get).toHaveBeenCalledWith('/workflows/42/')
+    expect(mockRequest.get).toHaveBeenCalledWith('/workflows/42/', {}, opaqueOptions)
   })
 })
 
@@ -50,43 +51,43 @@ describe('workflowApi.create', () => {
   it('POST /workflows/ 携带工作流数据', async () => {
     const data = { name: '新工作流', description: '描述', status: 'draft', tags: ['ai'] }
     await workflowApi.create(data)
-    expect(mockRequest.post).toHaveBeenCalledWith('/workflows/', data)
+    expect(mockRequest.post).toHaveBeenCalledWith('/workflows/', data, opaqueOptions)
   })
 })
 
 describe('workflowApi.update', () => {
   it('PATCH /workflows/:id/', async () => {
     await workflowApi.update(5, { name: '更新名称' })
-    expect(mockRequest.patch).toHaveBeenCalledWith('/workflows/5/', { name: '更新名称' })
+    expect(mockRequest.patch).toHaveBeenCalledWith('/workflows/5/', { name: '更新名称' }, opaqueOptions)
   })
 })
 
 describe('workflowApi.delete', () => {
   it('DELETE /workflows/:id/', async () => {
     await workflowApi.delete(7)
-    expect(mockRequest.delete).toHaveBeenCalledWith('/workflows/7/')
+    expect(mockRequest.delete).toHaveBeenCalledWith('/workflows/7/', opaqueOptions)
   })
 })
 
 describe('workflowApi.duplicate', () => {
   it('POST /workflows/:id/duplicate/', async () => {
     await workflowApi.duplicate(10)
-    expect(mockRequest.post).toHaveBeenCalledWith('/workflows/10/duplicate/')
+    expect(mockRequest.post).toHaveBeenCalledWith('/workflows/10/duplicate/', {}, opaqueOptions)
   })
 })
 
 describe('workflowApi.export', () => {
   it('GET /workflows/:id/export/', async () => {
     await workflowApi.export(3)
-    expect(mockRequest.get).toHaveBeenCalledWith('/workflows/3/export/')
+    expect(mockRequest.get).toHaveBeenCalledWith('/workflows/3/export/', {}, { ...opaqueOptions, preserveResponseKeys: true })
   })
 })
 
 describe('workflowApi.import', () => {
-  it('POST /workflows/import/ 携带 multipart/form-data', async () => {
+  it('POST /workflows/import/ 保留 FormData 并由浏览器设置 boundary', async () => {
     const formData = new FormData()
     await workflowApi.import(formData)
-    expect(mockRequest.post).toHaveBeenCalledWith('/workflows/import/', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
+    expect(mockRequest.post).toHaveBeenCalledWith('/workflows/import/', formData, opaqueOptions)
   })
 })
 
@@ -94,28 +95,28 @@ describe('workflowApi.import', () => {
 describe('workflowApi.getNodes', () => {
   it('GET /workflows/nodes/ 按 workflowId 过滤', async () => {
     await workflowApi.getNodes(5)
-    expect(mockRequest.get).toHaveBeenCalledWith('/workflows/nodes/', { workflow: 5 })
+    expect(mockRequest.get).toHaveBeenCalledWith('/workflows/nodes/', { workflow: 5 }, opaqueOptions)
   })
 })
 
 describe('workflowApi.createNode', () => {
   it('POST /workflows/nodes/ 附带 workflow ID', async () => {
     await workflowApi.createNode(5, { node_type: 'llm', position_x: 100, position_y: 200 })
-    expect(mockRequest.post).toHaveBeenCalledWith('/workflows/nodes/', { node_type: 'llm', position_x: 100, position_y: 200, workflow: 5 })
+    expect(mockRequest.post).toHaveBeenCalledWith('/workflows/nodes/', { node_type: 'llm', position_x: 100, position_y: 200, workflow: 5 }, opaqueOptions)
   })
 })
 
 describe('workflowApi.updateNode', () => {
   it('PATCH /workflows/nodes/:id/', async () => {
     await workflowApi.updateNode(3, { position_x: 300 })
-    expect(mockRequest.patch).toHaveBeenCalledWith('/workflows/nodes/3/', { position_x: 300 })
+    expect(mockRequest.patch).toHaveBeenCalledWith('/workflows/nodes/3/', { position_x: 300 }, opaqueOptions)
   })
 })
 
 describe('workflowApi.deleteNode', () => {
   it('DELETE /workflows/nodes/:id/', async () => {
     await workflowApi.deleteNode(8)
-    expect(mockRequest.delete).toHaveBeenCalledWith('/workflows/nodes/8/')
+    expect(mockRequest.delete).toHaveBeenCalledWith('/workflows/nodes/8/', opaqueOptions)
   })
 })
 
@@ -123,7 +124,7 @@ describe('workflowApi.saveNodePositions', () => {
   it('POST /workflows/nodes/batch_update_positions/', async () => {
     const positions = [{ id: 1, position: { x: 100, y: 200 } }]
     await workflowApi.saveNodePositions(positions)
-    expect(mockRequest.post).toHaveBeenCalledWith('/workflows/nodes/batch_update_positions/', { positions })
+    expect(mockRequest.post).toHaveBeenCalledWith('/workflows/nodes/batch_update_positions/', { positions }, opaqueOptions)
   })
 })
 
@@ -131,14 +132,14 @@ describe('workflowApi.batchCreateNodes', () => {
   it('POST /workflows/nodes/batch_create/', async () => {
     const nodes = [{ node_type: 'start' }, { node_type: 'end' }]
     await workflowApi.batchCreateNodes(1, nodes)
-    expect(mockRequest.post).toHaveBeenCalledWith('/workflows/nodes/batch_create/', { workflow_id: 1, nodes })
+    expect(mockRequest.post).toHaveBeenCalledWith('/workflows/nodes/batch_create/', { workflow_id: 1, nodes }, opaqueOptions)
   })
 })
 
 describe('workflowApi.getAvailableNodeTypes', () => {
   it('GET /workflows/nodes/available_types/', async () => {
     await workflowApi.getAvailableNodeTypes()
-    expect(mockRequest.get).toHaveBeenCalledWith('/workflows/nodes/available_types/')
+    expect(mockRequest.get).toHaveBeenCalledWith('/workflows/nodes/available_types/', {}, opaqueOptions)
   })
 })
 
@@ -146,7 +147,7 @@ describe('workflowApi.getAvailableNodeTypes', () => {
 describe('workflowApi.getEdges', () => {
   it('GET /workflows/edges/ 按 workflowId 过滤', async () => {
     await workflowApi.getEdges(2)
-    expect(mockRequest.get).toHaveBeenCalledWith('/workflows/edges/', { workflow: 2 })
+    expect(mockRequest.get).toHaveBeenCalledWith('/workflows/edges/', { workflow: 2 }, opaqueOptions)
   })
 })
 
@@ -154,21 +155,21 @@ describe('workflowApi.createEdge', () => {
   it('POST /workflows/edges/', async () => {
     const data = { source_node: 1, target_node: 2, workflow: 5 }
     await workflowApi.createEdge(data)
-    expect(mockRequest.post).toHaveBeenCalledWith('/workflows/edges/', data)
+    expect(mockRequest.post).toHaveBeenCalledWith('/workflows/edges/', data, opaqueOptions)
   })
 })
 
 describe('workflowApi.updateEdge', () => {
   it('PATCH /workflows/edges/:id/', async () => {
     await workflowApi.updateEdge(10, { label: '新标签' })
-    expect(mockRequest.patch).toHaveBeenCalledWith('/workflows/edges/10/', { label: '新标签' })
+    expect(mockRequest.patch).toHaveBeenCalledWith('/workflows/edges/10/', { label: '新标签' }, opaqueOptions)
   })
 })
 
 describe('workflowApi.deleteEdge', () => {
   it('DELETE /workflows/edges/:id/', async () => {
     await workflowApi.deleteEdge(10)
-    expect(mockRequest.delete).toHaveBeenCalledWith('/workflows/edges/10/')
+    expect(mockRequest.delete).toHaveBeenCalledWith('/workflows/edges/10/', opaqueOptions)
   })
 })
 
@@ -176,7 +177,7 @@ describe('workflowApi.batchCreateEdges', () => {
   it('POST /workflows/edges/batch_create/', async () => {
     const edges = [{ source_node: 1, target_node: 2 }]
     await workflowApi.batchCreateEdges(5, edges)
-    expect(mockRequest.post).toHaveBeenCalledWith('/workflows/edges/batch_create/', { workflow_id: 5, edges })
+    expect(mockRequest.post).toHaveBeenCalledWith('/workflows/edges/batch_create/', { workflow_id: 5, edges }, opaqueOptions)
   })
 })
 
@@ -184,71 +185,71 @@ describe('workflowApi.batchCreateEdges', () => {
 describe('workflowApi.executeSync', () => {
   it('POST /workflows/:id/execute/ 同步模式', async () => {
     await workflowApi.executeSync(1, { key: 'value' })
-    expect(mockRequest.post).toHaveBeenCalledWith('/workflows/1/execute/', { input_data: { key: 'value' }, is_async: false })
+    expect(mockRequest.post).toHaveBeenCalledWith('/workflows/1/execute/', { input_data: { key: 'value' }, is_async: false }, opaqueOptions)
   })
 })
 
 describe('workflowApi.executeAsync', () => {
   it('POST /workflows/:id/execute/ 异步模式', async () => {
     await workflowApi.executeAsync(1, { key: 'value' })
-    expect(mockRequest.post).toHaveBeenCalledWith('/workflows/1/execute/', { input_data: { key: 'value' }, is_async: true })
+    expect(mockRequest.post).toHaveBeenCalledWith('/workflows/1/execute/', { input_data: { key: 'value' }, is_async: true }, opaqueOptions)
   })
 })
 
 describe('workflowApi.getExecution', () => {
   it('GET /workflows/executions/:id/', async () => {
     await workflowApi.getExecution(100)
-    expect(mockRequest.get).toHaveBeenCalledWith('/workflows/executions/100/')
+    expect(mockRequest.get).toHaveBeenCalledWith('/workflows/executions/100/', {}, opaqueOptions)
   })
 })
 
 describe('workflowApi.getExecutionHistory', () => {
   it('GET /workflows/executions/ 按 workflowId 过滤', async () => {
     await workflowApi.getExecutionHistory(3, { page: 1 })
-    expect(mockRequest.get).toHaveBeenCalledWith('/workflows/executions/', { workflow: 3, page: 1 })
+    expect(mockRequest.get).toHaveBeenCalledWith('/workflows/executions/', { workflow: 3, page: 1 }, opaqueOptions)
   })
 })
 
 describe('workflowApi.cancelExecution', () => {
   it('POST /workflows/executions/:id/cancel/', async () => {
     await workflowApi.cancelExecution(100)
-    expect(mockRequest.post).toHaveBeenCalledWith('/workflows/executions/100/cancel/')
+    expect(mockRequest.post).toHaveBeenCalledWith('/workflows/executions/100/cancel/', {}, opaqueOptions)
   })
 })
 
 describe('workflowApi.pauseExecution', () => {
   it('POST /workflows/executions/:id/pause/', async () => {
     await workflowApi.pauseExecution(100)
-    expect(mockRequest.post).toHaveBeenCalledWith('/workflows/executions/100/pause/')
+    expect(mockRequest.post).toHaveBeenCalledWith('/workflows/executions/100/pause/', {}, opaqueOptions)
   })
 })
 
 describe('workflowApi.resumeExecution', () => {
   it('POST /workflows/executions/:id/resume/', async () => {
     await workflowApi.resumeExecution(100)
-    expect(mockRequest.post).toHaveBeenCalledWith('/workflows/executions/100/resume/')
+    expect(mockRequest.post).toHaveBeenCalledWith('/workflows/executions/100/resume/', {}, opaqueOptions)
   })
 })
 
 describe('workflowApi.getExecutionStatistics', () => {
   it('GET /workflows/executions/statistics/', async () => {
     await workflowApi.getExecutionStatistics()
-    expect(mockRequest.get).toHaveBeenCalledWith('/workflows/executions/statistics/')
+    expect(mockRequest.get).toHaveBeenCalledWith('/workflows/executions/statistics/', {}, opaqueOptions)
   })
 })
 
 // 模板
 describe('workflowApi.getTemplates', () => {
-  it('GET /workflows/templates/', async () => {
+  it('GET /templates/', async () => {
     await workflowApi.getTemplates()
-    expect(mockRequest.get).toHaveBeenCalledWith('/workflows/templates/', {})
+    expect(mockRequest.get).toHaveBeenCalledWith('/templates/', {}, opaqueOptions)
   })
 })
 
 describe('workflowApi.createFromTemplate', () => {
-  it('POST /workflows/templates/:id/create_from_template/', async () => {
+  it('POST /templates/:id/create_from_template/', async () => {
     await workflowApi.createFromTemplate(2, { name: '自定义名称' })
-    expect(mockRequest.post).toHaveBeenCalledWith('/workflows/templates/2/create_from_template/', { name: '自定义名称' })
+    expect(mockRequest.post).toHaveBeenCalledWith('/templates/2/create_from_template/', { name: '自定义名称' }, opaqueOptions)
   })
 })
 
@@ -256,6 +257,6 @@ describe('workflowApi.createFromTemplate', () => {
 describe('workflowApi.validate', () => {
   it('POST /workflows/:id/validate/', async () => {
     await workflowApi.validate(5)
-    expect(mockRequest.post).toHaveBeenCalledWith('/workflows/5/validate/')
+    expect(mockRequest.post).toHaveBeenCalledWith('/workflows/5/validate/', {}, opaqueOptions)
   })
 })

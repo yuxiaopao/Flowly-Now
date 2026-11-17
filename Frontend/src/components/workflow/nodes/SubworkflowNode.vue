@@ -182,7 +182,7 @@ const isFailed = computed(() => nodeStatus.value === 'failed')
 
 const resultSummary = computed(() => {
   if (!nodeOutput.value) return '完成'
-  return nodeOutput.value.execution_id || '完成'
+  return nodeOutput.value.child_execution_id || nodeOutput.value.execution_id || '完成'
 })
 
 const isExpanded = ref(false)

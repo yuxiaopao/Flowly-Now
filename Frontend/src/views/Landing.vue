@@ -1,1562 +1,233 @@
 <template>
   <div class="landing-page">
-    <!-- Navigation -->
-    <nav class="landing-nav">
-      <div class="nav-container">
-        <div class="nav-brand">
-          <router-link
-            to="/"
-            class="brand-link"
+    <a
+      class="landing-skip"
+      href="#landing-main"
+    >跳至页面内容</a>
+    <header>
+      <nav aria-label="产品导航">
+        <router-link
+          to="/"
+          class="brand"
+          aria-label="Flowly 首页"
+        >
+          <ThemeLogo alt="" /><strong>Flowly</strong><small>STUDIO</small>
+        </router-link><div class="nav-links">
+          <a href="#delivery">交付流程</a><a href="#scenarios">使用场景</a><a href="#faq">常见问题</a>
+        </div><ThemeSwitcher /><router-link to="/login">
+          登录
+        </router-link>
+      </nav>
+    </header>
+    <main id="landing-main">
+      <section
+        class="hero"
+        aria-labelledby="hero-title"
+      >
+        <div>
+          <p class="eyebrow">
+            {{ LANDING.eyebrow }}
+          </p><h1 id="hero-title">
+            {{ LANDING.title }}<br><span>{{ LANDING.emphasis }}</span>
+          </h1><p class="description">
+            {{ LANDING.description }}
+          </p><router-link
+            :to="LANDING.primaryPath"
+            class="primary"
           >
-            <ThemeLogo
-              alt="Flowly"
-              class="brand-logo-img"
+            {{ LANDING.primary }}<ArrowUpRight aria-hidden="true" />
+          </router-link><p class="note">
+            知识助手与工作流应用，共用一条交付路径。
+          </p>
+        </div>
+        <div
+          class="preview"
+          aria-label="应用交付路径示意"
+        >
+          <div class="preview-heading">
+            <span><Boxes aria-hidden="true" />APPLICATION DELIVERY</span><small>流程示意</small>
+          </div><div class="preview-app">
+            <Layers aria-hidden="true" /><div><strong>团队知识助手</strong><small>知识库 → 检索 → 有依据的回答</small></div><FlowlyBot
+              :size="BOT_AVATAR.size"
+              decorative
+              :animated="false"
             />
-            <span class="brand-name">Flowly</span>
-          </router-link>
-        </div>
-
-        <div class="nav-links">
-          <a
-            href="#features"
-            class="nav-link"
-          >功能</a>
-          <a
-            href="#pricing"
-            class="nav-link"
-          >定价</a>
-          <a
-            href="#faq"
-            class="nav-link"
-          >常见问题</a>
-        </div>
-
-        <div class="nav-actions">
-          <ThemeSwitcher variant="pill" />
-          <router-link
-            to="/login"
-            class="btn btn-ghost"
+          </div>
+          <div
+            class="stage-tabs"
+            role="tablist"
+            aria-label="了解交付步骤"
           >
-            登录
-          </router-link>
-          <router-link
-            to="/register"
-            class="btn btn-primary"
+            <button
+              v-for="(stage, index) in LANDING.stages"
+              :id="`delivery-tab-${index}`"
+              :key="stage.label"
+              type="button"
+              role="tab"
+              :aria-selected="activeStage === index"
+              :tabindex="activeStage === index ? 0 : -1"
+              :aria-controls="`delivery-panel-${index}`"
+              @click="activeStage = index"
+              @keydown="changeStage($event, index)"
+            >
+              <span>0{{ index + 1 }}</span>{{ stage.label }}
+            </button>
+          </div>
+          <div
+            v-for="(stage, index) in LANDING.stages"
+            v-show="activeStage === index"
+            :id="`delivery-panel-${index}`"
+            :key="stage.label"
+            role="tabpanel"
+            :aria-labelledby="`delivery-tab-${index}`"
+            class="stage-panel"
           >
-            开始免费试用
-          </router-link>
+            <component
+              :is="icons[stage.icon]"
+              aria-hidden="true"
+            /><h2>{{ stage.title }}</h2><p>{{ stage.detail }}</p><code>{{ stage.code }}</code>
+          </div><div class="preview-footer">
+            <ShieldCheck aria-hidden="true" />应用专属密钥<span>真实测试与请求记录</span>
+          </div>
         </div>
-      </div>
-    </nav>
-
-    <!-- Hero Section -->
-    <section class="hero">
-      <div class="hero-bg">
-        <div class="hero-gradient" />
-        <div class="hero-grid" />
-      </div>
-      <div class="hero-container">
-        <div class="hero-badge">
-          <span class="badge-dot" />
-          AI驱动的下一代工作流平台
-        </div>
-
-        <h1 class="hero-title">
-          用自然语言构建
-          <span class="title-emphasis">AI 工作流</span>
-        </h1>
-
-        <p class="hero-description">
-          Flowly 让您通过简单的对话描述，自动生成复杂的 AI 工作流。
-          无需编程，即可构建自动化流程、集成多种 AI 能力。
-        </p>
-
-        <div class="hero-actions">
-          <router-link
-            to="/register"
-            class="btn btn-primary btn-lg"
+      </section>
+      <section
+        id="delivery"
+        class="split-section"
+        aria-labelledby="delivery-title"
+      >
+        <div class="intro">
+          <span class="eyebrow">从原型，到稳定交付</span><h2 id="delivery-title">
+            少一点入口切换，<br>多一条能走通的流程。
+          </h2><p>应用是交付对象。知识、模型与流程是构建资源，每一步都能找到下一步。</p>
+        </div><ol class="rows">
+          <li
+            v-for="(stage, index) in LANDING.stages"
+            :key="stage.label"
           >
-            <Zap class="btn-icon" />
-            免费开始
-          </router-link>
-          <router-link
-            to="/nl-create"
-            class="btn btn-outline btn-lg"
+            <span class="number">0{{ index + 1 }}</span><div><h3>{{ stage.title }}</h3><p>{{ stage.detail }}</p></div><component
+              :is="icons[stage.icon]"
+              aria-hidden="true"
+            />
+          </li>
+        </ol>
+      </section>
+      <section
+        id="scenarios"
+        class="split-section"
+        aria-labelledby="scenarios-title"
+      >
+        <div class="intro">
+          <span class="eyebrow">围绕小团队的真实工作</span><h2 id="scenarios-title">
+            做出应用，<br>也把维护的路留好。
+          </h2>
+        </div><div class="rows">
+          <article
+            v-for="item in LANDING.scenarios"
+            :key="item.number"
           >
-            <Play class="btn-icon" />
-            观看演示
+            <span class="number">{{ item.number }}</span><div><h3>{{ item.title }}</h3><p>{{ item.description }}</p><small>{{ item.tags }}</small></div><ArrowUpRight aria-hidden="true" />
+          </article>
+        </div>
+      </section>
+      <section
+        class="statement"
+        aria-label="产品主张"
+      >
+        <p>发布时有把握，<br><span>迭代时有依据。</span></p><div>
+          <p>版本、测试与请求记录放在同一个应用工作区。<br>先把一条真实业务跑通，再扩展下一项能力。</p><router-link
+            :to="LANDING.primaryPath"
+            class="primary"
+          >
+            开始创建应用<ArrowUpRight aria-hidden="true" />
           </router-link>
         </div>
-
-        <div class="hero-stats">
-          <div class="stat">
-            <span class="stat-value">10K+</span>
-            <span class="stat-label">活跃用户</span>
-          </div>
-          <div class="stat-divider" />
-          <div class="stat">
-            <span class="stat-value">100K+</span>
-            <span class="stat-label">工作流执行</span>
-          </div>
-          <div class="stat-divider" />
-          <div class="stat">
-            <span class="stat-value">99.9%</span>
-            <span class="stat-label">可用性</span>
-          </div>
+      </section>
+      <section
+        id="faq"
+        class="split-section faq"
+        aria-labelledby="faq-title"
+      >
+        <div class="intro">
+          <span class="eyebrow">开始之前</span><h2 id="faq-title">
+            接入与使用
+          </h2><p>明确能力边界，交付才有可预期的结果。</p>
+        </div><div>
+          <details
+            v-for="item in LANDING.faqs"
+            :key="item.question"
+          >
+            <summary>{{ item.question }}<Plus aria-hidden="true" /></summary><p>{{ item.answer }}</p>
+          </details>
         </div>
-      </div>
-    </section>
-
-    <!-- Features Section -->
-    <section
-      id="features"
-      class="features"
-    >
-      <div class="container">
-        <div class="section-header">
-          <h2 class="section-title">
-            强大的功能，简单的体验
-          </h2>
-          <p class="section-description">
-            从自然语言描述到可视化工作流，Flowly 让 AI 开发变得前所未有的简单。
-          </p>
-        </div>
-
-        <div class="features-grid">
-          <div class="feature-card feature-pill feature-pill--blue">
-            <div class="feature-icon">
-              <MessageSquare class="icon" />
-            </div>
-            <h3 class="feature-title">
-              自然语言生成
-            </h3>
-            <p class="feature-description">
-              用日常语言描述您的需求，AI 自动为您构建完整的工作流程。无需学习复杂的语法。
-            </p>
-          </div>
-
-          <div class="feature-card feature-pill feature-pill--blue">
-            <div class="feature-icon">
-              <GitBranch class="icon" />
-            </div>
-            <h3 class="feature-title">
-              可视化编辑器
-            </h3>
-            <p class="feature-description">
-              直观的拖拽式界面，让您轻松设计和编辑工作流。实时预览，每一步都清晰可见。
-            </p>
-          </div>
-
-          <div class="feature-card feature-pill feature-pill--amber">
-            <div class="feature-icon">
-              <Bot class="icon" />
-            </div>
-            <h3 class="feature-title">
-              AI Agent 编排
-            </h3>
-            <p class="feature-description">
-              构建智能代理，赋予它们工具调用能力。多 Agent 协作，处理复杂任务。
-            </p>
-          </div>
-
-          <div class="feature-card feature-pill feature-pill--rose">
-            <div class="feature-icon">
-              <Zap class="icon" />
-            </div>
-            <h3 class="feature-title">
-              实时流式输出
-            </h3>
-            <p class="feature-description">
-              即时查看 AI 生成的每一个字符。告别等待，获得流畅的交互体验。
-            </p>
-          </div>
-
-          <div class="feature-card feature-pill feature-pill--emerald">
-            <div class="feature-icon">
-              <Database class="icon" />
-            </div>
-            <h3 class="feature-title">
-              RAG 知识库
-            </h3>
-            <p class="feature-description">
-              上传文档，构建私有知识库。让 AI 在您的数据基础上提供精准答案。
-            </p>
-          </div>
-
-          <div class="feature-card feature-pill feature-pill--rose">
-            <div class="feature-icon">
-              <Users class="icon" />
-            </div>
-            <h3 class="feature-title">
-              团队协作
-            </h3>
-            <p class="feature-description">
-              与团队成员共享工作流，实时协作编辑。权限控制，确保安全共享。
-            </p>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- How It Works Section -->
-    <section class="how-it-works">
-      <div class="container">
-        <div class="section-header">
-          <h2 class="section-title">
-            三步创建您的 AI 工作流
-          </h2>
-          <p class="section-description">
-            简单、直观、高效
-          </p>
-        </div>
-
-        <div class="steps">
-          <div class="step">
-            <div class="step-number">
-              1
-            </div>
-            <div class="step-content">
-              <h3 class="step-title">
-                描述您的需求
-              </h3>
-              <p class="step-description">
-                用自然语言告诉 Flowly 您想要实现的功能，比如"创建一个客服机器人，能够回答产品相关问题"。
-              </p>
-            </div>
-          </div>
-
-          <div class="step-connector">
-            <svg viewBox="0 0 100 20">
-              <path
-                d="M0 10 L100 10"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-dasharray="6 4"
-              />
-            </svg>
-          </div>
-
-          <div class="step">
-            <div class="step-number">
-              2
-            </div>
-            <div class="step-content">
-              <h3 class="step-title">
-                AI 自动生成
-              </h3>
-              <p class="step-description">
-                Flowly 的 AI 引擎理解您的意图，自动构建可视化工作流，包含所有必要的节点和连接。
-              </p>
-            </div>
-          </div>
-
-          <div class="step-connector">
-            <svg viewBox="0 0 100 20">
-              <path
-                d="M0 10 L100 10"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-dasharray="6 4"
-              />
-            </svg>
-          </div>
-
-          <div class="step">
-            <div class="step-number">
-              3
-            </div>
-            <div class="step-content">
-              <h3 class="step-title">
-                一键执行
-              </h3>
-              <p class="step-description">
-                预览工作流，调整细节，然后一键执行。实时查看执行状态和输出结果。
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- Use Cases Section -->
-    <section class="use-cases">
-      <div class="container">
-        <div class="use-cases-grid">
-          <div class="use-case-content">
-            <h2 class="section-title">
-              适用于各种场景
-            </h2>
-            <p class="section-description">
-              无论是客户服务、内容创作还是数据分析，Flowly 都能助您一臂之力。
-            </p>
-
-            <div class="use-case-list">
-              <div class="use-case-item">
-                <div class="use-case-icon">
-                  <Headphones class="icon" />
-                </div>
-                <div class="use-case-text">
-                  <h4>智能客服</h4>
-                  <p>构建 7x24 小时在线的 AI 客服，自动回答常见问题</p>
-                </div>
-              </div>
-
-              <div class="use-case-item">
-                <div class="use-case-icon">
-                  <FileText class="icon" />
-                </div>
-                <div class="use-case-text">
-                  <h4>内容生成</h4>
-                  <p>自动化生成营销文案、社交媒体内容、产品描述</p>
-                </div>
-              </div>
-
-              <div class="use-case-item">
-                <div class="use-case-icon">
-                  <BarChart class="icon" />
-                </div>
-                <div class="use-case-text">
-                  <h4>数据分析</h4>
-                  <p>自动采集、处理和分析数据，生成可视化报告</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="use-case-visual">
-            <div class="workflow-preview">
-              <div class="preview-header">
-                <span class="preview-dot red" />
-                <span class="preview-dot yellow" />
-                <span class="preview-dot green" />
-              </div>
-              <div class="preview-content">
-                <div class="preview-node start">
-                  <MessageSquare class="node-icon" />
-                  <span>用户输入</span>
-                </div>
-                <div class="preview-arrow">
-                  <ChevronRight class="arrow-icon" />
-                </div>
-                <div class="preview-node ai">
-                  <Bot class="node-icon" />
-                  <span>AI 分析</span>
-                </div>
-                <div class="preview-arrow">
-                  <ChevronRight class="arrow-icon" />
-                </div>
-                <div class="preview-node output">
-                  <FileText class="node-icon" />
-                  <span>生成回复</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- Pricing Section -->
-    <section
-      id="pricing"
-      class="pricing"
-    >
-      <div class="container">
-        <div class="section-header">
-          <h2 class="section-title">
-            简单透明的定价
-          </h2>
-          <p class="section-description">
-            从免费开始，根据需求升级。所有方案均包含 14 天免费试用。
-          </p>
-        </div>
-
-        <div class="pricing-grid">
-          <div class="pricing-card">
-            <div class="pricing-header">
-              <h3 class="plan-name">
-                免费版
-              </h3>
-              <div class="plan-price">
-                <span class="price">¥0</span>
-                <span class="period">/月</span>
-              </div>
-              <p class="plan-description">
-                适合个人探索和小规模使用
-              </p>
-            </div>
-            <ul class="plan-features">
-              <li>
-                <Check class="check-icon" />
-                3 个工作流
-              </li>
-              <li>
-                <Check class="check-icon" />
-                100 次执行/月
-              </li>
-              <li>
-                <Check class="check-icon" />
-                基础模板
-              </li>
-              <li>
-                <Check class="check-icon" />
-                社区支持
-              </li>
-            </ul>
-            <router-link
-              to="/register"
-              class="btn btn-outline btn-block"
-            >
-              免费开始
-            </router-link>
-          </div>
-
-          <div class="pricing-card featured">
-            <div class="featured-badge">
-              最受欢迎
-            </div>
-            <div class="pricing-header">
-              <h3 class="plan-name">
-                专业版
-              </h3>
-              <div class="plan-price">
-                <span class="price">¥99</span>
-                <span class="period">/月</span>
-              </div>
-              <p class="plan-description">
-                适合团队和中小型企业
-              </p>
-            </div>
-            <ul class="plan-features">
-              <li>
-                <Check class="check-icon" />
-                无限工作流
-              </li>
-              <li>
-                <Check class="check-icon" />
-                10,000 次执行/月
-              </li>
-              <li>
-                <Check class="check-icon" />
-                高级模板库
-              </li>
-              <li>
-                <Check class="check-icon" />
-                团队协作
-              </li>
-              <li>
-                <Check class="check-icon" />
-                优先支持
-              </li>
-            </ul>
-            <router-link
-              to="/register"
-              class="btn btn-primary btn-block"
-            >
-              立即升级
-            </router-link>
-          </div>
-
-          <div class="pricing-card">
-            <div class="pricing-header">
-              <h3 class="plan-name">
-                企业版
-              </h3>
-              <div class="plan-price">
-                <span class="price">¥399</span>
-                <span class="period">/月</span>
-              </div>
-              <p class="plan-description">
-                适合大型企业和高需求场景
-              </p>
-            </div>
-            <ul class="plan-features">
-              <li>
-                <Check class="check-icon" />
-                无限所有
-              </li>
-              <li>
-                <Check class="check-icon" />
-                私有化部署
-              </li>
-              <li>
-                <Check class="check-icon" />
-                SSO 集成
-              </li>
-              <li>
-                <Check class="check-icon" />
-                SLA 保障
-              </li>
-              <li>
-                <Check class="check-icon" />
-                专属客服
-              </li>
-            </ul>
-            <router-link
-              to="/register"
-              class="btn btn-outline btn-block"
-            >
-              联系销售
-            </router-link>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- FAQ Section -->
-    <section
-      id="faq"
-      class="faq"
-    >
-      <div class="container">
-        <div class="section-header">
-          <h2 class="section-title">
-            常见问题
-          </h2>
-        </div>
-
-        <div class="faq-list">
-          <div class="faq-item">
-            <button
-              class="faq-question"
-              @click="toggleFaq(0)"
-            >
-              <span>Flowly 支持哪些 AI 模型？</span>
-              <ChevronDown
-                class="faq-icon"
-                :class="{ active: openFaq === 0 }"
-              />
-            </button>
-            <div
-              class="faq-answer"
-              :class="{ open: openFaq === 0 }"
-            >
-              <p>Flowly 支持 OpenAI GPT 系列、Anthropic Claude、阿里通义千问、百度文心一言等多种主流 AI 模型。您可以根据需求自由选择和切换。</p>
-            </div>
-          </div>
-
-          <div class="faq-item">
-            <button
-              class="faq-question"
-              @click="toggleFaq(1)"
-            >
-              <span>是否需要编程基础？</span>
-              <ChevronDown
-                class="faq-icon"
-                :class="{ active: openFaq === 1 }"
-              />
-            </button>
-            <div
-              class="faq-answer"
-              :class="{ open: openFaq === 1 }"
-            >
-              <p>完全不需要！Flowly 的核心理念是降低 AI 开发门槛。您可以通过自然语言描述需求，或使用可视化拖拽来构建工作流。</p>
-            </div>
-          </div>
-
-          <div class="faq-item">
-            <button
-              class="faq-question"
-              @click="toggleFaq(2)"
-            >
-              <span>我的数据安全吗？</span>
-              <ChevronDown
-                class="faq-icon"
-                :class="{ active: openFaq === 2 }"
-              />
-            </button>
-            <div
-              class="faq-answer"
-              :class="{ open: openFaq === 2 }"
-            >
-              <p>我们非常重视数据安全。所有数据传输使用 TLS 加密，数据存储符合 SOC 2 标准。企业版还支持私有化部署，完全掌控您的数据。</p>
-            </div>
-          </div>
-
-          <div class="faq-item">
-            <button
-              class="faq-question"
-              @click="toggleFaq(3)"
-            >
-              <span>可以集成到现有系统吗？</span>
-              <ChevronDown
-                class="faq-icon"
-                :class="{ active: openFaq === 3 }"
-              />
-            </button>
-            <div
-              class="faq-answer"
-              :class="{ open: openFaq === 3 }"
-            >
-              <p>可以！Flowly 提供完整的 REST API 和 Webhook 支持，可以轻松与您的网站、应用或其他 SaaS 服务集成。</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- CTA Section -->
-    <section class="cta">
-      <div class="container">
-        <div class="cta-content">
-          <h2 class="cta-title">
-            准备好开始了吗？
-          </h2>
-          <p class="cta-description">
-            免费注册，立即体验 Flowly 的强大功能。
-          </p>
-          <div class="cta-actions">
-            <router-link
-              to="/register"
-              class="btn btn-primary btn-lg"
-            >
-              开始免费试用
-            </router-link>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- Footer -->
-    <footer class="landing-footer">
-      <div class="container">
-        <div class="footer-grid">
-          <div class="footer-brand">
-            <div class="nav-brand">
-              <router-link
-                to="/"
-                class="brand-link"
-              >
-                <ThemeLogo
-                  alt="Flowly"
-                  class="brand-logo-img"
-                />
-                <span class="brand-name">Flowly</span>
-              </router-link>
-            </div>
-            <p class="footer-tagline">
-              AI Agent 工作流编排平台
-            </p>
-          </div>
-
-          <div class="footer-links">
-            <h4>产品</h4>
-            <a href="#features">功能</a>
-            <a href="#pricing">定价</a>
-            <a href="#faq">常见问题</a>
-          </div>
-
-          <div class="footer-links">
-            <h4>资源</h4>
-            <a href="#">文档</a>
-            <a href="#">API</a>
-            <a href="#">教程</a>
-          </div>
-
-          <div class="footer-links">
-            <h4>公司</h4>
-            <a href="#">关于我们</a>
-            <a href="#">博客</a>
-            <a href="#">联系我们</a>
-          </div>
-        </div>
-
-        <div class="footer-bottom">
-          <p>&copy; 2026 Flowly. 保留所有权利。</p>
-        </div>
-      </div>
+      </section>
+    </main>
+    <footer>
+      <router-link
+        to="/"
+        class="brand"
+      >
+        <strong>Flowly</strong><small>AI 应用交付工作台</small>
+      </router-link><router-link to="/login">
+        登录工作区<ArrowUpRight aria-hidden="true" />
+      </router-link><span>知识 · 流程 · 测试 · 发布 · 观测</span>
     </footer>
   </div>
 </template>
-
 <script setup>
-import { ref } from 'vue'
+import { nextTick, ref } from 'vue'
+import { ArrowUpRight, Boxes, FlaskConical, GitBranch, Layers, Plus, Radio, ShieldCheck } from 'lucide-vue-next'
+import { LANDING } from '@/config/landing'
+import { BOT_AVATAR } from '@/config/botAvatar'
 import ThemeLogo from '@/components/common/ThemeLogo.vue'
 import ThemeSwitcher from '@/components/common/ThemeSwitcher.vue'
-import {
-  Zap, Play, MessageSquare, GitBranch, Bot, Database, Users,
-  FileText, Headphones, BarChart, ChevronRight, ChevronDown, Check
-} from 'lucide-vue-next'
-
-const openFaq = ref(null)
-
-function toggleFaq(index) {
-  openFaq.value = openFaq.value === index ? null : index
+import FlowlyBot from '@/components/common/FlowlyBot.vue'
+const icons = { Boxes, FlaskConical, GitBranch, Radio }
+const activeStage = ref(0)
+async function changeStage(event, index) {
+  const total = LANDING.stages.length
+  const next = event.key === 'ArrowRight' ? (index + 1) % total : event.key === 'ArrowLeft' ? (index + total - 1) % total : event.key === 'Home' ? 0 : event.key === 'End' ? total - 1 : null
+  if (next == null) return
+  event.preventDefault()
+  activeStage.value = next
+  await nextTick()
+  document.getElementById(`delivery-tab-${next}`)?.focus()
 }
 </script>
-
 <style lang="scss" scoped>
 @use '@/assets/styles/variables.scss' as *;
-
-// 主题自适应颜色
-$primary: var(--accent-primary);
-$primary-dark: var(--accent-secondary);
-$white: var(--text-inverse);
-
-.landing-page {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  color: var(--text-primary);
-  line-height: 1.6;
-  background-color: var(--bg-primary);
-  transition: background-color 0.3s, color 0.3s;
-}
-
-.container {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 0 $spacing-6;
-}
-
-// Navigation
-.landing-nav {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 100;
-  background: var(--glass-bg);
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
-  border-bottom: 1px solid var(--glass-border);
-  box-shadow: var(--glass-shadow);
-  transition: background-color 0.3s, border-color 0.3s, backdrop-filter 0.3s;
-}
-
-.nav-container {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: $spacing-4 $spacing-6;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.nav-brand {
-  display: flex;
-  align-items: center;
-  gap: $spacing-2;
-
-  .brand-link {
-    display: flex;
-    align-items: center;
-    gap: $spacing-2;
-    text-decoration: none;
-  }
-
-  .brand-logo-img {
-    width: 32px;
-    height: 32px;
-  }
-
-  .brand-name {
-    font-size: $font-size-xl;
-    font-weight: $font-weight-bold;
-    color: var(--text-primary);
-  }
-}
-
-.nav-links {
-  display: flex;
-  gap: $spacing-8;
-
-  .nav-link {
-    color: var(--text-secondary);
-    text-decoration: none;
-    font-size: $font-size-sm;
-    transition: color 0.2s;
-
-    &:hover {
-      color: var(--text-primary);
-    }
-  }
-}
-
-.nav-actions {
-  display: flex;
-  align-items: center;
-  gap: $spacing-3;
-}
-
-// Buttons
-.btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: $spacing-2;
-  padding: $spacing-2 $spacing-4;
-  border-radius: $radius-lg;
-  font-size: $font-size-sm;
-  font-weight: $font-weight-medium;
-  text-decoration: none;
-  transition: all 0.2s;
-  cursor: pointer;
-  border: none;
-
-  &-icon {
-    width: 16px;
-    height: 16px;
-  }
-
-  &-lg {
-    padding: $spacing-3 $spacing-6;
-    font-size: $font-size-base;
-  }
-
-  &-block {
-    width: 100%;
-  }
-
-  &-primary {
-    background: var(--button-primary-bg);
-    color: var(--button-primary-text);
-    box-shadow: var(--button-primary-shadow, var(--shadow-sm));
-
-    &:hover {
-      background: var(--button-primary-hover-bg);
-      color: var(--button-primary-text);
-      transform: translateY(-2px);
-      box-shadow: var(--shadow-md);
-    }
-  }
-
-  &-outline {
-    background: transparent;
-    border: 1px solid var(--border-primary);
-    color: var(--text-primary);
-
-    &:hover {
-      border-color: var(--border-hover);
-      color: var(--text-primary);
-      background: var(--bg-hover);
-    }
-  }
-
-  &-ghost {
-    background: transparent;
-    color: var(--text-primary);
-
-    &:hover {
-      background: var(--bg-hover);
-      color: var(--text-primary);
-    }
-  }
-
-  &-white {
-    background: var(--text-inverse);
-    color: var(--bg-primary);
-
-    &:hover {
-      transform: translateY(-1px);
-      box-shadow: var(--shadow-md);
-    }
-  }
-}
-
-// Hero Section
-.hero {
-  position: relative;
-  padding: 160px 0 100px;
-  text-align: center;
-  overflow: hidden;
-}
-
-.hero-bg {
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-}
-
-.hero-gradient {
-  position: absolute;
-  top: -50%;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 150%;
-  height: 150%;
-  background: radial-gradient(ellipse at center, var(--hero-glow) 0%, transparent 60%);
-}
-
-.hero-grid {
-  position: absolute;
-  inset: 0;
-  background-image:
-    linear-gradient(var(--hero-grid) 1px, transparent 1px),
-    linear-gradient(90deg, var(--hero-grid) 1px, transparent 1px);
-  background-size: 60px 60px;
-  mask-image: radial-gradient(ellipse at center, black 30%, transparent 70%);
-}
-
-.hero-container {
-  max-width: 900px;
-  margin: 0 auto;
-  padding: 0 $spacing-6;
-}
-
-.hero-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: $spacing-2;
-  padding: $spacing-2 $spacing-4;
-  background: var(--surface-muted);
-  border: 1px solid var(--accent-blue-soft);
-  border-radius: $radius-full;
-  color: var(--text-primary);
-  margin-bottom: $spacing-6;
-  font-size: $font-size-sm;
-  font-weight: $font-weight-medium;
-
-  .badge-dot {
-    width: 8px;
-    height: 8px;
-    background: var(--accent-blue);
-    border-radius: 50%;
-    animation: pulse 2s infinite;
-  }
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
-}
-
-.hero-title {
-  font-size: 4rem;
-  font-weight: $font-weight-bold;
-  line-height: 1.1;
-  margin-bottom: $spacing-6;
-  color: var(--text-primary);
-
-  @media (max-width: $breakpoint-md) {
-    font-size: 2.5rem;
-  }
-}
-
-.title-emphasis {
-  color: var(--text-primary);
-  border-bottom: 2px solid var(--accent-blue-soft);
-  padding-bottom: 0.06em;
-}
-
-.hero-description {
-  font-size: $font-size-xl;
-  color: var(--text-secondary);
-  max-width: 700px;
-  margin: 0 auto $spacing-8;
-}
-
-.hero-actions {
-  display: flex;
-  gap: $spacing-4;
-  justify-content: center;
-  flex-wrap: wrap;
-  margin-bottom: $spacing-12;
-}
-
-.hero-stats {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: $spacing-8;
-}
-
-.stat {
-  text-align: center;
-
-  .stat-value {
-    display: block;
-    font-size: $font-size-2xl;
-    font-weight: $font-weight-bold;
-    color: var(--text-primary);
-  }
-
-  .stat-label {
-    font-size: $font-size-sm;
-    color: var(--text-secondary);
-  }
-}
-
-.stat-divider {
-  width: 1px;
-  height: 40px;
-  background: var(--border-primary);
-}
-
-// Section Styles
-.section-header {
-  text-align: center;
-  margin-bottom: $spacing-12;
-}
-
-.section-title {
-  font-size: $font-size-3xl;
-  font-weight: $font-weight-bold;
-  margin-bottom: $spacing-4;
-  color: var(--text-primary);
-}
-
-.section-description {
-  font-size: $font-size-lg;
-  color: var(--text-secondary);
-  max-width: 600px;
-  margin: 0 auto;
-}
-
-// Features Section
-.features {
-  padding: 100px 0;
-  background: var(--bg-secondary);
-  transition: background-color 0.3s;
-}
-
-.features-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: $spacing-6;
-
-  @media (max-width: $breakpoint-lg) {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  @media (max-width: $breakpoint-sm) {
-    grid-template-columns: 1fr;
-  }
-}
-
-.feature-card {
-  position: relative;
-  background: var(--card-bg);
-  padding: $spacing-6;
-  border-radius: var(--radius-card, $radius-xl);
-  border: 1px solid var(--card-border);
-  box-shadow: var(--shadow-sm);
-  overflow: hidden;
-  transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1),
-              box-shadow 0.3s ease,
-              border-color 0.3s ease;
-
-  &::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    background: var(--card-inner-highlight);
-  }
-
-  &:hover {
-    transform: translateY(-6px);
-    border-color: var(--item-accent-soft, var(--border-hover));
-    box-shadow: var(--shadow-md);
-  }
-}
-
-.feature-icon {
-  position: relative;
-  z-index: 1;
-  width: 48px;
-  height: 48px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--bg-tertiary);
-  border-radius: $radius-lg;
-  margin-bottom: $spacing-4;
-  box-shadow: inset 0 0 0 1px var(--item-accent-soft, var(--accent-blue-soft));
-
-  .icon {
-    width: 24px;
-    height: 24px;
-    color: var(--item-accent, var(--accent-blue));
-  }
-}
-
-.feature-title {
-  font-size: $font-size-lg;
-  font-weight: $font-weight-semibold;
-  margin-bottom: $spacing-2;
-  color: var(--text-primary);
-}
-
-.feature-description {
-  font-size: $font-size-sm;
-  color: var(--text-secondary);
-  line-height: 1.7;
-}
-
-// How It Works
-.how-it-works {
-  padding: 100px 0;
-  background: var(--bg-primary);
-  transition: background-color 0.3s;
-}
-
-.steps {
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  gap: $spacing-4;
-
-  @media (max-width: $breakpoint-md) {
-    flex-direction: column;
-    align-items: center;
-  }
-}
-
-.step {
-  display: flex;
-  gap: $spacing-4;
-  flex: 1;
-  max-width: 300px;
-}
-
-.step-number {
-  width: 48px;
-  height: 48px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--accent-primary);
-  color: var(--text-inverse);
-  font-size: $font-size-xl;
-  font-weight: $font-weight-bold;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.step-content {
-  .step-title {
-    font-size: $font-size-lg;
-    font-weight: $font-weight-semibold;
-    margin-bottom: $spacing-2;
-    color: var(--text-primary);
-  }
-
-  .step-description {
-    font-size: $font-size-sm;
-    color: var(--text-secondary);
-  }
-}
-
-.step-connector {
-  width: 100px;
-  color: var(--border-primary);
-  padding-top: 12px;
-
-  @media (max-width: $breakpoint-md) {
-    transform: rotate(90deg);
-    width: 60px;
-  }
-
-  svg {
-    width: 100%;
-  }
-}
-
-// Use Cases
-.use-cases {
-  padding: 100px 0;
-  background: var(--bg-secondary);
-  transition: background-color 0.3s;
-}
-
-.use-cases-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: $spacing-12;
-  align-items: center;
-
-  @media (max-width: $breakpoint-lg) {
-    grid-template-columns: 1fr;
-  }
-}
-
-.use-case-list {
-  display: flex;
-  flex-direction: column;
-  gap: $spacing-6;
-}
-
-.use-case-item {
-  display: flex;
-  gap: $spacing-4;
-}
-
-.use-case-icon {
-  width: 48px;
-  height: 48px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--bg-tertiary);
-  border-radius: $radius-lg;
-  flex-shrink: 0;
-  box-shadow: var(--shadow-sm);
-
-  .icon {
-    width: 24px;
-    height: 24px;
-    color: var(--accent-primary);
-  }
-}
-
-.use-case-text {
-  h4 {
-    font-size: $font-size-base;
-    font-weight: $font-weight-semibold;
-    margin-bottom: $spacing-1;
-    color: var(--text-primary);
-  }
-
-  p {
-    font-size: $font-size-sm;
-    color: var(--text-secondary);
-  }
-}
-
-.workflow-preview {
-  background: var(--bg-tertiary);
-  border-radius: $radius-xl;
-  overflow: hidden;
-  box-shadow: var(--shadow-xl);
-}
-
-.preview-header {
-  display: flex;
-  gap: $spacing-2;
-  padding: $spacing-3 $spacing-4;
-  background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border-primary);
-}
-
-.preview-dot {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-
-  &.red { background: var(--text-tertiary); }
-  &.yellow { background: var(--text-secondary); }
-  &.green { background: var(--text-primary); }
-}
-
-.preview-content {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: $spacing-4;
-  padding: $spacing-8;
-  flex-wrap: wrap;
-}
-
-.preview-node {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: $spacing-2;
-  padding: $spacing-4;
-  border-radius: $radius-lg;
-  min-width: 100px;
-
-  .node-icon {
-    width: 24px;
-    height: 24px;
-  }
-
-  span {
-    font-size: $font-size-xs;
-    font-weight: $font-weight-medium;
-    color: var(--text-primary);
-  }
-
-  &.start {
-    background: var(--surface-muted);
-    color: var(--accent-primary);
-  }
-
-  &.ai {
-    background: var(--accent-primary);
-    color: var(--text-inverse);
-  }
-
-  &.output {
-    background: var(--surface-muted);
-    color: var(--accent-primary);
-  }
-}
-
-.preview-arrow {
-  .arrow-icon {
-    width: 20px;
-    height: 20px;
-    color: var(--border-primary);
-  }
-}
-
-// Pricing
-.pricing {
-  padding: 100px 0;
-  background: var(--bg-primary);
-  transition: background-color 0.3s;
-}
-
-.pricing-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: $spacing-6;
-  align-items: start;
-
-  @media (max-width: $breakpoint-lg) {
-    grid-template-columns: 1fr;
-    max-width: 400px;
-    margin: 0 auto;
-  }
-}
-
-.pricing-card {
-  background: var(--bg-tertiary);
-  border-radius: $radius-xl;
-  padding: $spacing-6;
-  border: 1px solid var(--border-primary);
-  position: relative;
-  transition: all 0.3s;
-
-  &.featured {
-    border: 2px solid $primary;
-    transform: scale(1.05);
-
-    @media (max-width: $breakpoint-lg) {
-      transform: none;
-    }
-  }
-}
-
-.featured-badge {
-  position: absolute;
-  top: -12px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: var(--accent-primary);
-  color: var(--text-inverse);
-  padding: $spacing-1 $spacing-3;
-  border-radius: 100px;
-  font-size: $font-size-xs;
-  font-weight: $font-weight-semibold;
-}
-
-.pricing-header {
-  text-align: center;
-  padding-bottom: $spacing-6;
-  border-bottom: 1px solid var(--border-primary);
-  margin-bottom: $spacing-6;
-}
-
-.plan-name {
-  font-size: $font-size-lg;
-  font-weight: $font-weight-semibold;
-  margin-bottom: $spacing-2;
-  color: var(--text-primary);
-}
-
-.plan-price {
-  .price {
-    font-size: $font-size-3xl;
-    font-weight: $font-weight-bold;
-    color: var(--text-primary);
-  }
-
-  .period {
-    font-size: $font-size-sm;
-    color: var(--text-secondary);
-  }
-}
-
-.plan-description {
-  font-size: $font-size-sm;
-  color: var(--text-secondary);
-  margin-top: $spacing-2;
-}
-
-.plan-features {
-  list-style: none;
-  padding: 0;
-  margin: 0 0 $spacing-6;
-
-  li {
-    display: flex;
-    align-items: center;
-    gap: $spacing-2;
-    padding: $spacing-2 0;
-    font-size: $font-size-sm;
-    color: var(--text-secondary);
-
-    .check-icon {
-      width: 16px;
-      height: 16px;
-      color: var(--success);
-    }
-  }
-}
-
-// FAQ
-.faq {
-  padding: 100px 0;
-  background: var(--bg-secondary);
-  transition: background-color 0.3s;
-}
-
-.faq-list {
-  max-width: 800px;
-  margin: 0 auto;
-}
-
-.faq-item {
-  background: var(--bg-tertiary);
-  border-radius: $radius-lg;
-  margin-bottom: $spacing-3;
-  overflow: hidden;
-}
-
-.faq-question {
-  width: 100%;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: $spacing-4 $spacing-5;
-  background: transparent;
-  border: none;
-  font-size: $font-size-base;
-  font-weight: $font-weight-medium;
-  color: var(--text-primary);
-  cursor: pointer;
-  text-align: left;
-  transition: background-color 0.2s;
-
-  &:hover {
-    background: var(--bg-hover);
-  }
-}
-
-.faq-icon {
-  width: 20px;
-  height: 20px;
-  color: var(--text-secondary);
-  transition: transform 0.3s;
-
-  &.active {
-    transform: rotate(180deg);
-  }
-}
-
-.faq-answer {
-  max-height: 0;
-  overflow: hidden;
-  transition: max-height 0.3s;
-
-  &.open {
-    max-height: 200px;
-  }
-
-  p {
-    padding: 0 $spacing-5 $spacing-4;
-    font-size: $font-size-sm;
-    color: var(--text-secondary);
-    line-height: 1.7;
-  }
-}
-
-// CTA
-.cta {
-  padding: 100px 0;
-  background: var(--bg-primary);
-  color: var(--text-primary);
-  text-align: center;
-  border-top: 1px solid var(--border-primary);
-}
-
-.cta-content {
-  max-width: 600px;
-  margin: 0 auto;
-}
-
-.cta-title {
-  font-size: $font-size-3xl;
-  font-weight: $font-weight-bold;
-  color: var(--text-primary);
-  margin-bottom: $spacing-4;
-}
-
-.cta-description {
-  font-size: $font-size-lg;
-  color: var(--text-secondary);
-  margin-bottom: $spacing-8;
-}
-
-// Footer
-.landing-footer {
-  padding: 60px 0 30px;
-  background: var(--bg-tertiary);
-  color: var(--text-secondary);
-  border-top: 1px solid var(--border-primary);
-}
-
-.footer-grid {
-  display: grid;
-  grid-template-columns: 2fr 1fr 1fr 1fr;
-  gap: $spacing-8;
-  margin-bottom: $spacing-8;
-
-  @media (max-width: $breakpoint-lg) {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  @media (max-width: $breakpoint-sm) {
-    grid-template-columns: 1fr;
-  }
-}
-
-.footer-brand {
-  .nav-brand {
-    margin-bottom: $spacing-2;
-
-    .brand-name {
-      color: var(--text-primary);
-    }
-  }
-
-  .footer-tagline {
-    font-size: $font-size-sm;
-    color: var(--text-secondary);
-  }
-}
-
-.footer-links {
-  h4 {
-    color: var(--text-primary);
-    font-size: $font-size-sm;
-    font-weight: $font-weight-semibold;
-    margin-bottom: $spacing-4;
-  }
-
-  a {
-    display: block;
-    color: var(--text-secondary);
-    font-size: $font-size-sm;
-    text-decoration: none;
-    padding: $spacing-1 0;
-    transition: color 0.2s;
-
-    &:hover {
-      color: var(--text-primary);
-    }
-  }
-}
-
-.footer-bottom {
-  padding-top: $spacing-6;
-  border-top: 1px solid var(--border-primary);
-  text-align: center;
-
-  p {
-    font-size: $font-size-sm;
-    color: var(--text-secondary);
-  }
-}
+.landing-page { --landing-width: 1200px; --landing-gutter: 32px; --landing-space: 96px; --landing-display: 48px; --landing-heading: 36px; color: var(--text-primary); background: var(--delivery-surface); }
+.landing-page svg { width: var(--delivery-icon); height: var(--delivery-icon); flex-shrink: 0; }
+.landing-page a:hover { opacity: 1; }
+.landing-page h1, .landing-page h2 { text-wrap: balance; }
+.landing-page p { text-wrap: pretty; }
+.landing-skip { position: fixed; top: $spacing-3; left: $spacing-3; z-index: $z-tooltip; transform: translateY(-200%); padding: $spacing-3; background: var(--bg-elevated); &:focus { transform: none; } }
+header { border-bottom: 1px solid var(--delivery-border); background: var(--delivery-panel); }
+nav { max-width: var(--landing-width); margin-inline: auto; padding: $spacing-4 var(--landing-gutter); display: flex; gap: $spacing-6; align-items: center; font-size: $font-size-sm; }
+.brand { display: flex; align-items: center; gap: $spacing-3; color: var(--text-primary); :deep(img) { width: $spacing-8; height: $spacing-8; } strong { font-size: $font-size-xl; font-weight: $font-weight-semibold; } small { color: var(--text-tertiary); font-size: $font-size-xs; } }
+.nav-links { display: flex; gap: $spacing-6; margin-left: auto; a { color: var(--text-secondary); &:hover { color: var(--delivery-accent); } } }
+.hero, .split-section { max-width: var(--landing-width); margin-inline: auto; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: $spacing-12; padding: var(--landing-space) var(--landing-gutter); }
+.hero { align-items: center; }
+.eyebrow { color: var(--delivery-accent); font-size: $font-size-xs; font-weight: $font-weight-medium; }
+h1 { margin-block: $spacing-6; font-size: var(--landing-display); line-height: 1.2; font-weight: $font-weight-semibold; letter-spacing: -0.025em; span { color: var(--delivery-accent); } }
+.description { margin-bottom: $spacing-8; max-width: 65ch; color: var(--text-secondary); font-size: $font-size-base; line-height: $line-height-relaxed; }
+.primary { display: inline-flex; align-items: center; justify-content: center; gap: $spacing-4; padding: $spacing-3 $spacing-4; min-height: var(--delivery-touch-target); border-radius: var(--radius-lg); color: var(--button-primary-text); background: var(--button-primary-bg); font-size: $font-size-sm; font-weight: $font-weight-semibold; transition: background-color var(--delivery-transition); &:hover { background: var(--button-primary-hover-bg); } }
+.note { margin-top: $spacing-4; color: var(--text-tertiary); font-size: $font-size-xs; }
+.preview { min-width: 0; border: 1px solid var(--border-secondary); border-radius: var(--radius-xl); background: var(--delivery-panel); overflow: hidden; box-shadow: var(--shadow-md); }
+.preview-heading, .preview-footer { display: flex; align-items: center; gap: $spacing-2; padding: $spacing-4 $spacing-6; color: var(--text-secondary); font-size: $font-size-xs; > span { display: inline-flex; align-items: center; gap: $spacing-2; } }
+.preview-heading { border-bottom: 1px solid var(--delivery-border); font-family: var(--font-family-mono); small { margin-left: auto; color: var(--text-tertiary); } }
+.preview-app { display: flex; align-items: center; gap: $spacing-3; padding: $spacing-6; > svg { color: var(--delivery-accent); } > div { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: $spacing-1; } strong { font-size: $font-size-base; font-weight: $font-weight-medium; } small { font-size: $font-size-xs; color: var(--text-secondary); } }
+.stage-tabs { display: flex; padding-inline: $spacing-6; gap: $spacing-2; button { flex: 1; display: flex; justify-content: center; align-items: center; gap: $spacing-2; padding: $spacing-2; min-height: var(--delivery-touch-target); border: 1px solid transparent; border-radius: var(--radius-md); color: var(--text-secondary); font-size: $font-size-sm; span { font-family: var(--font-family-mono); font-size: $font-size-xs; line-height: $line-height-normal; color: var(--text-tertiary); } &:hover { background: var(--bg-hover); } &[aria-selected='true'] { background: var(--delivery-accent-soft); color: var(--delivery-accent); border-color: var(--delivery-border); } } }
+.stage-panel { padding: $spacing-6; min-height: $spacing-16 * 4; > svg { color: var(--delivery-accent); margin-bottom: $spacing-3; } h2 { font-size: $font-size-lg; line-height: $line-height-normal; margin-bottom: $spacing-3; } p { min-height: $spacing-16; color: var(--text-secondary); font-size: $font-size-sm; line-height: $line-height-relaxed; } code { display: block; margin-top: $spacing-4; padding: $spacing-3; color: var(--delivery-accent); background: var(--bg-primary); border-radius: var(--radius-md); font-size: $font-size-xs; white-space: normal; overflow-wrap: anywhere; } }
+.preview-footer { border-top: 1px solid var(--delivery-border); flex-wrap: wrap; > svg { color: var(--delivery-accent); } > span { margin-left: auto; } }
+.split-section { grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); gap: $spacing-16; border-top: 1px solid var(--delivery-border); scroll-margin-top: $spacing-6; }
+.intro h2 { margin-block: $spacing-4; font-size: var(--landing-heading); line-height: 1.3; font-weight: $font-weight-semibold; }
+.intro p { max-width: 50ch; color: var(--text-secondary); font-size: $font-size-sm; line-height: $line-height-relaxed; }
+.rows { list-style: none; li, article { display: flex; gap: $spacing-4; padding-block: $spacing-6; border-bottom: 1px solid var(--delivery-border); &:first-child { padding-top: 0; } > div { flex: 1; min-width: 0; } > svg { color: var(--text-tertiary); } } h3 { font-size: $font-size-lg; line-height: $line-height-normal; font-weight: $font-weight-medium; } p { margin-block: $spacing-2 $spacing-3; color: var(--text-secondary); font-size: $font-size-sm; line-height: $line-height-relaxed; } small { color: var(--delivery-accent); font-size: $font-size-xs; } }
+.number { color: var(--delivery-accent); font-family: var(--font-family-mono); font-size: $font-size-xs; line-height: $line-height-normal; }
+.statement { display: flex; flex-wrap: wrap; justify-content: space-between; gap: $spacing-8; padding: var(--landing-space) max(var(--landing-gutter), calc((100% - var(--landing-width)) / 2 + var(--landing-gutter))); background: var(--delivery-panel); border-block: 1px solid var(--delivery-border); > p { font-size: var(--landing-display); line-height: 1.3; font-weight: $font-weight-semibold; span { color: var(--delivery-accent); } } > div { align-self: flex-end; > p { margin-bottom: $spacing-6; color: var(--text-secondary); font-size: $font-size-sm; line-height: $line-height-relaxed; } } }
+.faq { border-top: 0; details { border-bottom: 1px solid var(--delivery-border); padding-block: $spacing-4; &:first-child { padding-top: 0; } summary { display: flex; align-items: center; justify-content: space-between; gap: $spacing-4; list-style: none; font-size: $font-size-sm; font-weight: $font-weight-medium; cursor: pointer; min-height: var(--delivery-touch-target); &::-webkit-details-marker { display: none; } svg { color: var(--text-tertiary); } } &[open] summary svg { transform: rotate(45deg); } p { color: var(--text-secondary); font-size: $font-size-sm; line-height: $line-height-relaxed; margin-block: $spacing-2 $spacing-4; max-width: 65ch; } } }
+footer { display: flex; flex-wrap: wrap; align-items: center; gap: $spacing-6; max-width: var(--landing-width); padding: $spacing-8 var(--landing-gutter); margin-inline: auto; border-top: 1px solid var(--delivery-border); > a:not(.brand) { margin-left: auto; display: inline-flex; align-items: center; gap: $spacing-2; color: var(--delivery-accent); font-size: $font-size-sm; } > span { width: 100%; color: var(--text-tertiary); font-size: $font-size-xs; } }
+@media (max-width: 960px) { .landing-page { --landing-gutter: 24px; --landing-space: 64px; --landing-display: 36px; --landing-heading: 30px; } .hero { gap: $spacing-6; } .split-section { gap: $spacing-8; } .nav-links { gap: $spacing-4; } .brand > small { display: none; } }
+@media (max-width: 720px) { .landing-page { --landing-gutter: 16px; --landing-space: 48px; } .hero, .split-section { grid-template-columns: minmax(0, 1fr); gap: $spacing-8; } .nav-links { display: none; } nav > :nth-last-child(2) { margin-left: auto; } nav > a:last-child { min-height: var(--delivery-touch-target); display: inline-flex; align-items: center; } .preview-app, .preview-heading, .preview-footer, .stage-panel { padding: $spacing-4; } .stage-tabs { padding-inline: $spacing-4; } .preview-footer > span { margin-left: 0; flex-basis: 100%; } footer .brand { flex-basis: 100%; } footer > a:not(.brand) { margin-left: 0; } }
 </style>

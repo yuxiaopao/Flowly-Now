@@ -254,7 +254,7 @@ class AnthropicProvider(BaseProvider):
             if kwargs.get('stop_sequences'):
                 payload['stop_sequences'] = kwargs['stop_sequences']
 
-            with httpx.Client(timeout=120.0) as http_client:
+            with httpx.Client(timeout=kwargs.get('timeout', 120.0)) as http_client:
                 response = http_client.post(
                     f"{self._anthropic_base_url}/messages",
                     headers=headers,

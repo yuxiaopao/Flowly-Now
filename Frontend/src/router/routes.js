@@ -8,7 +8,7 @@ const routes = [
     path: '/',
     name: 'Landing',
     component: () => import('@/views/Landing.vue'),
-    meta: { title: 'Flowly - AI Agent 工作流编排平台', requiresAuth: false, layout: 'blank' }
+    meta: { title: 'Flowly · AI 应用交付工作台', requiresAuth: false, layout: 'blank' }
   },
   {
     path: '/login',
@@ -42,7 +42,19 @@ const routes = [
     path: '/home',
     name: 'Dashboard',
     component: () => import('@/views/dashboard/Home.vue'),
-    meta: { title: '工作台', requiresAuth: true, layout: 'default' }
+    meta: { title: '交付工作台', requiresAuth: true, layout: 'default' }
+  },
+  {
+    path: '/applications',
+    name: 'ApplicationList',
+    component: () => import('@/views/applications/Index.vue'),
+    meta: { title: '应用中心', requiresAuth: true, layout: 'default' }
+  },
+  {
+    path: '/applications/:id',
+    name: 'ApplicationDetail',
+    component: () => import('@/views/applications/Detail.vue'),
+    meta: { title: '应用工作区', requiresAuth: true, layout: 'default' }
   },
   {
     path: '/workflows',

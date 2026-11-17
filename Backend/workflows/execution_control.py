@@ -67,23 +67,23 @@ def heartbeat_interval_seconds() -> float:
     return float(getattr(settings, 'WORKFLOW_HEARTBEAT_INTERVAL_SEC', 15))
 
 
-def count_active_runs(workflow_id, exclude_execution_id=None) -> int:
-    """Count executions that occupy a worker slot (queued/pending/running)."""
+def count_active_runs(workflow_id, exclude_execution_id=None, *, running_only=False) -> int:
+    """Count accepted runs, or only running workers when admitting queued work."""
     from workflows.models import WorkflowExecution
 
     qs = WorkflowExecution.objects.filter(
         workflow_id=workflow_id,
-        status__in=('queued', 'pending', 'running'),
+        status__in=('running',) if running_only else ('queued', 'pending', 'running'),
     )
     if exclude_execution_id:
         qs = qs.exclude(id=exclude_execution_id)
     return qs.count()
 
 
-def check_concurrency_allowed(workflow_id, exclude_execution_id=None) -> Tuple[bool, str]:
+def check_concurrency_allowed(workflow_id, exclude_execution_id=None, *, running_only=False) -> Tuple[bool, str]:
     """Return (ok, message). Paused/interrupted do not consume concurrency slots."""
     limit = max_concurrent_per_workflow()
-    current = count_active_runs(workflow_id, exclude_execution_id=exclude_execution_id)
+    current = count_active_runs(workflow_id, exclude_execution_id=exclude_execution_id, running_only=running_only)
     if current >= limit:
         return False, (
             f'该工作流已有 {current} 个进行中的执行（上限 {limit}）。'
@@ -124,6 +124,7 @@ def claim_execution_for_run(
     allowed_statuses: Tuple[str, ...],
     task_id: Optional[str] = None,
     require_snapshot: bool = False,
+    enforce_concurrency: bool = False,
 ) -> Tuple[bool, Any, str]:
     """
     Atomically claim an execution for a worker.
@@ -131,9 +132,13 @@ def claim_execution_for_run(
     Prevents double-resume / double-start races across concurrent Celery workers.
     Returns (ok, execution, message).
     """
-    from workflows.models import WorkflowExecution
+    from workflows.models import Workflow, WorkflowExecution
 
     try:
+        if enforce_concurrency:
+            workflow_id = WorkflowExecution.objects.values_list('workflow_id', flat=True).get(pk=execution_id)
+            # Serialize slot claims across different executions of the same workflow.
+            Workflow.all_objects.select_for_update().get(pk=workflow_id)
         execution = (
             WorkflowExecution.objects.select_for_update()
             .select_related('workflow')
@@ -144,6 +149,13 @@ def claim_execution_for_run(
 
     if execution.status not in allowed_statuses:
         return False, execution, f'Execution status is {execution.status}, cannot claim'
+
+    if enforce_concurrency:
+        allowed, message = check_concurrency_allowed(
+            execution.workflow_id, exclude_execution_id=execution.id, running_only=True,
+        )
+        if not allowed:
+            return False, execution, message
 
     if require_snapshot:
         snap = execution.context_snapshot or {}

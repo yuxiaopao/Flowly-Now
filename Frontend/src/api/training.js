@@ -74,6 +74,9 @@ export default {
   getYoloMetricsHistory(id) {
     return apiClient.get(`/training/yolo-runs/${id}/metrics_history/`)
   },
+  getYoloAnalytics(id) {
+    return apiClient.get(`/training/yolo-runs/${id}/analytics/`, { preserveResponseKeys: true, skipErrorToast: true })
+  },
   getYoloTrainingPlots(id) {
     return apiClient.get(`/training/yolo-runs/${id}/plots/`)
   },

@@ -22,95 +22,100 @@ jest.mock('@/api/index', () => ({
 }))
 
 const marketplaceApi = require('@/api/marketplace').default
+const { WORKFLOW_OPAQUE_KEYS } = require('@/api/workflow')
+const opaqueOptions = { opaqueKeys: WORKFLOW_OPAQUE_KEYS }
 
 beforeEach(() => jest.clearAllMocks())
 
 describe('marketplaceApi.getTemplates', () => {
-  it('GET /marketplace/templates/', async () => {
+  it('GET /templates/', async () => {
     await marketplaceApi.getTemplates()
-    expect(mockRequest.get).toHaveBeenCalledWith('/marketplace/templates/', {})
+    expect(mockRequest.get).toHaveBeenCalledWith('/templates/', {}, opaqueOptions)
   })
   it('携带搜索参数', async () => {
     await marketplaceApi.getTemplates({ search: 'AI' })
-    expect(mockRequest.get).toHaveBeenCalledWith('/marketplace/templates/', { search: 'AI' })
+    expect(mockRequest.get).toHaveBeenCalledWith('/templates/', { search: 'AI' }, opaqueOptions)
   })
 })
 
 describe('marketplaceApi.getTemplate', () => {
-  it('GET /marketplace/templates/:id/', async () => {
+  it('GET /templates/:id/', async () => {
     await marketplaceApi.getTemplate(1)
-    expect(mockRequest.get).toHaveBeenCalledWith('/marketplace/templates/1/')
+    expect(mockRequest.get).toHaveBeenCalledWith('/templates/1/', {}, opaqueOptions)
   })
 })
 
 describe('marketplaceApi.createTemplate', () => {
-  it('POST /marketplace/templates/', async () => {
+  it('POST /templates/', async () => {
     const data = { name: '模板', workflow_id: 5 }
     await marketplaceApi.createTemplate(data)
-    expect(mockRequest.post).toHaveBeenCalledWith('/marketplace/templates/', data)
+    expect(mockRequest.post).toHaveBeenCalledWith('/templates/', data)
   })
 })
 
 describe('marketplaceApi.updateTemplate', () => {
-  it('PATCH /marketplace/templates/:id/', async () => {
+  it('PATCH /templates/:id/', async () => {
     await marketplaceApi.updateTemplate(1, { description: '新描述' })
-    expect(mockRequest.patch).toHaveBeenCalledWith('/marketplace/templates/1/', { description: '新描述' })
+    expect(mockRequest.patch).toHaveBeenCalledWith('/templates/1/', { description: '新描述' })
   })
 })
 
 describe('marketplaceApi.deleteTemplate', () => {
-  it('DELETE /marketplace/templates/:id/', async () => {
+  it('DELETE /templates/:id/', async () => {
     await marketplaceApi.deleteTemplate(1)
-    expect(mockRequest.delete).toHaveBeenCalledWith('/marketplace/templates/1/')
+    expect(mockRequest.delete).toHaveBeenCalledWith('/templates/1/')
   })
 })
 
 describe('marketplaceApi.getFeaturedTemplates', () => {
-  it('GET /marketplace/templates/featured/', async () => {
+  it('GET /templates/featured/', async () => {
     await marketplaceApi.getFeaturedTemplates()
-    expect(mockRequest.get).toHaveBeenCalledWith('/marketplace/templates/featured/')
+    expect(mockRequest.get).toHaveBeenCalledWith('/templates/featured/', {}, opaqueOptions)
   })
 })
 
-describe('marketplaceApi.getPopularTemplates', () => {
-  it('GET /marketplace/templates/popular/', async () => {
-    await marketplaceApi.getPopularTemplates()
-    expect(mockRequest.get).toHaveBeenCalledWith('/marketplace/templates/popular/')
+describe('marketplaceApi.getTemplates popular sorting', () => {
+  it('GET /templates/ with sort=popular', async () => {
+    await marketplaceApi.getTemplates({ sort: 'popular' })
+    expect(mockRequest.get).toHaveBeenCalledWith('/templates/', { sort: 'popular' }, opaqueOptions)
   })
 })
 
-describe('marketplaceApi.getRecentTemplates', () => {
-  it('GET /marketplace/templates/recent/', async () => {
-    await marketplaceApi.getRecentTemplates()
-    expect(mockRequest.get).toHaveBeenCalledWith('/marketplace/templates/recent/')
+describe('marketplaceApi.getTemplates newest sorting', () => {
+  it('GET /templates/ with sort=newest', async () => {
+    await marketplaceApi.getTemplates({ sort: 'newest' })
+    expect(mockRequest.get).toHaveBeenCalledWith('/templates/', { sort: 'newest' }, opaqueOptions)
   })
 })
 
-describe('marketplaceApi.getTemplatePreview', () => {
-  it('GET /marketplace/templates/:id/preview/', async () => {
-    await marketplaceApi.getTemplatePreview(1)
-    expect(mockRequest.get).toHaveBeenCalledWith('/marketplace/templates/1/preview/')
+describe('marketplaceApi.getTemplate preview data', () => {
+  it('GET /templates/:id/ preserves the workflow data for preview', async () => {
+    const workflowData = { nodes: [{ id: 'start' }], edges: [] }
+    mockRequest.get.mockResolvedValueOnce({ id: 1, workflow_data: workflowData })
+    const response = await marketplaceApi.getTemplate(1)
+    expect(mockRequest.get).toHaveBeenCalledWith('/templates/1/', {}, opaqueOptions)
+    expect(response.workflow_data).toEqual(workflowData)
   })
 })
 
 describe('marketplaceApi.installTemplate', () => {
-  it('POST /marketplace/templates/:id/install/', async () => {
+  it('POST /templates/:id/install/', async () => {
     await marketplaceApi.installTemplate(1)
-    expect(mockRequest.post).toHaveBeenCalledWith('/marketplace/templates/1/install/')
+    expect(mockRequest.post).toHaveBeenCalledWith('/templates/1/install/')
   })
 })
 
 describe('marketplaceApi.rateTemplate', () => {
-  it('POST /marketplace/templates/:id/rate/', async () => {
+  it('POST /templates/:id/rate/', async () => {
     await marketplaceApi.rateTemplate(1, 5)
-    expect(mockRequest.post).toHaveBeenCalledWith('/marketplace/templates/1/rate/', { rating: 5 })
+    expect(mockRequest.post).toHaveBeenCalledWith('/templates/1/rate/', { rating: 5 })
   })
 })
 
 describe('marketplaceApi.getTemplateStats', () => {
-  it('GET /marketplace/templates/:id/stats/', async () => {
+  it('GET /templates/:id/stats/', async () => {
     await marketplaceApi.getTemplateStats(1)
-    expect(mockRequest.get).toHaveBeenCalledWith('/marketplace/templates/1/stats/')
+    expect(mockRequest.get).toHaveBeenCalledWith('/templates/1/stats/')
   })
 })
 
@@ -122,50 +127,50 @@ describe('marketplaceApi.reportTemplate', () => {
 })
 
 describe('marketplaceApi.getCategories', () => {
-  it('GET /marketplace/categories/', async () => {
+  it('GET /template-categories/', async () => {
     await marketplaceApi.getCategories()
-    expect(mockRequest.get).toHaveBeenCalledWith('/marketplace/categories/', {})
+    expect(mockRequest.get).toHaveBeenCalledWith('/template-categories/', {}, opaqueOptions)
   })
 })
 
 describe('marketplaceApi.getCategory', () => {
-  it('GET /marketplace/categories/:id/', async () => {
+  it('GET /template-categories/:id/', async () => {
     await marketplaceApi.getCategory(1)
-    expect(mockRequest.get).toHaveBeenCalledWith('/marketplace/categories/1/')
+    expect(mockRequest.get).toHaveBeenCalledWith('/template-categories/1/', {}, opaqueOptions)
   })
 })
 
 describe('marketplaceApi.getCategoryTemplates', () => {
-  it('GET /marketplace/categories/:id/templates/', async () => {
+  it('GET /templates/ with category filter', async () => {
     await marketplaceApi.getCategoryTemplates(1)
-    expect(mockRequest.get).toHaveBeenCalledWith('/marketplace/categories/1/templates/', {})
+    expect(mockRequest.get).toHaveBeenCalledWith('/templates/', { category: 1 })
   })
 })
 
 describe('marketplaceApi.getMyTemplates', () => {
-  it('GET /marketplace/my-templates/', async () => {
+  it('GET /templates/mine/', async () => {
     await marketplaceApi.getMyTemplates()
-    expect(mockRequest.get).toHaveBeenCalledWith('/marketplace/my-templates/', {})
+    expect(mockRequest.get).toHaveBeenCalledWith('/templates/mine/', {})
   })
 })
 
 describe('marketplaceApi.publishTemplate', () => {
-  it('POST /marketplace/my-templates/:id/publish/', async () => {
+  it('PATCH /templates/:id/publish/', async () => {
     await marketplaceApi.publishTemplate(10)
-    expect(mockRequest.post).toHaveBeenCalledWith('/marketplace/my-templates/10/publish/')
+    expect(mockRequest.patch).toHaveBeenCalledWith('/templates/10/publish/')
   })
 })
 
 describe('marketplaceApi.unpublishTemplate', () => {
-  it('POST /marketplace/my-templates/:id/unpublish/', async () => {
+  it('PATCH /templates/:id/unpublish/', async () => {
     await marketplaceApi.unpublishTemplate(10)
-    expect(mockRequest.post).toHaveBeenCalledWith('/marketplace/my-templates/10/unpublish/')
+    expect(mockRequest.patch).toHaveBeenCalledWith('/templates/10/unpublish/')
   })
 })
 
 describe('marketplaceApi.getInstalledTemplates', () => {
-  it('GET /marketplace/installed/', async () => {
+  it('GET /templates/installed/', async () => {
     await marketplaceApi.getInstalledTemplates()
-    expect(mockRequest.get).toHaveBeenCalledWith('/marketplace/installed/', {})
+    expect(mockRequest.get).toHaveBeenCalledWith('/templates/installed/', {})
   })
 })

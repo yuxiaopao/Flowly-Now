@@ -28,13 +28,13 @@ vi.mock('@/api/workflow', () => ({
 }))
 
 vi.mock('@/api/websocket', () => ({
-  ExecutionWebSocket: vi.fn().mockImplementation(() => ({
+  ExecutionWebSocket: vi.fn().mockImplementation(function () { return {
     on: vi.fn(),
     off: vi.fn(),
     connect: vi.fn().mockResolvedValue(undefined),
     disconnect: vi.fn(),
     send: vi.fn()
-  }))
+  } })
 }))
 
 vi.mock('@/stores/app', () => ({
@@ -214,7 +214,7 @@ describe('Execution Store', () => {
         connect: vi.fn().mockResolvedValue(undefined),
         disconnect: vi.fn()
       }
-      ExecutionWebSocket.mockImplementation(() => mockWsInstance)
+      ExecutionWebSocket.mockImplementation(function () { return mockWsInstance })
 
       await executionStore.connectWebSocket(1)
 

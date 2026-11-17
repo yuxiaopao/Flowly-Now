@@ -14,7 +14,7 @@ import pytest
 DEFAULT_SUITES = (
     'tests/backend', 'tests/nl_workflow', 'Backend/workflows/tests',
     'Backend/core/tests', 'Backend/website_generator/tests',
-    'Backend/nl_to_workflow/tests', 'Backend/tests',
+    'Backend/nl_to_workflow/tests', 'Backend/tests', 'Backend/training',
 )
 
 if __name__ == '__main__':

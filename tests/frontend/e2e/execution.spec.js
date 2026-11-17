@@ -8,16 +8,28 @@ import {
   mockExecutionList,
   mockExecution,
   mockExecutionRunning
-} from '../mocks/executions.mock'
+} from '../vitest/mocks/executions.mock'
 
 test.describe('Execution Interface', () => {
   test.beforeEach(async ({ page }) => {
-    // Navigate to execution page
-    await page.goto('/workflow/execute/1')
-    
-    // Wait for page to load
-    await page.waitForLoadState('networkidle')
-    
+    await page.context().addCookies([
+      { name: 'access_token', value: 'e2e-token', domain: 'localhost', path: '/' },
+      { name: 'refresh_token', value: 'e2e-refresh', domain: 'localhost', path: '/' },
+    ])
+    await page.addInitScript(() => {
+      localStorage.setItem('access_token', 'e2e-token')
+      localStorage.setItem('refresh_token', 'e2e-refresh')
+      sessionStorage.setItem('access_token', 'e2e-token')
+      sessionStorage.setItem('refresh_token', 'e2e-refresh')
+    })
+    await page.route('**/api/v1/auth/user/', (route) => {
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ code: 200, data: { id: 1, username: 'e2e', email: 'e2e@example.com', is_staff: false, is_superuser: false } }),
+      })
+    })
+
     // Mock API responses
     await page.route('**/api/v1/workflows/**', async (route) => {
       const url = route.request().url()
@@ -166,7 +178,7 @@ test.describe('Execution Interface', () => {
 
     test('should display execution metadata', async ({ page }) => {
       // Navigate to specific execution
-      await page.goto('/workflow/execution/1')
+      await page.goto('/executions/1')
       await page.waitForLoadState('networkidle')
       
       // Check for metadata fields
@@ -177,7 +189,7 @@ test.describe('Execution Interface', () => {
     })
 
     test('should display node status visualization', async ({ page }) => {
-      await page.goto('/workflow/execution/1')
+      await page.goto('/executions/1')
       await page.waitForLoadState('networkidle')
       
       // Look for node status display
@@ -190,7 +202,7 @@ test.describe('Execution Interface', () => {
 
   test.describe('Real-time Status Updates', () => {
     test('should connect to WebSocket for live updates', async ({ page }) => {
-      await page.goto('/workflow/execution/1')
+      await page.goto('/executions/1')
       await page.waitForLoadState('networkidle')
       
       // Mock WebSocket
@@ -211,7 +223,7 @@ test.describe('Execution Interface', () => {
     })
 
     test('should update UI on node completion', async ({ page }) => {
-      await page.goto('/workflow/execution/1')
+      await page.goto('/executions/1')
       await page.waitForLoadState('networkidle')
       
       // Mock WebSocket messages
@@ -230,7 +242,7 @@ test.describe('Execution Interface', () => {
     })
 
     test('should show streaming output in real-time', async ({ page }) => {
-      await page.goto('/workflow/execution/1')
+      await page.goto('/executions/1')
       await page.waitForLoadState('networkidle')
       
       // Look for streaming output panel
@@ -241,7 +253,7 @@ test.describe('Execution Interface', () => {
     })
 
     test('should update progress bar', async ({ page }) => {
-      await page.goto('/workflow/execution/1')
+      await page.goto('/executions/1')
       await page.waitForLoadState('networkidle')
       
       // Look for progress bar
@@ -255,7 +267,7 @@ test.describe('Execution Interface', () => {
       // This would test that a toast/notification appears
       // when execution_complete WebSocket event is received
       
-      await page.goto('/workflow/execution/1')
+      await page.goto('/executions/1')
       await page.waitForLoadState('networkidle')
       
       // Toast container should exist
@@ -267,7 +279,7 @@ test.describe('Execution Interface', () => {
 
   test.describe('Execution Logs', () => {
     test('should display execution logs', async ({ page }) => {
-      await page.goto('/workflow/execution/1')
+      await page.goto('/executions/1')
       await page.waitForLoadState('networkidle')
       
       // Mock logs API
@@ -289,7 +301,7 @@ test.describe('Execution Interface', () => {
     })
 
     test('should filter logs by level', async ({ page }) => {
-      await page.goto('/workflow/execution/1')
+      await page.goto('/executions/1')
       await page.waitForLoadState('networkidle')
       
       // Look for log level filter
@@ -309,7 +321,7 @@ test.describe('Execution Interface', () => {
     })
 
     test('should display log timestamps', async ({ page }) => {
-      await page.goto('/workflow/execution/1')
+      await page.goto('/executions/1')
       await page.waitForLoadState('networkidle')
       
       // Look for timestamp in logs
@@ -319,7 +331,7 @@ test.describe('Execution Interface', () => {
     })
 
     test('should auto-scroll logs to bottom', async ({ page }) => {
-      await page.goto('/workflow/execution/1')
+      await page.goto('/executions/1')
       await page.waitForLoadState('networkidle')
       
       const logsContainer = page.locator('[class*="log-list"], [class*="console"]')
@@ -332,7 +344,7 @@ test.describe('Execution Interface', () => {
     })
 
     test('should copy log entry', async ({ page }) => {
-      await page.goto('/workflow/execution/1')
+      await page.goto('/executions/1')
       await page.waitForLoadState('networkidle')
       
       // Find a log entry
@@ -359,7 +371,7 @@ test.describe('Execution Interface', () => {
         })
       })
       
-      await page.goto('/workflow/execution/1')
+      await page.goto('/executions/1')
       await page.waitForLoadState('networkidle')
       
       // Look for cancel button
@@ -379,7 +391,7 @@ test.describe('Execution Interface', () => {
         })
       })
       
-      await page.goto('/workflow/execution/1')
+      await page.goto('/executions/1')
       await page.waitForLoadState('networkidle')
       
       const cancelButton = page.locator('button:has-text("Cancel"), button:has-text("取消")')
@@ -403,7 +415,7 @@ test.describe('Execution Interface', () => {
     })
 
     test('should show pause button', async ({ page }) => {
-      await page.goto('/workflow/execution/1')
+      await page.goto('/executions/1')
       await page.waitForLoadState('networkidle')
       
       const pauseButton = page.locator(
@@ -426,7 +438,7 @@ test.describe('Execution Interface', () => {
         })
       })
       
-      await page.goto('/workflow/execution/12') // Failed execution
+      await page.goto('/executions/12') // Failed execution
       await page.waitForLoadState('networkidle')
       
       const retryButton = page.locator(
@@ -456,7 +468,7 @@ test.describe('Execution Interface', () => {
         })
       })
       
-      await page.goto('/workflow/executions')
+      await page.goto('/executions')
       await page.waitForLoadState('networkidle')
       
       // Look for statistics section
@@ -465,7 +477,7 @@ test.describe('Execution Interface', () => {
     })
 
     test('should show success rate chart', async ({ page }) => {
-      await page.goto('/workflow/executions')
+      await page.goto('/executions')
       await page.waitForLoadState('networkidle')
       
       const chart = page.locator('canvas, [class*="chart"], [class*="graph"]')
@@ -489,7 +501,7 @@ test.describe('Execution Interface', () => {
         })
       })
       
-      await page.goto('/workflow/execution/12')
+      await page.goto('/executions/12')
       await page.waitForLoadState('networkidle')
       
       // Look for error display
@@ -500,7 +512,7 @@ test.describe('Execution Interface', () => {
     })
 
     test('should show traceback for debugging', async ({ page }) => {
-      await page.goto('/workflow/execution/12')
+      await page.goto('/executions/12')
       await page.waitForLoadState('networkidle')
       
       // Look for traceback/code block
@@ -514,7 +526,7 @@ test.describe('Execution Interface', () => {
         await route.abort('failed')
       })
       
-      await page.goto('/workflow/executions')
+      await page.goto('/executions')
       await page.waitForLoadState('networkidle')
       
       // Should show error state
@@ -527,7 +539,7 @@ test.describe('Execution Interface', () => {
 
   test.describe('Output Display', () => {
     test('should display node output data', async ({ page }) => {
-      await page.goto('/workflow/execution/1')
+      await page.goto('/executions/1')
       await page.waitForLoadState('networkidle')
       
       // Look for output section
@@ -538,7 +550,7 @@ test.describe('Execution Interface', () => {
     })
 
     test('should display JSON output formatted', async ({ page }) => {
-      await page.goto('/workflow/execution/1')
+      await page.goto('/executions/1')
       await page.waitForLoadState('networkidle')
       
       // Look for JSON viewer or formatted output
@@ -550,7 +562,7 @@ test.describe('Execution Interface', () => {
     })
 
     test('should allow output to be copied', async ({ page }) => {
-      await page.goto('/workflow/execution/1')
+      await page.goto('/executions/1')
       await page.waitForLoadState('networkidle')
       
       // Look for copy button near output
@@ -571,7 +583,7 @@ test.describe('Execution Interface', () => {
     test('should work on mobile viewport', async ({ page }) => {
       await page.setViewportSize({ width: 375, height: 667 })
       
-      await page.goto('/workflow/executions')
+      await page.goto('/executions')
       await page.waitForLoadState('networkidle')
       
       // Should show mobile-friendly list
@@ -582,7 +594,7 @@ test.describe('Execution Interface', () => {
     test('should collapse panels on small screens', async ({ page }) => {
       await page.setViewportSize({ width: 768, height: 1024 })
       
-      await page.goto('/workflow/execution/1')
+      await page.goto('/executions/1')
       await page.waitForLoadState('networkidle')
       
       // Look for collapsible panels

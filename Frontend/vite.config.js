@@ -52,8 +52,10 @@ export default defineConfig(({ mode, command }) => {
   },
   build: {
     outDir: 'dist',
+    // Preserve the browser compilation targets used before the security upgrade.
+    target: ['es2020', 'edge88', 'firefox78', 'chrome87', 'safari14'],
     sourcemap: false,
-    chunkSizeWarningLimit: 1500,
+    chunkSizeWarningLimit: 2500,
     rollupOptions: {
       output: {
         manualChunks: {
@@ -61,6 +63,7 @@ export default defineConfig(({ mode, command }) => {
           'vue-flow': ['@vue-flow/core', '@vue-flow/background', '@vue-flow/controls', '@vue-flow/minimap'],
           'echarts': ['echarts'],
           'spline': ['@splinetool/runtime'],
+          'three-graph': ['three', '3d-force-graph'],
         }
       }
     }

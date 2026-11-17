@@ -313,6 +313,9 @@ class OpenAIProvider(BaseProvider):
             # Agnes chat models spend completion budget on reasoning_content first.
             # Prefer disabling thinking so workflow nodes get usable text output.
             create_kwargs = dict(kwargs)
+            timeout = create_kwargs.pop('timeout', None)
+            if timeout is not None:
+                client = client.with_options(timeout=timeout, max_retries=0)
             if self._is_agnes() and str(model or '').startswith('agnes-'):
                 extra_body = dict(create_kwargs.pop('extra_body', None) or {})
                 extra_body.setdefault('enable_thinking', False)

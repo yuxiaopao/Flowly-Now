@@ -2,10 +2,8 @@
 Audit log API views.
 """
 
-import json
-
 from django.http import HttpResponse
-from rest_framework import viewsets, status
+from rest_framework import mixins, viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
@@ -13,12 +11,20 @@ from django_filters.rest_framework import DjangoFilterBackend
 from django.utils import timezone
 from django.db import models
 
-from ..models.audit import AuditLog, LoginHistory, DataExport
+from ..models.audit import AuditLog, LoginHistory, DataExport, PersonalBackupPolicy
 from ..serializers.audit_serializers import (
     AuditLogSerializer,
     LoginHistorySerializer,
     DataExportSerializer,
+    DataExportRequestSerializer,
+    PersonalBackupPolicySerializer,
 )
+from core.services.personal_exports import create_export, render_export
+from core.services.personal_restore import preview_restore, confirm_restore
+from core.services.personal_backups import save_backup_policy
+from core.services.personal_deletion import preview_deletion, delete_personal_data
+from rest_framework.exceptions import ValidationError
+from core.data_constants import SNAPSHOT_VERSION
 
 
 class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
@@ -114,79 +120,48 @@ class LoginHistoryViewSet(viewsets.ReadOnlyModelViewSet):
         return Response(list(locations))
 
 
-def _serialize_export_rows(queryset, fields):
-    return list(queryset.values(*fields))
-
-
-def _build_export_payload(export):
-    """Build export payload from the user's data."""
-    user = export.user
-    payload = {
-        'export_type': export.export_type,
-        'format': export.format,
-        'exported_at': timezone.now().isoformat(),
-        'user_id': user.id,
-        'username': user.username,
-    }
-
-    if export.export_type in ('full', 'workflows'):
-        from workflows.models import Workflow
-        from tenants.access import get_accessible_workflow_queryset
-
-        payload['workflows'] = _serialize_export_rows(
-            get_accessible_workflow_queryset(user).filter(
-                models.Q(owner=user) | models.Q(is_public=True)
-            ).order_by('-created_at')[:500],
-            ['id', 'name', 'description', 'status', 'created_at', 'updated_at'],
-        )
-
-    if export.export_type in ('full', 'executions'):
-        from workflows.models import WorkflowExecution
-        from tenants.access import get_accessible_workflow_queryset, get_accessible_tenant_ids
-
-        payload['executions'] = _serialize_export_rows(
-            WorkflowExecution.objects.filter(
-                workflow__in=get_accessible_workflow_queryset(user),
-            ).filter(
-                models.Q(workflow__owner=user)
-                | models.Q(triggered_by=user)
-                | models.Q(workflow__tenant_id__in=get_accessible_tenant_ids(user))
-            ).distinct().order_by('-created_at')[:500],
-            ['id', 'workflow_id', 'status', 'started_at', 'completed_at', 'duration_ms'],
-        )
-
-    if export.export_type in ('full', 'audit_logs'):
-        payload['audit_logs'] = _serialize_export_rows(
-            AuditLog.objects.filter(user=user).order_by('-created_at')[:500],
-            ['id', 'action', 'level', 'description', 'target_type', 'target_id', 'created_at'],
-        )
-
-    return payload
-
-
-def _render_export_bytes(export):
-    payload = _build_export_payload(export)
-    if export.format == 'json':
-        return json.dumps(payload, ensure_ascii=False, default=str).encode('utf-8'), 'application/json'
-    if export.format == 'csv':
-        lines = ['section,key,value']
-        for section, rows in payload.items():
-            if isinstance(rows, list):
-                lines.append(f'{section},count,{len(rows)}')
-            else:
-                lines.append(f'meta,{section},{rows}')
-        return '\n'.join(lines).encode('utf-8'), 'text/csv'
-    return json.dumps(payload, ensure_ascii=False, default=str).encode('utf-8'), 'application/json'
-
-
-class DataExportViewSet(viewsets.ModelViewSet):
+class DataExportViewSet(mixins.DestroyModelMixin, viewsets.ReadOnlyModelViewSet):
     """ViewSet for data exports."""
 
     serializer_class = DataExportSerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return DataExport.objects.filter(user=self.request.user)
+        return DataExport.objects.filter(user=self.request.user).annotate(
+            _restorable=models.Case(models.When(
+                status='completed', format='json', export_type__in=['full', 'workflows', 'agents'],
+                snapshot__schema_version=SNAPSHOT_VERSION, then=models.Value(True),
+            ), default=models.Value(False), output_field=models.BooleanField()),
+        ).defer('snapshot')
+
+    @action(detail=False, methods=['get'])
+    def delete_preview(self, request):
+        return Response(preview_deletion(request.user))
+
+    @action(detail=False, methods=['post'])
+    def delete_personal_data(self, request):
+        return Response(delete_personal_data(request.user, request.data))
+
+    @action(detail=False, methods=['get', 'patch'])
+    def backup_settings(self, request):
+        policy, _ = PersonalBackupPolicy.objects.get_or_create(user=request.user)
+        if request.method == 'PATCH':
+            serializer = PersonalBackupPolicySerializer(policy, data=request.data, partial=True)
+            serializer.is_valid(raise_exception=True)
+            policy = save_backup_policy(request.user, serializer.validated_data)
+        return Response(PersonalBackupPolicySerializer(policy).data)
+
+    @action(detail=True, methods=['post'])
+    def restore_preview(self, request, pk=None):
+        return Response(preview_restore(self.get_object()))
+
+    @action(detail=True, methods=['post'])
+    def restore(self, request, pk=None):
+        export = self.get_object()
+        if request.data.get('confirm') is not True or not isinstance(request.data.get('confirmation_token'), str):
+            raise ValidationError('请先预览并明确确认恢复为副本。')
+        result, created = confirm_restore(request.user, export.pk, request.data['confirmation_token'])
+        return Response(result, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
 
     @action(detail=True, methods=['get'])
     def download(self, request, pk=None):
@@ -197,10 +172,8 @@ class DataExportViewSet(viewsets.ModelViewSet):
         if export.expires_at and export.expires_at < timezone.now():
             return Response({'error': 'Export expired'}, status=status.HTTP_410_GONE)
 
-        content, content_type = _render_export_bytes(export)
-        export.download_count += 1
-        export.file_size = len(content)
-        export.save(update_fields=['download_count', 'file_size'])
+        content, content_type = render_export(export)
+        DataExport.objects.filter(pk=export.pk).update(download_count=models.F('download_count') + 1)
 
         response = HttpResponse(content, content_type=content_type)
         response['Content-Disposition'] = f'attachment; filename="{export.file_name or f"export_{export.id}.{export.format}"}"'
@@ -209,25 +182,9 @@ class DataExportViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['post'])
     def request_export(self, request):
         """Request a new data export."""
-        export_type = request.data.get('export_type', 'full')
-        export_format = request.data.get('format', 'json')
-
-        export = DataExport.objects.create(
-            user=request.user,
-            export_type=export_type,
-            format=export_format,
-            status='pending'
-        )
-
-        content, _ = _render_export_bytes(export)
-        export.status = 'completed'
-        export.file_name = f"export_{export.id}.{export_format}"
-        export.file_size = len(content)
-        export.file_url = request.build_absolute_uri(
-            f'/api/v1/data-export/{export.id}/download/'
-        )
-        export.completed_at = timezone.now()
-        export.save()
+        serializer = DataExportRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        export = create_export(request.user, serializer.validated_data)
 
         return Response(
             DataExportSerializer(export).data,

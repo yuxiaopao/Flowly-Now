@@ -28,6 +28,7 @@ from tenants.models import Tenant
 from users.models import User
 from users.serializers import UserSerializer
 from workflows.models import Workflow, WorkflowExecution
+from workflows.serializers import WorkflowDetailSerializer
 
 from .constants import (
     BACKUP_DUMPDATA_EXCLUDES, BACKUP_TYPE_DATABASE, BACKUP_TYPE_FILES,
@@ -306,7 +307,7 @@ class WorkflowManagementViewSet(viewsets.ReadOnlyModelViewSet):
     """ViewSet for workflow management."""
 
     queryset = Workflow.objects.all()
-    serializer_class = None
+    serializer_class = WorkflowDetailSerializer
     permission_classes = [IsSuperUser]
 
     def list(self, request):
@@ -315,6 +316,9 @@ class WorkflowManagementViewSet(viewsets.ReadOnlyModelViewSet):
         page_size = int(request.query_params.get('page_size', 20))
 
         queryset = Workflow.objects.select_related('owner')
+        workflow_status = request.query_params.get('status')
+        if workflow_status:
+            queryset = queryset.filter(status=workflow_status)
 
         total = queryset.count()
         workflows = queryset.order_by('-created_at')[

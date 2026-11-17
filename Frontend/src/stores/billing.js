@@ -66,14 +66,7 @@ export const useBillingStore = defineStore('billing', {
         this.subscription = res
       } catch (error) {
         this.error = error.message
-        if (!this.subscription) {
-          this.subscription = {
-            planType: 'free',
-            plan_type: 'free',
-            status: 'active',
-            billingCycle: 'monthly',
-          }
-        }
+        this.subscription = null
       } finally {
         this.isLoading = false
       }

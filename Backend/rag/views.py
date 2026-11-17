@@ -3,22 +3,25 @@ import json
 import logging
 from django.conf import settings
 from django.db import transaction
-from django.db.models import Count, F, Q, Sum
+from django.db.models import Count, F, Sum
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from tenants.access import get_accessible_tenant_ids, is_tenant_admin, is_tenant_member
-from .access import accessible_collections, can_manage_collection
+from .access import accessible_collections, accessible_stores, can_manage_resource, can_manage_store
+from .permissions import RAGResourcePermission
 from .constants import (
-    DEFAULT_TOP_K, DEFAULT_MIN_SIMILARITY, DEFAULT_STORE_NAME, LOCAL_STORE_TYPES,
+    DEFAULT_TOP_K, DEFAULT_MIN_SIMILARITY, LOCAL_STORE_TYPES,
     FILE_EXTENSIONS, DEFAULT_MAX_FILE_BYTES, RETRIEVAL_MODES, CHUNK_STRATEGIES, INDEX_FIELDS,
 )
 from .models import VectorStore, DocumentCollection, Document, Chunk, RAGPipeline
 from .parsing import extract_file_content
 from .pipeline import RAGUnavailable, refresh_collection_stats, import_system_guides
+from .mutations import lock_collections
+from .store_scope import (writable_space, validate_collection_store, choose_default_store,
+    lock_store_owner, clear_other_defaults)
 from .serializers import (
     VectorStoreSerializer, VectorStoreCreateSerializer, DocumentSerializer, DocumentListSerializer,
     DocumentCreateSerializer, DocumentURLSerializer, DocumentCollectionSerializer,
@@ -30,13 +33,8 @@ from .services import RAGService, DocumentProcessor, get_vector_store_client
 logger = logging.getLogger(__name__)
 
 
-def _validate_tenant_membership(request, tenant):
-    if tenant is not None and not is_tenant_member(request.user, tenant.id):
-        raise PermissionDenied('您不是该团队的成员，无法将资源共享到此团队。')
-
-
-def require_manager(user, collection):
-    if not can_manage_collection(user, collection):
+def require_manager(user, resource):
+    if not can_manage_resource(user, resource):
         raise PermissionDenied('仅所有者或团队管理员可修改或删除这些知识库资源。')
 
 
@@ -62,7 +60,7 @@ def query_options(request):
 
 
 class RAGViewMixin:
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, RAGResourcePermission]
 
     def handle_exception(self, exc):
         if isinstance(exc, RAGUnavailable):
@@ -74,41 +72,45 @@ class RAGViewMixin:
 
 class VectorStoreViewSet(RAGViewMixin, viewsets.ModelViewSet):
     def get_queryset(self):
-        user = self.request.user
-        return VectorStore.objects.filter(Q(owner=user) | Q(owner__isnull=True) |
-            Q(tenant_id__in=get_accessible_tenant_ids(user))).select_related('tenant').distinct()
+        return accessible_stores(self.request.user).select_related('tenant')
 
     def get_serializer_class(self):
         return VectorStoreCreateSerializer if self.action in {'create', 'update', 'partial_update'} else VectorStoreSerializer
 
     def require_owner(self, instance):
-        user = self.request.user
-        if user.is_superuser or instance.owner_id == user.id:
-            return
-        if instance.tenant_id and is_tenant_admin(user, instance.tenant_id):
+        if can_manage_store(self.request.user, instance):
             return
         raise PermissionDenied('仅所有者或团队管理员可管理该存储；公共存储由管理员管理。')
 
     def perform_create(self, serializer):
-        _validate_tenant_membership(self.request, serializer.validated_data.get('tenant'))
         with transaction.atomic():
+            tenant = writable_space(self.request.user, serializer.validated_data.get('tenant'))
+            lock_store_owner(self.request.user.pk)
             if serializer.validated_data.get('is_default'):
-                VectorStore.objects.filter(owner=self.request.user).update(is_default=False)
-            serializer.save(owner=self.request.user)
+                clear_other_defaults(self.request.user.pk, tenant)
+            serializer.save(owner=self.request.user, tenant=tenant)
 
     def perform_update(self, serializer):
-        self.require_owner(serializer.instance)
-        _validate_tenant_membership(self.request, serializer.validated_data.get('tenant'))
-        connection_fields = {'store_type', 'host', 'port', 'path', 'collection', 'dimension', 'metric'}
-        if serializer.instance.collections.filter(documents__isnull=False).exists() and any(
-            key in serializer.validated_data and serializer.validated_data[key] != getattr(serializer.instance, key)
-            for key in connection_fields
-        ):
-            raise ValidationError('此存储已有知识文档。请先迁移或清空关联知识库，再变更连接参数。')
         with transaction.atomic():
-            if serializer.validated_data.get('is_default'):
-                VectorStore.objects.filter(owner=serializer.instance.owner).exclude(pk=serializer.instance.pk).update(is_default=False)
-            serializer.save()
+            if serializer.instance.owner_id is not None:
+                lock_store_owner(serializer.instance.owner_id)
+            lock_collections(serializer.instance.collections.values_list('pk', flat=True))
+            store = VectorStore.objects.select_for_update().get(pk=serializer.instance.pk)
+            self.require_owner(store)
+            writable_space(self.request.user, store.tenant)
+            tenant = writable_space(self.request.user, serializer.validated_data.get('tenant', store.tenant))
+            if store.tenant_id != (tenant.pk if tenant else None) and store.collections.exists():
+                raise ValidationError({'tenant': '此存储仍被知识库使用，不能单独转移空间；请先显式迁移知识库。'})
+            connection_fields = {'store_type', 'host', 'port', 'path', 'collection', 'dimension', 'metric'}
+            if store.collections.filter(documents__isnull=False).exists() and any(
+                key in serializer.validated_data and serializer.validated_data[key] != getattr(store, key)
+                for key in connection_fields
+            ):
+                raise ValidationError('此存储已有知识文档。请先迁移或清空关联知识库，再变更连接参数。')
+            if serializer.validated_data.get('is_default', store.is_default):
+                clear_other_defaults(store.owner_id, tenant, except_id=store.pk)
+            serializer.instance = store
+            serializer.save(tenant=tenant)
 
     def perform_destroy(self, instance):
         self.require_owner(instance)
@@ -202,34 +204,43 @@ class DocumentCollectionViewSet(RAGViewMixin, viewsets.ModelViewSet):
         return DocumentCollectionSerializer
 
     def perform_create(self, serializer):
-        _validate_tenant_membership(self.request, serializer.validated_data.get('tenant'))
-        store = serializer.validated_data.get('vector_store')
-        if not store:
-            store = VectorStore.objects.filter(owner=self.request.user, is_default=True).first()
-        if not store:
-            store, _ = VectorStore.objects.get_or_create(owner=self.request.user, store_type='memory', name=DEFAULT_STORE_NAME,
-                                                        defaults={'is_default': True})
-        serializer.save(owner=self.request.user, vector_store=store)
+        with transaction.atomic():
+            tenant = writable_space(self.request.user, serializer.validated_data.get('tenant'))
+            store = serializer.validated_data.get('vector_store')
+            if store is None:
+                store = choose_default_store(self.request.user, tenant)
+            store = VectorStore.objects.select_for_update().get(pk=store.pk)
+            validate_collection_store(self.request.user, tenant, store, self.request.user.pk)
+            serializer.save(owner=self.request.user, tenant=tenant, vector_store=store)
 
     def perform_update(self, serializer):
         require_manager(self.request.user, serializer.instance)
-        _validate_tenant_membership(self.request, serializer.validated_data.get('tenant'))
         with transaction.atomic():
             collection = DocumentCollection.objects.select_for_update().get(id=serializer.instance.id)
+            require_manager(self.request.user, collection)
+            writable_space(self.request.user, collection.tenant)
+            tenant = serializer.validated_data.get('tenant', collection.tenant)
+            store = serializer.validated_data.get('vector_store') or collection.vector_store
+            store = VectorStore.objects.select_for_update().get(pk=store.pk)
+            validate_collection_store(self.request.user, tenant, store, collection.owner_id)
+            if store.pk != collection.vector_store_id and collection.documents.exists():
+                raise ValidationError({'vector_store': '已有文档时不能直接切换存储，请新建知识库并重新导入。'})
             changed = any(key in serializer.validated_data and serializer.validated_data[key] != getattr(collection, key)
                           for key in INDEX_FIELDS)
             if changed and collection.documents.filter(status='processing').exists():
                 raise ValidationError('有文档正在处理，请完成后修改索引配置。')
             if 'vector_store' in serializer.validated_data and serializer.validated_data['vector_store'] is None:
                 serializer.validated_data['vector_store'] = collection.vector_store
+            serializer.instance = collection
             serializer.save()
             if changed:
                 collection.documents.update(status='pending', error_message='索引配置已修改，请重新处理文档。')
 
     def perform_destroy(self, instance):
         require_manager(self.request.user, instance)
-        remove_documents(instance, instance.documents.all())
-        instance.delete()
+        with transaction.atomic():
+            remove_documents(instance, instance.documents.all())
+            instance.delete()
 
     @action(detail=False, methods=['get'])
     def capabilities(self, request):
@@ -344,9 +355,13 @@ class DocumentViewSet(RAGViewMixin, mixins.ListModelMixin, mixins.RetrieveModelM
         document = serializer.instance
         require_manager(self.request.user, document.collection)
         with transaction.atomic():
-            DocumentCollection.objects.select_for_update().get(id=document.collection_id)
-            if Document.objects.get(id=document.id).status == 'processing':
+            collection = DocumentCollection.objects.select_for_update().get(id=document.collection_id)
+            document = Document.objects.select_for_update().get(id=document.id)
+            require_manager(self.request.user, collection)
+            if document.status == 'processing':
                 raise ValidationError('文档正在处理中。')
+            document.collection = collection
+            serializer.instance = document
             serializer.save(status='pending')
         result = DocumentProcessor(document.collection).process_document(document)
         if not result['success']:
@@ -393,11 +408,11 @@ class RAGPipelineViewSet(RAGViewMixin, viewsets.ModelViewSet):
         serializer.save(owner=self.request.user)
 
     def perform_update(self, serializer):
-        require_manager(self.request.user, serializer.instance.collection)
+        require_manager(self.request.user, serializer.instance)
         serializer.save()
 
     def perform_destroy(self, instance):
-        require_manager(self.request.user, instance.collection)
+        require_manager(self.request.user, instance)
         instance.delete()
 
     @action(detail=True, methods=['post'])

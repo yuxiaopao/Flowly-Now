@@ -46,21 +46,21 @@
           show-icon
           role="alert"
         />
-        <el-form-item
+        <AuthFormField
+          v-model="formData.email"
           prop="email"
           label="注册邮箱"
-          label-position="top"
+          placeholder="请输入邮箱地址"
+          type="email"
+          autocomplete="email"
+          trim
+          required
+          help="请输入注册时使用的邮箱地址"
         >
-          <el-input
-            v-model.trim="formData.email"
-            type="email"
-            autocomplete="email"
-            aria-label="注册邮箱"
-            placeholder="请输入邮箱地址"
-            size="large"
-            :prefix-icon="Mail"
-          />
-        </el-form-item>
+          <template #prefix>
+            <Mail class="input-icon" />
+          </template>
+        </AuthFormField>
 
         <el-form-item>
           <el-button
@@ -93,6 +93,7 @@
 <script setup>
 import { ref, reactive } from 'vue'
 import { ArrowLeft, Mail } from 'lucide-vue-next'
+import AuthFormField from '@/components/auth/AuthFormField.vue'
 import { sendResetEmail } from '@/api/auth'
 import { getSettingsError } from '@/utils/personalCenter'
 
@@ -107,8 +108,8 @@ const formData = reactive({
 
 const formRules = {
   email: [
-    { required: true, message: '请输入邮箱地址' },
-    { type: 'email', message: '请输入有效的邮箱地址' }
+    { required: true, message: '请输入邮箱地址', trigger: 'blur' },
+    { type: 'email', message: '请输入有效的邮箱地址，例如 name@example.com', trigger: 'blur' }
   ]
 }
 
@@ -203,7 +204,8 @@ async function handleSubmit() {
   font-size: 14px;
   margin-bottom: 24px;
   transition: color 0.2s, background-color 0.2s;
-  padding: 8px 12px;
+  padding: 12px 16px;
+  min-height: 44px;
   border-radius: 999px;
 }
 
@@ -215,6 +217,12 @@ async function handleSubmit() {
 .back-icon {
   width: 16px;
   height: 16px;
+}
+
+.input-icon {
+  width: 18px;
+  height: 18px;
+  color: var(--text-secondary);
 }
 
 .title {
@@ -255,6 +263,9 @@ async function handleSubmit() {
 }
 
 .card-footer .link {
+  display: inline-block;
+  padding: 12px 2px;
+  margin: -12px -2px;
   color: var(--text-primary);
   font-weight: 600;
   text-decoration: none;
@@ -262,5 +273,18 @@ async function handleSubmit() {
 
 .card-footer .link:hover {
   text-decoration: underline;
+}
+
+@media (max-width: 480px) {
+  .forgot-password-card {
+    padding: 24px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .back-link,
+  .submit-btn {
+    transition: none !important;
+  }
 }
 </style>

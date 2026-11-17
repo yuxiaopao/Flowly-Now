@@ -14,7 +14,7 @@ import {
   mockExecutionRunning,
   mockExecutionList,
   mockExecutionFailed
-} from '../mocks/executions.mock'
+} from '../vitest/mocks/executions.mock'
 
 test.describe('Workflow Execution E2E', () => {
   

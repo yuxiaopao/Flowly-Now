@@ -1,0 +1,75 @@
+# Deploy with docker/deploy_release.py; images and runtime env are recorded per release.
+# Database, Redis, pgvector and optional model servers remain operator-managed.
+x-backend: &backend
+  image: ${BACKEND_IMAGE_REF:?Set an immutable backend image reference}
+  working_dir: /app
+  env_file:
+    - ${FLOWLY_RUNTIME_ENV_FILE:?Set the recorded runtime environment file}
+  extra_hosts:
+    - "host.docker.internal:host-gateway"
+  volumes:
+    - ${FLOWLY_OUTPUTS_PATH:-./Backend/outputs}:/app/outputs
+    - ${FLOWLY_DATA_PATH:-./Backend/data}:/app/data
+    - ${FLOWLY_LOGS_PATH:-./Backend/logs}:/app/logs
+    - ${FLOWLY_BACKUPS_PATH:-./Backend/backups}:/app/backups
+    - flowly_now_media:/app/media
+    - flowly_now_static:/app/staticfiles
+  restart: unless-stopped
+
+services:
+  backend:
+    <<: *backend
+    command: ["daphne", "-b", "0.0.0.0", "-p", "8000", "config.asgi:application"]
+    ports:
+      - "${BACKEND_BIND_ADDRESS:-127.0.0.1}:${BACKEND_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD", "python", "/opt/flowly-healthcheck.py"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 45s
+
+  celery:
+    <<: *backend
+    command: ["celery", "-A", "config", "worker", "-l", "info", "-c", "${CELERY_WORKERS:-2}", "--pool=threads"]
+    environment:
+      C_FORCE_ROOT: "1"
+      OPENBLAS_NUM_THREADS: "1"
+      OMP_NUM_THREADS: "1"
+      MKL_NUM_THREADS: "1"
+      NUMEXPR_NUM_THREADS: "1"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  celery-beat:
+    <<: *backend
+    command: ["celery", "-A", "config", "beat", "-l", "info", "--schedule", "/var/lib/celery/celerybeat-schedule"]
+    volumes:
+      - flowly_now_beat:/var/lib/celery
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  frontend:
+    image: ${FRONTEND_IMAGE_REF:?Set an immutable frontend image reference}
+    ports:
+      - "${FRONTEND_BIND_ADDRESS:-0.0.0.0}:${FRONTEND_PORT:-5200}:80"
+    volumes:
+      - flowly_now_media:/var/www/flowly/media:ro
+      - flowly_now_static:/var/www/flowly/staticfiles:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  flowly_now_media:
+  flowly_now_static:
+  flowly_now_beat:

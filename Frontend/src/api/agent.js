@@ -198,7 +198,7 @@ export const agentApi = {
    * @param {number|string} sessionId
    */
   loadDebugSession(agentId, sessionId) {
-    return request.get(`/agents/debug/sessions/${sessionId}/`, { agent_id: agentId })
+    return request.get(`/agents/${agentId}/debug/sessions/${sessionId}/`)
   },
 
   /**
@@ -215,8 +215,8 @@ export const agentApi = {
    * @param {number|string} agentId
    * @param {Object} data - { message, conversation_id }
    */
-  streamChat(agentId, data) {
-    return request.stream(`/agents/${agentId}/stream_chat/`, data)
+  streamChat(agentId, data, config = {}) {
+    return request.stream(`/agents/${agentId}/stream_chat/`, data, config)
   },
 
   // ==================== Memory ====================

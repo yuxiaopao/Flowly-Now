@@ -7,6 +7,7 @@ const vm = require('node:vm');
 const { createRequire } = require('node:module');
 const { TrainingMonitorReader, parseHistory, parseBatch, safePath, contained } = require('../training-monitor/reader');
 const { createMonitorSession, AUTH_SETTINGS } = require('../training-monitor/auth');
+const { registerTrustedRenderer } = require('../trusted-renderer');
 
 const HEADER = 'epoch,time,train/loss,metrics/accuracy_top1,metrics/accuracy_top5,val/loss,lr/pg0';
 const BINDING = {
@@ -121,8 +122,9 @@ function serviceFixture(context) {
   const handlers = new Map();
   const timers = new Set();
   const messages = [];
-  const webContents = { mainFrame: {}, send: (...message) => messages.push(message) };
+  const webContents = { mainFrame: { url: 'http://127.0.0.1:5200/home' }, send: (...message) => messages.push(message) };
   const window = { webContents, isDestroyed: () => false };
+  registerTrustedRenderer(window, { mode: 'url', url: 'http://127.0.0.1:5200' });
   const servicePath = path.resolve(__dirname, '../training-monitor/service.js');
   const localRequire = createRequire(servicePath);
   const module = { exports: {} };
@@ -181,6 +183,14 @@ test('IPC rejects another window and subframes, and rapid page remounts keep onl
   const second = handlers.get('monitor:start')(event, 'valid', BINDING);
   await Promise.all([first, second]);
   assert.equal(timers.size, 1);
+});
+
+test('monitor IPC rejects an external document occupying the registered main frame', async context => {
+  const { handlers, event } = serviceFixture(context);
+  event.senderFrame.url = 'https://untrusted.test/';
+  for (const [channel, handler] of handlers) {
+    await assert.rejects(async () => handler(event, 'valid', BINDING), /主页面|信任/, channel);
+  }
 });
 
 test('every data IPC rejects unauthenticated calls and logout clears data and polling', async context => {

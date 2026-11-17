@@ -112,6 +112,8 @@ class TrainingConsumer(AsyncJsonWebsocketConsumer):
         """Handle progress update event from channel layer."""
         await self.send_json(event['data'])
 
+    training_training_progress = training_progress
+
     async def training_training_complete(self, event):
         """Handle training_complete event from channel layer."""
         await self.send_json(event['data'])

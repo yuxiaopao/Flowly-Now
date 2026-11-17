@@ -65,11 +65,12 @@ class AgentSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'owner', 'created_at', 'updated_at']
 
     def get_knowledge_collections_detail(self, obj):
-        from rag.models import DocumentCollection
+        from rag.access import accessible_collections
         ids = obj.knowledge_collections or []
         if not ids:
             return []
-        collections = DocumentCollection.objects.filter(id__in=ids)
+        request = self.context.get('request')
+        collections = accessible_collections(request.user if request else None).filter(id__in=ids)
         return [{'id': str(c.id), 'name': c.name} for c in collections]
 
 

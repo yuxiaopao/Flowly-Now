@@ -55,6 +55,8 @@ class McpClient {
       clientInfo: { name: 'flowly-click-audit', version: '1.0.0' },
     })
     this.notify('notifications/initialized', {})
+    const { tools } = await this.request('tools/list')
+    this.pageTools = new Set(tools.filter(tool => tool.inputSchema?.properties?.pageId).map(tool => tool.name))
   }
 
   notify(method, params = {}) {
@@ -67,7 +69,7 @@ class McpClient {
     const promise = new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         this.pending.delete(id)
-        reject(new Error(`MCP request timed out: ${method}`))
+        reject(new Error(`MCP request timed out: ${method}${method === 'tools/call' ? ` (${params.name})` : ''}`))
       }, timeoutMs)
       this.pending.set(id, { resolve, reject, timeout })
     })
@@ -115,8 +117,8 @@ async function evalPage(client, fn, timeoutMs = 30000) {
   }
 }
 
-async function login(client) {
-  await client.tool('new_page', { url: `${FRONTEND_URL}/login`, timeout: 20000 }, 30000)
+async function login(client, { entryPath = '/login' } = {}) {
+  await client.tool('new_page', { url: `${FRONTEND_URL}${entryPath}`, timeout: 20000 }, 30000)
   await delay(1000)
   const loginResult = await evalPage(client, `async () => {
     const response = await fetch('${BACKEND_URL}/api/v1/auth/login/', {

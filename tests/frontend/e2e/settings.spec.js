@@ -15,7 +15,7 @@ test.describe('Settings Page', () => {
 
   test('should display profile settings tab', async ({ page }) => {
     await page.goto('/settings');
-    const profileTab = page.locator('*:has-text("个人设置" i), *:has-text("Profile" i)').first();
+    const profileTab = page.locator('*:has-text("个人设置"), *:has-text("Profile")').first();
     await expect(profileTab).toBeVisible();
   });
 
@@ -23,7 +23,7 @@ test.describe('Settings Page', () => {
     await page.goto('/settings');
 
     // Try submitting empty or invalid form
-    const submitBtn = page.locator('button:has-text("保存" i), [data-testid="save-profile-btn"]').first();
+    const submitBtn = page.locator('button:has-text("保存"), [data-testid="save-profile-btn"]').first();
     if (await submitBtn.count() > 0) {
       await submitBtn.click();
       await page.waitForTimeout(300);
@@ -43,7 +43,7 @@ test.describe('Settings Page', () => {
     const usernameInput = page.locator('input[type="text"], [data-testid="username-input"]').first();
     await usernameInput.fill('new_username');
 
-    const saveBtn = page.locator('button:has-text("保存" i), [data-testid="save-profile-btn"]').first();
+    const saveBtn = page.locator('button:has-text("保存"), [data-testid="save-profile-btn"]').first();
     if (await saveBtn.count() > 0) {
       await saveBtn.click();
       await page.waitForTimeout(500);
@@ -61,19 +61,19 @@ test.describe('Settings Page', () => {
       });
     });
 
-    const apiKeysSection = page.locator('*:has-text("API" i), *:has-text("密钥" i)').first();
+    const apiKeysSection = page.locator('*:has-text("API"), *:has-text("密钥")').first();
     await expect(apiKeysSection).toBeVisible();
   });
 
   test('should display create API key button', async ({ page }) => {
     await page.goto('/settings');
-    const createKeyBtn = page.locator('button:has-text("创建" i):has-text("API" i), [data-testid="create-api-key-btn"]');
+    const createKeyBtn = page.locator('button:has-text("创建"):has-text("API"), [data-testid="create-api-key-btn"]');
     await expect(createKeyBtn.first()).toBeVisible();
   });
 
   test('should open create API key dialog', async ({ page }) => {
     await page.goto('/settings');
-    const createKeyBtn = page.locator('button:has-text("创建" i):has-text("API" i), [data-testid="create-api-key-btn"]').first();
+    const createKeyBtn = page.locator('button:has-text("创建"):has-text("API"), [data-testid="create-api-key-btn"]').first();
     if (await createKeyBtn.count() > 0) {
       await createKeyBtn.click();
       await page.waitForTimeout(300);
@@ -99,7 +99,7 @@ test.describe('Settings Page', () => {
       });
     });
 
-    const createKeyBtn = page.locator('button:has-text("创建" i):has-text("API" i), [data-testid="create-api-key-btn"]').first();
+    const createKeyBtn = page.locator('button:has-text("创建"):has-text("API"), [data-testid="create-api-key-btn"]').first();
     if (await createKeyBtn.count() > 0) {
       await createKeyBtn.click();
       await page.waitForTimeout(300);
@@ -114,7 +114,7 @@ test.describe('Settings Page', () => {
         await page.locator('.el-select-dropdown__item').first().click();
       }
 
-      const submitBtn = dialog.locator('button:has-text("创建" i), [type="submit"]').first();
+      const submitBtn = dialog.locator('button:has-text("创建"), [type="submit"]').first();
       await submitBtn.click();
       await page.waitForTimeout(500);
     }
@@ -141,7 +141,7 @@ test.describe('Settings Page', () => {
     });
 
     await page.waitForTimeout(500);
-    const deleteBtn = page.locator('button:has-text("删除" i), [data-testid="delete-key-btn"]').first();
+    const deleteBtn = page.locator('button:has-text("删除"), [data-testid="delete-key-btn"]').first();
     if (await deleteBtn.count() > 0) {
       // Mock delete
       await page.route('DELETE', '**/api/v1/gateway/keys/key-1/', (route) => {
@@ -151,7 +151,7 @@ test.describe('Settings Page', () => {
       await deleteBtn.click();
       await page.waitForTimeout(300);
       // Confirm dialog if present
-      const confirmBtn = page.locator('.el-button--primary:has-text("确认" i), .el-message-box__btn:has-text("确定" i)').first();
+      const confirmBtn = page.locator('.el-button--primary:has-text("确认"), .el-message-box__btn:has-text("确定")').first();
       if (await confirmBtn.count() > 0) {
         await confirmBtn.click();
         await page.waitForTimeout(500);
@@ -161,7 +161,7 @@ test.describe('Settings Page', () => {
 
   test('should display notification preferences', async ({ page }) => {
     await page.goto('/settings');
-    const notifSection = page.locator('*:has-text("通知" i), *:has-text("Notification" i)').first();
+    const notifSection = page.locator('*:has-text("通知"), *:has-text("Notification")').first();
     await expect(notifSection).toBeVisible();
   });
 
@@ -190,7 +190,7 @@ test.describe('Settings Page', () => {
       });
     });
 
-    const billingSection = page.locator('*:has-text("订阅" i), *:has-text("Subscription" i), *:has-text("计费" i)').first();
+    const billingSection = page.locator('*:has-text("订阅"), *:has-text("Subscription"), *:has-text("计费")').first();
     await expect(billingSection).toBeVisible();
   });
 
@@ -219,7 +219,7 @@ test.describe('Settings Page', () => {
     });
 
     await page.waitForTimeout(500);
-    const usageSection = page.locator('*:has-text("使用" i), *:has-text("Usage" i), [data-testid="usage-stats"]');
+    const usageSection = page.locator('*:has-text("使用"), *:has-text("Usage"), [data-testid="usage-stats"]');
     await expect(usageSection.first()).toBeVisible();
   });
 
@@ -256,7 +256,7 @@ test.describe('Profile Page', () => {
     });
 
     await page.waitForTimeout(500);
-    const username = page.locator('*:has-text("testuser" i)').first();
+    const username = page.locator('*:has-text("testuser")').first();
     await expect(username).toBeVisible();
   });
 
@@ -277,7 +277,7 @@ test.describe('Profile Page', () => {
       });
     });
 
-    const passwordSection = page.locator('*:has-text("密码" i), *:has-text("Password" i)').first();
+    const passwordSection = page.locator('*:has-text("密码"), *:has-text("Password")').first();
     await expect(passwordSection).toBeVisible();
   });
 

@@ -8,6 +8,8 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from django.db.models import Sum, Count, Avg
+from django.db import transaction
+from rest_framework.exceptions import PermissionDenied, ValidationError
 
 from workflows.models import APICredential
 from .gateway_service import GatewayService, PROVIDER_DISPLAY_NAMES
@@ -34,7 +36,7 @@ class AIModelViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        queryset = AIModel.objects.filter(is_active=True)
+        queryset = AIModel.objects.filter(is_active=True, provider__is_active=True)
 
         # Filter by provider
         provider = self.request.query_params.get('provider')
@@ -65,7 +67,7 @@ class AIModelViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=False, methods=['get'])
     def default_models(self, request):
         """Get default models by type."""
-        defaults = AIModel.objects.filter(is_active=True, is_default=True)
+        defaults = AIModel.objects.filter(is_active=True, provider__is_active=True, is_default=True).select_related('provider')
         by_type = {}
         for model in defaults:
             if model.model_type not in by_type:
@@ -128,24 +130,33 @@ class AIModelViewSet(viewsets.ReadOnlyModelViewSet):
     def test(self, request, pk=None):
         """Test model connectivity."""
         model = self.get_object()
-        gateway = GatewayService(user=request.user)
-
+        from .services.connectivity import test_model_connection, ProbeFailure, DEFAULT_PROMPT
         try:
-            response = gateway.chat(
-                messages=[{"role": "user", "content": "Hello"}],
-                model=model.model_id,
-                max_tokens=10
-            )
-            return Response({
-                'success': True,
-                'model': model.name,
-                'response': response.content
-            })
-        except Exception as e:
-            return Response({
-                'success': False,
-                'error': str(e)
-            }, status=status.HTTP_400_BAD_REQUEST)
+            result = test_model_connection(request.user, model, request.data.get('prompt', DEFAULT_PROMPT))
+            return Response({'success': True, 'model': model.name, **result})
+        except ProbeFailure as exc:
+            return Response({'success': False, 'error': str(exc), 'error_code': exc.code}, status=exc.status)
+
+    @action(detail=True, methods=['post'])
+    def set_default(self, request, pk=None):
+        """Change the catalog default; runtime RAG settings and credentials are unaffected."""
+        if not (request.user.is_staff or request.user.is_superuser):
+            raise PermissionDenied('仅管理员可设置目录默认模型。')
+        desired = request.data.get('is_default')
+        if not isinstance(desired, bool):
+            raise ValidationError({'is_default': '请明确提交 true 或 false。'})
+        target = self.get_object()
+        with transaction.atomic():
+            provider = ModelProvider.objects.select_for_update().get(pk=target.provider_id)
+            models = list(AIModel.objects.select_for_update().filter(model_type=target.model_type).order_by('id'))
+            target = next(model for model in models if model.pk == target.pk)
+            if not target.is_active or not provider.is_active:
+                raise ValidationError('模型或提供商已禁用。')
+            if desired:
+                AIModel.objects.filter(model_type=target.model_type, is_default=True).exclude(pk=target.pk).update(is_default=False)
+            target.is_default = desired
+            target.save(update_fields=['is_default'])
+        return Response(AIModelSerializer(target).data)
 
 
 class UserAPIKeyViewSet(viewsets.ModelViewSet):
@@ -171,21 +182,12 @@ class UserAPIKeyViewSet(viewsets.ModelViewSet):
     def verify(self, request, pk=None):
         """Verify API key is valid."""
         credential = self.get_object()
-        decrypted_key = credential.get_decrypted_data()
-        gateway = GatewayService(user=request.user, api_key=decrypted_key)
-
+        from .services.connectivity import verify_credential, ProbeFailure
         try:
-            response = gateway.chat(
-                messages=[{"role": "user", "content": "test"}],
-                model='gpt-3.5-turbo',
-                max_tokens=5
-            )
-            return Response({'valid': True, 'response': getattr(response, 'content', '')})
-        except Exception as e:
-            return Response({
-                'valid': False,
-                'error': str(e)
-            }, status=status.HTTP_400_BAD_REQUEST)
+            result = verify_credential(request.user, credential, request.data.get('model'))
+            return Response({'valid': True, **result})
+        except ProbeFailure as exc:
+            return Response({'valid': False, 'error': str(exc), 'error_code': exc.code}, status=exc.status)
 
 
 class APICallLogViewSet(viewsets.ReadOnlyModelViewSet):

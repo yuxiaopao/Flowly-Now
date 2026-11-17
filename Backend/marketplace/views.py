@@ -2,7 +2,6 @@
 Marketplace API for workflow templates.
 """
 
-import uuid
 from django.db.models import Avg, Prefetch
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
@@ -10,11 +9,11 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 
 from .models import WorkflowTemplate, TemplateCategory, TemplateInstall, TemplateRating
+from templates.permissions import TemplateAccessPermission
 from .serializers import (
     WorkflowTemplateSerializer,
     TemplateCategorySerializer,
     TemplateInstallSerializer,
-    TemplateRatingSerializer,
     TemplateCreateSerializer
 )
 
@@ -22,7 +21,7 @@ from .serializers import (
 class WorkflowTemplateViewSet(viewsets.ModelViewSet):
     """ViewSet for workflow templates (marketplace)."""
 
-    permission_classes = [AllowAny]  # Marketplace is public
+    permission_classes = [TemplateAccessPermission]
 
     def get_queryset(self):
         queryset = WorkflowTemplate.objects.filter(is_published=True)

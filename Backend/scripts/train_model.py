@@ -148,6 +148,8 @@ def train_with_pytorch(config: dict, job_id: str = None, streaming: bool = True)
     
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
     criterion = torch.nn.CrossEntropyLoss()
+    from training.tabular_artifacts import standardize_tabular_features, raw_tabular_metadata
+    preprocessing = raw_tabular_metadata()
     
     # 加载数据
     if dataset_path and Path(dataset_path).exists():
@@ -159,16 +161,18 @@ def train_with_pytorch(config: dict, job_id: str = None, streaming: bool = True)
             # 假设最后一列是标签，其余是特征
             X = df.iloc[:, :-1].values.astype(np.float32)
             y = df.iloc[:, -1].values.astype(np.int64)
+            feature_names, label_column = list(df.columns[:-1]), str(df.columns[-1])
         elif ext == '.json':
             with open(dataset_path, 'r') as f:
                 data = json.load(f)
             X = np.array(data.get('features', [])).astype(np.float32)
             y = np.array(data.get('labels', [])).astype(np.int64)
+            feature_names, label_column = data.get('feature_names') or [], None
         else:
             raise ValueError(f"Unsupported dataset format: {ext}")
         
         # 归一化
-        X = (X - X.mean(axis=0)) / (X.std(axis=0) + 1e-8)
+        X, preprocessing = standardize_tabular_features(X, feature_names, label_column)
         
         dataset = TensorDataset(
             torch.tensor(X, dtype=torch.float32),
@@ -209,6 +213,8 @@ def train_with_pytorch(config: dict, job_id: str = None, streaming: bool = True)
                 'epoch': epoch + 1,
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
+                'config': config,
+                'preprocessing': preprocessing,
                 'interrupted': True,
             }, checkpoint_path)
             
@@ -313,6 +319,8 @@ def train_with_pytorch(config: dict, job_id: str = None, streaming: bool = True)
                 'epoch': epoch + 1,
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
+                'config': config,
+                'preprocessing': preprocessing,
                 'loss': avg_loss,
                 'metrics': metrics,
             }, checkpoint_path)
@@ -330,6 +338,7 @@ def train_with_pytorch(config: dict, job_id: str = None, streaming: bool = True)
     torch.save({
         'model_state_dict': model.state_dict(),
         'config': config,
+        'preprocessing': preprocessing,
         'final_metrics': all_metrics[-1] if all_metrics else {},
     }, final_model_path)
     

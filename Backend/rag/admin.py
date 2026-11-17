@@ -3,7 +3,10 @@ Admin configuration for RAG app.
 """
 
 from django.contrib import admin
+from django.db import transaction
+from django.utils import timezone
 from .models import VectorStore, DocumentCollection, Document, Chunk, RAGPipeline
+from .mutations import lock_collections
 
 
 @admin.register(VectorStore)
@@ -12,6 +15,11 @@ class VectorStoreAdmin(admin.ModelAdmin):
     list_filter = ('store_type', 'is_default')
     search_fields = ('name', 'host', 'collection')
     readonly_fields = ('created_at', 'updated_at')
+
+    def save_model(self, request, obj, form, change):
+        with transaction.atomic():
+            lock_collections(DocumentCollection.objects.filter(vector_store_id=obj.pk).values_list('pk', flat=True))
+            super().save_model(request, obj, form, change)
 
     fieldsets = (
         ('基本信息', {
@@ -44,6 +52,11 @@ class DocumentCollectionAdmin(admin.ModelAdmin):
     search_fields = ('name', 'description')
     readonly_fields = ('created_at', 'updated_at')
 
+    def save_model(self, request, obj, form, change):
+        with transaction.atomic():
+            lock_collections([obj.pk])
+            super().save_model(request, obj, form, change)
+
     fieldsets = (
         ('基本信息', {
             'fields': ('name', 'description', 'vector_store', 'owner')
@@ -67,6 +80,14 @@ class DocumentAdmin(admin.ModelAdmin):
     list_filter = ('source_type', 'status')
     search_fields = ('title', 'content')
     readonly_fields = ('created_at', 'updated_at', 'processed_at')
+
+    def save_model(self, request, obj, form, change):
+        with transaction.atomic():
+            ids = {obj.collection_id}
+            if change:
+                ids.update(Document.objects.filter(pk=obj.pk).values_list('collection_id', flat=True))
+            lock_collections(ids)
+            super().save_model(request, obj, form, change)
 
     fieldsets = (
         ('基本信息', {
@@ -95,7 +116,9 @@ class DocumentAdmin(admin.ModelAdmin):
 
     @admin.action(description='标记为失败')
     def mark_as_failed(self, request, queryset):
-        queryset.update(status='failed')
+        with transaction.atomic():
+            lock_collections(queryset.values_list('collection_id', flat=True))
+            queryset.update(status='failed', updated_at=timezone.now())
 
 
 @admin.register(Chunk)

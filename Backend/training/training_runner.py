@@ -225,6 +225,8 @@ class TrainingRunner:
         model = nn.Sequential(*layers).to(device)
         optimizer = optim.Adam(model.parameters(), lr=learning_rate)
         criterion = nn.CrossEntropyLoss()
+        from .tabular_artifacts import standardize_tabular_features, raw_tabular_metadata
+        preprocessing = raw_tabular_metadata()
         
         if dataset_path and Path(dataset_path).exists():
             ext = Path(dataset_path).suffix.lower()
@@ -232,15 +234,17 @@ class TrainingRunner:
                 df = pd.read_csv(dataset_path)
                 X = df.iloc[:, :-1].values.astype(np.float32)
                 y = df.iloc[:, -1].values.astype(np.int64)
+                feature_names, label_column = list(df.columns[:-1]), str(df.columns[-1])
             elif ext == '.json':
                 with open(dataset_path, 'r') as f:
                     data = json.load(f)
                 X = np.array(data.get('features', [])).astype(np.float32)
                 y = np.array(data.get('labels', [])).astype(np.int64)
+                feature_names, label_column = data.get('feature_names') or [], None
             else:
                 raise ValueError(f'Unsupported dataset format: {ext}')
             
-            X = (X - X.mean(axis=0)) / (X.std(axis=0) + 1e-8)
+            X, preprocessing = standardize_tabular_features(X, feature_names, label_column)
             
             dataset = TensorDataset(
                 torch.tensor(X, dtype=torch.float32),
@@ -336,6 +340,8 @@ class TrainingRunner:
                 'epoch': epoch + 1,
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
+                'config': self.config,
+                'preprocessing': preprocessing,
                 'loss': avg_loss,
                 'metrics': metrics,
             }, checkpoint_path)
@@ -346,6 +352,7 @@ class TrainingRunner:
                 torch.save({
                     'model_state_dict': model.state_dict(),
                     'config': self.config,
+                    'preprocessing': preprocessing,
                     'final_metrics': metrics,
                 }, best_model_path)
         
@@ -353,6 +360,7 @@ class TrainingRunner:
         torch.save({
             'model_state_dict': model.state_dict(),
             'config': self.config,
+            'preprocessing': preprocessing,
             'final_metrics': all_metrics[-1] if all_metrics else {},
         }, final_model_path)
         

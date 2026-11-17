@@ -1,4 +1,4 @@
-import { watch } from 'vue'
+import { getCurrentScope, onScopeDispose, watch } from 'vue'
 import APP_CONFIG from '@/config'
 import {
   connectDesktopAgent,
@@ -15,14 +15,11 @@ function normalizeCloudUrl(url) {
 /**
  * 登录后自动将本地 GPU Agent 注册并连接至云端
  */
-export async function bootstrapDesktopAgent(apiToken) {
+export async function bootstrapDesktopAgent(apiToken, isCurrent = () => true) {
   if (!isElectron() || !apiToken) return null
 
   const config = await getDesktopAgentConfig()
-  const status = await getDesktopAgentStatus()
-  if (status?.connected) {
-    return status
-  }
+  if (!isCurrent()) return null
 
   return connectDesktopAgent({
     cloudUrl: normalizeCloudUrl(config?.cloudUrl),
@@ -36,11 +33,12 @@ export async function bootstrapDesktopAgent(apiToken) {
  */
 export function useDesktopAgentBridge(authStore) {
   if (!isElectron()) return
+  let syncVersion = 0
 
-  const syncAgentConnection = async (token) => {
+  const syncAgentConnection = async (token, version) => {
     if (token) {
       try {
-        await bootstrapDesktopAgent(token)
+        await bootstrapDesktopAgent(token, () => version === syncVersion)
       } catch (err) {
         console.warn('[desktop-agent] auto-connect failed:', err?.message || err)
       }
@@ -57,10 +55,11 @@ export function useDesktopAgentBridge(authStore) {
   watch(
     () => authStore.token,
     (token) => {
-      syncAgentConnection(token)
+      syncAgentConnection(token, ++syncVersion)
     },
     { immediate: true },
   )
+  if (getCurrentScope()) onScopeDispose(() => { syncVersion++ })
 }
 
 export { isElectron, getDesktopAgentStatus, connectDesktopAgent, disconnectDesktopAgent }

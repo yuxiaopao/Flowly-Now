@@ -349,8 +349,15 @@ def run_integration_node(service, node_type: str, node_config: Dict, input_data:
         'feishu': _exec_feishu,
         'dingtalk': _exec_dingtalk,
         'wechat_work': _exec_wechat_work,
+        'microsoft_teams': _exec_microsoft_teams,
         'notion': _exec_notion,
         'github': _exec_github,
+        'gitlab': _exec_gitlab,
+        'google_sheets': _exec_google_sheets,
+        'google_drive': _exec_google_drive,
+        'airtable': _exec_airtable,
+        'jira': _exec_jira,
+        'trello': _exec_trello,
         'redis': _exec_redis,
         'mysql': _exec_mysql,
         'postgres': _exec_postgres,
@@ -463,6 +470,128 @@ def _exec_github(config: Dict, input_data: Dict) -> Dict:
         timeout=30,
     )
     return resp.json()
+
+
+def _exec_google_sheets(config: Dict, input_data: Dict) -> Dict:
+    token = config.get('credentialToken') or config.get('token')
+    spreadsheet_id = config.get('spreadsheetId') or config.get('spreadsheet_id')
+    range_name = config.get('range') or 'Sheet1!A1:Z20'
+    operation = config.get('operation') or 'read'
+    values = config.get('values') or [config.get('value')]
+    if not token or not spreadsheet_id:
+        return {'simulated': True, 'spreadsheetId': spreadsheet_id, 'range': range_name, 'operation': operation}
+    headers = {'Authorization': f'Bearer {token}'}
+    base = f'https://sheets.googleapis.com/v4/spreadsheets/{spreadsheet_id}'
+    if operation in ('append', 'write'):
+        payload = {'values': values if isinstance(values, list) else [[values]]}
+        resp = requests.post(
+            f'{base}/values/{range_name}:append' if operation == 'append' else f'{base}/values/{range_name}',
+            params={'valueInputOption': 'USER_ENTERED'} if operation == 'append' else None,
+            headers=headers, json=payload, timeout=30,
+        )
+    else:
+        resp = requests.get(f'{base}/values/{range_name}', headers=headers, timeout=30)
+    return resp.json()
+
+
+def _exec_google_drive(config: Dict, input_data: Dict) -> Dict:
+    token = config.get('credentialToken') or config.get('token')
+    if not token:
+        return {'simulated': True, 'operation': config.get('operation') or 'list'}
+    headers = {'Authorization': f'Bearer {token}'}
+    resp = requests.get(
+        'https://www.googleapis.com/drive/v3/files',
+        headers=headers,
+        params={'pageSize': int(config.get('limit') or 20), 'fields': 'files(id,name,mimeType,webViewLink)'},
+        timeout=30,
+    )
+    return resp.json()
+
+
+def _exec_airtable(config: Dict, input_data: Dict) -> Dict:
+    token = config.get('credentialToken') or config.get('token')
+    base_id = config.get('baseId')
+    table_id = config.get('tableId') or config.get('table_id')
+    operation = config.get('operation') or 'list_bases'
+    if not token:
+        return {'simulated': True, 'operation': operation}
+    headers = {'Authorization': f'Bearer {token}'}
+    if operation == 'list_records' and base_id and table_id:
+        resp = requests.get(
+            f'https://api.airtable.com/v0/{base_id}/{table_id}',
+            headers=headers, timeout=30,
+        )
+    else:
+        resp = requests.get('https://api.airtable.com/v0/meta/bases', headers=headers, timeout=30)
+    return resp.json()
+
+
+def _exec_gitlab(config: Dict, input_data: Dict) -> Dict:
+    token = config.get('credentialToken') or config.get('token')
+    if not token:
+        return {'simulated': True, 'operation': config.get('operation') or 'list_projects'}
+    resp = requests.get(
+        'https://gitlab.com/api/v4/projects',
+        headers={'PRIVATE-TOKEN': token},
+        params={'membership': 'true', 'per_page': 20},
+        timeout=30,
+    )
+    return resp.json()
+
+
+def _exec_jira(config: Dict, input_data: Dict) -> Dict:
+    token = config.get('credentialToken') or config.get('token')
+    domain = config.get('domain') or config.get('host') or config.get('baseUrl')
+    issue_key = config.get('issueKey') or config.get('issue_key')
+    if not token or not domain:
+        return {'simulated': True, 'issueKey': issue_key, 'operation': config.get('operation') or 'get_issue'}
+    base = str(domain).rstrip('/')
+    if issue_key:
+        resp = requests.get(
+            f'{base}/rest/api/2/issue/{issue_key}',
+            headers={'Authorization': f'Bearer {token}'}, timeout=30,
+        )
+    else:
+        resp = requests.get(
+            f'{base}/rest/api/2/myself',
+            headers={'Authorization': f'Bearer {token}'}, timeout=30,
+        )
+    return resp.json()
+
+
+def _exec_trello(config: Dict, input_data: Dict) -> Dict:
+    token = config.get('credentialToken') or config.get('token')
+    api_key = config.get('apiKey')
+    list_id = config.get('listId') or config.get('list_id')
+    if not token or not api_key or not list_id:
+        return {'simulated': True, 'operation': config.get('operation') or 'create_card', 'listId': list_id}
+    resp = requests.post(
+        'https://api.trello.com/1/cards',
+        params={'key': api_key, 'token': token, 'idList': list_id,
+                'name': config.get('name') or 'Flowly card', 'desc': config.get('description') or ''},
+        timeout=30,
+    )
+    return resp.json()
+
+
+def _exec_microsoft_teams(config: Dict, input_data: Dict) -> Dict:
+    webhook_url = config.get('webhookUrl') or config.get('webhook_url')
+    if not webhook_url:
+        return {'simulated': True, 'title': config.get('title') or config.get('name')}
+    payload = {
+        'type': 'message',
+        'attachments': [{
+            'contentType': 'application/vnd.microsoft.card.adaptive',
+            'content': {
+                '$schema': 'http://adaptivecards.io/schemas/adaptive-card.json',
+                'type': 'AdaptiveCard',
+                'version': '1.4',
+                'body': [{'type': 'TextBlock', 'text': config.get('text') or config.get('title') or 'Flowly'}],
+            },
+        }],
+    }
+    resp = requests.post(webhook_url, json=payload, timeout=30)
+    return {'status_code': resp.status_code, 'body': resp.text}
 
 
 def _exec_redis(config: Dict, input_data: Dict) -> Dict:

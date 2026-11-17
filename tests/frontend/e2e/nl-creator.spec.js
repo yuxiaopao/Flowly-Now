@@ -9,7 +9,7 @@ import {
   mockNLSession,
   mockNLWorkflow,
   mockNLHistory
-} from '../mocks/nl.mock'
+} from '../vitest/mocks/nl.mock'
 
 
 

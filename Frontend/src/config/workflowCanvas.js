@@ -19,6 +19,12 @@ export const WORKFLOW_CANVAS_VIEWPORT = {
   zoom: WORKFLOW_CANVAS_ZOOM.default,
 }
 
+export const WORKFLOW_HISTORY = {
+  maxEntries: Number(import.meta.env.VITE_WORKFLOW_HISTORY_MAX_ENTRIES) || 100,
+  maxBytes: Number(import.meta.env.VITE_WORKFLOW_HISTORY_MAX_BYTES) || 5 * 1024 * 1024,
+  mergeWindowMs: 400,
+}
+
 /** 工作流编辑器底部执行面板高度（拖拽拉伸预览区） */
 export const WORKFLOW_EXECUTION_PANEL = {
   defaultHeight: 420,

@@ -3,6 +3,8 @@
 
 import importlib.util
 import json
+from pathlib import Path
+
 from django.test import SimpleTestCase
 
 from nl_to_workflow.cumcm_solvers import (
@@ -15,9 +17,8 @@ from nl_to_workflow.cumcm_solvers import (
 
 
 def _load_sandbox_module():
-    spec = importlib.util.spec_from_file_location(
-        'sandbox_service', 'workflows/services/sandbox_service.py'
-    )
+    sandbox_path = Path(__file__).resolve().parents[2] / 'workflows' / 'services' / 'sandbox_service.py'
+    spec = importlib.util.spec_from_file_location('sandbox_service', sandbox_path)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod

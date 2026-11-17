@@ -36,7 +36,7 @@
             alt="Flowly"
           />
           <span class="logo-text">Flowly</span>
-          <span class="logo-badge">AI</span>
+          <span class="logo-badge">STUDIO</span>
         </router-link>
         <button
           class="mobile-close"
@@ -48,14 +48,14 @@
       </div>
 
       <router-link
-        :to="NAVIGATION_UI.newWorkflow.path"
+        :to="NAVIGATION_UI.newApplication.path"
         class="sidebar-create"
-        :aria-label="NAVIGATION_UI.newWorkflow.label"
-        :title="NAVIGATION_UI.newWorkflow.label"
+        :aria-label="NAVIGATION_UI.newApplication.label"
+        :title="NAVIGATION_UI.newApplication.label"
         @click="mobileMenuOpen = false"
       >
         <Plus aria-hidden="true" />
-        <span>{{ NAVIGATION_UI.newWorkflow.label }}</span>
+        <span>{{ NAVIGATION_UI.newApplication.label }}</span>
       </router-link>
 
       <!-- 导航菜单 -->
@@ -146,7 +146,7 @@
         </div>
       </nav>
 
-      <!-- 侧边栏底部 -->
+      <!-- 侧边栏底部（固定区：设置 / 账户 / 升级） -->
       <div class="sidebar-footer">
         <router-link
           :to="NAVIGATION_UI.personalCenter.path"
@@ -165,6 +165,42 @@
           </span>
           <span class="nav-label">{{ NAVIGATION_UI.personalCenter.label }}</span>
         </router-link>
+
+        <router-link
+          :to="NAVIGATION_UI.account.path"
+          class="nav-item"
+          :class="[`nav-item--${NAVIGATION_UI.account.accent}`, { active: isActiveRoute(NAVIGATION_UI.account.path) }]"
+          :aria-label="NAVIGATION_UI.account.label"
+          :title="NAVIGATION_UI.account.label"
+          :aria-current="isActiveRoute(NAVIGATION_UI.account.path) ? 'page' : undefined"
+          @click="mobileMenuOpen = false"
+        >
+          <span class="nav-icon-wrap">
+            <User
+              class="nav-icon"
+              aria-hidden="true"
+            />
+          </span>
+          <span class="nav-label">{{ NAVIGATION_UI.account.label }}</span>
+        </router-link>
+
+        <router-link
+          :to="NAVIGATION_UI.upgrade.path"
+          class="nav-item sidebar-upgrade"
+          :class="[`nav-item--${NAVIGATION_UI.upgrade.accent}`, { active: isActiveRoute(NAVIGATION_UI.upgrade.path) }]"
+          :aria-label="NAVIGATION_UI.upgrade.label"
+          :title="NAVIGATION_UI.upgrade.label"
+          :aria-current="isActiveRoute(NAVIGATION_UI.upgrade.path) ? 'page' : undefined"
+          @click="mobileMenuOpen = false"
+        >
+          <span class="nav-icon-wrap">
+            <Sparkles
+              class="nav-icon"
+              aria-hidden="true"
+            />
+          </span>
+          <span class="nav-label">{{ NAVIGATION_UI.upgrade.label }}</span>
+        </router-link>
       </div>
     </aside>
 
@@ -177,13 +213,16 @@
       <header class="topbar">
         <!-- 移动端菜单按钮 -->
         <button
-          class="mobile-menu-btn"
-          aria-label="打开导航"
+          class="mobile-menu-btn flowly-hamburger-to-x"
+          :class="{ 'is-open': mobileMenuOpen }"
+          :aria-label="mobileMenuOpen ? '关闭导航' : '打开导航'"
           aria-controls="app-sidebar"
           :aria-expanded="mobileMenuOpen"
-          @click="mobileMenuOpen = true"
+          @click="mobileMenuOpen = !mobileMenuOpen"
         >
-          <Menu />
+          <span class="flowly-hamburger-to-x__line" />
+          <span class="flowly-hamburger-to-x__line" />
+          <span class="flowly-hamburger-to-x__line" />
         </button>
         <button
           class="sidebar-toggle"
@@ -318,13 +357,13 @@ import {
   Bell as BellIcon,
   User,
   LogOut,
-  Menu,
   PanelLeftClose,
   PanelLeftOpen,
   X,
   ChevronRight,
   Plus,
   Globe,
+  Sparkles,
 } from 'lucide-vue-next'
 import ThemeSwitcher from '@/components/common/ThemeSwitcher.vue'
 import AccountAvatar from '@/components/common/AccountAvatar.vue'
@@ -412,7 +451,9 @@ onUnmounted(() => {
   document.removeEventListener('keydown', handleNavigationKeydown)
 })
 
-const collapsedSections = ref([])
+const collapsedSections = ref(APP_NAV_SECTIONS
+  .filter(section => section.defaultCollapsed && !section.items.some(item => isActiveRoute(item.path)))
+  .map(section => section.id))
 
 watch(() => route.path, () => {
   const activeSection = APP_NAV_SECTIONS.find(section => section.items.some(item => isActiveRoute(item.path)))
@@ -467,27 +508,28 @@ async function handleUserCommand(command) {
   border-right: 1px solid var(--border-primary); z-index: $z-fixed;
   .sidebar-collapsed & { width: $sidebar-collapsed-width; }
 }
-.sidebar-header { height: $header-height; min-height: $header-height; padding-inline: $spacing-4; display: flex; align-items: center; }
+.sidebar-header { height: $header-height; min-height: $header-height; padding-inline: $spacing-4; display: flex; align-items: center; flex-shrink: 0; }
 .logo-link { display: flex; align-items: center; gap: $spacing-2; }
 .logo { width: 28px; height: 28px; }
 .logo-text { font-size: $font-size-lg; font-weight: $font-weight-semibold; color: var(--text-primary); .sidebar-collapsed & { display: none; } }
 .logo-badge { margin-left: $spacing-1; padding: 2px $spacing-1; border: 1px solid var(--tech-selection-border); border-radius: $radius-sm; color: var(--tech-cyan); background: var(--tech-cyan-soft); font-family: var(--font-family-mono); font-size: $font-size-xs; .sidebar-collapsed & { display: none; } }
-.sidebar-nav { flex: 1; overflow-y: auto; padding: $spacing-3 $spacing-2; overscroll-behavior: contain; }
-.nav-section { margin-bottom: $spacing-3; min-width: 0; }
+.sidebar-nav { flex: 1; min-height: 0; overflow-y: auto; padding: $spacing-3 $spacing-2; overscroll-behavior: contain; }
+.nav-section { margin-bottom: var(--navigation-section-gap, $spacing-5); min-width: 0; }
 .nav-section-title {
   display: flex; align-items: center; gap: $spacing-2; width: 100%; padding: $spacing-1 $spacing-3; margin-bottom: $spacing-1;
-  border-radius: $radius-md; text-align: left; font-size: $font-size-xs; color: var(--text-tertiary); font-weight: $font-weight-medium;
-  &:hover { background: var(--surface-muted); color: var(--text-primary); }
-  > span:first-child { color: var(--section-accent, var(--text-secondary)); }
+  border-radius: $radius-md; text-align: left; font-size: $font-size-xs; font-weight: $font-weight-semibold;
+  letter-spacing: 0.05em; color: var(--text-tertiary);
+  &:hover { background: transparent; color: var(--text-secondary); }
+  > span:first-child { color: var(--text-tertiary); }
   .sidebar-collapsed & { display: none; }
-  &--static { color: var(--text-secondary); }
+  &--static { color: var(--text-tertiary); }
 }
 .nav-section-count { margin-left: auto; font-variant-numeric: tabular-nums; font-family: var(--font-family-mono); }
-.nav-section-chevron { width: $spacing-3; height: $spacing-3; transition: transform $transition-fast; &.expanded { transform: rotate(90deg); } }
+.nav-section-chevron { width: $spacing-3; height: $spacing-3; margin-left: auto; flex-shrink: 0; transition: transform $transition-fast; &.expanded { transform: rotate(90deg); } }
 .nav-active-arrow { width: $spacing-3; height: $spacing-3; flex-shrink: 0; margin-left: auto; color: var(--navigation-accent); .sidebar-collapsed & { display: none; } }
 .sidebar-create {
   display: flex; align-items: center; justify-content: center; gap: $spacing-2;
-  min-height: var(--control-height); margin: $spacing-2 $spacing-3 0;
+  min-height: var(--control-height); margin: $spacing-2 $spacing-3 0; flex-shrink: 0;
   border: 1px solid var(--tech-selection-border); border-radius: $radius-lg;
   background: var(--tech-blue-soft); color: var(--tech-blue); font-size: $font-size-sm; font-weight: $font-weight-medium;
   svg { width: $spacing-4; height: $spacing-4; }
@@ -500,10 +542,43 @@ async function handleUserCommand(command) {
   border-radius: $radius-lg; color: var(--text-secondary); font-size: $font-size-sm;
   transition: background-color $transition-fast, color $transition-fast;
   &:hover { background: var(--surface-muted); color: var(--text-primary); opacity: 1; }
-  &.active { background: var(--tech-selection-bg); border-color: var(--tech-selection-border); color: var(--tech-selection-text); font-weight: $font-weight-medium; }
   .sidebar-collapsed & { justify-content: center; padding-inline: $spacing-1; .nav-label { display: none; } }
 }
-.sidebar-footer { padding: $spacing-3 $spacing-2; border-top: 1px solid var(--border-primary); }
+
+// 当前选中项：与背景有明显对比的底块高亮（沿用 accent 令牌）
+.sidebar .nav-item[class*='nav-item--'] {
+  &.active {
+    background: color-mix(in srgb, var(--item-accent, var(--accent-blue)) 20%, var(--bg-secondary));
+    border-color: color-mix(in srgb, var(--item-accent, var(--accent-blue)) 40%, transparent);
+    color: var(--text-primary);
+    font-weight: $font-weight-medium;
+    .nav-icon { color: var(--item-accent, var(--accent-blue)); }
+    .nav-active-arrow { color: var(--item-accent, var(--accent-blue)); }
+  }
+}
+
+.sidebar-footer {
+  flex-shrink: 0; padding: $spacing-3 $spacing-2;
+  border-top: 1px solid color-mix(in srgb, var(--border-primary) 55%, transparent);
+  display: flex; flex-direction: column; gap: $spacing-1;
+  .nav-item { margin-bottom: 0; }
+}
+
+// 底部升级入口保持显眼
+.sidebar .sidebar-footer .sidebar-upgrade {
+  color: var(--item-accent, var(--accent-amber));
+  background: var(--item-accent-bg, var(--accent-amber-bg));
+  border-color: var(--item-accent-soft, var(--accent-amber-soft));
+  font-weight: $font-weight-medium;
+  .nav-icon-wrap { background: var(--item-accent-bg, var(--accent-amber-bg)); box-shadow: inset 0 0 0 1px var(--item-accent-soft, var(--accent-amber-soft)); }
+  .nav-icon { color: var(--item-accent, var(--accent-amber)); }
+  &:hover { background: color-mix(in srgb, var(--item-accent, var(--accent-amber)) 18%, var(--bg-hover)); }
+  &.active {
+    background: color-mix(in srgb, var(--item-accent, var(--accent-amber)) 22%, var(--bg-secondary));
+    border-color: var(--item-accent-soft, var(--accent-amber-soft));
+    color: var(--text-primary);
+  }
+}
 .main-container {
   position: relative; isolation: isolate; flex: 1; min-width: 0; margin-left: $sidebar-width;
   .sidebar-collapsed & { margin-left: $sidebar-collapsed-width; }
@@ -551,6 +626,14 @@ async function handleUserCommand(command) {
   .nav-item, .nav-section-title, .sidebar-create { min-height: var(--control-height-large); }
   .global-search { width: var(--control-height-large); height: var(--control-height-large); padding: $spacing-3; border: 0; justify-content: center; span, kbd { display: none; } }
   .breadcrumb { font-size: $font-size-xs; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-create,
+  .nav-item,
+  .nav-section-title,
+  .nav-section-chevron {
+    transition: none;
+  }
 }
 </style>
 

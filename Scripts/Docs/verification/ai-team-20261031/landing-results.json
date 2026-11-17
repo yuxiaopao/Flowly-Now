@@ -1,0 +1,153 @@
+{
+  "browser": "chrome-devtools-mcp",
+  "target": "http://localhost:5200",
+  "timestamp": "2026-11-17T09:55:24.441Z",
+  "passed": true,
+  "checks": [
+    {
+      "name": "desktop boundary and navigation targets",
+      "passed": true,
+      "evidence": {
+        "width": 1440,
+        "documentWidth": 1434,
+        "bodyWidth": 1434,
+        "horizontalOverflow": false,
+        "heading": "让 AI 原型，成为可交付的应用。",
+        "primaryLinks": [
+          {
+            "text": "进入应用工作区",
+            "path": "/applications",
+            "visible": true
+          },
+          {
+            "text": "开始创建应用",
+            "path": "/applications",
+            "visible": true
+          }
+        ],
+        "navigationLinks": [
+          {
+            "href": "#delivery",
+            "targetExists": true
+          },
+          {
+            "href": "#scenarios",
+            "targetExists": true
+          },
+          {
+            "href": "#faq",
+            "targetExists": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "four-step tab roles, selection, keyboard and wraparound",
+      "passed": true,
+      "evidence": {
+        "count": 4,
+        "keys": [
+          {
+            "key": "ArrowRight",
+            "selected": 1
+          },
+          {
+            "key": "ArrowRight",
+            "selected": 2
+          },
+          {
+            "key": "End",
+            "selected": 3
+          },
+          {
+            "key": "ArrowRight",
+            "selected": 0
+          },
+          {
+            "key": "ArrowLeft",
+            "selected": 3
+          },
+          {
+            "key": "Home",
+            "selected": 0
+          },
+          {
+            "key": "End",
+            "selected": 3
+          }
+        ]
+      }
+    },
+    {
+      "name": "native FAQ details support keyboard open and close",
+      "passed": true,
+      "evidence": {
+        "count": 6,
+        "keyboard": "Enter toggles each native details element"
+      }
+    },
+    {
+      "name": "390px mobile boundary and CTA visibility",
+      "passed": true,
+      "evidence": {
+        "width": 390,
+        "documentWidth": 390,
+        "bodyWidth": 390,
+        "horizontalOverflow": false,
+        "heading": "让 AI 原型，成为可交付的应用。",
+        "primaryLinks": [
+          {
+            "text": "进入应用工作区",
+            "path": "/applications",
+            "visible": true
+          },
+          {
+            "text": "开始创建应用",
+            "path": "/applications",
+            "visible": true
+          }
+        ],
+        "navigationLinks": [
+          {
+            "href": "#delivery",
+            "targetExists": true
+          },
+          {
+            "href": "#scenarios",
+            "targetExists": true
+          },
+          {
+            "href": "#faq",
+            "targetExists": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "prefers-reduced-motion disables the primary transition",
+      "passed": true,
+      "evidence": {
+        "reduced": true,
+        "deliveryTransition": "0ms",
+        "primaryDuration": "0s",
+        "runningAnimations": 0
+      }
+    },
+    {
+      "name": "primary CTA follows the real authentication route",
+      "passed": true,
+      "evidence": {
+        "path": "/login",
+        "redirect": "/applications",
+        "loginForm": true
+      }
+    }
+  ],
+  "screenshots": [
+    "E:\\Flowly-now\\Scripts\\Docs\\verification\\ai-team-20261031\\landing-desktop.png",
+    "E:\\Flowly-now\\Scripts\\Docs\\verification\\ai-team-20261031\\landing-mobile.png",
+    "E:\\Flowly-now\\Scripts\\Docs\\verification\\ai-team-20261031\\landing-mobile-viewport.png",
+    "E:\\Flowly-now\\Scripts\\Docs\\verification\\ai-team-20261031\\landing-reduced-motion.png"
+  ],
+  "error": null
+}

@@ -1,38 +1,13 @@
-/**
- * Ensure Desktop training-scripts/build_clip_index.py exists for bundled builds.
- * Dev mode resolves Backend/scripts/build_clip_index.py from main.js; this copy
- * is used when packaging without the monorepo Backend tree.
- */
-const fs = require('fs');
-const path = require('path');
+/** Bundle the canonical index builder and its pure standalone runtime helpers. */
+const fs = require('node:fs');
+const path = require('node:path');
+const { syncTrainingRuntime, rewriteRuntimeImports } = require('./sync-training-runtime');
 
 const desktopRoot = path.join(__dirname, '..');
-const targetDir = path.join(desktopRoot, 'training-scripts');
-const target = path.join(targetDir, 'build_clip_index.py');
-
-const sources = [
-  path.join(desktopRoot, 'training-scripts', 'build_clip_index.py'),
-  path.join(desktopRoot, '..', 'Backend', 'scripts', 'build_clip_index.py'),
-];
-
-let copied = false;
-for (const source of sources) {
-  if (!fs.existsSync(source)) continue;
-  const content = fs.readFileSync(source, 'utf-8');
-  const desktopVariant = content.includes('parents[2]')
-    ? content
-    : content.replace(
-      /BACKEND = Path\(__file__\)\.resolve\(\)\.parents\[1\]/,
-      "BACKEND = Path(__file__).resolve().parents[2] / 'Backend'",
-    );
-
-  fs.mkdirSync(targetDir, { recursive: true });
-  fs.writeFileSync(target, desktopVariant, 'utf-8');
-  console.log('[sync-clip-index-script] build_clip_index.py ready at training-scripts/');
-  copied = true;
-  break;
-}
-
-if (!copied) {
-  console.warn('[sync-clip-index-script] No source build_clip_index.py found — skip');
-}
+const source = path.join(desktopRoot, '..', 'Backend', 'scripts', 'build_clip_index.py');
+const targetDirectory = path.join(desktopRoot, 'training-scripts');
+if (!fs.existsSync(source)) throw new Error('Canonical CLIP index script is missing');
+syncTrainingRuntime();
+fs.mkdirSync(targetDirectory, { recursive: true });
+fs.writeFileSync(path.join(targetDirectory, 'build_clip_index.py'), rewriteRuntimeImports(fs.readFileSync(source, 'utf8')), 'utf8');
+console.log('[sync-clip-index-script] Canonical builder and standalone runtime are ready');

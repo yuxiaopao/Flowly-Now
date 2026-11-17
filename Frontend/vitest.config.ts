@@ -11,22 +11,22 @@ export default defineConfig({
     AutoImport({
       resolvers: [ElementPlusResolver({ importStyle: false })],
       imports: ['vue', 'vue-router', 'pinia'],
-      dts: path.resolve(__dirname, 'src/auto-imports.d.ts')
+      dts: false
     }),
     Components({
       resolvers: [ElementPlusResolver({ importStyle: false })],
-      dts: path.resolve(__dirname, 'src/components.d.ts')
+      dts: false
     })
   ],
   resolve: {
-    alias: {
-      '@': path.resolve(__dirname, 'src'),
-      'pinia': path.resolve(__dirname, 'node_modules/pinia/dist/pinia.mjs'),
-      'vue': path.resolve(__dirname, 'node_modules/vue/dist/vue.runtime.esm-bundler.js'),
-      'vue-router': path.resolve(__dirname, 'node_modules/vue-router/dist/vue-router.mjs'),
-      '@vue-flow/core': path.resolve(__dirname, 'node_modules/@vue-flow/core/dist/vue-flow-core.mjs'),
-      '@vue/test-utils': path.resolve(__dirname, 'node_modules/@vue/test-utils/dist/vue-test-utils.esm-bundler.mjs')
-    }
+    alias: [
+      { find: '@', replacement: path.resolve(__dirname, 'src') },
+      { find: 'pinia', replacement: path.resolve(__dirname, 'node_modules/pinia/dist/pinia.mjs') },
+      { find: 'vue', replacement: path.resolve(__dirname, 'node_modules/vue/dist/vue.runtime.esm-bundler.js') },
+      { find: 'vue-router', replacement: path.resolve(__dirname, 'node_modules/vue-router/dist/vue-router.mjs') },
+      { find: /^@vue-flow\/core$/, replacement: path.resolve(__dirname, 'node_modules/@vue-flow/core/dist/vue-flow-core.mjs') },
+      { find: '@vue/test-utils', replacement: path.resolve(__dirname, 'node_modules/@vue/test-utils/dist/vue-test-utils.esm-bundler.mjs') },
+    ]
   },
   test: {
     globals: true,
@@ -35,6 +35,7 @@ export default defineConfig({
     exclude: ['../tests/frontend/e2e/**'],
     coverage: {
       provider: 'v8',
+      include: ['src/**/*.{js,ts,vue}'],
       reporter: ['text', 'json', 'html'],
       exclude: [
         'node_modules/**',

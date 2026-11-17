@@ -57,6 +57,7 @@ def build_chat_llm(
     api_key: Optional[str] = None,
     base_url: Optional[str] = None,
     timeout: Optional[float] = None,
+    max_retries: Optional[int] = None,
 ):
     """Create a LangChain chat model using the same rules as AgentEngine."""
     from langchain_openai import AzureChatOpenAI, ChatOpenAI
@@ -92,6 +93,7 @@ def build_chat_llm(
             azure_endpoint=resolved_base_url,
             api_version='2024-02-01',
             timeout=timeout or OLLAMA_CHAT_TIMEOUT,
+            **({'max_retries': max_retries} if max_retries is not None else {}),
         )
 
     model_kwargs: Dict[str, Any] = {
@@ -102,6 +104,8 @@ def build_chat_llm(
     }
     if resolved_api_key:
         model_kwargs['api_key'] = resolved_api_key
+    if max_retries is not None:
+        model_kwargs['max_retries'] = max_retries
     if resolved_base_url and resolved_base_url != 'https://api.openai.com/v1':
         model_kwargs['base_url'] = resolved_base_url
     return ChatOpenAI(**model_kwargs)
@@ -116,6 +120,7 @@ def invoke_chat_messages(
     api_key: Optional[str] = None,
     base_url: Optional[str] = None,
     timeout: Optional[float] = None,
+    max_retries: Optional[int] = None,
 ) -> str:
     """Invoke an LLM with role/content dict messages and return text content."""
     from langchain_core.messages import HumanMessage, SystemMessage
@@ -127,6 +132,7 @@ def invoke_chat_messages(
         api_key=api_key,
         base_url=base_url,
         timeout=timeout,
+        **({'max_retries': max_retries} if max_retries is not None else {}),
     )
     langchain_messages = []
     for msg in messages:

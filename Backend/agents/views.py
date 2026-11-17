@@ -64,12 +64,8 @@ def _validate_knowledge_collections(user, collection_ids):
     (must own it, or it must be shared with a tenant the user belongs to)."""
     if not collection_ids:
         return
-    from rag.models import DocumentCollection
-
-    tenant_ids = get_accessible_tenant_ids(user)
-    accessible_ids = set(str(cid) for cid in DocumentCollection.objects.filter(
-        Q(owner=user) | Q(tenant_id__in=tenant_ids)
-    ).values_list('id', flat=True))
+    from rag.access import accessible_collections
+    accessible_ids = set(str(cid) for cid in accessible_collections(user).values_list('id', flat=True))
 
     invalid_ids = [str(cid) for cid in collection_ids if str(cid) not in accessible_ids]
     if invalid_ids:

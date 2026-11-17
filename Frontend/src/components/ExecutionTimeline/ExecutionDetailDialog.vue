@@ -369,13 +369,14 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
   Loader, CheckCircle, XCircle, Pause, Play, Square,
   RotateCcw, Download, Copy, Clock, Timer, Workflow, AlertTriangle
 } from 'lucide-vue-next'
 import { useExecutionStore } from '@/stores/execution'
+import { APP_CONFIG } from '@/config'
 import NodeExecutionTimeline from '@/components/ExecutionTimeline/NodeExecutionTimeline.vue'
 import NodeExecutionDetail from '@/components/NodeExecutionStatus/NodeExecutionDetail.vue'
 import StreamingOutputPanel from '@/components/ExecutionTimeline/StreamingOutputPanel.vue'
@@ -419,6 +420,9 @@ const currentStreamingNode = ref('')
 
 // Polling fallback
 let pollingInterval = null
+let pollingInFlight = false
+let connectionVersion = 0
+const terminalStatuses = new Set(['completed', 'failed', 'cancelled'])
 
 // Computed
 const execution = computed(() => {
@@ -670,31 +674,40 @@ function downloadLogs() {
 }
 
 // WebSocket connection for real-time updates
-function connectWebSocket() {
+async function connectWebSocket() {
   if (!props.executionId) return
 
   disconnectWebSocket()
+  const version = connectionVersion
 
   try {
-    executionStore.connectWebSocket(props.executionId)
+    await executionStore.connectWebSocket(props.executionId)
   } catch (error) {
     // Fallback to polling on WebSocket failure
-    startPolling()
+    if (version === connectionVersion && dialogVisible.value) startPolling()
   }
 }
 
 function disconnectWebSocket() {
+  connectionVersion++
   executionStore.disconnectWebSocket()
   stopPolling()
 }
 
 function startPolling() {
-  if (pollingInterval) return
+  if (pollingInterval || terminalStatuses.has(executionStore.executionStatus)) return
   pollingInterval = setInterval(async () => {
-    if (props.executionId) {
+    if (!props.executionId || !dialogVisible.value || pollingInFlight) return
+    pollingInFlight = true
+    try {
       await executionStore.fetchExecutionDetails(props.executionId)
+    } catch (error) {
+      // The next poll retries transient failures; never leave a rejected timer callback.
+      console.warn('刷新执行详情失败:', error?.message || error)
+    } finally {
+      pollingInFlight = false
     }
-  }, 3000)
+  }, APP_CONFIG.executionRealtime.pollIntervalMs)
 }
 
 function stopPolling() {
@@ -704,8 +717,8 @@ function stopPolling() {
   }
 }
 
-async function loadExecutionData() {
-  if (!props.executionId) {
+async function loadExecutionData(executionId, version) {
+  if (!executionId) {
     loadError.value = '缺少执行 ID'
     return
   }
@@ -714,43 +727,42 @@ async function loadExecutionData() {
   loadError.value = ''
 
   try {
-    await executionStore.fetchExecutionDetails(props.executionId)
-    await executionStore.fetchExecutionLogs(props.executionId)
+    await executionStore.fetchExecutionDetails(executionId)
+    if (version !== connectionVersion) return
+    await executionStore.fetchExecutionLogs(executionId)
   } catch (error) {
-    loadError.value = error?.message || '加载执行详情失败'
+    if (version === connectionVersion) loadError.value = error?.message || '加载执行详情失败'
   } finally {
-    isLoadingExecution.value = false
+    if (version === connectionVersion) isLoadingExecution.value = false
   }
 }
 
 // Watchers
-watch(dialogVisible, async (val) => {
+watch([dialogVisible, () => props.executionId], async ([val, id]) => {
+  disconnectWebSocket()
+  const version = connectionVersion
   if (val) {
     activeTab.value = 'timeline'
     selectedNodeId.value = null
     loadError.value = ''
-    await loadExecutionData()
-    if (props.executionId && !loadError.value) {
+    await loadExecutionData(id, version)
+    if (version === connectionVersion && dialogVisible.value && props.executionId && !loadError.value) {
       connectWebSocket()
     }
-  } else {
-    disconnectWebSocket()
   }
+}, { immediate: true })
+
+watch(() => executionStore.isWsConnected, (connected) => {
+  if (!dialogVisible.value || !props.executionId || loadError.value) return
+  if (connected) stopPolling()
+  else startPolling()
 })
 
-watch(() => props.executionId, (val) => {
-  if (val && dialogVisible.value) {
-    connectWebSocket()
-  }
+watch(() => executionStore.executionStatus, status => {
+  if (terminalStatuses.has(status)) stopPolling()
 })
 
 // Lifecycle
-onMounted(() => {
-  if (props.executionId && dialogVisible.value) {
-    connectWebSocket()
-  }
-})
-
 onUnmounted(() => {
   disconnectWebSocket()
 })

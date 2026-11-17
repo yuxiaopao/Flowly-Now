@@ -1,15 +1,24 @@
-# State-only initial migration for datasets app.
-# The physical table already exists in the database (created outside the
-# migration framework), so all operations are wrapped in
-# SeparateDatabaseAndState with state_operations only. This keeps the
-# migration graph valid for apps that reference datasets.Dataset
-# (e.g. augmentation) without touching the database.
+# Adopt legacy datasets tables; fresh installations create the historical schema.
+# Unapplying the initial state preserves an adopted table and its user data.
 
 import datasets.models
 import django.db.models.deletion
 import uuid
 from django.conf import settings
 from django.db import migrations, models
+
+
+class EnsureDatasetTable(migrations.SeparateDatabaseAndState):
+    def database_forwards(self, app_label, schema_editor, from_state, to_state):
+        model = to_state.apps.get_model(app_label, 'Dataset')
+        if not self.allow_migrate_model(schema_editor.connection.alias, model):
+            return
+        if model._meta.db_table not in schema_editor.connection.introspection.table_names():
+            schema_editor.create_model(model)
+
+    def database_backwards(self, app_label, schema_editor, from_state, to_state):
+        # Legacy tables predate this migration; reversal must not delete their data.
+        pass
 
 
 class Migration(migrations.Migration):
@@ -22,7 +31,7 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.SeparateDatabaseAndState(
+        EnsureDatasetTable(
             database_operations=[],
             state_operations=[
                 migrations.CreateModel(

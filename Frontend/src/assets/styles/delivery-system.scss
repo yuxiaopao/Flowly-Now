@@ -1,0 +1,118 @@
+// 应用交付工作台的唯一视觉令牌。黑白与高对比主题继承各自语义色。
+:root {
+  --delivery-accent: var(--color-primary-light);
+  --delivery-accent-soft: var(--surface-muted);
+  --delivery-surface: var(--bg-primary);
+  --delivery-panel: var(--bg-secondary);
+  --delivery-muted: var(--text-secondary);
+  --delivery-border: var(--border-primary);
+  --delivery-radius: var(--radius-xl);
+  --delivery-space-xs: 4px;
+  --delivery-space-sm: 8px;
+  --delivery-space-md: 12px;
+  --delivery-space-lg: 16px;
+  --delivery-space-xl: 24px;
+  --delivery-space-2xl: 32px;
+  --delivery-space-3xl: 48px;
+  --delivery-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --delivery-transition: 200ms var(--delivery-ease);
+  --delivery-icon: 18px;
+  --delivery-touch-target: 44px;
+  --delivery-status-dot: 6px;
+}
+
+[data-theme='dark'], .dark {
+  --bg-primary: oklch(17.5% 0.008 240);
+  --bg-secondary: oklch(21% 0.009 240);
+  --bg-tertiary: oklch(24% 0.01 240);
+  --bg-elevated: oklch(26% 0.012 240);
+  --bg-hover: oklch(28% 0.012 240);
+  --border-primary: oklch(31% 0.012 240);
+  --border-secondary: oklch(38% 0.014 240);
+  --border-hover: oklch(52% 0.022 200);
+  --text-primary: oklch(94% 0.008 220);
+  --text-secondary: oklch(75% 0.012 230);
+  --text-tertiary: oklch(67% 0.012 230);
+  --color-primary: oklch(75% 0.13 173);
+  --color-primary-light: oklch(79% 0.12 173);
+  --color-primary-08: oklch(75% 0.13 173 / 0.08);
+  --color-primary-20: oklch(75% 0.13 173 / 0.2);
+  --button-primary-bg: oklch(78% 0.13 173);
+  --button-primary-hover-bg: oklch(83% 0.12 173);
+  --button-primary-text: oklch(19% 0.03 173);
+  --button-primary-shadow: none;
+  --delivery-accent: oklch(79% 0.12 173);
+  --delivery-accent-soft: oklch(75% 0.13 173 / 0.1);
+}
+
+[data-theme='light'], .light {
+  --bg-primary: oklch(97% 0.006 230);
+  --bg-secondary: oklch(99% 0.003 230);
+  --bg-tertiary: oklch(94% 0.009 230);
+  --bg-elevated: oklch(99% 0.003 230);
+  --bg-hover: oklch(93% 0.012 230);
+  --border-primary: oklch(89% 0.012 230);
+  --border-secondary: oklch(81% 0.018 230);
+  --border-hover: oklch(61% 0.035 190);
+  --text-primary: oklch(25% 0.018 235);
+  --text-secondary: oklch(43% 0.021 230);
+  --text-tertiary: oklch(49% 0.019 230);
+  --color-primary: oklch(43% 0.085 173);
+  --color-primary-light: oklch(43% 0.085 173);
+  --color-primary-08: oklch(47% 0.1 173 / 0.08);
+  --color-primary-20: oklch(47% 0.1 173 / 0.2);
+  --button-primary-bg: oklch(43% 0.085 173);
+  --button-primary-hover-bg: oklch(36% 0.075 173);
+  --button-primary-text: oklch(99% 0.003 173);
+  --button-primary-shadow: none;
+  --delivery-accent: oklch(43% 0.085 173);
+  --delivery-accent-soft: oklch(47% 0.1 173 / 0.08);
+}
+
+// 保留旧页面所引用的科技令牌，同时让产品表面与新的工作区保持一致。
+[data-theme], .dark, .light, .pure-bw, .high-contrast {
+  --tech-app-bg: var(--bg-primary);
+  --tech-shell-bg: var(--bg-secondary);
+  --tech-hero-bg: var(--bg-secondary);
+  --tech-card-highlight: none;
+  --tech-grid: transparent;
+  --tech-edge: transparent;
+  --tech-core-glow: transparent;
+  --tech-button-shadow: none;
+  --tech-blue: var(--delivery-accent);
+  --tech-blue-soft: var(--delivery-accent-soft);
+  --tech-selection-bg: var(--delivery-accent-soft);
+  --tech-selection-border: var(--border-primary);
+  --tech-selection-text: var(--delivery-accent);
+}
+
+.app-layout {
+  .nav-item[class*='nav-item--'] {
+    --navigation-accent: var(--text-secondary);
+    .nav-icon-wrap { background: transparent; box-shadow: none; }
+    &:hover { background: var(--bg-hover); }
+    &.active {
+      color: var(--delivery-accent);
+      background: var(--delivery-accent-soft);
+      border-color: transparent;
+      .nav-icon-wrap { background: transparent; }
+      .nav-icon { color: var(--delivery-accent); }
+    }
+  }
+  .nav-section-title > span:first-child { color: var(--text-tertiary); }
+  .nav-section-count { display: none; }
+  .logo-badge { color: var(--text-tertiary); background: transparent; border: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --delivery-transition: 0ms; }
+
+  // Override the legacy global 0.01ms rule within the application delivery UI.
+  :is(.landing-page, .delivery-workbench, .applications-page) {
+    &, &::before, &::after, *, *::before, *::after {
+      transition-duration: 0ms !important;
+      transition-delay: 0ms !important;
+      animation: none !important;
+    }
+  }
+}

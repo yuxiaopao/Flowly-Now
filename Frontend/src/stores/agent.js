@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { agentApi } from '@/api/agent'
+import { readJsonSse } from '@/utils/jsonSse'
 
 export const useAgentStore = defineStore('agent', () => {
   // State
@@ -24,6 +25,10 @@ export const useAgentStore = defineStore('agent', () => {
   const debugMessages = ref([])
   const streamingContent = ref('')
   const isStreaming = ref(false)
+  let debugRevision = 0
+  let streamController = null
+  let agentRevision = 0
+  let historyRevision = 0
 
   // Conversation state
   const conversations = ref([])
@@ -33,19 +38,7 @@ export const useAgentStore = defineStore('agent', () => {
   const MAX_MESSAGES = 100
 
   // Getters
-  const activeAgents = computed(() => agents.value.filter(a => a.is_active))
-
-  // Helper to parse SSE line
-  function parseSSELine(line) {
-    if (line.startsWith('data: ')) {
-      try {
-        return JSON.parse(line.slice(6))
-      } catch {
-        return null
-      }
-    }
-    return null
-  }
+  const activeAgents = computed(() => agents.value.filter(a => a.isActive ?? a.is_active))
 
   // Actions
   async function fetchAgents(params = {}) {
@@ -72,17 +65,21 @@ export const useAgentStore = defineStore('agent', () => {
   }
 
   async function fetchAgent(id) {
+    const revision = ++agentRevision
+    currentAgent.value = null
     isLoading.value = true
     error.value = null
     try {
       const response = await agentApi.getById(id)
+      if (revision !== agentRevision) return response
       currentAgent.value = response
       return response
     } catch (err) {
+      if (revision !== agentRevision) return undefined
       error.value = err.message
       throw err
     } finally {
-      isLoading.value = false
+      if (revision === agentRevision) isLoading.value = false
     }
   }
 
@@ -163,7 +160,8 @@ export const useAgentStore = defineStore('agent', () => {
       const response = await agentApi.debug(agentId, params)
       currentDebugSession.value = {
         ...response,
-        session_id: response.execution_id
+        session_id: response.executionId ?? response.execution_id,
+        usage: response.usage ?? null,
       }
       debugMessages.value = [
         { role: 'user', content: params.message, timestamp: new Date().toISOString() },
@@ -179,6 +177,9 @@ export const useAgentStore = defineStore('agent', () => {
   }
 
   async function sendDebugMessage(agentId, message) {
+    if (isStreaming.value || isLoading.value) throw new Error('请等待当前请求完成')
+    const revision = ++debugRevision
+    isLoading.value = true
     // Add user message
     debugMessages.value.push({ role: 'user', content: message, timestamp: new Date().toISOString() })
     // Trim messages to prevent memory leak
@@ -192,110 +193,93 @@ export const useAgentStore = defineStore('agent', () => {
         conversation_id: currentDebugSession.value?.conversation_id
       })
 
+      if (revision !== debugRevision) return { cancelled: true }
+
       debugMessages.value.push({
         role: 'assistant',
         content: response.response || response.message,
         timestamp: new Date().toISOString(),
-        toolCalls: response.tool_calls || null
+        toolCalls: response.toolCalls ?? response.tool_calls ?? null
       })
 
-      if (response.execution_id) {
+      if (response.executionId || response.execution_id) {
         currentDebugSession.value = {
           ...currentDebugSession.value,
-          session_id: response.execution_id
+          session_id: response.executionId ?? response.execution_id,
+          usage: response.usage ?? null,
         }
       }
 
       return response
     } catch (err) {
+      if (revision !== debugRevision) return { cancelled: true }
       debugMessages.value.push({
         role: 'error',
         content: err.message,
         timestamp: new Date().toISOString()
       })
       throw err
+    } finally {
+      if (revision === debugRevision) isLoading.value = false
     }
   }
 
   // 流式对话
   async function streamChatMessage(agentId, message) {
-    // Add user message
+    if (isStreaming.value || isLoading.value) throw new Error('请等待当前请求完成')
+    const revision = ++debugRevision
+    const controller = new AbortController()
+    streamController = controller
     debugMessages.value.push({ role: 'user', content: message, timestamp: new Date().toISOString() })
-    // Trim messages to prevent memory leak
-    if (debugMessages.value.length > MAX_MESSAGES) {
-      debugMessages.value = debugMessages.value.slice(-MAX_MESSAGES)
-    }
-
-    // Add placeholder for streaming response
-    const assistantMessage = {
-      role: 'assistant',
-      content: '',
-      timestamp: new Date().toISOString(),
-      isStreaming: true
-    }
-    debugMessages.value.push(assistantMessage)
-
+    if (debugMessages.value.length >= MAX_MESSAGES) debugMessages.value = debugMessages.value.slice(-(MAX_MESSAGES - 1))
+    debugMessages.value.push({ role: 'assistant', content: '', timestamp: new Date().toISOString(), isStreaming: true })
+    const messageIndex = debugMessages.value.length - 1
     isStreaming.value = true
     streamingContent.value = ''
-
+    let completed = false
     try {
       const response = await agentApi.streamChat(agentId, {
-        message,
-        conversation_id: currentDebugSession.value?.conversation_id
-      })
-
-      // Process SSE stream
-      const reader = response.body.getReader()
-      const decoder = new TextDecoder()
-
-      // eslint-disable-next-line no-constant-condition -- SSE stream read loop
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-
-        const chunk = decoder.decode(value)
-        const lines = chunk.split('\n')
-
-        for (const line of lines) {
-          const data = parseSSELine(line)
-          if (data) {
-            if (data.type === 'content' && data.content) {
-              streamingContent.value += data.content
-              assistantMessage.content = streamingContent.value
-              const msgIndex = debugMessages.value.findIndex(m => m === assistantMessage)
-              if (msgIndex !== -1) {
-                debugMessages.value[msgIndex] = { ...assistantMessage }
-              }
-            } else if (data.type === 'done') {
-              assistantMessage.isStreaming = false
-              assistantMessage.toolCalls = data.tool_calls || null
-              const msgIndex = debugMessages.value.findIndex(m => m === assistantMessage)
-              if (msgIndex !== -1) {
-                debugMessages.value[msgIndex] = { ...assistantMessage }
-              }
-              currentDebugSession.value = {
-                ...currentDebugSession.value,
-                conversation_id: data.conversation_id
-              }
-            }
+        message, conversation_id: currentDebugSession.value?.conversation_id,
+      }, { signal: controller.signal })
+      for await (const data of readJsonSse(response)) {
+        if (revision !== debugRevision) return { cancelled: true }
+        if (data.type === 'error') throw new Error(data.error || '模型响应失败')
+        if (data.type === 'content' && typeof data.content === 'string') {
+          streamingContent.value += data.content
+          debugMessages.value[messageIndex] = { ...debugMessages.value[messageIndex], content: streamingContent.value }
+        } else if (data.type === 'done') {
+          completed = true
+          debugMessages.value[messageIndex] = { ...debugMessages.value[messageIndex], isStreaming: false, toolCalls: data.tool_calls ?? data.toolCalls ?? null }
+          currentDebugSession.value = { ...currentDebugSession.value,
+            conversation_id: data.conversation_id ?? data.conversationId ?? currentDebugSession.value?.conversation_id,
+            usage: data.usage ?? null,
           }
+          break
         }
       }
-
+      if (revision !== debugRevision) return { cancelled: true }
+      if (!completed) throw new Error('响应连接提前关闭，请检查本轮结果后重试')
       return { success: true }
     } catch (err) {
-      assistantMessage.content = `错误: ${err.message}`
-      assistantMessage.isStreaming = false
+      if (revision !== debugRevision) return { cancelled: true }
+      error.value = err.message
+      debugMessages.value[messageIndex] = { ...debugMessages.value[messageIndex], isStreaming: false, role: 'error', content: err.message }
       throw err
     } finally {
-      isStreaming.value = false
-      streamingContent.value = ''
+      if (revision === debugRevision) {
+        isStreaming.value = false
+        streamingContent.value = ''
+        streamController = null
+      }
     }
   }
 
   async function fetchDebugHistory(agentId) {
+    const revision = ++historyRevision
+    debugSessions.value = []
     try {
       const response = await agentApi.getDebugHistory(agentId)
+      if (revision !== historyRevision) return response
       debugSessions.value = response.results || response
       return response
     } catch (err) {
@@ -304,12 +288,16 @@ export const useAgentStore = defineStore('agent', () => {
   }
 
   async function loadDebugSession(agentId, sessionId) {
+    clearDebugSession()
+    const revision = debugRevision
     isLoading.value = true
     error.value = null
     try {
       const response = await agentApi.loadDebugSession(agentId, sessionId)
+      if (revision !== debugRevision) return { cancelled: true }
       currentDebugSession.value = {
         ...response,
+        conversation_id: response.conversationId ?? response.conversation_id,
         session_id: response.id || sessionId
       }
 
@@ -318,10 +306,11 @@ export const useAgentStore = defineStore('agent', () => {
 
       return response
     } catch (err) {
+      if (revision !== debugRevision) return { cancelled: true }
       error.value = err.message
       throw err
     } finally {
-      isLoading.value = false
+      if (revision === debugRevision) isLoading.value = false
     }
   }
 
@@ -351,14 +340,21 @@ export const useAgentStore = defineStore('agent', () => {
   }
 
   function clearDebugSession() {
+    debugRevision++
+    streamController?.abort()
+    streamController = null
     currentDebugSession.value = null
     debugMessages.value = []
     streamingContent.value = ''
     isStreaming.value = false
+    isLoading.value = false
   }
 
   // Clear store
   function clearStore() {
+    agentRevision++
+    historyRevision++
+    clearDebugSession()
     agents.value = []
     currentAgent.value = null
     debugSessions.value = []
