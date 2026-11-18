@@ -10,9 +10,9 @@ django.setup()
 import requests
 from workflows.models import Workflow
 
-API = 'http://114.132.183.46:7863/v1/chat/completions'
-KEY = 'sk-wb2api-5aaf9082ef819bebf6f14cdab71ef3f3'
-MODEL = 'global:default-model'
+API = 'https://api.ming-ai.top/v1/chat/completions'
+KEY = 'sk-nznNm21gQoQbmXEpavvNozXQVRMnRwOAYBhrtt4r9wQRR4Ha'
+MODEL = 'gpt-5.6-luna'
 
 HAS_CJK = re.compile(r'[\u4e00-\u9fff]')
 
