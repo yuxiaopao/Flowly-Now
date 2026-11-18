@@ -621,7 +621,7 @@ def expand_to_parallel_shot_pipeline(
         560,
         40,
         {
-            'model': 'agnes-llm-v1',
+            'model': 'global:deepseek-v4.1-flash',
             'temperature': 0.55,
             'max_tokens': 8192,
             'system_prompt': CHAPTER_SYSTEM.replace(str(SHOT_COUNT), str(shot_count)),
@@ -664,8 +664,8 @@ def expand_to_parallel_shot_pipeline(
             x,
             y_img,
             {
-                'provider': 'agnes',
-                'model': 'agnes-image-2.1-flash',
+                'provider': 'ming',
+                'model': 'gpt-image-2.5-flare',
                 # Prefer unique per-shot key; fallback to branch-local image_prompt
                 'prompt': f'{{shot_{i:02d}_image_prompt}}',
                 'n': 1,
@@ -679,8 +679,8 @@ def expand_to_parallel_shot_pipeline(
             x,
             y_vid,
             {
-                'provider': 'agnes',
-                'model': 'agnes-video-v2.0',
+                'provider': 'ming',
+                'model': 'muse-video',
                 'prompt': f'{{shot_{i:02d}_video_motion_prompt}}',
                 'duration': SHOT_DURATION_SEC,
                 'resolution': '720p',
@@ -726,7 +726,7 @@ def expand_to_parallel_shot_pipeline(
         finish_x0,
         finish_y,
         {
-            'model': 'agnes-llm-v1',
+            'model': 'global:deepseek-v4.1-flash',
             'temperature': 0.7,
             'max_tokens': 4096,
             'system_prompt': NARRATION_SYSTEM,
@@ -782,7 +782,7 @@ def expand_to_parallel_shot_pipeline(
         finish_x0 + 1040,
         finish_y,
         {
-            'model': 'agnes-llm-v1',
+            'model': 'global:deepseek-v4.1-flash',
             'temperature': 0.7,
             'max_tokens': 2048,
             'system_prompt': PACKAGING_SYSTEM,
