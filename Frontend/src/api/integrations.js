@@ -79,6 +79,10 @@ export const integrationsApi = {
     return request.get('/integrations/integrations/available/')
   },
 
+  installIntegration(data) {
+    return request.post('/integrations/integrations/install/', data)
+  },
+
   // Integration Templates
   getIntegrationTemplates(params = {}) {
     return request.get('/integrations/templates/', params)

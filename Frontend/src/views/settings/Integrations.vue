@@ -131,7 +131,7 @@
             :aria-label="`${primary(service) ? COPY.manage : COPY.configure} ${service.name}`"
             @click="open(service)"
           >
-            {{ primary(service) ? COPY.manage : COPY.configure }}<ArrowUpRight
+            {{ primary(service) ? COPY.manage : '安装' }}<ArrowUpRight
               :size="14"
               aria-hidden="true"
             />

@@ -145,6 +145,13 @@ export const useIntegrationsStore = defineStore('integrations', {
       return this.upsertIntegration(res)
     },
 
+    async installIntegration(data) {
+      const res = await integrationsApi.installIntegration(data)
+      const record = res.integration
+      if (record) this.upsertIntegration(record)
+      return res
+    },
+
     async connectIntegration(id) {
       const res = await integrationsApi.connectIntegration(id)
       this.upsertIntegration(res.integration)
