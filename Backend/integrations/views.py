@@ -231,8 +231,56 @@ class IntegrationViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'])
     def available(self, request):
-        """Get available integration templates."""
-        return Response(public_catalog())
+        """插件市场：目录 + 当前用户安装/连接状态。"""
+        installed = {
+            row.integration_type: row
+            for row in Integration.objects.filter(user=request.user)
+        }
+        catalog = []
+        for item in public_catalog():
+            row = installed.get(item['id'])
+            catalog.append({
+                **item,
+                'installed': row is not None,
+                'connected': bool(row and row.is_connected),
+                'verification_status': row.verification_status if row else None,
+                'integration_id': str(row.id) if row else None,
+            })
+        return Response(catalog)
+
+    @action(detail=False, methods=['post'])
+    def install(self, request):
+        """安装插件：创建一条未连接、待配置的集成记录（Codex 插件市场模式第一步）。"""
+        integration_type = request.data.get('integration_type') or request.data.get('id')
+        connector = CONNECTORS.get(integration_type)
+        if not connector:
+            return Response({'detail': '未知插件。'}, status=status.HTTP_400_BAD_REQUEST)
+        name = request.data.get('name') or connector['name']
+        integration, created = Integration.objects.get_or_create(
+            user=request.user,
+            integration_type=integration_type,
+            defaults={
+                'name': name,
+                'is_active': False,
+                'is_connected': False,
+                'verification_status': 'unconfigured',
+                'config': {},
+            },
+        )
+        if not created and not integration.is_active:
+            integration.name = name or integration.name
+            integration.verification_status = 'unconfigured'
+            integration.save(update_fields=['name', 'verification_status', 'updated_at'])
+        return Response({'installed': True, 'integration': self.get_serializer(integration).data}, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+
+    @action(detail=False, methods=['get'])
+    def categories(self, request):
+        """插件分类（从目录聚合）。"""
+        result = []
+        for item in public_catalog():
+            if not any(cat['id'] == item['category'] for cat in result):
+                result.append({'id': item['category'], 'label': item['category']})
+        return Response(result)
 
 
 class IntegrationTemplateViewSet(viewsets.ReadOnlyModelViewSet):
